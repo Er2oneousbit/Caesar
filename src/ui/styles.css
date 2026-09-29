@@ -159,6 +159,7 @@ button, input, select { font: inherit; color: inherit; }
 .hud-stat .lbl { color: var(--hud-soft); font-size: 12px; }
 /* The season word only where the top bar has room; the glyph and the tooltip carry it elsewhere. */
 @media (max-width: 1280px) { .hud-stat .season { display: none; } }
+#hud-top.no-season .hud-stat .season { display: none; } /* set by Hud.fitSeason() when the bar is full */
 .hud-stat.neg { color: #ff8f83; }
 .hud-title { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; color: var(--gold); white-space: nowrap; }
 .hud-spacer { flex: 1; min-width: 4px; }
@@ -469,10 +470,11 @@ input[type="range"] { width: 100%; accent-color: var(--bronze); }
 #title-gate .gate-begin { display: block; width: 100%; padding: 12px; font-size: 17px; animation: gate-pulse 2.4s ease-in-out 0.6s infinite; }
 #title-gate .gate-hint { margin-top: 12px; font-size: 13px; color: var(--ink-soft); }
 @keyframes gate-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes gate-out { to { opacity: 0; } }
+@keyframes gate-out { from { opacity: var(--gate-from, 1); } to { opacity: 0; } }
 @keyframes gate-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--gold) 45%, transparent); } }
 @media (prefers-reduced-motion: reduce) {
-  #title-gate, #main-menu .menu-card { animation: none; transition: none; }
+  #main-menu .menu-card { transition: none; }
+  #title-gate { animation: gate-in 0s 0.15s both; } /* no fade, but still no flash where autoplay starts a moment late */
   #title-gate.leaving { animation: none; opacity: 0; }
   #title-gate .gate-begin { animation: none; }
 }

@@ -91,6 +91,9 @@ export class GameMap {
     /** Entry/exit tiles for the imperial road (set by mapgen). */
     this.entry = { x: 0, y: 0 };
     this.exit = { x: 0, y: 0 };
+    /** The Imperial road's first step [dx, dy] from each end (map gates face it); null in old saves. */
+    this.entryDir = null;
+    this.exitDir = null;
 
     /** Incremented whenever any layer changes; the renderer uses it to refresh caches. */
     this.revision = 0;
@@ -294,6 +297,8 @@ export class GameMap {
       h: this.h,
       entry: { ...this.entry },
       exit: { ...this.exit },
+      entryDir: this.entryDir,
+      exitDir: this.exitDir,
       terrain: encode(this.terrain),
       variant: encode(this.variant),
       road: encode(this.road),
@@ -316,6 +321,9 @@ export class GameMap {
     }
     m.entry = { x: data.entry.x, y: data.entry.y };
     m.exit = { x: data.exit.x, y: data.exit.y };
+    const dir = (d) => (Array.isArray(d) && d.length === 2 && Math.abs(d[0]) + Math.abs(d[1]) === 1 ? [d[0], d[1]] : null);
+    m.entryDir = dir(data.entryDir); // (older saves have none)
+    m.exitDir = dir(data.exitDir);
     m.computeWaterDistance();
     m.computeRoadNetworks();
     m.computeNavigation();

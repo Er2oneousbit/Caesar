@@ -107,21 +107,35 @@ export class UI {
       if (performance.now() > until && e.type === 'click') return;
       if ((e.type === 'keydown' && e.repeat) || (e.type === 'click' && e.detail >= 2)) { e.preventDefault(); e.stopPropagation(); }
     };
+    // Keyboard players land on the first menu button once the key is up AND
+    // the menu takes input again (focus() on an inert element does nothing),
+    // whichever comes last; until then a second Enter only meets the gate.
+    let released = false;
+    let gone = false;
+    const focusFirst = () => {
+      if (focusMenu && released && gone && g.menu && g.menu.isConnected) g.menu.querySelector('.btn')?.focus({ preventScroll: true });
+    };
     const end = () => {
       window.removeEventListener('keydown', guard, true);
       window.removeEventListener('click', guard, true);
       window.removeEventListener('keyup', end, true);
-      if (focusMenu && g.menu && g.menu.isConnected) g.menu.querySelector('.btn')?.focus({ preventScroll: true });
+      released = true;
+      focusFirst();
     };
     window.addEventListener('keydown', guard, true);
     window.addEventListener('click', guard, true);
     if (focusMenu) window.addEventListener('keyup', end, true); // keyboard: focus the menu once the key is released
     else setTimeout(end, GATE_GUARD_MS);
+    // Fade out from the opacity on screen now: a gate dropped at once (autoplay
+    // that starts a moment late) is still invisible and must not flash.
+    g.el.style.setProperty('--gate-from', getComputedStyle(g.el).opacity);
     g.el.classList.add('leaving');
     if (g.menu) g.menu.classList.remove('gated'); // the menu card fades in
     setTimeout(() => {
       g.el.remove();
       if (g.menu) g.menu.inert = false;
+      gone = true;
+      focusFirst();
     }, 250);
   }
 

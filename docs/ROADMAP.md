@@ -2,6 +2,17 @@
 
 What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order. New feature requests are added here first; bugs are fixed right away.
 
+## Done (v0.6.1)
+
+Fixes from a review of v0.6:
+* Title screen: a quick Enter or key press now leaves the keyboard on the menu (it was lost until Tab); where autoplay starts a moment late (Firefox, Safari) the title card no longer flashes up and fades out
+* Top bar: the season's name only shows while the bar has room (it clipped the Help and Messages buttons at about 1281-1450 px wide)
+* Snow and season changes that arrive a few frames apart no longer mix two looks on screen or draw hundreds of sprites in one frame (the complete old look stays until the new one is ready)
+* Map gates face the Imperial road as it was laid (saved with the map), so a road built beside the entrance or exit no longer turns the gate across the road
+* Horse Ranch "Next mare" counts the Insane winter rest
+* Docs: the months that blend season looks, the test list in the README
+* 101 unit tests (+3), 63 browser checks (+3)
+
 ## Done (v0.6)
 
 * **Menu music**: the music starts on the title screen, at once where the browser allows autoplay, otherwise with the first click, tap or key on a "Click, tap or press a key to begin" gate (which never presses a menu button); on phones one tap is enough (it took two)

@@ -275,6 +275,16 @@ function snapToLandOnEdge(map, edge, pos) {
   return { x, y };
 }
 
+/** The step [dx, dy] from `end` to the first tile of `path` beside it (the road's way out of `end`), or null. */
+function roadStep(map, end, path) {
+  for (const i of path) {
+    const dx = map.xOf(i) - end.x;
+    const dy = map.yOf(i) - end.y;
+    if (Math.abs(dx) + Math.abs(dy) === 1) return [dx, dy];
+  }
+  return null;
+}
+
 /** Choose entry/exit points and connect them with a road. */
 function placeImperialRoad(map, rng, type, info) {
   const { w, h } = map;
@@ -356,6 +366,9 @@ function placeImperialRoad(map, rng, type, info) {
   }
   map.fixedRoad[map.idx(entry.x, entry.y)] = 1;
   map.fixedRoad[map.idx(exit.x, exit.y)] = 1;
+  // Which way the road leaves each end (the map gates stand across it).
+  map.entryDir = roadStep(map, entry, path);
+  map.exitDir = roadStep(map, exit, [...path].reverse());
   info.roadLength = path.length;
   return path;
 }

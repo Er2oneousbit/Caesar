@@ -151,7 +151,7 @@ src/
                         (writes the notes), instruments.js (synth), music.js (player)
   dev/demoCity.js       builds a sample city through the public construction API
 scripts/                serve.mjs, build.mjs, simulate.mjs, run.ps1, run.sh
-tests/                  *.test.mjs (sim, military, trade, save, sandbox, render, music), e2e/smoke.mjs,
+tests/                  *.test.mjs (sim, military, trade, save, sandbox, render, input, music), e2e/smoke.mjs,
                         e2e/screenshots.mjs, e2e/render.html, e2e/artsheet.html,
                         e2e/music.html (listen to each mood, check levels and tuning)
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md

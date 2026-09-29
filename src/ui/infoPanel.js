@@ -12,7 +12,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_SUPPLIERS, PERFORMER_NAMES } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
-import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX, HERD_GROWTH_DAYS } from '../data/units.js';
+import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX } from '../data/units.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall } from '../world/map.js';
@@ -23,7 +23,14 @@ import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER
 import { dockBerth, dockUsed } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
-import { farmDormant } from '../sim/production.js';
+import { farmDormant, daysToNextMare } from '../sim/production.js';
+
+/** "in about 12 days", counting the winter rest on Insane. */
+function nextMareText(game, b) {
+  const days = daysToNextMare(game, b);
+  if (!Number.isFinite(days)) return 'not while the ranch is idle';
+  return `in about ${days} days${farmDormant(game, b) ? ' (after the winter)' : ''}`;
+}
 
 /** Plain-English description of one missing house requirement. */
 export function describeNeed(m) {
@@ -256,7 +263,7 @@ export class InfoPanel {
         if (b.herd !== undefined) {
           parts.push(sec('Horse ranch',
             kv('Breeding mares', `${b.herd} / ${HERD_MAX}`), bar(b.herd, HERD_MAX),
-            b.herd < HERD_MAX ? kv('Next mare', !(b.efficiency > 0 && b.fertility > 0) ? 'not while the ranch is idle' : farmDormant(g, b) ? 'after the winter' : `in about ${Math.ceil((HERD_GROWTH_DAYS - (b.herdDays || 0)) / b.efficiency)} days`) : null,
+            b.herd < HERD_MAX ? kv('Next mare', nextMareText(g, b)) : null,
             kv('Pasture (meadow)', pct(b.fertility)),
             kv('Next foal', pct(b.progress / 100)), bar(b.progress, 100),
             kv('Horses waiting', formatAmount('horses', b.stock.horses)),

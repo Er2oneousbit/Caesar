@@ -102,6 +102,13 @@ try {
     await p2.waitForTimeout(300);
     const opened = await p2.evaluate(() => { const m = document.querySelector('.modal'); return m ? m.textContent.slice(0, 40) : ''; });
     check('holding Enter on the title gate presses no menu button, then Enter opens the first one', held && /Campaign/.test(opened), JSON.stringify({ held, opened }));
+    // A quick tap of Enter (the usual press) leaves the keyboard on the menu.
+    await p2.goto(url);
+    await p2.waitForSelector('#title-gate', { timeout: 15000 });
+    await p2.keyboard.press('Enter');
+    await p2.waitForTimeout(600);
+    const focused = await p2.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent, modal: !!document.querySelector('.modal') }));
+    check('a quick Enter on the title gate puts keyboard focus on the first menu button', focused.tag === 'BUTTON' && /Campaign/.test(focused.text) && !focused.modal, JSON.stringify(focused));
     await p2.close();
   }
   if (shots) await page.screenshot({ path: path.join(shots, 'smoke-menu.png') });
@@ -353,6 +360,21 @@ try {
     app.game.time.month = month;
     return out;
   });
+  // The season's name only shows while the top bar has room for it.
+  const fit = await page.evaluate(() => {
+    const app = window.colonia;
+    const c = app.game.city;
+    const keep = { name: c.name, treasury: c.treasury, population: c.population };
+    Object.assign(c, { name: 'Portus Mercatorum Magnus', treasury: 1234567, population: 23456 });
+    app.ui.hud.update();
+    const bar = document.getElementById('hud-top');
+    const out = { hidden: bar.classList.contains('no-season'), over: bar.scrollWidth - bar.clientWidth };
+    Object.assign(c, keep);
+    app.ui.hud.update();
+    out.shownAfter = !bar.classList.contains('no-season') || bar.scrollWidth > bar.clientWidth;
+    return out;
+  });
+  check('the season name gives way when the top bar is full', (fit.hidden || fit.over <= 0) && fit.shownAfter, JSON.stringify(fit));
   check('the top bar shows the season; winter only snows', winter.text.includes('Winter') && winter.title.includes('winter') && winter.kind === 'snow' && /not possible in winter/.test(winter.reply) && /snow/.test(winter.after), JSON.stringify(winter));
   // Snow settles: the ground, trees and roofs turn white (baked into the
   // sprites, so the new look is prepared, then swapped in whole).
@@ -373,6 +395,44 @@ try {
     return out;
   });
   check('snow cover whitens ground, trees and roofs; the new look swaps in within 30 frames', /n3$/.test(snowy.key) && snowy.frames <= 30 && snowy.pending === 0 && snowy.snowSprites > 0 && snowy.buildings > 0, JSON.stringify(snowy));
+  // Snow levels arriving a few frames apart (0 -> 1 -> 2, and a flip back):
+  // every frame draws the ground in a single look, and the change completes.
+  // (Only ground: a tree's sway frame never drawn in the old look has no
+  // stand-in and is made in the new look at once.)
+  const overlap = await page.evaluate(() => {
+    const app = window.colonia;
+    const r = app.renderer;
+    const month = app.game.time.month;
+    app.game.time.month = 0;
+    app.ui.console.run('snow 0');
+    for (let i = 0; i < 80 && (r.palPrev !== null || r.snowPrev !== null || i < 2); i++) r.render(0, 0.016);
+    const get = r.sprites.get;
+    let looks = {};
+    r.sprites.get = function (key, spec, fb) {
+      const spr = get.call(this, key, spec, fb);
+      const m = /^g.*~(p\d+(?:n\d)?)$/.exec(key);
+      if (m) {
+        const old = fb !== null && fb !== undefined ? this.current.get(fb) || this.borrow(fb) : null;
+        const look = old && spr === old ? /~(p\d+(?:n\d)?)$/.exec(fb)[1] : m[1];
+        looks[look] = (looks[look] || 0) + 1;
+      }
+      return spr;
+    };
+    const frames = [];
+    const frame = () => { looks = {}; r.render(0, 0.016); frames.push(looks); };
+    try {
+      app.ui.console.run('snow 1'); frame(); frame();
+      app.ui.console.run('snow 2'); frame(); frame();
+      app.ui.console.run('snow 1'); frame();
+      for (let i = 0; i < 80 && (r.palPrev !== null || r.snowPrev !== null); i++) frame();
+    } finally {
+      r.sprites.get = get;
+      app.game.time.month = month;
+    }
+    const mixed = frames.filter((f) => Object.keys(f).length > 1);
+    return { mixed: mixed.length, example: mixed[0], frames: frames.length, done: r.palPrev === null && r.snowPrev === null, key: r.pal.key };
+  });
+  check('overlapping snow changes never mix two looks in one frame, and finish', overlap.mixed === 0 && overlap.done && /n1$/.test(overlap.key), JSON.stringify(overlap));
   // Reduced motion: no falling flakes, but the snow on the ground still shows.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const still = await page.evaluate(() => {
@@ -390,7 +450,7 @@ try {
   });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.evaluate(() => window.colonia.applySettings());
-  check('reduced motion: no falling snow, snow on the ground still shows', !still.motion && still.flakes === 0 && /n3$/.test(still.key), JSON.stringify(still));
+  check('reduced motion: no falling snow, snow on the ground still shows', !still.motion && still.flakes === 0 && /n\d$/.test(still.key), JSON.stringify(still));
   // Weather off: the snow is gone, and so are its sprites.
   const bare = await page.evaluate(() => {
     const app = window.colonia;

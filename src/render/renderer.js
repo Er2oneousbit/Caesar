@@ -74,14 +74,18 @@ const K_GATE = 8; // the gateway at the map entrance / exit
 /**
  * Where a map gate's pillars stand: the world offset (px) from the road tile's
  * center to one pillar, across the road (the other pillar mirrors it). The
- * road runs from the edge tile to its road neighbour, or toward the middle.
+ * gate faces the way the Imperial road was laid (`dir`, recorded by mapgen),
+ * so a road the player builds beside the edge tile never turns it. Without
+ * it (old saves, or that road removed): the road going into the map, then
+ * any road beside the tile, then the middle of the map.
  */
-export function mapGateOffset(map, end) {
+export function mapGateOffset(map, end, dir = null) {
   let dx = 0;
   let dy = 0;
-  for (const [nx, ny] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    if (map.hasRoad(end.x + nx, end.y + ny)) { dx = nx; dy = ny; break; }
-  }
+  const inward = end.x === 0 ? [1, 0] : end.x === map.w - 1 ? [-1, 0] : end.y === 0 ? [0, 1] : end.y === map.h - 1 ? [0, -1] : null;
+  const tries = [dir, inward, [1, 0], [-1, 0], [0, 1], [0, -1]];
+  const hit = tries.find((t) => t && map.hasRoad(end.x + t[0], end.y + t[1]));
+  if (hit) [dx, dy] = hit;
   if (!dx && !dy) { // no road beside it (should not happen): face the middle of the map
     if (Math.abs(map.w / 2 - end.x) > Math.abs(map.h / 2 - end.y)) dx = Math.sign(map.w / 2 - end.x) || 1;
     else dy = Math.sign(map.h / 2 - end.y) || 1;
@@ -90,6 +94,23 @@ export function mapGateOffset(map, end) {
   const b = dx;
   const r = 0.46; // pillars stand inside the tile, just off the road
   return { ox: (a - b) * HALF_W * r, oy: (a + b) * HALF_H * r };
+}
+
+/**
+ * One step of a look change (a season palette, or a snow level): the look is
+ * `cur`, `prev` the complete look still drawn while `cur` is prepared (null
+ * when no change is in progress) and `next` the look that just became due.
+ * Returns the look to keep drawing meanwhile and the looks whose sprites can
+ * go. The complete old look always stays the stand-in: when changes overlap
+ * (snow 0 -> 1 -> 2 a few frames apart) the half-made middle look is dropped,
+ * and a change back to `prev` simply ends the change.
+ * `hard` (a new or loaded game) switches at once and keeps no stand-in.
+ * @returns {{prev: string|null, drop: string[]}}
+ */
+export function lookStep(cur, prev, next, hard = false) {
+  if (hard) return { prev: null, drop: prev !== null && prev !== next ? [prev, cur] : [cur] };
+  if (prev !== null) return { prev: prev === next ? null : prev, drop: [cur] };
+  return { prev: cur, drop: [] };
 }
 
 /** Pennant colors of the map gates: where people arrive, and where they leave. */
@@ -471,11 +492,11 @@ export class Renderer {
     // Map entrance and exit: a gateway over the Imperial road at the map edge.
     // Two items, so walkers on the tile pass between the pillars.
     this.mapGates = [];
-    for (const [end, color, seed] of [[map.entry, ENTRY_COLOR, 1.3], [map.exit, EXIT_COLOR, 4.1]]) {
+    for (const [end, dir, color, seed] of [[map.entry, map.entryDir, ENTRY_COLOR, 1.3], [map.exit, map.exitDir, EXIT_COLOR, 4.1]]) {
       const wx = (end.x - end.y) * HALF_W;
       const wy = (end.x + end.y + 1) * HALF_H; // tile center
       if (!inView(wx, wy) && !inView(wx, wy - GATE_H * 2)) continue; // base or top on screen
-      const { ox, oy } = mapGateOffset(map, end);
+      const { ox, oy } = mapGateOffset(map, end, dir);
       this.mapGates.push({ wx, wy, ox, oy });
       const d = end.x + end.y + 1;
       items.push({ d: d - 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'back' });
@@ -618,20 +639,16 @@ export class Renderer {
     const hard = this.lookHard; // first frame of a new game: no preparing
     this.lookHard = false;
     if (pal.key !== this.pal.key) {
-      if (this.palPrev !== null && this.palPrev !== pal.key) this.dropSuffix(`~${this.palPrev}`);
-      if (hard) {
-        this.dropSuffix(`~${this.pal.key}`);
-        this.palPrev = null;
-      } else this.palPrev = this.pal.key;
+      const step = lookStep(this.pal.key, this.palPrev, pal.key, hard);
+      for (const k of step.drop) this.dropSuffix(`~${k}`);
+      this.palPrev = step.prev;
       this.pal = pal;
     }
     const snowKey = snowLevel ? `~n${snowLevel}` : '';
     if (snowKey !== this.snowKey) {
-      if (this.snowPrev && this.snowPrev !== snowKey) this.dropSuffix(this.snowPrev);
-      if (hard) {
-        if (this.snowKey) this.dropSuffix(this.snowKey); // '' = the snowless art, kept
-        this.snowPrev = null;
-      } else this.snowPrev = this.snowKey;
+      const step = lookStep(this.snowKey, this.snowPrev, snowKey, hard);
+      for (const k of step.drop) if (k) this.dropSuffix(k); // '' = the snowless art, always kept
+      this.snowPrev = step.prev;
       this.snowKey = snowKey;
     }
     const on = this.weatherOn;

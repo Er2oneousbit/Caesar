@@ -102,6 +102,25 @@ export function farmDormant(game, b) {
   return b.def.kind === 'farm' && farmSeasonRate(game) <= 0;
 }
 
+/**
+ * Days until a Horse Ranch gains its next mare at its current staffing,
+ * walking the calendar with the same winter rule as growHerd (on Insane the
+ * herd does not grow December to Februarius). Infinity if it never will.
+ */
+export function daysToNextMare(game, b) {
+  if (!(b.efficiency > 0 && b.fertility > 0)) return Infinity;
+  let need = HERD_GROWTH_DAYS - (b.herdDays || 0);
+  let { month, day } = game.time;
+  const winter = game.difficulty.winterGrowth ?? 1;
+  let days = 0;
+  while (need > 0 && days < 2000) {
+    need -= b.efficiency * (seasonOf(month) === 'winter' ? winter : 1);
+    days++;
+    if (++day >= CONFIG.DAYS_PER_MONTH) { day = 0; month = (month + 1) % CONFIG.MONTHS_PER_YEAR; }
+  }
+  return need > 0 ? Infinity : days;
+}
+
 /** Daily update for farms and raw material producers. */
 export function updateProducer(game, b) {
   const def = b.def;

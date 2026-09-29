@@ -61,6 +61,21 @@ export class Hud {
     return { el, val };
   }
 
+  /**
+   * Show the season's name next to the date only while the top bar has room
+   * for it (the bar clips what does not fit, with no scrollbar). Measured
+   * again only when something in the bar or its width changed; the class is
+   * cleared before measuring, so the word never flickers on and off.
+   */
+  fitSeason() {
+    const el = this.el;
+    const sig = `${el.clientWidth}|${this.title.textContent}|${this.money.val.textContent}|${this.pop.val.textContent}|${this.date.val.textContent}|${this.season.textContent}|${this.mood.val.textContent}|${this.threat.className}|${this.threat.textContent}`;
+    if (sig === this.fitSig) return;
+    this.fitSig = sig;
+    el.classList.remove('no-season');
+    if (el.scrollWidth > el.clientWidth) el.classList.add('no-season');
+  }
+
   update() {
     const { app } = this;
     const g = app.game;
@@ -90,6 +105,7 @@ export class Hud {
       this.threat.textContent = t.level === 'attack' ? `⚔ ${t.enemies}` : '⚠ Raid';
       this.threat.title = `${t.text}. Click to ${t.level === 'attack' ? 'look at the raiders' : 'open the military advisor'}.`;
     }
+    this.fitSeason();
     const active = app.paused ? 0 : app.speedIndex;
     this.speedBtns.forEach((b, i) => b.classList.toggle('active', i === active));
     if (this.overlaySel.value !== app.renderer.overlay.key) this.overlaySel.value = app.renderer.overlay.key;

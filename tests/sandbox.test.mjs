@@ -28,12 +28,12 @@ import { updateEmperor, scheduleNextRequest } from '../src/sim/emperor.js';
 import { updateRisk } from '../src/sim/risk.js';
 import { computeSentiment } from '../src/sim/population.js';
 import { addBuilding } from '../src/sim/entities.js';
-import { updateProducer, farmDormant, farmSeasonNotice } from '../src/sim/production.js';
+import { updateProducer, farmDormant, farmSeasonNotice, daysToNextMare } from '../src/sim/production.js';
 import { seasonOf, MONTH_NAMES } from '../src/sim/time.js';
 import { seasonOf as renderSeasonOf } from '../src/render/weather.js';
 import { buildingStatus } from '../src/ui/infoPanel.js';
 import { updateReligion } from '../src/sim/religion.js';
-import { HERD_START } from '../src/data/units.js';
+import { HERD_START, HERD_GROWTH_DAYS } from '../src/data/units.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { newGame, findFree } from './helpers.mjs';
 
@@ -232,6 +232,32 @@ test('difficulty: Insane farms grow again from Martius and ship stored harvest a
     assert.equal(f.progress, 10, `${type} rests in winter`);
     if (f.herd !== undefined) assert.equal(f.herd, HERD_START, 'no new mares in winter');
   }
+});
+
+test('difficulty: the next-mare estimate counts the Insane winter rest, and matches the sim', () => {
+  for (const difficulty of ['normal', 'insane']) {
+    const g = newGame({ difficulty, seed: 'mare' });
+    const ranch = winterFarm(g, 'horse_ranch', 10); // November: winter is two weeks off
+    g.time.day = 8;
+    ranch.herdDays = 0;
+    const predicted = daysToNextMare(g, ranch);
+    // Step the real calendar and the ranch's daily update until a mare is born.
+    const herd0 = ranch.herd;
+    let days = 0;
+    while (ranch.herd === herd0 && days < 500) {
+      for (let t = 0; t < CONFIG.TICKS_PER_DAY; t++) g.time.advance();
+      ranch.efficiency = 1;
+      updateProducer(g, ranch);
+      days++;
+    }
+    assert.equal(predicted, days, `${difficulty}: predicted ${predicted}, took ${days}`);
+    if (difficulty === 'normal') assert.equal(predicted, HERD_GROWTH_DAYS);
+    else assert.ok(predicted > HERD_GROWTH_DAYS, 'the winter rest is counted');
+  }
+  const g = newGame({ difficulty: 'insane', seed: 'mare' });
+  const idle = winterFarm(g, 'horse_ranch', 5);
+  idle.efficiency = 0;
+  assert.equal(daysToNextMare(g, idle), Infinity, 'an idle ranch never foals');
 });
 
 test('difficulty: a Ceres blessing still brings the harvest the next day, Insane winter or not', () => {

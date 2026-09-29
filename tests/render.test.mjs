@@ -30,7 +30,7 @@ import { skyAt, dayTime, DAY_TICKS } from '../src/render/lighting.js';
 import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf } from '../src/render/weather.js';
 import { groundColor } from '../src/render/terrainArt.js';
 import { GameTime } from '../src/sim/time.js';
-import { blendCode, mapGateOffset } from '../src/render/renderer.js';
+import { blendCode, mapGateOffset, lookStep } from '../src/render/renderer.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { GameMap, Terrain } from '../src/world/map.js';
 
@@ -466,6 +466,21 @@ test('sprite keys: dropping one look or snow level never drops another', () => {
   }
 });
 
+test('look changes: overlapping changes keep the complete old look as the stand-in', () => {
+  // A single change: p0 is drawn while p0n1 is prepared.
+  assert.deepEqual(lookStep('p0', null, 'p0n1'), { prev: 'p0', drop: [] });
+  // Snow deepens again before p0n1 is ready: drop the half-made p0n1, keep p0.
+  assert.deepEqual(lookStep('p0n1', 'p0', 'p0n2'), { prev: 'p0', drop: ['p0n1'] });
+  // It flips back to the complete look: the change simply ends.
+  assert.deepEqual(lookStep('p0n1', 'p0', 'p0'), { prev: null, drop: ['p0n1'] });
+  // Snow levels start from '' (no snow): that is a change in progress too.
+  assert.deepEqual(lookStep('~n1', '', '~n2'), { prev: '', drop: ['~n1'] });
+  assert.deepEqual(lookStep('', null, '~n1'), { prev: '', drop: [] });
+  // A new or loaded game switches at once and forgets any stand-in.
+  assert.deepEqual(lookStep('p40', null, 'p0', true), { prev: null, drop: ['p40'] });
+  assert.deepEqual(lookStep('p40n1', 'p40', 'p0', true), { prev: null, drop: ['p40', 'p40n1'] });
+});
+
 test('sprite cache: a new look is prepared behind the old one, then swapped whole', () => {
   const had = globalThis.OffscreenCanvas;
   globalThis.OffscreenCanvas = FakeCanvas;
@@ -496,26 +511,51 @@ test('sprite cache: a new look is prepared behind the old one, then swapped whol
 // --- map gates ---------------------------------------------------------------
 
 test('map gates: the entrance and exit pillars stand across the Imperial road', () => {
+  const steps = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const across = (map, end, dir) => {
+    // Back from world px to tiles: the pillar's step (a, b) across the road.
+    const { ox, oy } = mapGateOffset(map, end, dir);
+    return [Math.round((ox / HALF_W + oy / HALF_H) / 2 / 0.46), Math.round((oy / HALF_H - ox / HALF_W) / 2 / 0.46)];
+  };
   for (const type of ['river', 'coast', 'lakes', 'plains', 'desert']) {
     for (const seed of ['g1', 'g2', 'g3']) {
       const { map } = generateMap({ width: 64, height: 64, seed, type });
-      for (const end of [map.entry, map.exit]) {
-        assert.ok(map.hasRoad(end.x, end.y), `${type}/${seed}: the gate stands on the road`);
-        const { ox, oy } = mapGateOffset(map, end);
-        // Back from world px to tiles: the pillar's step (a, b) across the road.
-        const a = Math.round((ox / HALF_W + oy / HALF_H) / 2 / 0.46);
-        const b = Math.round((oy / HALF_H - ox / HALF_W) / 2 / 0.46);
-        assert.equal(Math.abs(a) + Math.abs(b), 1, 'one tile step');
-        // The road leaves the map edge tile through exactly one neighbour
-        // (sometimes along the edge first); the pillars stand across it.
+      for (const [end, dir] of [[map.entry, map.entryDir], [map.exit, map.exitDir]]) {
+        const tag = `${type}/${seed} ${end === map.entry ? 'entry' : 'exit'}`;
+        assert.ok(map.hasRoad(end.x, end.y), `${tag}: the gate stands on the road`);
         assert.ok(end.x === 0 || end.y === 0 || end.x === map.w - 1 || end.y === map.h - 1, 'on the map edge');
-        const next = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([nx, ny]) => map.hasRoad(end.x + nx, end.y + ny));
-        assert.equal(next.length, 1, 'one road on from the edge');
-        assert.equal(Math.abs(a * next[0][0] + b * next[0][1]), 0, `${type}/${seed}: across the road, not along it`);
-        assert.ok(!map.hasRoad(end.x + a, end.y + b) && !map.hasRoad(end.x - a, end.y - b), 'no road through a pillar');
+        assert.ok(dir && map.hasRoad(end.x + dir[0], end.y + dir[1]), `${tag}: mapgen recorded the road's way out`);
+        const [a, b] = across(map, end, dir);
+        assert.equal(Math.abs(a) + Math.abs(b), 1, 'one tile step');
+        assert.equal(Math.abs(a * dir[0] + b * dir[1]), 0, `${tag}: across the road, not along it`);
+        assert.ok(!map.hasRoad(end.x + a, end.y + b) && !map.hasRoad(end.x - a, end.y - b), `${tag}: no road through a pillar`);
+        // Roads the player builds beside the edge tile do not turn the gate.
+        const before = across(map, end, dir);
+        const added = [];
+        for (const [nx, ny] of steps) {
+          const x = end.x + nx;
+          const y = end.y + ny;
+          if (map.inBounds(x, y) && !map.hasRoad(x, y)) { map.road[map.idx(x, y)] = 1; added.push(map.idx(x, y)); }
+        }
+        assert.deepEqual(across(map, end, dir), before, `${tag}: a new road beside the gate does not turn it`);
+        for (const i of added) map.road[i] = 0;
+        // An old save (no recorded direction) still gets a gate across a road.
+        const [c, d] = across(map, end, null);
+        assert.equal(Math.abs(c) + Math.abs(d), 1);
       }
     }
   }
+});
+
+test('map gates: the road direction survives a save', () => {
+  const { map } = generateMap({ width: 64, height: 64, seed: 'g2', type: 'plains' });
+  const back = GameMap.deserialize(JSON.parse(JSON.stringify(map.serialize((a) => Array.from(a)))), (d) => Uint8Array.from(d));
+  assert.deepEqual([back.entryDir, back.exitDir], [map.entryDir, map.exitDir]);
+  const old = map.serialize((a) => Array.from(a));
+  delete old.entryDir;
+  delete old.exitDir;
+  const legacy = GameMap.deserialize(JSON.parse(JSON.stringify(old)), (d) => Uint8Array.from(d));
+  assert.equal(legacy.entryDir, null, 'older saves: no direction, the renderer works it out');
 });
 
 // --- edge blending ----------------------------------------------------------

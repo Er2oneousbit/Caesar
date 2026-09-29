@@ -39,8 +39,12 @@ function place(game, type, x, y, size) {
  */
 function findSite(game, W, D) {
   const { map } = game;
+  // Build along roads that reach the map entry (settlers come that way), not
+  // along a street the player left unconnected.
+  game.processRoadChanges();
+  const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
   const road = [];
-  for (let i = 0; i < map.size; i++) if (map.road[i]) road.push(i);
+  for (let i = 0; i < map.size; i++) if (map.road[i] && map.roadNet[i] === entryNet) road.push(i);
   if (!road.length) return null;
   // Imperial road tiles sorted by distance to the map center.
   const cx = map.w / 2;
@@ -288,6 +292,7 @@ function findSpot(game, size, center, minD, maxD, meadowOnly = false) {
  * next one is tried, so callers always get a working, road-linked building.
  */
 function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
+  const { map } = game;
   let tries = 0;
   for (const s of findSpot(game, size, center, minD, maxD, meadowOnly)) {
     if (tries++ > 40) break;
@@ -298,7 +303,12 @@ function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
       if (b.accessRoad >= 0) break;
       connectToRoad(game, x, y);
     }
-    if (b.accessRoad >= 0) return b;
+    // Only keep it if its road reaches the map entry: that network is where
+    // settlers (and so workers) live. A road that only reaches an isolated
+    // street of empty homes would leave it unstaffed forever.
+    game.processRoadChanges();
+    const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
+    if (b.accessRoad >= 0 && map.roadNet[b.accessRoad] === entryNet) return b;
     removeBuilding(game, b, 'undo');
     game.onMapEdited();
   }
@@ -308,8 +318,9 @@ function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
 /**
  * Add a garrison to the demo city: barracks, one fort of each kind, a horse
  * ranch, a fletcher, two watchtowers and a wall with a gate across the
- * Imperial road. With { stock: true } the barracks gets equipment up front so
- * soldiers appear quickly (screenshots, tests).
+ * Imperial road. Everything is placed on roads that reach the map entry.
+ * With { stock: true } the barracks gets equipment up front and military
+ * labor goes first, so soldiers appear quickly (screenshots, tests).
  * @returns {{ok:boolean, barracks?:object, forts:object[], ranch?:object, wall:number}}
  */
 export function buildDemoGarrison(game, center, opts = {}) {
@@ -328,6 +339,10 @@ export function buildDemoGarrison(game, center, opts = {}) {
     barracks.stock.weapons = 400;
     barracks.stock.arrows = 400;
     barracks.stock.horses = 400;
+    // ...and first call on workers, as a governor raising an army would set it:
+    // a small city short of hands otherwise leaves the barracks half empty.
+    const pri = game.city.laborPriority;
+    if (!pri.includes('military')) pri.unshift('military');
   }
   return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall };
 }

@@ -32,7 +32,7 @@ export const CONSOLE_HELP = [
   ['collapse', 'Collapse a random building'],
   ['favor <n>', 'Set the Emperor\'s favor (0-100)'],
   ['mood <n>', 'Set city sentiment (0-100)'],
-  ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped)'],
+  ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, military labor first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['army', 'List forts, soldiers, barracks stock and the raid schedule'],

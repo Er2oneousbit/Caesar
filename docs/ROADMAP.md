@@ -9,11 +9,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 ## Next up (suggested order)
 
 1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors.
+2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
 3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
 4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-5. **Classic buildings still missing**: hippodrome, fishing wharves and shipyards, military academy, large temples, and the governor's residence with salary and rank.
+5. **Classic content still missing**: hippodrome, fishing wharves and shipyards, military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
 6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+7. **The 20-level housing ladder**, after disease and crime, since it rebalances the whole economy.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
@@ -145,9 +146,9 @@ What Augustus added to the original, adapted to Colonia:
 * **Roadblocks**: roaming walkers stop, carts and settlers pass, so service coverage becomes a puzzle instead of a dice roll. With a switch per kind of walker (Augustus later added permissions for labor seekers and tax collectors).
 * **Market special orders**: choose which goods a market buys.
 * **Partial warehouse storage**: accept a good only up to a set amount.
-* **Supply posts**: soldiers in forts eat, fed from the granaries.
+* **Supply posts**: soldiers in forts eat, fed from the granaries (an option; the original's rule is the default).
 * **Monuments**: Grand Temples (one per god), a Pantheon and a Lighthouse, built over years from goods deliveries with a work camp and an engineer's guild; plus a Caravanserai for land trade. A late-game goal and a place to spend surplus goods.
-* **Global labour pool**: buildings hire from the whole city instead of needing homes within reach.
+* **Global labour pool**: buildings hire from the whole city instead of needing homes within reach (an option; the original's rule is the default).
 * **Building rotation** for gatehouses, warehouses, forts and hippodromes.
 * **Extended campaign**: keep governing a province after its goals are met.
 * Already in Colonia: zoom, much bigger maps (Uber) and a console.
@@ -173,7 +174,6 @@ Playing smoother:
 * **Interactive tutorial mission**.
 * **Photo mode**: hide the UI, pick the time of day, season and weather, save a screenshot.
 * **Accessibility**: UI scale and a screen-reader pass (reduced motion is already honored).
-* **Localization**: Italian first, and Latin for the purists.
 * **Challenge seeds and ironman**: a fixed map plus rules, with medals and par times; autosave-only games.
 * **Share-a-map link**: seed, landscape, size and difficulty in one link (the URL flags already exist).
 
@@ -220,11 +220,12 @@ Ideas that would change the original's economy or rules; each would come as an o
 * Performance: cache static terrain into chunk canvases for the most zoomed-out view. When the screen is full of tiles (the middle of a Large or Uber map) that view costs about 16 ms a frame in headless Chromium against 4 ms one zoom level in; chunks would cut its thousands of ground draw calls to a few dozen (see ARCHITECTURE.md, *Draw calls*).
 * Smaller saves for very big cities: buildings are about 0.8 KB each in a save (mostly the house record), so a 1,500-building capital needs about 1.5 MB per slot. Dropping default-valued fields, or compressing the whole save, would stretch the ~5 MB browser allowance further.
 
-## Open questions
+## Decisions
 
-* Rules the mods changed (supply posts, a city-wide labour pool): the original's rule by default with the change as an option, or the other way round?
-* Pantheon: switch to the original's five gods (Mercury and Venus in place of Jupiter and Vesta)? Saves would map the old gods' moods over.
-* Housing: the original's 20 levels, or keep Colonia's 12 larger steps?
-* Crime, disease and events: on for every difficulty, or off on Easy and scaling up from there?
+* **Modern features**: pure quality of life (roadblocks, market special orders, partial warehouse storage, building rotation) is on by default. Changes to the original's rules (supply posts, the global labour pool, everything under "Beyond the original") come as options that default to the original.
+* **Gods**: the original's five, Ceres, Neptune, Mercury, Mars and Venus. Mercury and Venus replace Jupiter and Vesta, and older saves map the old gods' moods over.
+* **Housing**: the original's 20 levels, done after disease and crime.
+* **Crime, disease and events**: on at every difficulty, as they always were in the original, and gentler on Easy.
+* **Localization**: not planned.
 
 Made with ❤️ from your friendly hacker - er2oneousbit

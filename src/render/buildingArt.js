@@ -58,6 +58,31 @@ const HEIGHT = {
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
 };
 
+/**
+ * How far (in tiles) a building's shadow reaches across the ground. The sun
+ * is in the upper left (the same light the art is shaded with), so shadows
+ * fall to the lower right. Flat things (fields, plazas) cast almost none.
+ */
+const SHADOW = {
+  well: 0.15, fountain: 0.2, reservoir: 0.25, garden: 0.15, plaza: 0, market: 0.3, horse_ranch: 0.25,
+  clay_pit: 0.08, iron_mine: 0.45, marble_quarry: 0.35, dock: 0.35, statue_small: 0.35, statue_medium: 0.6,
+  statue_large: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
+  warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
+  prefecture: 0.45,
+};
+/** Shadow length per house tier (tents are low, insulae tall, villas wide but low). */
+const HOUSE_SHADOW = [0, 0.18, 0.22, 0.26, 0.3, 0.45, 0.5, 0.8, 0.95, 1.1, 0.55, 0.6, 0.7];
+
+export function shadowLength(b) {
+  if (b.house) return HOUSE_SHADOW[b.house.tier] ?? 0.3;
+  if (SHADOW[b.type] !== undefined) return SHADOW[b.type];
+  const kind = b.def.kind;
+  if (kind === 'farm') return 0.2;
+  if (kind === 'decor') return 0.2;
+  if (kind === 'workshop') return 0.5;
+  return Math.min(1.1, heightFor(b.type, b.size) / 70);
+}
+
 function heightFor(key, size) {
   if (key.startsWith('temple_')) return 56;
   if (key.startsWith('farm_')) return 34;

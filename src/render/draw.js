@@ -239,8 +239,12 @@ export function shadowEllipse(ctx, u, v, rx, ry, alpha = 0.25) {
   ctx.fill();
 }
 
-/** A round bush/tree crown made of overlapping circles. */
-export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', seed = 0) {
+/**
+ * A round bush/tree crown made of overlapping circles.
+ * `sway` (px, about -2..2) leans the crown in the wind: higher leaves move
+ * more, the base of the trunk stays put.
+ */
+export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', seed = 0, sway = 0) {
   const [x, y] = P(u, v, 0);
   const s = size;
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -248,7 +252,13 @@ export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', 
   ctx.ellipse(x + 2 * s, y, 7 * s, 3 * s, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = trunk;
-  ctx.fillRect(x - 1.2 * s, y - 8 * s, 2.4 * s, 8 * s);
+  ctx.beginPath();
+  ctx.moveTo(x - 1.2 * s, y);
+  ctx.lineTo(x + 1.2 * s, y);
+  ctx.lineTo(x + 1.2 * s + sway * 0.35, y - 8 * s);
+  ctx.lineTo(x - 1.2 * s + sway * 0.35, y - 8 * s);
+  ctx.closePath();
+  ctx.fill();
   const blobs = [
     [0, -14, 7],
     [-4, -11, 5],
@@ -258,36 +268,38 @@ export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', 
   for (let k = 0; k < blobs.length; k++) {
     const [bx, by, br] = blobs[k];
     const jitter = ((seed * 31 + k * 17) % 5) - 2;
+    const lean = sway * (-by / 18); // top of the crown moves the most
     ctx.fillStyle = k === 3 ? shade(color, 0.12) : k % 2 ? shade(color, -0.12) : color;
     ctx.beginPath();
-    ctx.arc(x + (bx + jitter * 0.4) * s, y + by * s, br * s, 0, Math.PI * 2);
+    ctx.arc(x + (bx + jitter * 0.4) * s + lean, y + by * s, br * s, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.fillStyle = shade(color, 0.3);
   ctx.beginPath();
-  ctx.arc(x - 2 * s, y - 17 * s, 2.2 * s, 0, Math.PI * 2);
+  ctx.arc(x - 2 * s + sway * 0.95, y - 17 * s, 2.2 * s, 0, Math.PI * 2);
   ctx.fill();
 }
 
-/** Tall narrow cypress tree. */
-export function cypress(ctx, u, v, size = 1, color = '#2f5a2a') {
+/** Tall narrow cypress tree; `sway` bends its tip (px). */
+export function cypress(ctx, u, v, size = 1, color = '#2f5a2a', sway = 0) {
   const [x, y] = P(u, v, 0);
   const s = size;
+  const t = sway * 1.2; // the tall tip moves further than a round crown
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath();
   ctx.ellipse(x + 2 * s, y, 4 * s, 2 * s, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(x, y - 24 * s);
-  ctx.quadraticCurveTo(x + 5 * s, y - 10 * s, x + 2.5 * s, y - 1 * s);
+  ctx.moveTo(x + t, y - 24 * s);
+  ctx.quadraticCurveTo(x + 5 * s + t * 0.5, y - 10 * s, x + 2.5 * s, y - 1 * s);
   ctx.lineTo(x - 2.5 * s, y - 1 * s);
-  ctx.quadraticCurveTo(x - 5 * s, y - 10 * s, x, y - 24 * s);
+  ctx.quadraticCurveTo(x - 5 * s + t * 0.5, y - 10 * s, x + t, y - 24 * s);
   ctx.fill();
   ctx.fillStyle = shade(color, 0.18);
   ctx.beginPath();
-  ctx.moveTo(x, y - 23 * s);
-  ctx.quadraticCurveTo(x - 4 * s, y - 10 * s, x - 1.5 * s, y - 2 * s);
+  ctx.moveTo(x + t * 0.95, y - 23 * s);
+  ctx.quadraticCurveTo(x - 4 * s + t * 0.5, y - 10 * s, x - 1.5 * s, y - 2 * s);
   ctx.lineTo(x, y - 2 * s);
   ctx.closePath();
   ctx.fill();

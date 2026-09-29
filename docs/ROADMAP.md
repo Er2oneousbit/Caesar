@@ -9,7 +9,8 @@ What exists, what the classic game had that Colonia does not (yet), and ideas. R
 * **Sea trade**: navigable water detection, Docks, merchant ships, land/sea routes, 9 partners, empire map in the Trade advisor
 * Autosave when the page is hidden or closed; save sizes and storage usage in the menus
 * Open source: MIT license, contributing guide, code of conduct, security policy, issue/PR templates, CI with a reproducible-build check
-* Tests: 37 headless tests (core, military, trade), 29-check browser smoke test
+* Tests: 37 headless tests (core, military, trade), 32-check browser smoke test
+* Graphics: building shadows, construction rise-in, swaying forests, water glints, fountain spray, fire glow and embers, hearth smoke, cloud shadows and birds (with a setting and reduced-motion support); water supply radius on click and while placing
 
 ## Done (v0.1)
 
@@ -50,7 +51,8 @@ What exists, what the classic game had that Colonia does not (yet), and ideas. R
 
 * Background music (procedural, like the sound effects).
 * Charts in the advisors (population, treasury and mood history are already recorded in `city.history`).
-* Building animations (workshop fires, water in fountains, crowds at venues).
+* More building animation: waving banners, turning mill wheels, crowds at venues and markets.
+* Day/night cycle with lit windows (optional), smooth animated zoom, blended terrain edges.
 * Keyboard remapping and a colorblind-friendly overlay palette.
 * Performance: cache static terrain into chunk canvases for very zoomed-out views of 128x128 maps.
 

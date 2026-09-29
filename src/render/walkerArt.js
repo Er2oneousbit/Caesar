@@ -40,6 +40,8 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY) {
   ctx.beginPath();
   ctx.ellipse(sx, sy, 4.2 * k, 1.8 * k, 0, 0, Math.PI * 2);
   ctx.fill();
+  // a little bounce in each step (the shadow stays on the ground)
+  if (moving) sy -= Math.abs(Math.sin((t * 9 + w.anim) * 1.0)) * 0.8 * k;
 
   const item = def.item;
   if (item === 'cart') drawCart(ctx, w, sx + face * 7 * k, sy + dirY * 1.5 * k, k, face, phase);

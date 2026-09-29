@@ -205,6 +205,7 @@ export function settingsMenu(app) {
     check('muted', 'Mute all sounds'),
     check('edgeScroll', 'Scroll when the mouse touches the screen edge'),
     check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months and when you leave the page`, 'Uses the "Autosave" slot in this browser\'s local storage.'),
+    check('ambient', 'Ambient effects: drifting cloud shadows and birds', 'Purely decorative. Swaying trees and other small animations also turn off when your system asks for reduced motion.'),
     check('showFps', 'Show performance counters (debug HUD)'),
     h('div', { class: 'field' }, h('label', {}, 'Theme'),
       h('select', { onchange: (e) => { s.theme = e.target.value; app.applySettings(); } },

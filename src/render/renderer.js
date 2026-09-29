@@ -19,6 +19,13 @@
  *      Water buildings show their supply area: the one being placed or the
  *      one clicked in dark blue, existing coverage of that kind in pale blue.
  *   4. Particles (dust, smoke).
+ *
+ * Life in the picture (all visual only): buildings cast soft shadows to the
+ * lower right, new buildings rise out of a puff of dust, forests sway in
+ * gusts that roll across the map, water glints, fountains spray, fires glow
+ * and throw embers, and (ambient.js) cloud shadows drift over the city while
+ * birds fly past. `ambientOn` / `motionOn` switch the optional parts off
+ * (Settings, or the system's reduced-motion preference).
  * ----------------------------------------------------------------------------
  */
 
@@ -31,9 +38,10 @@ import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { groundTileSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec } from './terrainArt.js';
-import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock } from './buildingArt.js';
+import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength } from './buildingArt.js';
 import { drawWalker } from './walkerArt.js';
-import { Effects, drawFlames } from './effects.js';
+import { Effects, drawFlames, drawSpray, drawGlint } from './effects.js';
+import { Ambient } from './ambient.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
 const K_STRIP = 0;
@@ -80,6 +88,11 @@ export class Renderer {
     this.viewTiles = null; // visible tile range of the last frame {tx0, tx1, ty0, ty1}
     this.stripCache = new WeakMap();
     this.unsub = [];
+    this.ambient = new Ambient();
+    this.ambientOn = true; // clouds and birds (Settings: ambient effects)
+    this.motionOn = true; // swaying trees, glints, construction animation (off with reduced motion)
+    this.appear = new Map(); // building id -> time it was placed (rise-in animation)
+    this.puffBudget = 0; // dust puffs allowed this frame (a demo city appears all at once)
   }
 
   /** Point the renderer at a (new) game. */
@@ -90,6 +103,18 @@ export class Renderer {
     this.camera.setMapBounds(game.map.w, game.map.h);
     this.stripCache = new WeakMap();
     this.effects = new Effects();
+    this.ambient.reset(game.map.w, game.map.h);
+    this.appear.clear();
+    this.unsub.push(game.events.on('buildingAdded', (b) => {
+      if (!this.motionOn) return;
+      this.appear.set(b.id, this.time);
+      if (this.puffBudget > 0) {
+        this.puffBudget--;
+        const cx = b.x + b.size / 2;
+        const cy = b.y + b.size / 2;
+        this.effects.dust((cx - cy) * HALF_W, (cx + cy) * HALF_H, Math.min(1, b.size * 0.35));
+      }
+    }));
     this.unsub.push(game.events.on('collapse', ({ x, y, size }) => {
       const cx = x + size / 2;
       const cy = y + size / 2;
@@ -170,6 +195,10 @@ export class Renderer {
     const groundBottom = vr.y + vr.h + 4;
     this.viewTiles = { tx0, tx1, ty0, ty1 };
     this.stats.coverage = null;
+    this.puffBudget = 4;
+    const motion = this.motionOn;
+    const glints = motion && cam.zoom >= 1;
+    const visibleBuildings = [];
     const waterFrame = Math.floor(this.time * 2.5) % 4;
 
     const items = [];
@@ -200,6 +229,12 @@ export class Renderer {
             drawSpr(this.sprites.get(`w${variant}.${waterFrame}`, () => waterTileSpec(variant, waterFrame)), wx, wy);
             const mask = this.shoreMask(x, y);
             if (mask) drawSpr(this.sprites.get(`sh${mask}`, () => shoreSpec(mask)), wx, wy);
+            if (glints && !mask && (Math.imul(i, 2654435761) >>> 0) % 6 === 0) {
+              // Sun glints: brief flashes at a fixed spot per tile.
+              const h = (Math.imul(i, 40503) >>> 0) % 997;
+              const a = Math.sin(this.time * 2.1 + h);
+              if (a > 0.82) drawGlint(ctx, (wx + ((h % 30) - 15) - cam.x) * k, (wy + HALF_H + (((h >> 3) % 12) - 6) - cam.y) * k, k, (a - 0.82) * 4.5);
+            }
           } else {
             drawSpr(this.sprites.get(`g${terr}.${variant}`, () => groundTileSpec(terr, variant)), wx, wy);
           }
@@ -225,10 +260,16 @@ export class Renderer {
           if (!seenBuildings.has(bid)) {
             seenBuildings.add(bid);
             const b = game.buildings.get(bid);
-            if (b) this.collectBuilding(b, items, overlayOn);
+            if (b) {
+              this.collectBuilding(b, items, overlayOn);
+              visibleBuildings.push(b);
+            }
           }
         } else if (terr === Terrain.TREES && !map.road[i]) {
-          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${map.variant[i] & 7}`, () => treesSpec(map.variant[i] & 7)), wx, wy, full: true });
+          // Wind: 5 cached sway frames; the phase rolls across the map in gusts.
+          const tv = map.variant[i] & 7;
+          const sway = motion ? Math.round(Math.sin(this.time * 1.7 - (x * 0.45 + y * 0.25)) * 2) : 0;
+          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${tv}.${sway}`, () => treesSpec(tv, sway)), wx, wy, full: true });
         } else if (terr === Terrain.ROCK) {
           items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`k${variant}`, () => rocksSpec(variant)), wx, wy, full: true });
         }
@@ -252,6 +293,9 @@ export class Renderer {
         }
       }
     }
+
+    // --- building shadows (on the ground, under every object) --------------
+    if (!overlayOn) for (const b of visibleBuildings) this.drawBuildingShadow(b);
 
     // --- walkers ------------------------------------------------------------
     for (const w of game.walkers.values()) {
@@ -335,6 +379,12 @@ export class Renderer {
       }
     }
 
+    // --- ambient: cloud shadows and birds over the city --------------------
+    if (this.ambientOn) {
+      this.ambient.update(dt);
+      this.ambient.draw(ctx, cam, vr, this.time);
+    }
+
     // --- pass 3: previews, hover, selection --------------------------------
     this.drawToolPreview();
     if (this.selectedId) {
@@ -394,10 +444,23 @@ export class Renderer {
     const key = `b:${b.type}:${b.size}:${b.variant}:${state}`;
     const spr = this.sprites.get(key, () => buildingSpec(b.type, b.size, b.variant, state));
     const n = depths.length;
+    // Just built: rise out of the ground and fade in (half a second).
+    let alpha;
+    let rise = 0;
+    const t0 = this.appear.get(b.id);
+    if (t0 !== undefined) {
+      const p = (this.time - t0) / 0.5;
+      if (p >= 1) this.appear.delete(b.id);
+      else {
+        const e = 1 - (1 - p) ** 3; // ease out
+        alpha = Math.max(0.05, e);
+        rise = (1 - e) * 14;
+      }
+    }
     if (b.size === 1) {
-      items.push({ d: front, kind: K_STRIP, spr, wx, wy, full: true });
+      items.push({ d: front, kind: K_STRIP, spr, wx, wy: wy + rise, full: true, alpha });
     } else {
-      for (let j = 0; j < n; j++) items.push({ d: depths[j], kind: K_STRIP, spr, wx, wy, j, n });
+      for (let j = 0; j < n; j++) items.push({ d: depths[j], kind: K_STRIP, spr, wx, wy: wy + rise, j, n, alpha });
     }
     const kind = b.def.kind;
     if (kind === 'warehouse' || kind === 'granary') {
@@ -405,6 +468,13 @@ export class Renderer {
     }
     if ((b.type === 'pottery_ws' || b.type === 'weapons_ws') && b.efficiency > 0 && b.progress > 0 && Math.random() < 0.03) {
       this.effects.smoke(wx + (0.99 - 0.34) * HALF_W, wy + (0.99 + 0.34) * HALF_H - 32);
+    }
+    // Hearth smoke from lived-in homes (only when zoomed in enough to see it).
+    if (b.house && b.house.pop > 0 && b.house.tier >= 3 && b.house.tier <= 9 && this.camera.zoom >= 1 && Math.random() < 0.0015) {
+      this.effects.smoke(wx + (Math.random() - 0.5) * 8, wy + b.size * HALF_H - 14 - b.size * 10);
+    }
+    if (kind === 'fountain' && b.hasWater && b.efficiency > 0 && this.motionOn) {
+      items.push({ d: front + 0.0006, kind: K_EXTRA, b, wx, wy, spray: true });
     }
   }
 
@@ -451,6 +521,32 @@ export class Renderer {
     ctx.lineTo(z[0], z[1]);
     ctx.stroke();
     ctx.restore();
+  }
+
+  /**
+   * Soft shadow on the ground to the lower right of a building (sun in the
+   * upper left, like the art's shading). Drawn after the ground and before
+   * every object, so walkers and neighbours stand on top of it. The polygon
+   * wraps the footprint's two front edges, so the building's own tiles are
+   * never darkened (flat farms and plazas stay bright).
+   */
+  drawBuildingShadow(b) {
+    const L = shadowLength(b) * 1.25;
+    if (L <= 0.03) return;
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const S = b.size;
+    const pt = (u, v) => [((b.x + u - (b.y + v)) * HALF_W - cam.x) * k, ((b.x + u + b.y + v) * HALF_H - cam.y) * k];
+    for (const [len, alpha] of [[L, 0.14], [L * 0.55, 0.12]]) {
+      const dv = len * 0.4;
+      const pts = [pt(S, 0), pt(S + len, dv), pt(S + len, S + dv), pt(len, S + dv), pt(0, S), pt(S, S)];
+      ctx.fillStyle = `rgba(16,22,10,${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let q = 1; q < pts.length; q++) ctx.lineTo(pts[q][0], pts[q][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   /** Tile indices within `r` of a footprint (the square sim/water.js covers). */
@@ -599,11 +695,16 @@ export class Renderer {
     ctx.fill();
   }
 
-  /** Flat overlay footprints and dynamic stock displays. */
+  /** Flat overlay footprints, dynamic stock displays and fountain spray. */
   drawExtra(it) {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
     const b = it.b;
+    if (it.spray) {
+      // Spout top of fountainArt: local P(0.5, 0.5, 4) raised 10 px.
+      drawSpray(ctx, (it.wx - cam.x) * k, (it.wy + HALF_H * 1 - 14 - cam.y) * k, k, this.time, b.id);
+      return;
+    }
     if (it.flat) {
       this.fillDiamond(it.wx, it.wy, it.flat, b.size);
       return;

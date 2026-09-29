@@ -103,6 +103,12 @@
   if (focus) r.camera.centerOnTile(focus.x, focus.y);
   r.setOverlay(q.get('overlay') || 'none');
   if (selected) r.selectedId = selected.id;
+  // cloud=1: park one cloud shadow in the middle of the view (to judge its look).
+  if (q.get('cloud') && focus && r.ambient.clouds.length) {
+    const c = r.ambient.clouds[0];
+    c.x = (focus.x - focus.y) * 32 + 120;
+    c.y = (focus.x + focus.y) * 16 - 40;
+  }
   if (placing) { r.plan = placing; r.tool = placing.tool; }
   r.render(0, 0.016);
   r.render(0.5, 0.016);

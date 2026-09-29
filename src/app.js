@@ -33,7 +33,16 @@ import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort } from './sim/military.js';
 
-const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto' };
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true };
+
+/** Does the player's system ask for less motion (accessibility setting)? */
+function prefersReducedMotion() {
+  try {
+    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
 
 function readJson(key, fallback) {
   try {
@@ -119,6 +128,11 @@ export class App {
     const s = this.settings;
     this.sfx.setVolume(s.volume);
     this.sfx.setMuted(s.muted || this.flags.mute);
+    // Decorative motion: clouds/birds follow the setting; swaying trees, glints
+    // and build animations also stop when the system asks for reduced motion.
+    const reduced = prefersReducedMotion();
+    this.renderer.ambientOn = s.ambient !== false && !reduced;
+    this.renderer.motionOn = !reduced;
     // Only touch the theme attribute if the player picked a theme; 'auto'
     // leaves whatever the page host (or the OS) decided.
     const root = document.documentElement;

@@ -280,11 +280,16 @@ export function rubbleSpec(variant) {
 }
 
 /** 1-3 trees on a tile (object sprite, extends upward). */
-export function treesSpec(variant) {
+/**
+ * Trees on a forest tile. `sway` (-2..2) is the wind frame: the renderer
+ * cycles through these cached frames with a phase that rolls across the map,
+ * so forests ripple in gusts without redrawing any art per frame.
+ */
+export function treesSpec(variant, sway = 0) {
   return {
-    w: TW,
+    w: TW + 8,
     h: TH + 34,
-    ax: HALF_W,
+    ax: HALF_W + 4,
     ay: 34,
     draw(ctx) {
       const n = 1 + (variant % 3);
@@ -297,8 +302,10 @@ export function treesSpec(variant) {
       const drawList = spots.slice(0, n).sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
       drawList.forEach(([u, v], k) => {
         const size = 0.75 + hash01(variant, k, 31) * 0.4;
-        if (hash01(variant, k, 32) < 0.28) cypress(ctx, u, v, size, '#2f5a2a');
-        else tree(ctx, u, v, size, greens[(variant + k) % greens.length], '#6b4a2a', variant + k);
+        // Neighbouring trees on a tile do not move in perfect lockstep.
+        const s = sway * (0.8 + hash01(variant, k, 33) * 0.4);
+        if (hash01(variant, k, 32) < 0.28) cypress(ctx, u, v, size, '#2f5a2a', s);
+        else tree(ctx, u, v, size, greens[(variant + k) % greens.length], '#6b4a2a', variant + k, s);
       });
     },
   };

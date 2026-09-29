@@ -80,6 +80,25 @@ export class Effects {
  * pixels; t is time in seconds; seed varies the flicker per tile.
  */
 export function drawFlames(ctx, sx, sy, k, t, seed) {
+  // warm flickering glow on the ground and nearby walls
+  const glow = (26 + Math.sin(t * 9 + seed) * 3) * k;
+  const g = ctx.createRadialGradient(sx, sy - 6 * k, 0, sx, sy - 6 * k, glow);
+  g.addColorStop(0, 'rgba(255,170,60,0.38)');
+  g.addColorStop(1, 'rgba(255,120,30,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - 6 * k, glow, glow * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // rising embers
+  ctx.fillStyle = 'rgba(255,200,90,0.9)';
+  for (let e = 0; e < 3; e++) {
+    const p = (t * 0.8 + seed * 0.37 + e / 3) % 1;
+    const ex = sx + Math.sin(p * 9 + seed + e) * 6 * k;
+    const ey = sy - (8 + p * 30) * k;
+    ctx.globalAlpha = 1 - p;
+    ctx.fillRect(ex, ey, 1.4 * k, 1.4 * k);
+  }
+  ctx.globalAlpha = 1;
   for (let f = 0; f < 4; f++) {
     const ph = t * 7 + seed * 1.7 + f * 2.1;
     const h = (10 + Math.sin(ph) * 4 + f * 2) * k;
@@ -100,4 +119,29 @@ export function drawFlames(ctx, sx, sy, k, t, seed) {
     ctx.closePath();
     ctx.fill();
   }
+}
+
+/**
+ * Water droplets arcing out of a working fountain's spout. (sx, sy) is the
+ * top of the spout in device pixels.
+ */
+export function drawSpray(ctx, sx, sy, k, t, seed) {
+  ctx.fillStyle = 'rgba(210,236,255,0.9)';
+  for (let j = 0; j < 10; j++) {
+    const p = (t * 1.3 + j / 10 + seed * 0.13) % 1;
+    const side = j % 2 ? 1 : -1;
+    const x = sx + side * p * 8 * k;
+    const y = sy - p * 7 * k + p * p * 16 * k; // up, then down into the basin
+    ctx.globalAlpha = 0.95 - p * 0.6;
+    ctx.fillRect(x - 0.6 * k, y - 0.6 * k, 1.2 * k, 1.2 * k);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** A brief four-point sun glint on water (alpha 0..1). */
+export function drawGlint(ctx, sx, sy, k, alpha) {
+  ctx.fillStyle = `rgba(255,255,245,${alpha.toFixed(3)})`;
+  const r = 2.4 * k;
+  ctx.fillRect(sx - r, sy - 0.35 * k, r * 2, 0.7 * k);
+  ctx.fillRect(sx - 0.35 * k, sy - r * 0.6, 0.7 * k, r * 1.2);
 }

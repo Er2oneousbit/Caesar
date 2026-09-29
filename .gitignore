@@ -12,5 +12,8 @@ tests/e2e/out/
 Thumbs.db
 *.log
 
+# Artifact variant of the build (regenerate with: npm run build -- --artifact)
+dist/colonia.artifact.html
+
 # NOTE: dist/colonia.html IS committed on purpose, so players can download
 # and double-click it without installing anything. Rebuild with `npm run build`.

@@ -88,7 +88,13 @@ html, body {
 
 button, input, select { font: inherit; color: inherit; }
 
-#app { position: fixed; inset: 0; }
+#app {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+}
 
 #view {
   position: absolute;

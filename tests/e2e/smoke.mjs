@@ -169,7 +169,16 @@ try {
   const loaded = await page.evaluate(() => window.colonia.game.buildings.size);
   check('quick save survives a reload', loaded === savedNow.b, `${savedNow.b} vs ${loaded}`);
 
-  // 6. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
+  // 6. In-game confirm dialog: restart the map from the pause menu
+  await page.keyboard.press('Escape');
+  await page.click('text=Restart this map');
+  const dialog = await page.isVisible('[role="alertdialog"]');
+  check('restart asks for confirmation in-game', dialog);
+  await page.click('[role="alertdialog"] .btn.danger');
+  const fresh = await page.evaluate(() => window.colonia.game.buildings.size);
+  check('confirming restart starts a fresh map', fresh === 0, `${fresh} buildings`);
+
+  // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];
   phone.on('pageerror', (e) => perrors.push(e.message));

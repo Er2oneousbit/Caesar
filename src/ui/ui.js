@@ -77,6 +77,44 @@ export class UI {
 
   hasModal() { return this.modalRoot.childElementCount > 0; }
 
+  /**
+   * In-game confirmation dialog (window.confirm is blocked in some embeds,
+   * and a styled dialog fits the game better anyway).
+   */
+  confirm(message, onYes, { title = 'Are you sure?', yes = 'Yes', no = 'Cancel', danger = false } = {}) {
+    const modal = h('div', { class: 'modal narrow', role: 'alertdialog' },
+      h('div', { class: 'modal-head' }, h('h2', {}, title)),
+      h('div', { class: 'modal-body' }, h('p', {}, message)),
+      h('div', { class: 'modal-foot' },
+        h('button', { class: 'btn', onclick: () => this.closeModal() }, no),
+        h('button', { class: `btn ${danger ? 'danger' : 'primary'}`, onclick: () => { this.closeModal(); onYes(); } }, yes)));
+    this.showModal(modal, { pause: true, kind: 'confirm' });
+    setTimeout(() => modal.querySelector('.modal-foot .btn:last-child')?.focus(), 0);
+  }
+
+  /** Show text the player can copy (fallback when the clipboard is blocked). */
+  showText(title, text, note = '') {
+    const area = h('textarea', { id: 'text-dialog', readonly: true, style: { width: '100%', height: '180px', fontFamily: 'monospace', fontSize: '11px' } });
+    area.value = text;
+    this.showModal(h('div', { class: 'modal narrow' },
+      h('div', { class: 'modal-head' }, h('h2', {}, title), h('button', { class: 'panel-close', onclick: () => this.closeModal() }, '×')),
+      h('div', { class: 'modal-body' }, note ? h('p', { class: 'muted' }, note) : null, area),
+      h('div', { class: 'modal-foot' }, h('button', { class: 'btn primary', onclick: () => this.closeModal() }, 'Done'))), { pause: true, kind: 'text' });
+    setTimeout(() => { area.focus(); area.select(); }, 0);
+  }
+
+  /** Ask for pasted text, then call onSubmit(text). */
+  askText(title, note, submitLabel, onSubmit) {
+    const area = h('textarea', { id: 'paste-dialog', placeholder: 'Paste here', style: { width: '100%', height: '180px', fontFamily: 'monospace', fontSize: '11px' } });
+    this.showModal(h('div', { class: 'modal narrow' },
+      h('div', { class: 'modal-head' }, h('h2', {}, title), h('button', { class: 'panel-close', onclick: () => this.closeModal() }, '×')),
+      h('div', { class: 'modal-body' }, h('p', { class: 'muted' }, note), area),
+      h('div', { class: 'modal-foot' },
+        h('button', { class: 'btn', onclick: () => this.closeModal() }, 'Cancel'),
+        h('button', { class: 'btn primary', onclick: () => onSubmit(area.value) }, submitLabel))), { pause: true, kind: 'text' });
+    setTimeout(() => area.focus(), 0);
+  }
+
   openHelp(tab) { this.showModal(helpModal(this.app, tab), { pause: true, kind: 'help' }); }
 
   openAdvisors(tab) {

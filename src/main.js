@@ -57,6 +57,7 @@ function showCrash(err) {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" data-a="copy">Copy report</button>
         <button class="btn" data-a="save">Download emergency save</button>
+        <button class="btn" data-a="copysave">Copy save data</button>
         <button class="btn" data-a="continue">Try to continue</button>
         <button class="btn primary" data-a="reload">Reload</button>
       </div>
@@ -75,6 +76,13 @@ function showCrash(err) {
         link.click();
       } catch (saveErr) {
         e.target.textContent = `Save failed: ${saveErr.message}`;
+      }
+    } else if (a === 'copysave') {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(serializeGame(app.game)));
+        e.target.textContent = 'Save copied!';
+      } catch (copyErr) {
+        e.target.textContent = `Copy failed: ${copyErr.message || 'clipboard blocked'}`;
       }
     } else if (a === 'continue') {
       el.remove();
@@ -107,14 +115,39 @@ function boot() {
 
   const root = document.getElementById('app');
   if (!root) throw new Error('Missing #app element in the page');
+
+  // When hosted as a claude.ai artifact, the viewer can hot-swap a new
+  // version of the page. Hand it a snapshot of the running city so players
+  // keep their game across republishes. Harmless everywhere else.
+  const hot = typeof window !== 'undefined' && window.claude ? window.claude.hot : null;
   try {
-    app = new App(root, flags);
-    window.colonia = app;
-    app.boot();
+    if (hot && typeof hot.snapshot === 'function') {
+      hot.snapshot(() => (app && app.game ? { save: serializeGame(app.game, { camera: app.renderer.camera.serialize() }) } : {}));
+    }
   } catch (err) {
-    log.error('Boot failed:', err);
-    showCrash(err);
+    log.warn('Hot snapshot unavailable:', err);
   }
+
+  const start = (data) => {
+    try {
+      app = new App(root, flags);
+      window.colonia = app;
+      if (data && data.save) {
+        try {
+          app.loadData(data.save);
+          return;
+        } catch (err) {
+          log.warn('Could not restore the previous session, starting fresh:', err);
+        }
+      }
+      app.boot();
+    } catch (err) {
+      log.error('Boot failed:', err);
+      showCrash(err);
+    }
+  };
+  if (hot && typeof hot.ready === 'function') hot.ready(start);
+  else start((hot && hot.data) || {});
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

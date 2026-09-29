@@ -147,11 +147,12 @@ export function loadMenu(app) {
     const s = byName[slot];
     return slotRow(app, slot, s?.meta, s ? [
       s.corrupt ? h('span', { class: 'no' }, 'Corrupt') : h('button', { class: 'btn small primary', onclick: () => app.loadSlot(slot) }, 'Load'),
-      h('button', { class: 'btn small danger', onclick: () => { if (window.confirm(`Delete ${SLOT_NAMES[slot]}?`)) { deleteSlot(slot); app.ui.showModal(loadMenu(app)); } } }, '🗑'),
+      h('button', { class: 'btn small danger', title: 'Delete this save', onclick: () => app.ui.confirm(`Delete ${SLOT_NAMES[slot]}? This cannot be undone.`, () => { deleteSlot(slot); app.ui.showModal(loadMenu(app)); }, { yes: 'Delete', danger: true }) }, '🗑'),
     ] : null);
   });
   return modal('Load game', [rows, fileInput], [
     h('button', { class: 'btn', onclick: () => fileInput.click() }, '📂 Import from file'),
+    h('button', { class: 'btn', onclick: () => app.ui.askText('Paste save data', 'Paste the text you copied with "Copy save data".', 'Load', (text) => app.importText(text)) }, '📋 Paste save data'),
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
   ], 'narrow', () => app.ui.closeModal());
 }
@@ -160,9 +161,10 @@ export function saveMenu(app) {
   const slots = listSlots(SAVE_SLOTS);
   const byName = Object.fromEntries(slots.map((s) => [s.slot, s]));
   const rows = SAVE_SLOTS.filter((s) => s !== 'auto').map((slot) => slotRow(app, slot, byName[slot]?.meta,
-    h('button', { class: 'btn small primary', onclick: () => { if (!byName[slot] || window.confirm(`Overwrite ${SLOT_NAMES[slot]}?`)) { app.saveSlot(slot); app.ui.closeModal(); } } }, 'Save here')));
-  return modal('Save game', [rows, h('div', { class: 'muted' }, 'Saves live in this browser. Export to a file to keep a backup or move it to another computer.')], [
+    h('button', { class: 'btn small primary', onclick: () => { const doSave = () => { app.saveSlot(slot); app.ui.closeModal(); }; if (!byName[slot]) doSave(); else app.ui.confirm(`Overwrite ${SLOT_NAMES[slot]}?`, doSave, { yes: 'Overwrite' }); } }, 'Save here')));
+  return modal('Save game', [rows, h('div', { class: 'muted' }, 'Saves live in this browser. Export to a file (or copy the save data) to keep a backup or move it to another computer.')], [
     h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export to file'),
+    h('button', { class: 'btn', onclick: () => app.copySave() }, '📋 Copy save data'),
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
   ], 'narrow', () => app.ui.closeModal());
 }
@@ -209,8 +211,8 @@ export function pauseMenu(app) {
     btn('Mission briefing', () => app.ui.showModal(briefing(app, g.scenario, () => {}))),
     btn('Settings', () => app.ui.showModal(settingsMenu(app))),
     btn('How to play', () => app.ui.openHelp()),
-    btn('Restart this map', () => { if (window.confirm('Restart and lose progress on this map?')) app.restart(); }),
-    btn('Quit to main menu', () => { if (window.confirm('Quit to the main menu? Unsaved progress is lost (the autosave remains).')) app.toMainMenu(); }, 'danger'),
+    btn('Restart this map', () => app.ui.confirm('Restart this map from scratch? Progress since your last save is lost.', () => app.restart(), { yes: 'Restart', danger: true })),
+    btn('Quit to main menu', () => app.ui.confirm('Quit to the main menu? Progress since your last save is lost (the autosave remains).', () => app.toMainMenu(), { yes: 'Quit', danger: true }), 'danger'),
   ], null, 'narrow', () => app.ui.closeModal());
 }
 

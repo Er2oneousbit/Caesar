@@ -19,7 +19,7 @@
 import { CONFIG } from './config.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
-import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile } from './core/save.js';
+import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile, serializeGame } from './core/save.js';
 import { Renderer } from './render/renderer.js';
 import { OVERLAYS } from './render/overlays.js';
 import { UI } from './ui/ui.js';
@@ -99,8 +99,10 @@ export class App {
   resize() {
     const sidebarHidden = this.ui && this.ui.sidebar.el.classList.contains('hidden');
     const sidebarW = sidebarHidden ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 0;
-    const w = Math.max(200, window.innerWidth - sidebarW);
-    const hgt = Math.max(200, window.innerHeight);
+    // #app is inset by the phone's safe areas, so size from it, not the window.
+    const rect = this.root.getBoundingClientRect();
+    const w = Math.max(200, (rect.width || window.innerWidth) - sidebarW);
+    const hgt = Math.max(200, rect.height || window.innerHeight);
     this.renderer.resize(w, hgt, window.devicePixelRatio || 1);
   }
 
@@ -109,8 +111,16 @@ export class App {
     const s = this.settings;
     this.sfx.setVolume(s.volume);
     this.sfx.setMuted(s.muted || this.flags.mute);
-    if (s.theme === 'light' || s.theme === 'dark') document.documentElement.dataset.theme = s.theme;
-    else delete document.documentElement.dataset.theme;
+    // Only touch the theme attribute if the player picked a theme; 'auto'
+    // leaves whatever the page host (or the OS) decided.
+    const root = document.documentElement;
+    if (s.theme === 'light' || s.theme === 'dark') {
+      root.dataset.theme = s.theme;
+      this.themeSetByGame = true;
+    } else if (this.themeSetByGame) {
+      delete root.dataset.theme;
+      this.themeSetByGame = false;
+    }
     writeJson(`${CONFIG.STORAGE_PREFIX}settings`, s);
   }
 
@@ -261,6 +271,31 @@ export class App {
       exportToFile(this.game, { camera: this.renderer.camera.serialize() });
     } catch (err) {
       this.ui.toastError(`Export failed: ${err.message}`);
+    }
+  }
+
+  /** Copy the save to the clipboard (works where file downloads are blocked). */
+  copySave() {
+    if (!this.game) return;
+    const text = JSON.stringify(serializeGame(this.game, { camera: this.renderer.camera.serialize() }));
+    const fallback = () => this.ui.showText('Save data', text, 'Select all and copy this text somewhere safe. Load it later with "Paste save data".');
+    try {
+      navigator.clipboard.writeText(text).then(
+        () => this.ui.messages.push({ text: `Save data copied (${Math.round(text.length / 1024)} KB). Paste it into a text file to keep it.`, level: 'good', date: '' }),
+        fallback,
+      );
+    } catch {
+      fallback();
+    }
+  }
+
+  /** Load a save from pasted text. */
+  importText(text) {
+    try {
+      const data = JSON.parse(String(text || '').trim());
+      this.loadData(data);
+    } catch (err) {
+      this.ui.toastError(`Could not load that text: ${err.message}`);
     }
   }
 

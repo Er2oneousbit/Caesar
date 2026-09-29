@@ -149,11 +149,13 @@ export class InfoPanel {
         onclick: () => {
           const people = b.house ? b.house.pop : 0;
           const msg = people > 0 ? `Demolish this home? ${people} residents will become homeless.` : `Demolish this ${b.house ? 'home' : b.def.name}?`;
-          if (!window.confirm(msg)) return;
-          removeBuilding(g, b, 'demolish');
-          g.onMapEdited();
-          this.app.sfx.play('demolish');
-          this.close();
+          this.app.ui.confirm(msg, () => {
+            if (!g.buildings.has(b.id)) return;
+            removeBuilding(g, b, 'demolish');
+            g.onMapEdited();
+            this.app.sfx.play('demolish');
+            this.close();
+          }, { title: 'Demolish', yes: 'Demolish', danger: true });
         },
       }, '⛏ Demolish'),
       h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${b.id} at ${b.x},${b.y}`));

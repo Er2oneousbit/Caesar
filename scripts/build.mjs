@@ -28,20 +28,24 @@ Colonia single-file build
 Options:
   --out <file>    Output HTML file (default dist/colonia.html)
   --no-minify     Keep the bundle readable (bigger file, easier debugging)
+  --artifact      Emit a page FRAGMENT for claude.ai artifacts (no html/head/body
+                  tags; the host wraps it). Default out: dist/colonia.artifact.html
   --help          Show this help
 
 Made with ❤️ from your friendly hacker - er2oneousbit
 `;
 
 function parseArgs(argv) {
-  const o = { out: path.join(ROOT, 'dist', 'colonia.html'), minify: true };
+  const o = { out: null, minify: true, artifact: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') { console.log(HELP); process.exit(0); }
     else if (a === '--out') o.out = path.resolve(argv[++i]);
     else if (a === '--no-minify') o.minify = false;
+    else if (a === '--artifact') o.artifact = true;
     else { console.error(`Unknown option: ${a}\n${HELP}`); process.exit(2); }
   }
+  if (!o.out) o.out = path.join(ROOT, 'dist', o.artifact ? 'colonia.artifact.html' : 'colonia.html');
   return o;
 }
 
@@ -80,13 +84,29 @@ async function main() {
   if (opts.minify) css = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*\n/g, '\n');
 
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
-  const html = `<!doctype html>
+  const fonts = `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">`;
+  // Artifact hosts wrap the page in their own document skeleton.
+  const fragment = `<title>Colonia</title>
+<!-- Colonia v${version}: an original browser city builder. Made with ❤️ from your friendly hacker - er2oneousbit -->
+${fonts}
+<style>
+${css}
+</style>
+<div id="app"></div>
+<noscript><p style="color:#fff;padding:20px">Colonia needs JavaScript enabled.</p></noscript>
+<script>
+${js}
+</script>
+`;
+  const html = opts.artifact ? fragment : `<!doctype html>
 <!-- Colonia v${version}: an original browser city builder. Built ${new Date().toISOString()}.
      Made with ❤️ from your friendly hacker - er2oneousbit -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Colonia</title>
 <meta name="description" content="Colonia: an original browser city builder inspired by classic Roman city-building games.">
 <link rel="icon" href="${FAVICON}">

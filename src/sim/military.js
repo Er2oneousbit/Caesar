@@ -31,7 +31,7 @@ import { Terrain, Road, Wall } from '../world/map.js';
 import { MinHeap } from '../world/pathfinding.js';
 import { INVASION_PRESETS } from '../data/scenarios.js';
 import { difficultyOf } from '../data/difficulty.js';
-import { spawnWalker, killWalker } from './entities.js';
+import { spawnWalker, killWalker, STRIDE_WRAP } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
 import { igniteBuilding, collapseBuilding } from './risk.js';
@@ -109,6 +109,7 @@ export class Unit {
     this.oy = 0;
     this.px = x; // position at the start of the tick (render interpolation)
     this.py = y;
+    this.walked = 0; // tiles walked, modulo STRIDE_WRAP (drives the leg animation)
   }
 }
 
@@ -211,6 +212,7 @@ function moveToward(game, u, tx, ty, speed) {
     u.stuck += 2;
     u.moving = false;
   }
+  if (u.moving) u.walked = (u.walked + step) % STRIDE_WRAP;
   return false;
 }
 

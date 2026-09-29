@@ -4,7 +4,7 @@
  * Combat unit definitions for both sides. Units are separate from walkers:
  * walkers stay on roads, units move freely over open land and fight.
  *
- * Timing: speed is tiles per tick (20 ticks = 1 second at 1x),
+ * Timing: speed is tiles per tick (20 ticks = 1 game day, 1.67 s at 1x),
  * cooldown is ticks between attacks.
  *
  *   hp        hit points

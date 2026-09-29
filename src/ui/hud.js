@@ -8,11 +8,12 @@
  */
 
 import { h, fmt } from './dom.js';
+import { CONFIG } from '../config.js';
 import { OVERLAYS } from '../render/overlays.js';
 import { threatSummary } from '../sim/military.js';
 
 const SPEED_LABELS = ['⏸', '▶', '▶▶', '▶▶▶', '⏩'];
-const SPEED_TITLES = ['Pause (Space)', 'Normal speed (1)', 'Fast (2)', 'Faster (3)', 'Fastest (4)'];
+const SPEED_TITLES = ['Pause (Space)', 'Normal speed', 'Fast', 'Faster', 'Fastest'].map((t, i) => (i ? `${t}, ${CONFIG.SPEEDS[i]}x (${i})` : t));
 
 export class Hud {
   constructor(app, root) {

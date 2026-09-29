@@ -4,12 +4,14 @@ The rules and numbers behind Colonia. Every number here comes from `src/config.j
 
 ## Time
 
-* 1 day = 1 second at normal speed, 16 days per month, 12 months per year (about 3 minutes per year at 1x).
-* Speeds: 1x, 2x, 3x, 5x. Walkers move about 2 tiles per second at 1x.
+* A game day takes 1.67 seconds at 1x (12 simulation ticks a second, 20 a day); 16 days make a month (about 27 seconds) and 12 months a year (about 5 minutes at 1x).
+* Speeds: 1x, 2x, 4x, 8x. People walk 2 tiles a game day, 1.2 tiles a second at 1x; their legs step with the ground they cover, so they match at every speed and stand still while paused. Carts roll a little slower, soldiers march at their own pace (table under *Military*).
 
 ## Map sizes
 
-Sandbox maps come in Small (64x64), Medium (96x96), Large (128x128) and **Uber (256x256)**: sixteen times the land of Small, room for a capital and its whole province. Settlers walk in from the map entrance to the home they picked; on a big map that can be far, so anyone with more than a 70-tile walk comes with a pack mule and travels faster (up to 4x walking speed), and no settler's trip takes much longer than a 70-tile walk. Uber costs about the same per frame as Large (only the tiles on screen are drawn) and a year-old Uber city saves in about 300 KB.
+Sandbox maps come in Small (64x64), Medium (96x96), Large (128x128) and **Uber (256x256)**: sixteen times the land of Small, room for a capital and its whole province. Settlers walk in from the map entrance to the home they picked; on a big map that can be far, so anyone with more than a 70-tile walk rides in on a mule, up to twice walking speed (a trot): trips up to 140 tiles take no longer than a 70-tile walk. Uber costs about the same per frame as Large (only the tiles on screen are drawn) and a year-old Uber city saves in about 300 KB.
+
+**Around the Imperial road** the land is kept free of rock for about 5 tiles each side (4 at the least, where the edge of an outcrop wanders in). Rock can never be cleared and every city starts along the road, so outcrops there would wall off the first blocks. Rock elsewhere stays for marble quarries and iron mines.
 
 ## Difficulty
 
@@ -121,7 +123,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 | Exports come from | that warehouse | staffed warehouses within 60 road tiles of the dock |
 
 * A **Dock** (3x3, 10 workers, 120 Dn) must touch navigable water: water connected to the map edge through a body of at least 80 tiles. Rivers and coasts always qualify, big lakes touching the edge sometimes do, desert and plains maps usually do not. Ships sail under bridges.
-* One ship ties up at a dock at a time (about 6 seconds at 1x); more docks serve more routes at once.
+* One ship ties up at a dock at a time (6 game days, 10 seconds at 1x); more docks serve more routes at once.
 * Partners and routes (open cost in Dn):
 
 | Partner | Route | Sells | Buys |
@@ -144,11 +146,11 @@ Repelling a raid: +8 peace, +3 favor. Each building lost: -1 peace.
 
 **Recruiting.** A staffed Barracks trains one recruit every 8 days (at full staff) and sends him by road to the emptiest staffed fort. Each fort holds 8 soldiers. Equipment is delivered to the Barracks by cart only while forts have empty places:
 
-| Soldier | Fort | Needs | HP | Attack | Defense | Range | Speed | Pay |
+| Soldier | Fort | Needs | HP | Attack | Defense | Range | Speed (1x) | Pay |
 |---|---|---|---|---|---|---|---|---|
-| Legionary | Legion Fort (300) | 50 weapons | 110 | 14 | 9 | melee | 1.5 tiles/s | 2 |
-| Archer | Archer Fort (220) | 50 arrows | 60 | 10 | 3 | 6.5 tiles | 1.5 | 2 |
-| Cavalryman | Cavalry Fort (350) | 1 horse | 120 | 15 | 6 | melee | 2.6 | 3 |
+| Legionary | Legion Fort (300) | 50 weapons | 110 | 14 | 9 | melee | 0.9 tiles/s | 2 |
+| Archer | Archer Fort (220) | 50 arrows | 60 | 10 | 3 | 6.5 tiles | 0.9 | 2 |
+| Cavalryman | Cavalry Fort (350) | 1 horse | 120 | 15 | 6 | melee | 1.6 | 3 |
 
 Pay is Dn per soldier per month, on top of the wages of the forts' and barracks' staff (8 and 10 workers). A full set of three forts with a barracks employs about 34 people, so size the army to the city: an army that takes the farmers leaves the city hungry (use labor priorities).
 
@@ -209,9 +211,9 @@ A mission is won when every goal is met at the same time (checked monthly). You 
 
 None of this changes the simulation: the same seed plays out the same way with every setting on or off, and saves do not store it.
 
-* **Day and night** (*Settings*: Day and night). One day and night takes 5 minutes of game time at 1x (a minute at 5x) and stops while the game is paused. Daylight lasts a bit over half of it; sunset and dawn get warm colors. From dusk, homes light their windows one by one (about half their windows, more in bigger homes), temples, forts, towers, gates, docks and venues light torches, one walker in three carries a lantern, raiders carry torches, and fires light up their surroundings. Closed buildings (no staff) and farms, workshops and storehouses stay dark. Tool previews, radius overlays and selection outlines are drawn after the lighting, so they are always bright. Info overlays turn the tint off.
+* **Day and night** (*Settings*: Day and night). One day and night takes 5 minutes at 1x (under 40 seconds at 8x) and stops while the game is paused. Daylight lasts a bit over half of it; sunset and dawn get warm colors. From dusk, homes light their windows one by one (about half their windows, more in bigger homes), temples, forts, towers, gates, docks and venues light torches, one walker in three carries a lantern, raiders carry torches, and fires light up their surroundings. Closed buildings (no staff) and farms, workshops and storehouses stay dark. Tool previews, radius overlays and selection outlines are drawn after the lighting, so they are always bright. Info overlays turn the tint off.
 * **Seasons** (*Settings*: Seasons). The month sets the colors: Ianuarius is mid-winter, Aprilis mid-spring, Iulius mid-summer, October mid-autumn, and the months between blend. Winter: grey-green grass and a third of the round trees bare. Spring: fresh green, meadows full of flowers, blossoms on some trees. Autumn: olive-gold grass and orange, gold and red leaves. Cypresses never change.
-* **Weather** (*Settings*: Weather). A spell of weather lasts 35 to 110 seconds of game time, then the next is drawn with odds by season (summer is mostly clear with the odd thunderstorm; autumn and winter bring more rain; snow falls only in winter and turns to rain when spring comes). Overcast dims the scene and hides sun shadows and cloud shade. Thunderstorms flash (at most every 5 seconds) and thunder rolls in a moment later; heavy storms make some homes light their lamps by day. Birds stay home at night and in rain or snow.
+* **Weather** (*Settings*: Weather). A spell of weather lasts 35 to 110 seconds of game time, then the next is drawn with odds by season (summer is mostly clear with the odd thunderstorm; autumn and winter bring more rain; snow falls only in winter and turns to rain when spring comes). Rain and snow never fall together: when one follows the other, the first stops before the second starts. Overcast dims the scene and hides sun shadows and cloud shade. Thunderstorms flash (at most every 5 seconds) and thunder rolls in a moment later; heavy storms make some homes light their lamps by day. Birds stay home at night and in rain or snow.
 * **Reduced motion.** When the system asks for reduced motion, decorative motion stops: no swaying trees, glints, falling rain or snow, lightning flashes, fling or zoom animation. Colors, lights and flags (held still) remain.
 * **Debug console:** `weather rain` (clear, cloudy, rain, storm, snow) changes the weather now; `sky 0.8` freezes the time of day (0.3 noon, 0.67 sunset, 0.8 night) and `sky off` lets it run again.
 

@@ -401,7 +401,8 @@ export class Renderer {
       if (wx < x0w || wx > x1w || wy < y0w || wy > vr.y + vr.h + 30) continue;
       const ddx = (w.tx - w.x) - (w.ty - w.y);
       const ddy = (w.tx - w.x) + (w.ty - w.y);
-      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
+      const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
+      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -412,7 +413,9 @@ export class Renderer {
       const fy = u.py + (u.y - u.py) * alpha;
       const wx = (fx - fy) * HALF_W;
       const wy = (fx + fy) * HALF_H;
-      if (inView(wx, wy)) items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy });
+      // u.walked already includes this tick's step; the drawing is (1 - alpha) of it behind.
+      const stride = u.walked - (1 - alpha) * Math.hypot(u.x - u.px, u.y - u.py);
+      if (inView(wx, wy)) items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
     }
     for (const p of game.projectiles) {
       const wx = (p.x - p.y) * HALF_W;
@@ -438,7 +441,7 @@ export class Renderer {
           if (it.alpha) ctx.globalAlpha = 1;
           break;
         case K_WALKER:
-          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY);
+          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride);
           break;
         case K_FIRE:
           drawFlames(ctx, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, this.time, it.seed);
@@ -450,7 +453,7 @@ export class Renderer {
           this.drawExtra(it);
           break;
         case K_UNIT:
-          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, selFort !== 0 && it.u.fort === selFort);
+          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, selFort !== 0 && it.u.fort === selFort, it.stride);
           break;
         case K_PROJ:
           drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k);

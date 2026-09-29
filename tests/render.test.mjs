@@ -13,8 +13,8 @@
  *   - day and night: the sky cycle is continuous, lamps are on at night and
  *     off by day, and it follows game ticks
  *   - seasons: months map to seasons, palettes change month by month
- *   - weather: the state machine only snows in winter, eases levels, and a
- *     storm throws lightning with thunder
+ *   - weather: the state machine only snows in winter, never rains into the
+ *     snow, eases levels, and a storm throws lightning with thunder
  *   - edge blending: a tile learns which stronger ground borders it
  * ----------------------------------------------------------------------------
  */
@@ -262,6 +262,28 @@ test('weather: levels ease toward the new weather instead of jumping', () => {
   for (let i = 0; i < 60; i++) w.update(1, 'autumn');
   assert.ok(Math.abs(w.rain - WEATHER.rain.rain) < 0.02, 'arrived');
   w.update(0, 'autumn'); // paused: nothing moves
+});
+
+test('weather: rain and snow never fall at the same time', () => {
+  // Long histories that switch between winter and spring, so they hit every
+  // snow -> rain and rain -> snow change, and snow melting into spring rain.
+  for (let seed = 1; seed <= 8; seed++) {
+    const w = new Weather(seeded(seed));
+    for (let i = 0; i < 12000; i++) {
+      w.update(1 / 3, Math.floor(i / 1500) % 2 ? 'spring' : 'winter');
+      assert.ok(!(w.rain > 0 && w.snow > 0), `seed ${seed} step ${i}: rain ${w.rain.toFixed(3)} with snow ${w.snow.toFixed(3)}`);
+    }
+  }
+  // Snow turning to rain: the snow stops first (quickly), then the rain builds up.
+  const w = new Weather(seeded(5));
+  w.force('snow', true);
+  w.force('rain');
+  let t = 0;
+  while (w.rain === 0 && t < 30) { w.update(0.1, 'winter'); t += 0.1; }
+  assert.equal(w.snow, 0, 'snow gone before the first drop');
+  assert.ok(t < 10, `rain starts ${t.toFixed(1)} s after the snow`);
+  for (let i = 0; i < 400; i++) w.update(0.1, 'winter');
+  assert.ok(Math.abs(w.rain - WEATHER.rain.rain) < 0.02, 'then it rains properly');
 });
 
 test('weather: a thunderstorm flashes and calls for thunder', () => {

@@ -29,7 +29,7 @@ export const KEY_HELP = [
   ['Right click', 'Cancel tool / close panel'],
   ['Space or P', 'Pause / resume'],
   ['M', 'Music on / off'],
-  ['1 2 3 4', 'Game speed 1x, 2x, 3x, 5x'],
+  ['1 2 3 4', `Game speed ${CONFIG.SPEEDS.slice(1).map((v) => `${v}x`).join(', ')}`],
   ['H', 'Housing tool'],
   ['R', 'Road tool'],
   ['X or Delete', 'Clear land tool'],

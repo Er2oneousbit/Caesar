@@ -5,7 +5,8 @@
  * hunting through system code. Values are grouped by system.
  *
  * Units cheat sheet:
- *   - "tick"  : one simulation step. 20 ticks = 1 real second at 1x speed.
+ *   - "tick"  : one simulation step. TICKS_PER_SECOND ticks run per real
+ *               second at 1x speed (12: a game day takes 1.67 s).
  *   - "day"   : TICKS_PER_DAY ticks. Most building logic runs once per day.
  *   - "unit"  : one unit of a good. A cart carries CART_CAPACITY units.
  *   - "Dn"    : denarii, the city's money.
@@ -16,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.5.0',
+  VERSION: '0.5.1',
   SAVE_VERSION: 3, // v2 added the military, v3 packed map layers and paths; older saves still load
   STORAGE_PREFIX: 'colonia.',
 
@@ -30,16 +31,19 @@ export const CONFIG = {
   PAN_SPEED: 900, // keyboard pan speed, screen px per second
 
   // --- Time ----------------------------------------------------------------
-  TICKS_PER_SECOND: 20,
+  // Real-time pace only: the balance is all per tick/day, so this sets how
+  // fast everything looks. At 20 people walked 2 tiles a second (a jog for
+  // their size); at 12 they walk 1.2 and a month takes about 27 s at 1x.
+  TICKS_PER_SECOND: 12,
   TICKS_PER_DAY: 20,
   DAYS_PER_MONTH: 16,
   MONTHS_PER_YEAR: 12,
-  SPEEDS: [0, 1, 2, 3, 5], // index 0 = paused
+  SPEEDS: [0, 1, 2, 4, 8], // index 0 = paused; 8x runs about as fast as the old top speed
   MAX_TICKS_PER_FRAME: 40, // safety valve so a slow frame can't spiral
   AUTOSAVE_EVERY_MONTHS: 3,
 
   // --- Walkers -------------------------------------------------------------
-  WALKER_SPEED: 0.1, // tiles per tick (2 tiles/sec at 1x)
+  WALKER_SPEED: 0.1, // tiles per tick: 2 tiles a game day (1.2 tiles/s at 1x)
   CART_SPEED: 0.08,
   SERVICE_RADIUS: 2, // walkers serve buildings within this many tiles
   ACCESS_DAYS: 48, // how long a house "remembers" a service visit
@@ -70,8 +74,8 @@ export const CONFIG = {
 
   // --- Immigration -------------------------------------------------------
   IMMIGRANT_GROUP_MAX: 6,
-  SETTLER_WALK_TILES: 70, // settlers with a longer trip than this (big maps) travel faster, with a pack mule...
-  SETTLER_MAX_SPEEDUP: 4, // ...up to this many times walking speed, so no trip takes much longer than a 70-tile walk
+  SETTLER_WALK_TILES: 70, // settlers with a longer trip than this (big maps) ride in on a mule...
+  SETTLER_MAX_SPEEDUP: 2, // ...up to this many times walking speed (a trot): trips up to 140 tiles take no longer than a 70-tile walk
   IMMIGRATION_BASE_PER_DAY: 6, // people/day arriving when sentiment is 100
   NEW_CITY_BONUS_MONTHS: 12, // extra sentiment early on so cities can start
 

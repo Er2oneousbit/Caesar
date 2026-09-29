@@ -32,7 +32,7 @@ Each animation frame:
 
 1. Add `dt * TICKS_PER_SECOND * speed` to an accumulator and run whole simulation ticks (capped at `MAX_TICKS_PER_FRAME` so a slow frame cannot snowball).
 2. Keyboard and edge scrolling.
-3. Render. The leftover fraction of a tick (`alpha`) interpolates walker positions so they glide at 60 FPS even though the sim runs at 20 Hz.
+3. Render. The leftover fraction of a tick (`alpha`) interpolates walker positions so they glide at 60 FPS even though the sim runs at 12 Hz at 1x. `TICKS_PER_SECOND` only sets the real-time pace: all balance is per tick and per day. Walkers and soldiers count the tiles they walk (`walked`, modulo `STRIDE_WRAP`), and the art swings their legs from that, so steps match ground speed at every game speed and freeze when paused.
 4. Refresh UI widgets (HUD 4x/second, info panel ~1.4x/second, advisors every 1.5 s).
 
 ## The tick (`core/game.js`)
@@ -77,7 +77,7 @@ Everything is serializable JSON, see `core/save.js`. Map layers are PackBits run
 | Service coverage | `sim/services.js` | Roamers set per-house access timers (48 days) on buildings within 2 tiles of each step. |
 | Roaming | `sim/movement.js` | Never reverse, prefer straight, avoid recently walked tiles, stay within 13 tiles of home. |
 | House levels | `sim/housing.js`, `data/housing.js` | Climb one tier after 3 good days, fall after 10 bad days; tiers 7+ merge neighbors into 2x2 / 3x3. |
-| Immigration | `sim/population.js` | Mood >= 30 and free beds on the entrance's road network; groups walk in from the map edge. Past a 70-tile trip they bring a pack mule and move up to 4x faster (big maps). |
+| Immigration | `sim/population.js` | Mood >= 30 and free beds on the entrance's road network; groups walk in from the map edge. Past a 70-tile trip they ride a mule, up to 2x faster (big maps). |
 | Labor | `sim/labor.js` | 32% of plebeians work; priorities first, then proportional shares. |
 | Water | `sim/water.js` | Reservoir next to water fills; aqueducts flood-fill to more reservoirs; piped area feeds fountains/baths. |
 | Desirability | `sim/desirability.js` | Every building radiates `[value, step, stepSize, range]`; terrain adds waterfront/tree bonuses. |

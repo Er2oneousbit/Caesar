@@ -277,6 +277,13 @@ function evictResidents(game, b) {
 // Walkers
 // ---------------------------------------------------------------------------
 
+/**
+ * Walkers and soldiers count the tiles they have walked, modulo this, to drive
+ * the leg animation (the art steps a whole number of times per STRIDE_WRAP
+ * tiles, so the wrap never shows).
+ */
+export const STRIDE_WRAP = 100;
+
 export class Walker {
   constructor(id, type, x, y) {
     const def = WALKER_TYPES[type];
@@ -307,6 +314,7 @@ export class Walker {
     this.waitTicks = 0;
     this.dead = false;
     this.anim = (id * 7919) % 100; // walk cycle offset so crowds do not march in sync
+    this.walked = 0; // tiles walked, modulo STRIDE_WRAP: legs step with distance, not the clock
   }
 }
 

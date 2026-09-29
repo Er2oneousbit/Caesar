@@ -117,6 +117,11 @@ function cracks(ctx, H) {
 // ---------------------------------------------------------------------------
 
 const SKIN = ['#e3b68c', '#c99a6b', '#a8784e', '#f0caa2'];
+// Walk cycles in radians per tile marched: 0.8 leg swings a tile on foot (about
+// 1.4 steps/s for a legionary at 1x), 0.55 for horses' longer stride. Both times
+// STRIDE_WRAP (100) are whole numbers, so the wrap of u.walked never shows.
+const STEP_RAD = Math.PI * 2 * 0.8;
+const HOOF_RAD = Math.PI * 2 * 0.55;
 const BARB_HAIR = ['#c9a14a', '#a0522d', '#7a5a3a', '#d8c07a'];
 
 /**
@@ -129,10 +134,11 @@ const BARB_HAIR = ['#c9a14a', '#a0522d', '#7a5a3a', '#d8c07a'];
  * @param {number} tick  current sim tick (for strike/hit flashes)
  * @param {boolean} [highlight] draw a selection ring (units of the selected fort)
  */
-export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false) {
+export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride = u.walked || 0) {
   const def = UNIT_TYPES[u.type];
   const face = u.facing < 0 ? -1 : 1;
-  const phase = u.moving ? Math.sin(t * (def.mounted ? 14 : 10) + u.id) : 0;
+  // Legs step with the distance marched (still when halted or paused, quicker when running).
+  const phase = u.moving ? Math.sin(stride * (def.mounted ? HOOF_RAD : STEP_RAD) + u.id) : 0;
   const striking = tick - u.strikeTick < 8;
   const enemy = def.side === 'enemy';
 

@@ -10,7 +10,7 @@
  * ----------------------------------------------------------------------------
  */
 
-import { killWalker, releaseReservation } from './entities.js';
+import { killWalker, releaseReservation, STRIDE_WRAP } from './entities.js';
 import { followPath, goHome, pickRoamTile, setNextTile } from './movement.js';
 import { roamerVisit } from './services.js';
 import { buyerArrive, buyerUnload } from './market.js';
@@ -55,6 +55,7 @@ function stepWalker(game, w) {
     return;
   }
   w.progress += w.speed;
+  w.walked = (w.walked + w.speed) % STRIDE_WRAP;
   if (w.progress < 1) return;
   w.progress -= 1;
   w.x = w.tx;

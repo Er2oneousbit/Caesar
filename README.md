@@ -72,7 +72,7 @@ Each of these can be switched off in *Settings*; the system's *reduce motion* pr
 | Right click | Cancel tool / close panel |
 | Space or P | Pause |
 | M | Music on / off |
-| 1 2 3 4 | Speed 1x 2x 3x 5x |
+| 1 2 3 4 | Speed 1x 2x 4x 8x |
 | H / R / X | Housing / Road / Clear tool |
 | Ctrl+Z | Undo last construction (full refund, for a few days) |
 | O, Shift+O | Next overlay, overlays off |

@@ -15,6 +15,9 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 
 const SKIN = ['#e3b68c', '#c99a6b', '#a8784e', '#f0caa2', '#b98a5e'];
 const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
+// Walk cycle: 0.8 leg swings per tile walked, about 1.6 steps a tile (2 steps
+// a second at 1x). 0.8 x STRIDE_WRAP (100) is whole, so w.walked's wrap never shows.
+const STEP_RAD = Math.PI * 2 * 0.8;
 
 /**
  * Draw one walker.
@@ -25,40 +28,58 @@ const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
  * @param {number} t      animation time in seconds
  * @param {number} dirX   screen-space movement direction sign (-1 left, 1 right)
  * @param {number} dirY   screen-space vertical direction sign (-1 up, 1 down)
+ * @param {number} [stride] tiles walked (interpolated): drives the legs
  */
-export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY) {
+export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked || 0) {
   const def = WALKER_TYPES[w.type];
   if (def.kind === 'ship') { drawShip(ctx, w, sx, sy, k, t, dirX); return; }
   const moving = w.moving;
-  const phase = moving ? Math.sin((t * 9 + w.anim) * 1.0) : 0;
+  // Legs step with the distance walked, so they match the ground speed at any
+  // game speed and stand still while paused.
+  const step = stride * STEP_RAD + w.anim;
+  const phase = moving ? Math.sin(step) : 0;
   const face = dirX < 0 ? -1 : 1;
   const tunic = w.type === 'priest' && w.god ? GODS[w.god].color : def.tunic;
   const skin = SKIN[w.id % SKIN.length];
+  const item = w.mule ? 'mule' : def.item;
+  const riding = !!w.mule; // settlers from far away ride in on a mule (merchants lead theirs)
 
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath();
-  ctx.ellipse(sx, sy, 4.2 * k, 1.8 * k, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // a little bounce in each step (the shadow stays on the ground)
-  if (moving) sy -= Math.abs(Math.sin((t * 9 + w.anim) * 1.0)) * 0.8 * k;
+  if (riding) {
+    // The mule carries the rider and the packs; the rider sits on its back.
+    drawMule(ctx, sx, sy + dirY * 0.5 * k, k, face, phase, true);
+    sy -= 5.5 * k + (moving ? Math.abs(Math.sin(step)) * 0.6 * k : 0);
+  } else {
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 4.2 * k, 1.8 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // a little bounce in each step (the shadow stays on the ground)
+    if (moving) sy -= Math.abs(Math.sin(step)) * 0.8 * k;
+  }
 
-  const item = w.mule ? 'mule' : def.item; // settlers on a long trip lead a pack mule
   if (item === 'cart') drawCart(ctx, w, sx + face * 7 * k, sy + dirY * 1.5 * k, k, face, phase);
-  if (item === 'mule') drawMule(ctx, sx + face * 8 * k, sy + dirY * 1.5 * k, k, face, phase);
+  if (item === 'mule' && !riding) drawMule(ctx, sx + face * 8 * k, sy + dirY * 1.5 * k, k, face, phase);
 
-  // legs
+  // legs: striding, or astride the mule
   ctx.strokeStyle = '#4a3a2c';
   ctx.lineWidth = 1.3 * k;
   ctx.beginPath();
-  ctx.moveTo(sx - 1 * k, sy - 5 * k);
-  ctx.lineTo(sx - 1 * k + phase * 1.8 * k, sy - 0.5 * k);
-  ctx.moveTo(sx + 1 * k, sy - 5 * k);
-  ctx.lineTo(sx + 1 * k - phase * 1.8 * k, sy - 0.5 * k);
+  if (riding) {
+    ctx.moveTo(sx - 1 * k, sy - 5 * k);
+    ctx.lineTo(sx - 0.5 * k + face * 1.2 * k, sy - 1.5 * k);
+    ctx.moveTo(sx + 1 * k, sy - 5 * k);
+    ctx.lineTo(sx + 1.5 * k + face * 1.2 * k, sy - 1.5 * k);
+  } else {
+    ctx.moveTo(sx - 1 * k, sy - 5 * k);
+    ctx.lineTo(sx - 1 * k + phase * 1.8 * k, sy - 0.5 * k);
+    ctx.moveTo(sx + 1 * k, sy - 5 * k);
+    ctx.lineTo(sx + 1 * k - phase * 1.8 * k, sy - 0.5 * k);
+  }
   ctx.stroke();
 
   // bundle on the back
-  if (item === 'bundle') {
+  if (item === 'bundle' && !riding) {
     ctx.fillStyle = '#8a6a44';
     ctx.beginPath();
     ctx.ellipse(sx - face * 3 * k, sy - 10 * k, 3 * k, 3.4 * k, 0, 0, Math.PI * 2);
@@ -189,7 +210,8 @@ function drawCart(ctx, w, cx, cy, k, face, phase) {
   ctx.stroke();
 }
 
-function drawMule(ctx, cx, cy, k, face, phase) {
+/** A pack mule; with `rider` the packs ride on its rump behind the rider. */
+function drawMule(ctx, cx, cy, k, face, phase, rider = false) {
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath();
   ctx.ellipse(cx, cy, 6 * k, 2 * k, 0, 0, Math.PI * 2);
@@ -210,6 +232,14 @@ function drawMule(ctx, cx, cy, k, face, phase) {
   ctx.ellipse(cx + face * 6.5 * k, cy - 10 * k, 2 * k, 1.6 * k, face * -0.5, 0, Math.PI * 2);
   ctx.fill();
   // packs
+  if (rider) {
+    const px = cx - face * 4.5 * k;
+    ctx.fillStyle = '#c9a86b';
+    ctx.fillRect(px - 2 * k, cy - 11 * k, 4 * k, 3.5 * k);
+    ctx.fillStyle = '#9b5a3a';
+    ctx.fillRect(px - 1.5 * k, cy - 12.5 * k, 3 * k, 1.8 * k);
+    return;
+  }
   ctx.fillStyle = '#c9a86b';
   ctx.fillRect(cx - 4 * k, cy - 11 * k, 7 * k, 3.5 * k);
   ctx.fillStyle = '#9b5a3a';

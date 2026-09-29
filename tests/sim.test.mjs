@@ -16,7 +16,7 @@ import { RNG } from '../src/core/rng.js';
 import { log } from '../src/core/debug.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
-import { generateMap, MAP_TYPES } from '../src/world/mapgen.js';
+import { generateMap, MAP_TYPES, ROAD_ROCK_CLEARANCE } from '../src/world/mapgen.js';
 import { Terrain, WaterBits } from '../src/world/map.js';
 import { PathFinder } from '../src/world/pathfinding.js';
 import { SCENARIOS, sandboxScenario } from '../src/data/scenarios.js';
@@ -89,6 +89,39 @@ test('every map type generates a connected imperial road', () => {
     let water = 0;
     for (let i = 0; i < map.size; i++) if (map.terrain[i] === Terrain.WATER) water++;
     assert.ok(water > 0, `${type}: has some water`);
+  }
+});
+
+test('rock stays clear of the Imperial road, and quarries still find outcrops', () => {
+  const scenarios = [
+    ...Object.keys(MAP_TYPES).map((type) => sandboxScenario({ size: 64, type, seed: `rock-${type}`, invasions: 'none' })),
+    ...SCENARIOS,
+  ];
+  for (const scenario of scenarios) {
+    const game = new Game({ scenario, flags: { unlockall: true, money: 99999 } });
+    const { map } = game;
+    const label = `${scenario.id} (${scenario.map.type} ${scenario.map.size})`;
+    const road = [];
+    for (let i = 0; i < map.size; i++) if (map.road[i]) road.push(i);
+    let rock = 0;
+    for (let i = 0; i < map.size; i++) {
+      if (map.terrain[i] !== Terrain.ROCK) continue;
+      rock++;
+      const x = map.xOf(i);
+      const y = map.yOf(i);
+      for (const r of road) {
+        const d = Math.hypot(map.xOf(r) - x, map.yOf(r) - y);
+        assert.ok(d > ROAD_ROCK_CLEARANCE - 1, `${label}: rock at ${x},${y} only ${d.toFixed(1)} tiles from the road`);
+      }
+    }
+    // Marble quarries and iron mines must sit right next to rock: there is still room for one.
+    let spot = false;
+    for (let y = 1; y < map.h - 2 && !spot; y++) {
+      for (let x = 1; x < map.w - 2 && !spot; x++) {
+        if (map.isNearTerrain(x, y, 2, Terrain.ROCK, 1)) spot = planAction(game, 'marble_quarry', x, y, x, y).count === 1;
+      }
+    }
+    assert.ok(spot, `${label}: room for a quarry next to rocks (${rock} rock tiles)`);
   }
 });
 

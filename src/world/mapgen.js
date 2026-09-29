@@ -12,6 +12,10 @@
  *   4. Add beaches next to water.
  *   5. Lay the Imperial Road from an entry tile on one map edge to an exit tile
  *      on another edge using A* (it avoids water and rocks when it can).
+ *   6. Clear rock within about ROAD_ROCK_CLEARANCE tiles of that road. Every
+ *      city starts along it and rock can never be cleared, so outcrops
+ *      hugging the road would wall off the first building lots. The tiles
+ *      get the ground they would have had without the rock.
  *
  * The same (seed, size, type) always produces the same map.
  * ----------------------------------------------------------------------------
@@ -24,6 +28,12 @@ import { PathFinder } from './pathfinding.js';
 
 /** Sandbox map sizes (tiles per side). Uber is the engine's maximum (GameMap allows up to 256). */
 export const MAP_SIZES = Object.freeze({ small: 64, medium: 96, large: 128, uber: 256 });
+
+/**
+ * Rock-free distance each side of the Imperial road, in tiles. The edge is
+ * ragged (+-1 tile of noise), so rock never comes closer than this minus 1.
+ */
+export const ROAD_ROCK_CLEARANCE = 5;
 
 /** One-line notes shown under the size picker. */
 export const MAP_SIZE_NOTES = Object.freeze({
@@ -95,19 +105,29 @@ export function generateMap({ width, height, seed, type }) {
   const meadowCut = percentile(meadowVal, type === 'desert' ? 0.93 : 0.8);
   const treeCut = percentile(treeVal, type === 'desert' ? 0.96 : 0.84);
   const rockCut = percentile(rockVal, type === 'desert' ? 0.93 : 0.95);
+  const base = type === 'desert' ? Terrain.SAND : Terrain.GRASS;
+
+  /**
+   * The ground a land tile gets when it is not rock: forest, meadow or plain.
+   * No random draws, so step 6 can ask again without changing the rest of
+   * the map for this seed.
+   */
+  const groundAt = (i) => {
+    const wd = map.waterDist[i];
+    if (treeVal[i] > treeCut && (type !== 'desert' || wd <= 6)) return Terrain.TREES;
+    if (meadowVal[i] > meadowCut && (type !== 'desert' || wd <= 6)) return Terrain.MEADOW;
+    return base;
+  };
 
   for (let i = 0; i < size; i++) {
     if (map.terrain[i] === Terrain.WATER) continue;
-    const wd = map.waterDist[i];
-    if (rockVal[i] > rockCut && wd > 2) {
+    if (rockVal[i] > rockCut && map.waterDist[i] > 2) {
       map.terrain[i] = Terrain.ROCK;
-    } else if (treeVal[i] > treeCut && (type !== 'desert' || wd <= 6)) {
-      map.terrain[i] = Terrain.TREES;
-    } else if (meadowVal[i] > meadowCut && (type !== 'desert' || wd <= 6)) {
-      map.terrain[i] = Terrain.MEADOW;
-    } else if (type !== 'desert' && rng.chance(0.012)) {
-      map.terrain[i] = Terrain.TREES; // lone trees for variety
+      continue;
     }
+    const ground = groundAt(i);
+    if (ground !== base) map.terrain[i] = ground;
+    else if (type !== 'desert' && rng.chance(0.012)) map.terrain[i] = Terrain.TREES; // lone trees for variety
   }
 
   // 4. Beaches: land touching water sometimes becomes sand.
@@ -122,8 +142,9 @@ export function generateMap({ width, height, seed, type }) {
     }
   }
 
-  // 5. Imperial road
-  placeImperialRoad(map, rng, type, info);
+  // 5. Imperial road, then 6. keep rock away from it
+  const roadPath = placeImperialRoad(map, rng, type, info);
+  clearRocksNearRoad(map, roadPath, groundAt, nDetail);
 
   // Visual variants
   for (let i = 0; i < size; i++) map.variant[i] = rng.int(256);
@@ -319,4 +340,31 @@ function placeImperialRoad(map, rng, type, info) {
   map.fixedRoad[map.idx(entry.x, entry.y)] = 1;
   map.fixedRoad[map.idx(exit.x, exit.y)] = 1;
   info.roadLength = path.length;
+  return path;
+}
+
+/**
+ * Turn rock within about ROAD_ROCK_CLEARANCE tiles of the road back into the
+ * ground it would have been (groundAt). The radius wobbles by up to a tile
+ * with low-frequency noise, so the outcrops keep a natural, ragged edge
+ * instead of a ruler-straight one. Rock elsewhere stays for quarries and mines.
+ */
+function clearRocksNearRoad(map, path, groundAt, noise) {
+  const { w } = map;
+  const reach = ROAD_ROCK_CLEARANCE + 1;
+  for (const i of path) {
+    const cx = i % w;
+    const cy = (i / w) | 0;
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (!map.inBounds(x, y)) continue;
+        const j = y * w + x;
+        if (map.terrain[j] !== Terrain.ROCK) continue;
+        const r = ROAD_ROCK_CLEARANCE + (noise.noise(x / 3 + 40, y / 3 + 40) - 0.5) * 2;
+        if (dx * dx + dy * dy <= r * r) map.terrain[j] = groundAt(j);
+      }
+    }
+  }
 }

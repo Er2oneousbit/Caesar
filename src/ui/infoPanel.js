@@ -328,7 +328,7 @@ export class InfoPanel {
       case 'tower':
         parts.push(sec('Watchtower',
           kv('Range', `${TOWER_RANGE} tiles`),
-          kv('Shoots', b.efficiency > 0 ? `every ${(TOWER_COOLDOWN / b.efficiency / CONFIG.TICKS_PER_DAY).toFixed(1)} s at normal speed` : 'not at all (no staff)'),
+          kv('Shoots', b.efficiency > 0 ? `every ${(TOWER_COOLDOWN / b.efficiency / CONFIG.TICKS_PER_SECOND).toFixed(1)} s at normal speed` : 'not at all (no staff)'),
           h('div', { class: 'muted' }, 'Archers on the tower shoot raiders in range. Raiders will try to tear it down: back it with walls and soldiers.')));
         break;
       case 'reservoir':

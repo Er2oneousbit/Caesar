@@ -2,9 +2,15 @@
 
 What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order.
 
+## Done (v0.5.1)
+
+* People walk instead of jog: the game clock runs at 12 ticks a second (a game day takes 1.67 s at 1x, balance unchanged), speeds are 1x/2x/4x/8x, and legs step with the distance walked; long-trip settlers ride their mules at a trot (2x)
+* No rock within about 5 tiles of the Imperial road (the first building lots are always usable; 94% of rock stays for quarries and mines)
+* Rain and snow no longer fall at the same time
+
 ## Done (v0.5)
 
-* **Uber maps**: 256x256 sandboxes (sixteen times Small); settlers with a long way to go ride in with pack mules, up to 4x faster
+* **Uber maps**: 256x256 sandboxes (sixteen times Small); settlers with a long way to go ride in on mules
 * **Insane difficulty**: every difficulty lever in one table (`src/data/difficulty.js`); Insane scales money, fire risk, production, immigration, city mood, raid size, timing and raider strength, and the Emperor's demands; difficulty choice in campaign briefings, remembered between games, with a "beaten on" badge per mission; `difficulty=` URL flag and `--difficulty` in the simulator
 * **Smaller saves** (format v3): map layers run-length coded, paths packed to 16 bits; an Uber save dropped from about 780 KB to 300 KB; older saves still load
 * 16 new unit tests (save packing, old saves, Uber, difficulty levers), 4 new smoke checks (79 unit tests, 44 browser checks)

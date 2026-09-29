@@ -175,10 +175,19 @@ export class Weather {
     const w = WEATHER[this.kind];
     const step = Math.min(1, dt * EASE);
     this.overcast += (w.overcast - this.overcast) * step;
-    this.rain += (w.rain - this.rain) * step;
-    this.snow += (w.snow - this.snow) * step;
-    if (this.rain < 0.005 && w.rain === 0) this.rain = 0;
-    if (this.snow < 0.005 && w.snow === 0) this.snow = 0;
+    // One kind of precipitation at a time: when rain follows snow (or snow
+    // follows rain), the old one tapers off 3x faster and the new one only
+    // starts once it has stopped, so rain never falls through the snow.
+    let rainTarget = w.rain;
+    let snowTarget = w.snow;
+    let rainStep = step;
+    let snowStep = step;
+    if (rainTarget > 0 && this.snow > 0) { rainTarget = 0; snowStep = Math.min(1, dt * EASE * 3); }
+    if (snowTarget > 0 && this.rain > 0) { snowTarget = 0; rainStep = Math.min(1, dt * EASE * 3); }
+    this.rain += (rainTarget - this.rain) * rainStep;
+    this.snow += (snowTarget - this.snow) * snowStep;
+    if (this.rain < 0.005 && rainTarget === 0) this.rain = 0;
+    if (this.snow < 0.005 && snowTarget === 0) this.snow = 0;
     // Lightning: a flash (sometimes two) every few seconds in a storm.
     this.flash = Math.max(0, this.flash - dt * 4);
     if (this.secondBolt >= 0) {

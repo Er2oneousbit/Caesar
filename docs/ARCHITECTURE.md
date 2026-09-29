@@ -66,7 +66,9 @@ Buildings get a `phase` (`id % TICKS_PER_DAY`) so their daily work is spread ove
 * **Unit** (`sim/military.js`): soldiers and raiders are not walkers. They move freely over open land in continuous tile coordinates (tile centers at .5), fight, and are drawn live by `render/militaryArt.js`. `px/py` keep the previous tick's position so the renderer can interpolate.
 * **Reservations**: a cart on its way reserves room at its target (`incoming`), settlers reserve beds (`house.incoming`), performers reserve a venue slot. `killWalker()` always releases them, so storage never overfills and houses never overbook.
 
-Everything is serializable JSON (typed arrays go through base64), see `core/save.js`. The save format is versioned (`SAVE_VERSION`, currently 2 = military); older saves load and get fresh defaults for what they lack.
+Everything is serializable JSON, see `core/save.js`. Map layers are PackBits run-length coded then base64 (`"pb:..."`, or plain base64 when that is smaller) and walker/soldier paths are packed as 16-bit tile indices (`"u16:..."`; maps are at most 256x256, so every index fits). The save format is versioned (`SAVE_VERSION`, currently 3: 2 added the military, 3 the packing); older saves load and get fresh defaults for what they lack. Campaign saves store only the mission id plus `difficulty`; sandbox saves store their whole scenario.
+
+**Difficulty** (`data/difficulty.js`) is one table of levers per level (funds, risk, production, immigration, mood, raid size/interval, raider strength, the Emperor's request size/interval/deadline). `Game` looks the level up once (`game.difficulty`, from `scenario.difficulty`) and each system reads its own lever; campaign missions get a level through `withDifficulty()` (`data/scenarios.js`), which also scales their funds.
 
 ## The genre mechanics, where they live
 
@@ -75,7 +77,7 @@ Everything is serializable JSON (typed arrays go through base64), see `core/save
 | Service coverage | `sim/services.js` | Roamers set per-house access timers (48 days) on buildings within 2 tiles of each step. |
 | Roaming | `sim/movement.js` | Never reverse, prefer straight, avoid recently walked tiles, stay within 13 tiles of home. |
 | House levels | `sim/housing.js`, `data/housing.js` | Climb one tier after 3 good days, fall after 10 bad days; tiers 7+ merge neighbors into 2x2 / 3x3. |
-| Immigration | `sim/population.js` | Mood >= 30 and free beds on the entrance's road network; groups walk in from the map edge. |
+| Immigration | `sim/population.js` | Mood >= 30 and free beds on the entrance's road network; groups walk in from the map edge. Past a 70-tile trip they bring a pack mule and move up to 4x faster (big maps). |
 | Labor | `sim/labor.js` | 32% of plebeians work; priorities first, then proportional shares. |
 | Water | `sim/water.js` | Reservoir next to water fills; aqueducts flood-fill to more reservoirs; piped area feeds fountains/baths. |
 | Desirability | `sim/desirability.js` | Every building radiates `[value, step, stepSize, range]`; terrain adds waterfront/tree bonuses. |
@@ -122,11 +124,12 @@ Everything is serializable JSON (typed arrays go through base64), see `core/save
 * **A new house need**: add the field to `HOUSE_TIERS`, measure it in `evaluateHouse()`, check it in `checkTier()`, explain it in `describeNeed()` (`ui/infoPanel.js`).
 * **A new trade partner**: `TRADE_PARTNERS` in `data/scenarios.js` (`route: 'land' | 'sea'`, `pos` on the empire map). Only give sea partners to scenarios whose maps have navigable water.
 * **A new soldier type**: `data/units.js`, a fort in `data/buildings.js` (`kind: 'fort'`, `unit`), a `RECRUIT_COST` in `data/goods.js`, art in `render/militaryArt.js`.
-* **Balance**: `config.js` first. Then `npm run sim -- --years 5` to see the effect without playing.
+* **Balance**: `config.js` first (difficulty levers: `data/difficulty.js`). Then `npm run sim -- --years 5` (add `--difficulty insane`, `--raids occasional --garrison`, `--size 256`) to see the effect without playing.
+* **A new map size**: add it to `MAP_SIZES` and `MAP_SIZE_NOTES` (`world/mapgen.js`) and to the `map=` flag list in `core/debug.js`. `GameMap` allows up to 256x256 (paths in saves are packed as 16-bit indices).
 
 ## Testing
 
-* `npm test`: 63 node:test tests: `tests/sim.test.mjs` (core city), `tests/military.test.mjs` and `tests/trade.test.mjs` drive the real sim through the public construction API; `tests/render.test.mjs` covers the camera, sprite cache, sky, seasons, weather and terrain blending; `tests/music.test.mjs` the composer.
-* `npm run test:e2e`: 40 checks; the build is opened in headless Chromium and played with real mouse/keyboard input: building, advisors, a garrison with deploy-by-click, a raid alert, the empire map, smooth zoom, night lights, weather, settings, music (starts after the first click, M key, every mood rendered and measured), autosave on page hide, save + reload + load, and a phone layout.
+* `npm test`: 79 node:test tests: `tests/sim.test.mjs` (core city), `tests/military.test.mjs` and `tests/trade.test.mjs` drive the real sim through the public construction API; `tests/save.test.mjs` covers the save packing, old saves and an Uber save; `tests/sandbox.test.mjs` the difficulty levers (up to Insane, campaign included) and Uber maps with mule-riding settlers; `tests/render.test.mjs` covers the camera, sprite cache, sky, seasons, weather and terrain blending; `tests/music.test.mjs` the composer.
+* `npm run test:e2e`: 44 checks; the build is opened in headless Chromium and played with real mouse/keyboard input: the sandbox menu (Uber, Insane), building, advisors, a garrison with deploy-by-click, a raid alert, the empire map, smooth zoom, night lights, weather, settings, music (starts after the first click, M key, every mood rendered and measured), autosave on page hide, save + reload + load, a campaign mission started on Insane from its briefing, and a phone layout.
 * CI (`.github/workflows/ci.yml`) runs both, and fails if `dist/colonia.html` is not the output of `npm run build` (the build is byte-for-byte reproducible).
 * `npm run sim`: prints monthly stats (population, jobs, mood, fed %, granary/market stock, treasury, house tiers) for a scripted demo city.

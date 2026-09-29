@@ -56,6 +56,7 @@ const MOOD_LABELS = {
   gods: 'The gods\' moods',
   festival: 'Recent festivals',
   newCity: 'New city optimism',
+  difficulty: 'Difficulty',
 };
 
 export class Advisors {

@@ -6,8 +6,8 @@
  * Format (JSON):
  *   {
  *     format: 'colonia-save', version: SAVE_VERSION,
- *     meta:   { city, scenarioId, date, population, savedAt },
- *     scenario, flags, difficulty,
+ *     meta:   { city, scenarioId, date, population, treasury, difficulty, savedAt },
+ *     scenario (sandbox: in full; campaign: { id }), flags, difficulty,
  *     rng, time, seed, map (base64 layers), buildings[], walkers[], fires[],
  *     units[], military, wallHp[], city, messages[], nextIds, camera
  *   }
@@ -16,9 +16,16 @@
  *   1  first release
  *   2  military: units[], military (raid schedule + stats), wallHp[], map.wall.
  *      Version 1 saves load fine; the missing parts start empty.
+ *   3  map layers may be PackBits-compressed ("pb:" + base64), and walker
+ *      and soldier paths are stored as 16-bit values ("u16:" + base64). An
+ *      Uber map (256x256) would otherwise spend ~600 KB of every save on
+ *      layers that are mostly runs of the same byte, and long paths cost
+ *      about 6 characters a step as JSON numbers. Older saves (plain base64
+ *      layers, paths as arrays) load.
  *
- * Typed-array map layers are base64 encoded. Derived data (building tile
- * layer, desirability, water coverage, road networks) is rebuilt on load.
+ * Typed-array map layers are base64 encoded, run-length compressed first
+ * when that is smaller (encodeLayer). Derived data (building tile layer,
+ * desirability, water coverage, road networks) is rebuilt on load.
  *
  * Browser storage: localStorage key `colonia.save.<slot>`. Every read/write
  * is wrapped in try/catch because storage can be missing, full or blocked.
@@ -38,7 +45,7 @@ import { Unit } from '../sim/military.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
-import { findScenario } from '../data/scenarios.js';
+import { findScenario, withDifficulty } from '../data/scenarios.js';
 import { log } from './debug.js';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +68,115 @@ export function decodeBytes(str) {
 }
 
 // ---------------------------------------------------------------------------
+// PackBits run-length compression for map layers
+// ---------------------------------------------------------------------------
+// A header byte h, then:
+//   h = 0..127    copy the next h + 1 bytes as they are (a "literal" run)
+//   h = 129..255  repeat the next byte 257 - h times (2..128 copies)
+//   h = 128       nothing (never written)
+// Map layers are mostly long runs (empty road/wall layers, big grass
+// fields), so they shrink 5-50x; random data grows by under 1%.
+
+/** Compress bytes with PackBits. */
+export function packBits(src) {
+  const n = src.length;
+  const out = new Uint8Array(n + Math.ceil(n / 128) + 2);
+  let o = 0;
+  let i = 0;
+  while (i < n) {
+    let run = 1;
+    while (i + run < n && run < 128 && src[i + run] === src[i]) run++;
+    if (run >= 3) {
+      out[o++] = 257 - run;
+      out[o++] = src[i];
+      i += run;
+      continue;
+    }
+    // Literal run: until 3 equal bytes start (worth a repeat) or 128 bytes.
+    const start = i;
+    let lit = 0;
+    while (i < n && lit < 128) {
+      if (i + 2 < n && src[i] === src[i + 1] && src[i] === src[i + 2]) break;
+      i++;
+      lit++;
+    }
+    out[o++] = lit - 1;
+    out.set(src.subarray(start, start + lit), o);
+    o += lit;
+  }
+  return out.slice(0, o);
+}
+
+/** Decompress PackBits data that must come out exactly `length` bytes long. */
+export function unpackBits(src, length) {
+  const out = new Uint8Array(length);
+  let i = 0;
+  let o = 0;
+  while (i < src.length && o < length) {
+    const h = src[i++];
+    if (h < 128) {
+      const cnt = h + 1;
+      if (o + cnt > length || i + cnt > src.length) throw new Error('Corrupt map layer (literal run overflows)');
+      out.set(src.subarray(i, i + cnt), o);
+      i += cnt;
+      o += cnt;
+    } else if (h > 128) {
+      const cnt = 257 - h;
+      if (o + cnt > length || i >= src.length) throw new Error('Corrupt map layer (repeat run overflows)');
+      out.fill(src[i++], o, o + cnt);
+      o += cnt;
+    }
+  }
+  if (o !== length) throw new Error(`Corrupt map layer (${o} of ${length} bytes)`);
+  return out;
+}
+
+/** A map layer for the save: PackBits + base64 ("pb:...") when smaller, else plain base64. */
+export function encodeLayer(bytes) {
+  const packed = packBits(bytes);
+  return packed.length < bytes.length * 0.95 ? `pb:${encodeBytes(packed)}` : encodeBytes(bytes);
+}
+
+/** Read a map layer written by encodeLayer (or by older versions: plain base64). */
+export function decodeLayer(str, length) {
+  if (typeof str !== 'string') throw new Error('Map layer is not a string');
+  if (str.startsWith('pb:')) return unpackBits(decodeBytes(str.slice(3)), length);
+  return decodeBytes(str);
+}
+
+// ---------------------------------------------------------------------------
+// Paths (walkers, soldiers): tile indices as 16-bit little-endian values
+// ---------------------------------------------------------------------------
+// Maps are at most 256x256, so every tile index fits in 16 bits: 2.7
+// characters a step in base64 instead of about 6 as JSON numbers. Anything
+// unexpected (a negative or huge value) is kept as a plain array instead.
+
+/** A path for the save: "u16:<base64>", or the path itself if it can't be packed. */
+export function encodePath(path) {
+  if (!path || !path.length) return path ? [] : null;
+  const bytes = new Uint8Array(path.length * 2);
+  for (let k = 0; k < path.length; k++) {
+    const v = path[k];
+    if (!Number.isInteger(v) || v < 0 || v > 0xffff) return Array.from(path);
+    bytes[2 * k] = v & 0xff;
+    bytes[2 * k + 1] = v >>> 8;
+  }
+  return `u16:${encodeBytes(bytes)}`;
+}
+
+/** Read a path written by encodePath (or by older versions: a plain array, or null). */
+export function decodePath(p) {
+  if (p === null || p === undefined) return null;
+  if (Array.isArray(p)) return p;
+  if (typeof p !== 'string' || !p.startsWith('u16:')) throw new Error('Corrupt path in save');
+  const bytes = decodeBytes(p.slice(4));
+  if (bytes.length % 2) throw new Error('Corrupt path in save (odd length)');
+  const out = new Array(bytes.length / 2);
+  for (let k = 0; k < out.length; k++) out[k] = bytes[2 * k] | (bytes[2 * k + 1] << 8);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Serialize
 // ---------------------------------------------------------------------------
 
@@ -69,17 +185,9 @@ export function serializeGame(game, extra = {}) {
   const buildings = [];
   for (const b of game.buildings.values()) buildings.push({ ...b });
   const walkers = [];
-  for (const w of game.walkers.values()) {
-    const copy = { ...w };
-    if (copy.path) copy.path = Array.from(copy.path);
-    walkers.push(copy);
-  }
+  for (const w of game.walkers.values()) walkers.push({ ...w, path: encodePath(w.path) });
   const units = [];
-  for (const u of game.units.values()) {
-    const copy = { ...u };
-    if (copy.path) copy.path = Array.from(copy.path);
-    units.push(copy);
-  }
+  for (const u of game.units.values()) units.push({ ...u, path: encodePath(u.path) });
   const isCampaign = !!findScenario(game.scenario.id);
   return {
     format: 'colonia-save',
@@ -90,14 +198,16 @@ export function serializeGame(game, extra = {}) {
       date: game.time.label(),
       population: game.city.population,
       treasury: Math.round(game.city.treasury),
+      difficulty: game.difficultyKey,
       savedAt: new Date().toISOString(),
     },
     scenario: isCampaign ? { id: game.scenario.id } : game.scenario,
+    difficulty: game.difficultyKey, // campaign saves only store the mission id
     flags: { unlockall: !!game.flags.unlockall },
     seed: game.seed,
     rng: game.rng.getState(),
     time: game.time.serialize(),
-    map: game.map.serialize(encodeBytes),
+    map: game.map.serialize(encodeLayer),
     buildings,
     walkers,
     fires: [...game.fires],
@@ -132,10 +242,10 @@ export function deserializeGame(data, flags = {}) {
   if (data.version > CONFIG.SAVE_VERSION) throw new Error(`This save was made by a newer version of the game (save v${data.version}, game supports v${CONFIG.SAVE_VERSION}).`);
   assert(data.map && data.time && data.city && Array.isArray(data.buildings), 'missing sections');
 
-  const scenario = data.scenario && data.scenario.map ? data.scenario : findScenario(data.scenario?.id);
+  const scenario = data.scenario && data.scenario.map ? data.scenario : withDifficulty(findScenario(data.scenario?.id), data.difficulty);
   assert(scenario, `unknown scenario "${data.scenario?.id}"`);
 
-  const map = GameMap.deserialize(data.map, decodeBytes);
+  const map = GameMap.deserialize(data.map, decodeLayer);
   const rng = new RNG(1);
   rng.setState(data.rng);
   const restore = {
@@ -178,6 +288,7 @@ export function deserializeGame(data, flags = {}) {
     if (!WALKER_TYPES[raw.type]) continue;
     const w = new Walker(raw.id, raw.type, raw.x, raw.y);
     Object.assign(w, raw);
+    w.path = decodePath(raw.path);
     w.dead = false;
     game.walkers.set(w.id, w);
     maxW = Math.max(maxW, w.id);
@@ -194,6 +305,7 @@ export function deserializeGame(data, flags = {}) {
     if (!UNIT_TYPES[raw.type]) continue;
     const u = new Unit(raw.id, raw.type, raw.x, raw.y);
     Object.assign(u, raw);
+    u.path = decodePath(raw.path);
     game.units.set(u.id, u);
     maxU = Math.max(maxU, u.id);
   }

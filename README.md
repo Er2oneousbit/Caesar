@@ -40,11 +40,13 @@ Full in-game manual: press **F1**.
 
 ### Campaign
 
-Seven original missions from a riverside village (*Novum Castrum*, 250 people) to a great capital (*Urbs Magna*, 6000 people with high ratings). Each unlocks more buildings; raids start in mission 4 and grow fiercer. Plus a **Sandbox** with 5 landscapes (river, coast, lakes, plains, desert), 3 map sizes, seeds, difficulty and raid frequency (peaceful, occasional, frequent).
+Seven original missions from a riverside village (*Novum Castrum*, 250 people) to a great capital (*Urbs Magna*, 6000 people with high ratings). Each unlocks more buildings; raids start in mission 4 and grow fiercer. Plus a **Sandbox** with 5 landscapes (river, coast, lakes, plains, desert), 4 map sizes up to **Uber** (256×256, sixteen times Small: room for a whole province), seeds and raid frequency (peaceful, occasional, frequent).
+
+**Difficulty** (Easy, Normal, Hard, **Insane**) is picked in the Sandbox setup and in every mission briefing, and the campaign list shows the hardest level you've beaten each mission on. Insane is for veterans: 40% of the money, grumpier citizens, more fires, slower farms and workshops, bigger and tougher raids that come sooner, and an Emperor who wants 50% more, more often, with less time. The full table is in [docs/GAMEPLAY.md](docs/GAMEPLAY.md#difficulty).
 
 ### Saving
 
-Games are saved in your browser's **localStorage**: an autosave slot (every 3 months and whenever you leave or hide the page), a quicksave (F5 / F9) and 5 manual slots. The Save/Load menus show how much space the saves use. Saves belong to that browser and site only, so use *Export to file* or *Copy save data* for backups or to move a city to another computer.
+Games are saved in your browser's **localStorage**: an autosave slot (every 3 months and whenever you leave or hide the page), a quicksave (F5 / F9) and 5 manual slots. Saves are packed (a year-old Uber city is about 300 KB), and the Save/Load menus show how much space they use. Saves belong to that browser and site only, so use *Export to file* or *Copy save data* for backups or to move a city to another computer.
 
 ### A living world
 
@@ -93,8 +95,9 @@ Append to the address, for example `dist/colonia.html?debug=1&seed=42&skipmenu=1
 | `skipmenu=1` | Start a sandbox immediately |
 | `scenario=c1` ... `c7` | Start a campaign mission directly |
 | `seed=TEXT` | Map seed for new games |
-| `map=small\|medium\|large` | Sandbox map size |
+| `map=small\|medium\|large\|uber` | Sandbox map size (Uber is 256×256) |
 | `maptype=river\|coast\|lakes\|plains\|desert` | Sandbox landscape |
+| `difficulty=easy\|normal\|hard\|insane` | Difficulty for `skipmenu=1` and `scenario=…` starts |
 | `money=N` | Starting treasury override |
 | `speed=0-4` | Starting speed (0 = paused) |
 | `unlockall=1` | All buildings and missions unlocked |
@@ -133,7 +136,8 @@ src/
   config.js             EVERY balance knob in one place
   core/                 game.js (simulation orchestrator), rng, events, debug, save
   world/                map layers, procedural map generator, pathfinding
-  data/                 buildings, housing tiers, goods, gods, walkers, scenarios
+  data/                 buildings, housing tiers, goods, gods, walkers, scenarios,
+                        difficulty (every difficulty lever in one table)
   sim/                  one file per system: housing, labor, water, risk, economy,
                         market, production, trade (caravans + ships), military,
                         religion, ratings, emperor...
@@ -147,7 +151,7 @@ src/
                         (writes the notes), instruments.js (synth), music.js (player)
   dev/demoCity.js       builds a sample city through the public construction API
 scripts/                serve.mjs, build.mjs, simulate.mjs, run.ps1, run.sh
-tests/                  *.test.mjs (sim, military, trade, render, music), e2e/smoke.mjs,
+tests/                  *.test.mjs (sim, military, trade, save, sandbox, render, music), e2e/smoke.mjs,
                         e2e/screenshots.mjs, e2e/render.html, e2e/artsheet.html,
                         e2e/music.html (listen to each mood, check levels and tuning)
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md

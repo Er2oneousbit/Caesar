@@ -310,7 +310,7 @@ export class GameMap {
     const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad', 'wall'];
     for (const name of layers) {
       if (data[name] === undefined && name === 'wall') continue; // older saves had no walls
-      const arr = decode(data[name]);
+      const arr = decode(data[name], m.size);
       if (arr.length !== m.size) throw new Error(`Save file map layer "${name}" has wrong size`);
       m[name].set(arr);
     }

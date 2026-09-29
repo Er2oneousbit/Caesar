@@ -8,9 +8,9 @@ import { sandboxScenario } from '../src/data/scenarios.js';
 import { planAction, applyPlan } from '../src/sim/construction.js';
 import { Terrain } from '../src/world/map.js';
 
-/** A small sandbox game on a known map. Raids are off unless asked for. */
+/** A small sandbox game on a known map. Raids are off unless asked for; difficulty is Normal unless asked for. */
 export function newGame(opts = {}) {
-  const scenario = sandboxScenario({ size: opts.size || 64, type: opts.type || 'river', seed: opts.seed || 'test-seed', invasions: opts.invasions || 'none' });
+  const scenario = sandboxScenario({ size: opts.size || 64, type: opts.type || 'river', seed: opts.seed || 'test-seed', invasions: opts.invasions || 'none', difficulty: opts.difficulty || 'normal' });
   return new Game({ scenario, flags: { unlockall: true, money: opts.money ?? 50000 } });
 }
 

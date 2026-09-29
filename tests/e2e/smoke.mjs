@@ -65,8 +65,18 @@ try {
   check('main menu shows', await page.isVisible('text=Campaign'));
   if (shots) await page.screenshot({ path: path.join(shots, 'smoke-menu.png') });
 
-  // 2. Start a sandbox from the menu UI
+  // 2. Start a sandbox from the menu UI (after a look at the Uber size and Insane difficulty)
   await page.click('text=Sandbox');
+  const sizeSel = 'select:has(option[value="uber"])';
+  const uberLabel = await page.$eval(`${sizeSel} option[value="uber"]`, (o) => o.textContent);
+  await page.selectOption(sizeSel, 'uber');
+  const uberNote = await page.isVisible('text=Sixteen times the land of Small');
+  await page.selectOption(sizeSel, 'medium');
+  check('sandbox menu offers the Uber map with a note', uberLabel === 'Uber (256×256)' && uberNote, uberLabel);
+  await page.selectOption('select.difficulty-select', 'insane');
+  const insaneNote = await page.isVisible('text=For veterans.');
+  await page.selectOption('select.difficulty-select', 'normal');
+  check('sandbox menu offers Insane and describes each level', insaneNote && await page.isVisible('text=The game as designed.'));
   await page.click('text=Found the city');
   await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   check('sandbox starts from the menu', true);
@@ -306,6 +316,25 @@ try {
   await page.click('[role="alertdialog"] .btn.danger');
   const fresh = await page.evaluate(() => window.colonia.game.buildings.size);
   check('confirming restart starts a fresh map', fresh === 0, `${fresh} buildings`);
+
+  // 6b. A campaign mission on Insane: the briefing picks the difficulty,
+  //     scales the starting funds, and the game remembers both.
+  await page.evaluate(() => window.colonia.toMainMenu());
+  await page.waitForSelector('.menu-card');
+  await page.click('.menu-card button:has-text("Campaign")');
+  await page.click('.scenario >> nth=0');
+  await page.selectOption('.modal select.difficulty-select', 'insane');
+  const fundsText = await page.textContent('.modal .row:has-text("Starting funds")');
+  const shownFunds = Number((/Starting funds: ([\d,]+) Dn/.exec(fundsText) || [])[1]?.replace(/,/g, ''));
+  await page.click('.modal button:has-text("Begin")');
+  await page.waitForFunction(() => window.colonia.game && window.colonia.game.scenario.id === 'c1', null, { timeout: 15000 });
+  const camp = await page.evaluate(() => { const g = window.colonia.game; return { key: g.difficultyKey, treasury: Math.round(g.city.treasury), pref: window.colonia.settings.difficulty }; });
+  check('campaign briefing starts a mission on Insane with scaled funds', camp.key === 'insane' && camp.treasury === 2400 && shownFunds === 2400 && camp.pref === 'insane', JSON.stringify({ ...camp, shownFunds }));
+  await page.keyboard.press('Escape');
+  await page.click('.modal button:has-text("Mission briefing")');
+  const inGame = await page.isVisible('.modal :text("Difficulty: Insane")') && await page.isVisible('.modal button:has-text("Close")') && !(await page.isVisible('.modal select.difficulty-select'));
+  check('in-game briefing shows the difficulty being played', inGame);
+  await page.click('.modal button:has-text("Close")');
 
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

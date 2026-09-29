@@ -11,9 +11,9 @@
 
 import { h, fmt } from './dom.js';
 import { CONFIG } from '../config.js';
-import { SCENARIOS } from '../data/scenarios.js';
-import { MAP_SIZES, MAP_TYPES } from '../world/mapgen.js';
-import { DIFFICULTY } from '../core/game.js';
+import { SCENARIOS, withDifficulty } from '../data/scenarios.js';
+import { MAP_SIZES, MAP_SIZE_NOTES, MAP_TYPES } from '../world/mapgen.js';
+import { DIFFICULTY } from '../data/difficulty.js';
 import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
 import { goalStatus } from '../sim/ratings.js';
 
@@ -63,33 +63,64 @@ export function mainMenu(app) {
 
 export function campaignMenu(app) {
   const done = app.progress.completed || [];
+  const best = app.progress.best || {};
   const list = SCENARIOS.map((s, i) => {
     const unlocked = app.flags.unlockall || i === 0 || done.includes(SCENARIOS[i - 1].id) || done.includes(s.id);
     const goals = Object.entries(s.goals).filter(([, v]) => v).map(([k, v]) => `${k} ${fmt(v)}`).join(', ');
+    const beaten = DIFFICULTY[best[s.id]];
     return h('button', {
       class: `scenario${unlocked ? '' : ' locked'}`,
       title: unlocked ? s.intro : 'Complete the previous mission to unlock',
-      onclick: () => { if (unlocked) app.ui.showModal(briefing(app, s, () => app.newScenario(s.id))); },
+      onclick: () => { if (unlocked) app.ui.showModal(briefing(app, s, (d) => app.newScenario(s.id, d))); },
     }, h('span', { class: 'n' }, done.includes(s.id) ? '✔' : String(i + 1)),
     h('span', { class: 't' }, h('b', {}, `${s.name}: ${s.title}`), h('span', { class: 'muted' }, `${MAP_TYPES[s.map.type].name} · Goals: ${goals}`)),
+    beaten ? h('span', { class: `best ${best[s.id]}`, title: `Completed on ${beaten.name}` }, beaten.name) : null,
     unlocked ? null : h('span', {}, '🔒'));
   });
   return modal('Campaign', h('div', { class: 'scenario-list' }, list),
     [h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back')], '', () => app.ui.closeModal());
 }
 
-/** Scenario briefing shown before starting (or from the pause menu). */
-export function briefing(app, s, onBegin) {
+/**
+ * A difficulty <select> with the chosen level's description under it.
+ * @param {string} current  difficulty key
+ * @param {(key:string)=>void} onChange
+ */
+function difficultyField(current, onChange) {
+  const desc = h('div', { class: 'muted', style: { fontSize: '12px' } }, DIFFICULTY[current].desc);
+  return h('div', { class: 'field' }, h('label', {}, 'Difficulty'),
+    h('select', {
+      class: 'difficulty-select',
+      onchange: (e) => { desc.textContent = DIFFICULTY[e.target.value].desc; onChange(e.target.value); },
+    }, Object.entries(DIFFICULTY).map(([k, v]) => h('option', { value: k, selected: k === current }, v.name))),
+    desc);
+}
+
+/**
+ * Scenario briefing. Before a mission (onBegin given) the player picks the
+ * difficulty and onBegin(key) starts it; from the game menu (no onBegin) it
+ * shows the difficulty being played.
+ */
+export function briefing(app, s, onBegin = null) {
   const goals = Object.entries(s.goals).filter(([, v]) => v);
+  let diff = onBegin ? app.difficultyPref() : (app.game?.difficultyKey || 'normal');
+  // In a game `s` is the running scenario (funds already scaled); before one, scale them here.
+  const fundsText = () => `Starting funds: ${fmt(onBegin ? withDifficulty(s, diff).funds : s.funds)} Dn · Map: ${MAP_TYPES[s.map.type].name} (${s.map.size}×${s.map.size})`;
+  const fundsRow = h('div', { class: 'row muted' }, fundsText());
   return modal(`${s.name}: ${s.title}`, [
     h('p', {}, s.intro),
     h('h4', {}, 'Goals'),
     goals.length ? h('ul', {}, goals.map(([k, v]) => h('li', {}, `${k[0].toUpperCase()}${k.slice(1)}: ${fmt(v)}`))) : h('div', { class: 'muted' }, 'None: build as you like.'),
-    h('div', { class: 'row muted' }, `Starting funds: ${fmt(s.funds)} Dn · Map: ${MAP_TYPES[s.map.type].name} (${s.map.size}×${s.map.size})`),
+    fundsRow,
+    onBegin
+      ? difficultyField(diff, (k) => { diff = k; fundsRow.textContent = fundsText(); })
+      : h('div', { class: 'row muted' }, `Difficulty: ${DIFFICULTY[diff].name}`),
     s.hints && s.hints.length ? [h('h4', {}, 'Advice'), h('ul', {}, s.hints.map((t) => h('li', {}, t)))] : null,
-  ], [
+  ], onBegin ? [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
-    h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); onBegin(); } }, 'Begin'),
+    h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(diff); onBegin(diff); } }, 'Begin'),
+  ] : [
+    h('button', { class: 'btn primary', onclick: () => app.ui.closeModal() }, 'Close'),
   ], 'narrow');
 }
 
@@ -102,24 +133,24 @@ export function sandboxMenu(app) {
     size: app.flags.map || 'medium',
     type: app.flags.maptype || 'river',
     seed: String(app.flags.seed ?? Math.floor(Math.random() * 1e6)),
-    difficulty: 'normal',
+    difficulty: app.difficultyPref(),
     funds: 8000,
     invasions: 'occasional',
   };
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
+  const sizeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_SIZE_NOTES[state.size] || '');
   return modal('Sandbox', [
     h('div', { class: 'grid2' },
       h('div', { class: 'field' }, h('label', {}, 'Map size'),
-        h('select', { onchange: (e) => { state.size = e.target.value; } }, Object.entries(MAP_SIZES).map(([k, v]) => h('option', { value: k, selected: k === state.size }, `${k[0].toUpperCase()}${k.slice(1)} (${v}×${v})`)))),
+        h('select', { onchange: (e) => { state.size = e.target.value; sizeDesc.textContent = MAP_SIZE_NOTES[state.size] || ''; } }, Object.entries(MAP_SIZES).map(([k, v]) => h('option', { value: k, selected: k === state.size }, `${k[0].toUpperCase()}${k.slice(1)} (${v}×${v})`))),
+        sizeDesc),
       h('div', { class: 'field' }, h('label', {}, 'Landscape'),
         h('select', { onchange: (e) => { state.type = e.target.value; typeDesc.textContent = MAP_TYPES[state.type].desc; } }, Object.entries(MAP_TYPES).map(([k, v]) => h('option', { value: k, selected: k === state.type }, v.name))),
         typeDesc),
       h('div', { class: 'field' }, h('label', {}, 'Map seed (same seed = same map)'),
         h('div', { class: 'row' }, seedInput, h('button', { class: 'btn small', onclick: () => { state.seed = String(Math.floor(Math.random() * 1e6)); seedInput.value = state.seed; } }, '🎲'))),
-      h('div', { class: 'field' }, h('label', {}, 'Difficulty'),
-        h('select', { onchange: (e) => { state.difficulty = e.target.value; } }, Object.entries(DIFFICULTY).map(([k, v]) => h('option', { value: k, selected: k === state.difficulty }, v.name))),
-        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Affects starting money, fire/collapse risk, production and immigration.')),
+      difficultyField(state.difficulty, (k) => { state.difficulty = k; }),
       h('div', { class: 'field' }, h('label', {}, 'Starting funds (before difficulty)'),
         h('input', { type: 'number', min: 1000, max: 100000, step: 500, value: state.funds, onchange: (e) => { state.funds = Math.max(1000, Math.min(100000, Number(e.target.value) || 8000)); } })),
       h('div', { class: 'field' }, h('label', {}, 'Raids'),
@@ -128,7 +159,7 @@ export function sandboxMenu(app) {
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Raiders never come before the city has 120 people, and scouts warn you about 3 months ahead.'))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
-    h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.newSandbox(state); } }, 'Found the city'),
+    h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),
   ], 'narrow', () => app.ui.closeModal());
 }
 
@@ -141,7 +172,7 @@ function slotRow(app, slot, meta, actions) {
   return h('div', { class: 'card row', style: { marginBottom: '6px' } },
     h('div', { style: { flex: 1 } },
       h('b', {}, SLOT_NAMES[slot] || slot),
-      meta ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `${meta.city} · ${meta.date} · pop ${fmt(meta.population)} · ${new Date(meta.savedAt).toLocaleString()} · ${fmt(kb)} KB`) : h('div', { class: 'muted' }, 'Empty')),
+      meta ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `${meta.city} · ${meta.date} · pop ${fmt(meta.population)}${DIFFICULTY[meta.difficulty] && meta.difficulty !== 'normal' ? ` · ${DIFFICULTY[meta.difficulty].name}` : ''} · ${new Date(meta.savedAt).toLocaleString()} · ${fmt(kb)} KB`) : h('div', { class: 'muted' }, 'Empty')),
     actions);
 }
 
@@ -236,7 +267,7 @@ export function pauseMenu(app) {
     btn('Resume', () => app.ui.closeModal(), 'primary'),
     btn('Save game', () => app.ui.showModal(saveMenu(app))),
     btn('Load game', () => app.ui.showModal(loadMenu(app))),
-    btn('Mission briefing', () => app.ui.showModal(briefing(app, g.scenario, () => {}))),
+    btn('Mission briefing', () => app.ui.showModal(briefing(app, g.scenario))),
     btn('Settings', () => app.ui.showModal(settingsMenu(app))),
     btn('How to play', () => app.ui.openHelp()),
     btn('Restart this map', () => app.ui.confirm('Restart this map from scratch? Progress since your last save is lost.', () => app.restart(), { yes: 'Restart', danger: true })),
@@ -258,7 +289,7 @@ export function victoryMenu(app) {
     h('p', { class: 'muted' }, `Founded ${fmt(g.time.totalMonths / 12)} years ago · ${fmt(g.city.stats.fires)} fires · ${fmt(g.city.stats.collapses)} collapses`),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Keep building'),
-    next ? h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.ui.showModal(briefing(app, next, () => app.newScenario(next.id))); } }, `Next: ${next.name}`) : null,
+    next ? h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.ui.showModal(briefing(app, next, (d) => app.newScenario(next.id, d))); } }, `Next: ${next.name}`) : null,
     h('button', { class: 'btn', onclick: () => app.toMainMenu() }, 'Main menu'),
   ], 'narrow');
 }

@@ -116,6 +116,11 @@ export function updateImmigration(game) {
     if (!w) break;
     v.b.house.incoming += n;
     followPath(game, w, path);
+    // A long way to go (big maps): they come with a pack mule, faster than on foot.
+    if (path.length > CONFIG.SETTLER_WALK_TILES) {
+      w.speed = CONFIG.WALKER_SPEED * Math.min(CONFIG.SETTLER_MAX_SPEEDUP, path.length / CONFIG.SETTLER_WALK_TILES);
+      w.mule = true;
+    }
     c.immigrationAcc -= n;
     v.free -= n;
     if (v.free <= 0) vacancies.splice(k, 1);
@@ -240,6 +245,7 @@ export function computeSentiment(game) {
   f.gods = Math.max(-8, Math.min(6, (moodSum / GOD_KEYS.length - 50) * 0.15));
   f.festival = c.festivalBoost;
   f.newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? 20 : 0;
+  if (game.difficulty.mood) f.difficulty = game.difficulty.mood; // Insane: a hard-to-please populace
   let s = 0;
   for (const k in f) s += f[k];
   s = Math.max(0, Math.min(100, s));

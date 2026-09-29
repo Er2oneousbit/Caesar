@@ -407,6 +407,9 @@ input[type="range"] { width: 100%; accent-color: var(--bronze); }
 .scenario .n { font-family: var(--font-title); font-weight: 700; font-size: 18px; width: 28px; color: var(--bronze); }
 .scenario .t { flex: 1; }
 .scenario .t b { display: block; }
+/* "Completed on <difficulty>" badge in the campaign list */
+.scenario .best { font-size: 11px; padding: 1px 7px; border: 1px solid var(--bronze); border-radius: 999px; color: var(--bronze); white-space: nowrap; }
+.scenario .best.insane { border-color: var(--bad); color: var(--bad); font-weight: 700; }
 
 /* ---------- main menu -------------------------------------------------------- */
 #main-menu {

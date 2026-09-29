@@ -22,7 +22,16 @@ import { RNG } from '../core/rng.js';
 import { ValueNoise } from './noise.js';
 import { PathFinder } from './pathfinding.js';
 
-export const MAP_SIZES = Object.freeze({ small: 64, medium: 96, large: 128 });
+/** Sandbox map sizes (tiles per side). Uber is the engine's maximum (GameMap allows up to 256). */
+export const MAP_SIZES = Object.freeze({ small: 64, medium: 96, large: 128, uber: 256 });
+
+/** One-line notes shown under the size picker. */
+export const MAP_SIZE_NOTES = Object.freeze({
+  small: 'Quick games; room for a town.',
+  medium: 'Room for a city.',
+  large: 'Room for a great city.',
+  uber: 'Sixteen times the land of Small: room for a capital and its whole province. Settlers bound for far-off homes ride in with pack mules. Saves run a few hundred KB.',
+});
 
 export const MAP_TYPES = Object.freeze({
   river: { name: 'River Valley', desc: 'A river winds through fertile floodplains. Plenty of water, meadows along the banks.' },

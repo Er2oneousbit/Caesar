@@ -44,13 +44,10 @@ import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/t
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
+import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
 
-/** Difficulty multipliers. */
-export const DIFFICULTY = Object.freeze({
-  easy: { name: 'Easy', risk: 0.7, production: 1.15, immigration: 1.25 },
-  normal: { name: 'Normal', risk: 1, production: 1, immigration: 1 },
-  hard: { name: 'Hard', risk: 1.3, production: 0.9, immigration: 0.85 },
-});
+// Difficulty levels live in data/difficulty.js; re-exported here for older imports.
+export { DIFFICULTY } from '../data/difficulty.js';
 
 /** Fresh city-wide state for a new game. */
 export function newCityState(scenario, funds) {
@@ -115,8 +112,8 @@ export class Game {
     this.log = log;
     this.events = new EventBus();
     this.scenario = scenario;
-    this.difficultyKey = scenario.difficulty || 'normal';
-    this.difficulty = DIFFICULTY[this.difficultyKey] || DIFFICULTY.normal;
+    this.difficultyKey = DIFFICULTY[scenario.difficulty] ? scenario.difficulty : 'normal';
+    this.difficulty = difficultyOf(this.difficultyKey); // every difficulty lever, see data/difficulty.js
     this.cheats = { freeBuild: false };
     this.buildings = new Map();
     this.walkers = new Map();

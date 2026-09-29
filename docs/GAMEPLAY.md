@@ -7,6 +7,30 @@ The rules and numbers behind Colonia. Every number here comes from `src/config.j
 * 1 day = 1 second at normal speed, 16 days per month, 12 months per year (about 3 minutes per year at 1x).
 * Speeds: 1x, 2x, 3x, 5x. Walkers move about 2 tiles per second at 1x.
 
+## Map sizes
+
+Sandbox maps come in Small (64x64), Medium (96x96), Large (128x128) and **Uber (256x256)**: sixteen times the land of Small, room for a capital and its whole province. Settlers walk in from the map entrance to the home they picked; on a big map that can be far, so anyone with more than a 70-tile walk comes with a pack mule and travels faster (up to 4x walking speed), and no settler's trip takes much longer than a 70-tile walk. Uber costs about the same per frame as Large (only the tiles on screen are drawn) and a year-old Uber city saves in about 300 KB.
+
+## Difficulty
+
+Chosen in the Sandbox setup and in every campaign briefing (the menus remember your last choice). Each mission in the Campaign list shows the hardest level you have beaten it on. All levers live in `src/data/difficulty.js`:
+
+| Lever | Easy | Normal | Hard | Insane |
+|---|---|---|---|---|
+| Starting funds | x1.5 | x1 | x0.6 | x0.4 |
+| Fire and collapse risk | x0.7 | x1 | x1.3 | x1.5 |
+| Farm, raw material and workshop speed | x1.15 | x1 | x0.9 | x0.8 |
+| Settlers per day | x1.25 | x1 | x0.85 | x0.7 |
+| City mood | | | | -8 |
+| Raiders per warband | x0.7 | x1 | x1.3 | x1.5 |
+| Raider health, attack and siege damage | | | | x1.15 |
+| Months until the first raid and between raids | | | | x0.75 |
+| Size of the Emperor's requests | | | | x1.5 |
+| Months between requests | | | | x0.7 (about 10-18) |
+| Months to deliver a request | 12 | 12 | 12 | 9 |
+
+Insane is for veterans: staff the Prefecture and Engineer's Post first (labor priorities), because an unpatrolled building now burns or collapses in about two months instead of three, and plan for roughly twice Normal's army. The headless simulator shows how a level plays out: `npm run sim -- --difficulty insane --raids occasional --garrison`.
+
 ## Housing
 
 A Housing Plot costs 10 Dn. Settlers arrive when the city mood is at least 30, the plot is within 2 tiles of a road, and that road connects to the map entrance.
@@ -114,7 +138,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 
 ## Military
 
-**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar). No raids come while the city has fewer than 120 people. A warband has about `base + population / 450 + raids so far` warriors (x0.7 easy, x1.3 hard; 3 to 40), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
+**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar). No raids come while the city has fewer than 120 people. A warband has about `base + population / 450 + raids so far` warriors (x0.7 Easy, x1.3 Hard, x1.5 Insane; 3 to 40; on Insane raiders also have 15% more health and attack, and come 25% sooner), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
 
 Repelling a raid: +8 peace, +3 favor. Each building lost: -1 peace.
 
@@ -136,7 +160,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. A save is roughly 50 KB for a new small map, about 150 KB for a year-old small city and 300 KB or more for a developed large map; browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 2); older saves still load.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 3); older saves still load.
 
 ## City mood (sentiment)
 
@@ -152,12 +176,13 @@ Starts from 50 and is recalculated monthly (moving halfway toward the new value)
 | Gods | -8 to +6 by average mood |
 | Festivals | temporary boost |
 | New city | +20 for the first year |
+| Difficulty | -8 on Insane |
 
 Mood 30+ brings settlers; below 25 people start leaving.
 
 ## Fire and collapse
 
-Every building gains fire and collapse risk daily (houses by level, industry faster). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread (3% per neighbor per day). Prefects within 24 road tiles are dispatched automatically.
+Every building gains fire and collapse risk daily (houses by level, industry faster; x0.7 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread (3% per neighbor per day). Prefects within 24 road tiles are dispatched automatically.
 
 ## Gods
 
@@ -176,7 +201,7 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 * **Culture:** religion, entertainment, school, library, academy coverage (+ Senate).
 * **Prosperity:** average house level, patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
 * **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy.
-* **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over).
+* **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over). The Emperor asks every 14-26 months (from 150 people) for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.
 

@@ -30,12 +30,13 @@ import { Sfx } from './audio/sfx.js';
 import { Music, renderMood, encodeWav, measure } from './audio/music.js';
 import { MOODS } from './audio/composer.js';
 import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLast } from './sim/construction.js';
-import { findScenario, sandboxScenario, SCENARIOS } from './data/scenarios.js';
+import { findScenario, sandboxScenario, withDifficulty, SCENARIOS } from './data/scenarios.js';
+import { DIFFICULTY, DIFFICULTY_ORDER } from './data/difficulty.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort, enemyCount } from './sim/military.js';
 
-const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true };
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true, difficulty: 'normal' };
 
 /** Does the player's system ask for less motion (accessibility setting)? */
 function prefersReducedMotion() {
@@ -69,7 +70,7 @@ export class App {
     this.flags = flags;
     this.log = log;
     this.settings = readJson(`${CONFIG.STORAGE_PREFIX}settings`, DEFAULT_SETTINGS);
-    this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [] });
+    this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [], best: {} }); // best = { missionId: hardest difficulty won }
     this.sfx = new Sfx();
     this.music = new Music();
     this.musicOverride = null; // mood after victory/defeat
@@ -124,11 +125,11 @@ export class App {
   boot() {
     if (this.flags.scenario) {
       const s = findScenario(this.flags.scenario);
-      if (s) { this.newScenario(s.id); return; }
+      if (s) { this.newScenario(s.id, this.flags.difficulty || 'normal'); return; }
       log.warn(`Unknown scenario "${this.flags.scenario}"`);
     }
     if (this.flags.skipmenu) {
-      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: 'normal', funds: 8000 });
+      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: this.flags.difficulty || 'normal', funds: 8000 });
       return;
     }
     this.toMainMenu();
@@ -176,9 +177,21 @@ export class App {
   }
 
   // ------------------------------------------------------------ game setup
-  /** Start a campaign scenario by id. */
-  newScenario(id) {
-    const scenario = findScenario(id);
+  /** The difficulty the menus start on: the player's last choice (or Normal). */
+  difficultyPref() {
+    return DIFFICULTY[this.settings.difficulty] ? this.settings.difficulty : 'normal';
+  }
+
+  /** Remember the difficulty picked in a menu for next time. */
+  setDifficultyPref(key) {
+    if (!DIFFICULTY[key] || this.settings.difficulty === key) return;
+    this.settings.difficulty = key;
+    writeJson(`${CONFIG.STORAGE_PREFIX}settings`, this.settings);
+  }
+
+  /** Start a campaign scenario by id, at a difficulty (default: Normal). */
+  newScenario(id, difficulty = 'normal') {
+    const scenario = withDifficulty(findScenario(id), difficulty);
     if (!scenario) { this.ui.toastError(`Unknown scenario ${id}`); return; }
     this.startGame(new Game({ scenario, flags: this.flags }));
     for (const hint of scenario.hints || []) this.game.message(hint, 'info');
@@ -266,6 +279,10 @@ export class App {
   onVictory() {
     const id = this.game.scenario.id;
     if (!this.progress.completed.includes(id)) this.progress.completed.push(id);
+    // Remember the hardest difficulty each mission was won on (campaign list badge).
+    const best = this.progress.best || (this.progress.best = {});
+    const rank = (k) => DIFFICULTY_ORDER.indexOf(k);
+    if (rank(this.game.difficultyKey) > rank(best[id] ?? '')) best[id] = this.game.difficultyKey;
     writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
     this.sfx.play('victory');
     this.musicOverride = 'festival';
@@ -575,7 +592,7 @@ export class App {
   toggleConsole() { this.ui.console.toggle(); }
 
   showBriefing() {
-    if (this.game) this.ui.showModal(briefing(this, this.game.scenario, () => {}));
+    if (this.game) this.ui.showModal(briefing(this, this.game.scenario));
   }
 
   // ----------------------------------------------------------- main loop

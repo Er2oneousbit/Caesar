@@ -43,7 +43,7 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY) {
   // a little bounce in each step (the shadow stays on the ground)
   if (moving) sy -= Math.abs(Math.sin((t * 9 + w.anim) * 1.0)) * 0.8 * k;
 
-  const item = def.item;
+  const item = w.mule ? 'mule' : def.item; // settlers on a long trip lead a pack mule
   if (item === 'cart') drawCart(ctx, w, sx + face * 7 * k, sy + dirY * 1.5 * k, k, face, phase);
   if (item === 'mule') drawMule(ctx, sx + face * 8 * k, sy + dirY * 1.5 * k, k, face, phase);
 

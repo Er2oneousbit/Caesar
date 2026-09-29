@@ -16,8 +16,8 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.4.0',
-  SAVE_VERSION: 2, // v2 added the military (units, walls, raids); v1 saves still load
+  VERSION: '0.5.0',
+  SAVE_VERSION: 3, // v2 added the military, v3 packed map layers and paths; older saves still load
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -70,6 +70,8 @@ export const CONFIG = {
 
   // --- Immigration -------------------------------------------------------
   IMMIGRANT_GROUP_MAX: 6,
+  SETTLER_WALK_TILES: 70, // settlers with a longer trip than this (big maps) travel faster, with a pack mule...
+  SETTLER_MAX_SPEEDUP: 4, // ...up to this many times walking speed, so no trip takes much longer than a 70-tile walk
   IMMIGRATION_BASE_PER_DAY: 6, // people/day arriving when sentiment is 100
   NEW_CITY_BONUS_MONTHS: 12, // extra sentiment early on so cities can start
 

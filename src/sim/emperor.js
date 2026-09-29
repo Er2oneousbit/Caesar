@@ -6,7 +6,8 @@
  * Every so often (REQUEST_INTERVAL_MONTHS) the Emperor asks for a shipment of
  * goods or a sum of money with a deadline. Fulfilling it from the Imperial
  * advisor raises favor; missing the deadline lowers it. The player can also
- * send personal gifts to buy a little favor.
+ * send personal gifts to buy a little favor. Difficulty (data/difficulty.js)
+ * scales how often he asks, how much, and how long the city gets.
  * ----------------------------------------------------------------------------
  */
 
@@ -28,8 +29,9 @@ function requestableGoods(game) {
 }
 
 export function scheduleNextRequest(game) {
+  const k = game.difficulty.requestInterval;
   const [a, b] = CONFIG.REQUEST_INTERVAL_MONTHS;
-  game.city.nextRequestMonth = game.time.totalMonths + game.rng.range(a, b);
+  game.city.nextRequestMonth = game.time.totalMonths + game.rng.range(Math.round(a * k), Math.round(b * k));
 }
 
 /** Monthly: create new requests and expire old ones. */
@@ -49,14 +51,17 @@ export function updateEmperor(game) {
   const goods = requestableGoods(game);
   const useMoney = goods.length === 0 || game.rng.chance(0.3);
   const scale = Math.max(1, Math.round(c.population / 400));
+  const { requestSize, requestTime } = game.difficulty;
+  const months = Math.round(CONFIG.REQUEST_DEADLINE_MONTHS * requestTime);
+  const round50 = (v) => Math.max(50, Math.round(v / 50) * 50);
   if (useMoney) {
-    c.request = { kind: 'money', amount: Math.round((300 + 150 * scale) / 50) * 50, deadline: now + CONFIG.REQUEST_DEADLINE_MONTHS };
+    c.request = { kind: 'money', amount: round50((300 + 150 * scale) * requestSize), deadline: now + months };
   } else {
     const good = game.rng.pick(goods);
-    const amount = Math.min(2400, 200 + 100 * game.rng.range(1, 2 + scale));
-    c.request = { kind: 'goods', good, amount, deadline: now + CONFIG.REQUEST_DEADLINE_MONTHS };
+    const amount = round50(Math.min(2400, 200 + 100 * game.rng.range(1, 2 + scale)) * requestSize);
+    c.request = { kind: 'goods', good, amount, deadline: now + months };
   }
-  game.message(`The Emperor requests ${describeRequest(c.request)} within ${CONFIG.REQUEST_DEADLINE_MONTHS} months. Open the Imperial advisor to send it.`, 'imperial');
+  game.message(`The Emperor requests ${describeRequest(c.request)} within ${months} months. Open the Imperial advisor to send it.`, 'imperial');
   game.events.emit('sound', { name: 'fanfare' });
 }
 

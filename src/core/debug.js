@@ -10,8 +10,9 @@
  *   debug=1        show the debug HUD (FPS, tick time, entity counts, tile info)
  *   log=LEVEL      error | warn | info | debug   (default: info, debug if debug=1)
  *   seed=N         force the map seed for new games
- *   map=SIZE       small | medium | large        (sandbox default map size)
+ *   map=SIZE       small | medium | large | uber (sandbox default map size)
  *   maptype=TYPE   river | coast | lakes | plains | desert
+ *   difficulty=D   easy | normal | hard | insane (with skipmenu=1 or scenario=ID)
  *   scenario=ID    start a scenario directly (see data/scenarios.js ids)
  *   skipmenu=1     jump straight into a sandbox game
  *   money=N        starting treasury override
@@ -60,8 +61,9 @@ export function parseFlags(source) {
   flags.log = LEVELS[get('log')] !== undefined ? get('log') : flags.debug ? 'debug' : 'info';
   const seed = get('seed');
   if (seed !== undefined && seed !== null && seed !== '') flags.seed = isNaN(Number(seed)) ? seed : Number(seed);
-  if (['small', 'medium', 'large'].includes(get('map'))) flags.map = get('map');
+  if (['small', 'medium', 'large', 'uber'].includes(get('map'))) flags.map = get('map'); // keys of MAP_SIZES (world/mapgen.js)
   if (['river', 'coast', 'lakes', 'plains', 'desert'].includes(get('maptype'))) flags.maptype = get('maptype');
+  if (['easy', 'normal', 'hard', 'insane'].includes(get('difficulty'))) flags.difficulty = get('difficulty'); // keys of data/difficulty.js
   if (get('scenario')) flags.scenario = String(get('scenario'));
   flags.skipmenu = truthy(get('skipmenu'));
   const money = Number(get('money'));

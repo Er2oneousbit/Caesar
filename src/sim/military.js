@@ -30,6 +30,7 @@ import { RECRUIT_COST, RECRUIT_SOURCE, GOODS } from '../data/goods.js';
 import { Terrain, Road, Wall } from '../world/map.js';
 import { MinHeap } from '../world/pathfinding.js';
 import { INVASION_PRESETS } from '../data/scenarios.js';
+import { difficultyOf } from '../data/difficulty.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
@@ -56,7 +57,8 @@ const RAID_MIN_POP = 120; // villages smaller than this are not worth raiding
 
 /**
  * Fresh military state for a new game.
- * @param {object} scenario  scenario.military = invasion settings or null
+ * @param {object} scenario  scenario.military = invasion settings or null;
+ *                           scenario.difficulty scales the wait for the first raid
  * @param {GameTime} time
  * @param {object} [flags]   debug flag raids=off|occasional|frequent overrides the scenario
  */
@@ -64,9 +66,10 @@ export function newMilitaryState(scenario, time, flags = {}) {
   let settings = scenario.military ? { ...scenario.military } : null;
   if (flags.raids === 'off') settings = null;
   else if (flags.raids && INVASION_PRESETS[flags.raids]) settings = { ...INVASION_PRESETS[flags.raids] };
+  const wait = settings ? Math.max(6, Math.round(settings.first * difficultyOf(scenario.difficulty).raidInterval)) : 0;
   return {
     settings,
-    nextRaidMonth: settings ? time.totalMonths + settings.first : null,
+    nextRaidMonth: settings ? time.totalMonths + wait : null,
     warned: null, // { origin:{x,y}, size, dir }
     active: null, // { id, origin, size, killed, buildingsLost, startDay, fleeing, plundered }
     nextInvasionId: 1,
@@ -114,6 +117,8 @@ export function spawnUnit(game, type, x, y, init = {}) {
   const u = new Unit(game.nextUnitId++, type, x, y);
   u.ox = (game.rng.next() - 0.5) * 0.5;
   u.oy = (game.rng.next() - 0.5) * 0.5;
+  // Tougher raiders on harder difficulties (their attack is scaled in enemyPower()).
+  if (u.side === 'enemy') u.hp = u.maxHp = Math.round(u.maxHp * enemyPower(game, u));
   Object.assign(u, init);
   game.units.set(u.id, u);
   return u;
@@ -578,8 +583,13 @@ function fillField(game, field, isSource) {
 // Combat
 // ---------------------------------------------------------------------------
 
-function rollDamage(game, attDef, tgtDef) {
-  const raw = attDef.attack * (0.75 + game.rng.next() * 0.5) - tgtDef.defense * 0.5;
+/** Strength multiplier for a unit: raiders scale with difficulty, Rome's soldiers never do. */
+function enemyPower(game, u) {
+  return u.side === 'enemy' ? game.difficulty.enemy : 1;
+}
+
+function rollDamage(game, attDef, tgtDef, power = 1) {
+  const raw = attDef.attack * power * (0.75 + game.rng.next() * 0.5) - tgtDef.defense * 0.5;
   return Math.max(2, raw);
 }
 
@@ -595,7 +605,7 @@ function attackUnit(game, u, def, target) {
   u.cooldown = def.cooldown;
   const sdx = (target.x - u.x) - (target.y - u.y);
   if (Math.abs(sdx) > 0.01) u.facing = sdx > 0 ? 1 : -1;
-  const dmg = rollDamage(game, def, UNIT_TYPES[target.type]);
+  const dmg = rollDamage(game, def, UNIT_TYPES[target.type], enemyPower(game, u));
   if (def.ranged) {
     game.projectiles.push({ x: u.x, y: u.y, z: 10, target: target.id, damage: dmg, speed: 0.4, kind: u.side === 'enemy' ? 'stone' : 'arrow', life: 60 });
     game.events.emit('sound', { name: 'arrow' });
@@ -768,7 +778,7 @@ function updateRaider(game, u, romans) {
     if (u.cooldown <= 0) {
       u.cooldown = def.cooldown;
       u.strikeTick = game.time.totalTicks;
-      const dmg = def.siege * (0.75 + game.rng.next() * 0.5);
+      const dmg = def.siege * enemyPower(game, u) * (0.75 + game.rng.next() * 0.5);
       if (bestKind === 'wall') damageWall(game, best, dmg);
       else {
         const b = game.buildings.get(map.building[best]);
@@ -903,8 +913,7 @@ function pickRaidOrigin(game) {
 export function raidSize(game) {
   const s = game.military.settings;
   const base = s ? s.base : 5;
-  const mult = { easy: 0.7, normal: 1, hard: 1.3 }[game.difficultyKey] ?? 1;
-  const n = Math.round((base + game.city.population / 450 + (game.military.stats.raids || 0)) * mult);
+  const n = Math.round((base + game.city.population / 450 + (game.military.stats.raids || 0)) * game.difficulty.raidSize);
   return Math.max(3, Math.min(40, n));
 }
 
@@ -1031,8 +1040,9 @@ function endInvasion(game, inv) {
   m.active = null;
   const s = m.settings;
   if (s) {
+    const k = game.difficulty.raidInterval;
     const [a, b] = s.interval;
-    m.nextRaidMonth = game.time.totalMonths + game.rng.range(a, b);
+    m.nextRaidMonth = game.time.totalMonths + game.rng.range(Math.max(4, Math.round(a * k)), Math.max(5, Math.round(b * k)));
   }
   game.projectiles = [];
 }

@@ -103,7 +103,8 @@ export class Minimap {
     const ox = (cw - this.base.width * scale) / 2;
     const oy = (ch - this.base.height * scale) / 2;
     this.layout = { scale, ox, oy, h: game.map.h };
-    ctx.imageSmoothingEnabled = false;
+    // Crisp pixels when enlarged; smoothed when shrunk (Uber maps), or 1-tile roads drop out.
+    ctx.imageSmoothingEnabled = scale < 1;
     ctx.drawImage(this.base, ox, oy, this.base.width * scale, this.base.height * scale);
     // camera frame: 1 minimap px = HALF_W world px
     const v = camera.viewRect();

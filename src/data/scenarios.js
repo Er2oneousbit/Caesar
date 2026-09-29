@@ -14,9 +14,13 @@
  *                                 sea partners on maps with navigable water
  *                                 (river, coast, or a big lake at the map edge)
  *   requests: boolean             Emperor makes requests
+ *   difficulty                    key of data/difficulty.js (missing = normal;
+ *                                 campaign missions get it from withDifficulty)
  *   hints: string[]               tips shown at start
  * ----------------------------------------------------------------------------
  */
+
+import { DIFFICULTY, difficultyOf } from './difficulty.js';
 
 /**
  * Trade partners.
@@ -152,14 +156,22 @@ export const SCENARIOS = Object.freeze([
   },
 ]);
 
+/**
+ * A campaign mission played at a difficulty: a copy with the key set and the
+ * starting funds scaled. Normal returns the mission as written.
+ */
+export function withDifficulty(scenario, difficulty = 'normal') {
+  if (!scenario || !DIFFICULTY[difficulty] || difficulty === 'normal') return scenario;
+  return { ...scenario, difficulty, funds: Math.round(scenario.funds * difficultyOf(difficulty).funds) };
+}
+
 /** Sandbox settings template. The New Game screen fills in the blanks. */
 export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional' } = {}) {
-  const fundsByDiff = { easy: 1.5, normal: 1, hard: 0.6 };
   return {
     id: 'sandbox', name: 'Sandbox', title: 'Free Build',
     intro: 'No goals, no deadlines. Build the city you want.',
     map: { size, type, seed },
-    funds: Math.round(funds * (fundsByDiff[difficulty] ?? 1)),
+    funds: Math.round(funds * difficultyOf(difficulty).funds),
     startYear: -300,
     goals: { population: 0, culture: 0, prosperity: 0, peace: 0, favor: 0 },
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,

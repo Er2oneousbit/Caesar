@@ -420,7 +420,11 @@ function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
  * ranch, a fletcher, two watchtowers and a wall with a gate across the
  * Imperial road. Everything is placed on roads that reach the map entry.
  * With { stock: true } the barracks gets equipment up front, so soldiers
- * appear quickly (screenshots, tests, the --garrison simulation).
+ * appear quickly (screenshots, tests, the --garrison simulation). With
+ * { militaryFirst: true } military labor also goes first in the Labor
+ * advisor, as a governor raising an army might set it (the console
+ * showcase); the simulation leaves priorities alone, since a small city
+ * that staffs its army first loses its prefects, engineers and farms.
  * @returns {{ok:boolean, barracks?:object, forts:object[], ranch?:object, wall:number}}
  */
 export function buildDemoGarrison(game, center, opts = {}) {
@@ -436,14 +440,15 @@ export function buildDemoGarrison(game, center, opts = {}) {
   const towers = [placeNear(game, 'tower', 2, center, 10, 30), placeNear(game, 'tower', 2, center, 14, 34)].filter(Boolean);
   const wall = demoWall(game, center);
   if (opts.stock && barracks) {
-    // Equipment up front, so recruits come quickly. Labor priorities stay
-    // as they are: putting the army first starved the prefects, engineers
-    // and farms of small cities, which burned down or went hungry (on Hard
-    // and Insane most demo garrison cities fell to 0).
+    // Equipment up front, so recruits come quickly. Labor priorities only
+    // change on request (militaryFirst): putting the army first starved the
+    // prefects, engineers and farms of small cities, which burned down or
+    // went hungry (on Hard and Insane most demo garrison cities fell to 0).
     barracks.stock.weapons = 400;
     barracks.stock.arrows = 400;
     barracks.stock.horses = 400;
   }
+  if (opts.militaryFirst && barracks && !game.city.laborPriority.includes('military')) game.city.laborPriority.unshift('military');
   return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall };
 }
 

@@ -32,7 +32,7 @@ export const CONSOLE_HELP = [
   ['collapse', 'Collapse a random building'],
   ['favor <n>', 'Set the Emperor\'s favor (0-100)'],
   ['mood <n>', 'Set city sentiment (0-100)'],
-  ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, military labor first)'],
+  ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['army', 'List forts, soldiers, barracks stock and the raid schedule'],
@@ -185,9 +185,9 @@ export class DebugConsole {
         const center = cityCenter(g);
         if (!center) return 'Build some homes first (try: demo 2).';
         if (cmd === 'garrison') {
-          const res = buildDemoGarrison(g, center, { stock: true });
+          const res = buildDemoGarrison(g, center, { stock: true, militaryFirst: true });
           if (res.barracks) app.renderer.camera.centerOnTile(res.barracks.x, res.barracks.y);
-          return res.ok ? `Garrison built: ${res.forts.length} forts, ${res.towers.length} towers, ${res.wall} wall tiles. Recruits arrive over the next weeks.` : 'Could not find room for a barracks and forts near the city.';
+          return res.ok ? `Garrison built: ${res.forts.length} forts, ${res.towers.length} towers, ${res.wall} wall tiles. Military labor now goes first (Labor advisor). Recruits arrive over the next weeks.` : 'Could not find room for a barracks and forts near the city.';
         }
         const res = buildDemoHarbor(g, center);
         if (res.dock) app.renderer.camera.centerOnTile(res.dock.x, res.dock.y);

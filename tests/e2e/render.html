@@ -41,7 +41,7 @@
   let focus = res.center;
   let battle = null;
   if (q.get('military') && res.center) {
-    const gar = buildDemoGarrison(game, res.center, { stock: true });
+    const gar = buildDemoGarrison(game, res.center, { stock: true, militaryFirst: true });
     game.runDays(Number(q.get('recruitDays') || 70));
     launchInvasion(game, null, Number(q.get('raiders') || 12));
     for (let d = 0; d < 90; d++) {

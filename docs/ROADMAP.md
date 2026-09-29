@@ -96,28 +96,61 @@ Fixes from a review of v0.6:
 * Touch controls and phone layout; synthesized sound effects
 * Tests: 16 headless sim tests, 18-check browser smoke test, balance simulator
 
+## Next up (suggested order)
+
+Picked for value per effort; each is described in the sections below.
+
+1. Roadblocks and walker click-to-inspect
+2. The "next level" overlay, and production and logistics stats
+3. Sim fuzzer and save corpus
+4. Disease and crime
+5. Replay and timelapse
+6. The wider world: the regional map, then the Emperor's legions, then distant battles
+
 ## Missing compared to the classic formula
 
-1. **The Emperor's legions** marching on a governor whose favor collapses; distant battles the Emperor asks you to send troops to.
+1. **The Emperor's legions** marching on a governor whose favor collapses, which gives the favor rating real teeth; distant battles the Emperor asks you to send troops to.
 2. **Water industry**: fishing wharves (fish as a food) and shipyards.
-3. **Crime**: criminals from unhappy neighborhoods, theft, riots.
-4. **Disease**: plague outbreaks that hospitals and baths prevent.
+3. **Crime**: criminals from unhappy neighborhoods. Unemployment and low mood breed thieves who rob the treasury and markets, and rioters who burn buildings; prefects double as police, as in the original.
+4. **Disease**: plague outbreaks in dense, unhealthy blocks that clinics, hospitals and baths prevent, so health buildings matter beyond housing needs. It can reuse the fire and collapse risk machinery.
 5. **Hippodrome** (chariot races) as a fourth entertainment venue.
 6. **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary).
 7. **Map rotation** (view the city from 4 angles).
-8. **Scenario/map editor**.
-9. **Events**: floods, earthquakes, price changes, trade route disruptions.
+8. **Scenario/map editor**, which doubles as modding (missions saved as data files).
+9. **Events**: floods, earthquakes, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 10. **Warehouse/granary orders** ("get goods", "empty storage") and granary-to-granary transfers.
-11. **Walker click-to-inspect** (currently only buildings and tiles).
+11. **Walker click-to-inspect** (currently only buildings and tiles): who it is, where it came from, where it is going, what it carries.
 12. **Regional map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), whether clicking a warband pans the city view to its entry edge, and whether the geography is Italy-centred or the whole inland sea (the partners reach from Tarraco to Alexandria).
+13. **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
+
+## Beyond the original: tools for optimizers
+
+* **Roadblocks**: roaming walkers cannot pass, carts and settlers can, so service coverage becomes a puzzle instead of a dice roll (Pharaoh's big quality-of-life addition; Caesar III never had them).
+* **"Next level" overlay**: color every home by the one thing blocking its next level (water, food variety, a temple, desirability...), with the reason in the tooltip.
+* **Production and logistics stats**: per good, how much was made and used each month; per building, why it is idle (no workers, no raw material, no storage, no road); a hint at the bottleneck. Charts in the advisors belong here (population, treasury and mood history are already recorded in `city.history`).
+* **Blueprints**: copy and paste housing blocks, and a ghost planner that places the pieces and builds each one once you can afford it.
+
+## Built on the deterministic sim
+
+The sim is deterministic (seeded RNG, never `Math.random`), so the same seed plus the same player actions rebuild a city exactly.
+
+* **Replay and timelapse**: record the player's actions with the tick they happened on, then play them back: a timelapse of the city growing, a rewind to before a disaster, and bug reports that come with a replay instead of "it broke somehow".
+* **Sim fuzzer**: thousands of game-days of random building, demolishing and speed changes, checking invariants: the books balance, no stock goes negative, save and reload gives the same game, no walker is stuck forever. It finds bugs before players do.
+* **Save corpus in CI**: keep a save from every release and prove each one still loads.
+* **`npm run sweep`**: the balance table (4 landscapes x 3 seeds x 4 difficulties, with and without a garrison) as a real script instead of one-off scratch copies.
 
 ## Polish ideas
 
-* Charts in the advisors (population, treasury and mood history are already recorded in `city.history`).
 * More building animation: turning mill wheels, laundry flapping, working farmers and fishermen.
 * Optional sprite packs: load PNG art (hand-drawn or AI-assisted) over the procedural sprites, keyed like the sprite cache, with the procedural art as the fallback. The art sheet (`tests/e2e/artsheet.html`) is the reference for sizes and anchors.
 * Keyboard remapping and a colorblind-friendly overlay palette.
+* A synthesized city soundscape (market chatter, forge clanks, gulls at the docks) that changes as you zoom.
 * Performance: cache static terrain into chunk canvases for the most zoomed-out view. When the screen is full of tiles (the middle of a Large or Uber map) that view costs about 16 ms a frame in headless Chromium against 4 ms one zoom level in; chunks would cut its thousands of ground draw calls to a few dozen (see ARCHITECTURE.md, *Draw calls*).
 * Smaller saves for very big cities: buildings are about 0.8 KB each in a save (mostly the house record), so a 1,500-building capital needs about 1.5 MB per slot. Dropping default-valued fields, or compressing the whole save, would stretch the ~5 MB browser allowance further.
+
+## Open questions
+
+* Stay close to classic Caesar, or "Caesar with modern quality of life"? Roadblocks and blueprints are not in the original.
+* Crime, disease and events: on for every difficulty, or off on Easy and scaling up from there?
 
 Made with ❤️ from your friendly hacker - er2oneousbit

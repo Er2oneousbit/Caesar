@@ -136,7 +136,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. A save is about 40-400 KB depending on map size; browsers usually allow about 5 MB per site, and the Save/Load menus show the current usage. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 2); older saves still load.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. A save is roughly 50 KB for a new small map, about 150 KB for a year-old small city and 300 KB or more for a developed large map; browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 2); older saves still load.
 
 ## City mood (sentiment)
 

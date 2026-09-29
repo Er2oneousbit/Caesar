@@ -1,0 +1,194 @@
+#!/usr/bin/env node
+/**
+ * smoke.mjs - end-to-end smoke test of the BUILT game (dist/colonia.html).
+ * ----------------------------------------------------------------------------
+ * Drives headless Chromium like a player: main menu, sandbox start, building
+ * with real mouse drags and keyboard shortcuts, advisors/help/menus, quick
+ * save + reload + quick load, and a phone-sized layout check.
+ *
+ * Usage:  npm run build && npm run test:e2e
+ *         node tests/e2e/smoke.mjs [--file dist/colonia.html] [--shots dir] [--help]
+ * Needs Playwright (npm i -D playwright, or a global install).
+ * Exit code 0 = all checks passed.
+ * ----------------------------------------------------------------------------
+ */
+
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const args = process.argv.slice(2);
+if (args.includes('--help')) {
+  console.log('node tests/e2e/smoke.mjs [--file dist/colonia.html] [--shots dir]');
+  process.exit(0);
+}
+const file = path.resolve(args.includes('--file') ? args[args.indexOf('--file') + 1] : path.join(ROOT, 'dist/colonia.html'));
+const shots = args.includes('--shots') ? path.resolve(args[args.indexOf('--shots') + 1]) : null;
+if (!fs.existsSync(file)) {
+  console.error(`Missing ${file}. Run "npm run build" first.`);
+  process.exit(2);
+}
+if (shots) fs.mkdirSync(shots, { recursive: true });
+
+function loadPlaywright() {
+  const require = createRequire(import.meta.url);
+  for (const t of ['playwright', '/opt/node22/lib/node_modules/playwright']) {
+    try { return require(t); } catch { /* next */ }
+  }
+  console.error('Playwright not found. Install it with: npm i -D playwright && npx playwright install chromium');
+  process.exit(2);
+}
+
+const { chromium } = loadPlaywright();
+const url = pathToFileURL(file).href;
+const results = [];
+const check = (name, ok, detail = '') => {
+  results.push({ name, ok, detail });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+};
+// Network failures for optional web fonts are not game errors.
+const ignorable = (t) => /fonts\.(googleapis|gstatic)|ERR_CERT|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|Failed to load resource/i.test(t);
+
+const browser = await chromium.launch();
+try {
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 820 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) errors.push(m.text()); });
+
+  // 1. Main menu
+  await page.goto(url);
+  await page.waitForSelector('.menu-card', { timeout: 15000 });
+  check('main menu shows', await page.isVisible('text=Campaign'));
+  if (shots) await page.screenshot({ path: path.join(shots, 'smoke-menu.png') });
+
+  // 2. Start a sandbox from the menu UI
+  await page.click('text=Sandbox');
+  await page.click('text=Found the city');
+  await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+  check('sandbox starts from the menu', true);
+
+  // 3. Build with real input: road drag + housing drag near the map entrance
+  const info = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    app.paused = true;
+    // Find the imperial road tile nearest the map center, then free land beside it.
+    let best = null;
+    for (let i = 0; i < g.map.size; i++) {
+      if (!g.map.road[i]) continue;
+      const x = g.map.xOf(i);
+      const y = g.map.yOf(i);
+      const d = Math.hypot(x - g.map.w / 2, y - g.map.h / 2);
+      if (!best || d < best.d) best = { x, y, d };
+    }
+    app.renderer.camera.centerOnTile(best.x, best.y);
+    return { x: best.x, y: best.y, money: g.city.treasury, buildings: g.buildings.size };
+  });
+  const toScreen = (tx, ty) => page.evaluate(([x, y]) => {
+    const cam = window.colonia.renderer.camera;
+    const wx = (x + 0.5 - (y + 0.5)) * 32;
+    const wy = (x + 0.5 + (y + 0.5)) * 16;
+    const r = window.colonia.canvas.getBoundingClientRect();
+    return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+  }, [tx, ty]);
+  // Find a free spot 3..8 tiles from the road for a little street.
+  const spot = await page.evaluate(({ x, y }) => {
+    const m = window.colonia.game.map;
+    for (let r = 2; r < 12; r++) {
+      for (const [dx, dy] of [[0, r], [r, 0], [0, -r], [-r, 0]]) {
+        let ok = true;
+        for (let k = 0; k < 6 && ok; k++) for (let j = 0; j < 3; j++) if (!m.isFree(x + dx + k, y + dy + j)) { ok = false; break; }
+        if (ok) return { x: x + dx, y: y + dy };
+      }
+    }
+    return null;
+  }, info);
+  check('found free land for the input test', !!spot);
+  if (spot) {
+    await page.keyboard.press('r');
+    const a = await toScreen(spot.x, spot.y);
+    const b = await toScreen(spot.x + 5, spot.y);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 5 });
+    await page.mouse.move(b.x, b.y, { steps: 5 });
+    await page.mouse.up();
+    const roadOk = await page.evaluate(({ x, y }) => window.colonia.game.map.road[window.colonia.game.map.idx(x + 3, y)] > 0, spot);
+    check('road drag builds a road', roadOk);
+    await page.keyboard.press('h');
+    const c = await toScreen(spot.x, spot.y + 1);
+    const d = await toScreen(spot.x + 5, spot.y + 2);
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(d.x, d.y, { steps: 8 });
+    await page.mouse.up();
+    const after = await page.evaluate(() => ({ money: window.colonia.game.city.treasury, buildings: window.colonia.game.buildings.size }));
+    check('housing drag places houses', after.buildings >= info.buildings + 6, `${after.buildings - info.buildings} new`);
+    check('construction costs money', after.money < info.money, `${info.money} -> ${after.money}`);
+    await page.mouse.click(c.x, c.y, { button: 'right' }); // cancel tool
+    check('right click cancels the tool', await page.evaluate(() => window.colonia.input.tool === null));
+    await page.mouse.click(c.x, c.y);
+    check('clicking a house opens the info panel', await page.isVisible('#info-panel'));
+  }
+
+  // 4. Menus and advisors via keyboard
+  await page.keyboard.press('F2');
+  check('F2 opens advisors', await page.isVisible('text=Advisors'));
+  for (const tab of ['Labor', 'Finance', 'Trade', 'Religion', 'Ratings', 'Imperial']) {
+    await page.click(`.tab:has-text("${tab}")`);
+  }
+  check('advisor tabs render', errors.length === 0, errors.join(' | '));
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('F1');
+  check('F1 opens help', await page.isVisible('text=How to play'));
+  await page.keyboard.press('Escape');
+
+  // 5. Let it run with the demo city, then quick save / reload / quick load
+  await page.evaluate(() => {
+    const app = window.colonia;
+    app.ui.console.run('demo 2');
+    app.ui.console.run('days 64');
+    app.setSpeed(3);
+  });
+  await page.waitForTimeout(1500);
+  if (shots) await page.screenshot({ path: path.join(shots, 'smoke-city.png') });
+  const saved = await page.evaluate(() => ({ b: window.colonia.game.buildings.size, pop: window.colonia.game.city.population }));
+  check('city grows', saved.pop > 50, `pop ${saved.pop}`);
+  await page.evaluate(() => window.colonia.togglePause());
+  const savedNow = await page.evaluate(() => ({ b: window.colonia.game.buildings.size }));
+  await page.keyboard.press('F5');
+  await page.reload();
+  await page.waitForSelector('.menu-card');
+  check('Continue offered after a quick save', await page.isVisible('text=Continue'));
+  await page.evaluate(() => window.colonia.quickLoad());
+  await page.waitForFunction(() => window.colonia.game, null, { timeout: 15000 });
+  const loaded = await page.evaluate(() => window.colonia.game.buildings.size);
+  check('quick save survives a reload', loaded === savedNow.b, `${savedNow.b} vs ${loaded}`);
+
+  // 6. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
+  const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const perrors = [];
+  phone.on('pageerror', (e) => perrors.push(e.message));
+  await phone.goto(`${url}?skipmenu=1&map=small`);
+  await phone.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+  const layout = await phone.evaluate(() => {
+    const sb = document.getElementById('sidebar').getBoundingClientRect();
+    return { scrollW: document.documentElement.scrollWidth, w: window.innerWidth, sbTop: sb.top, sbH: sb.height };
+  });
+  check('phone: no horizontal scroll', layout.scrollW <= layout.w, `${layout.scrollW} <= ${layout.w}`);
+  check('phone: build menu docked at the bottom', layout.sbTop > 400, `top ${Math.round(layout.sbTop)}`);
+  if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone.png') });
+  check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
+
+  check('no page errors overall', errors.length === 0, errors.join(' | '));
+} finally {
+  await browser.close();
+}
+
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
+process.exit(failed.length ? 1 : 0);

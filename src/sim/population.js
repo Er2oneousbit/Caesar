@@ -1,0 +1,250 @@
+/**
+ * population.js
+ * ----------------------------------------------------------------------------
+ * Immigration, emigration, homeless citizens, city mood ("sentiment") and the
+ * daily city statistics (population, tier counts, goods demand).
+ *
+ * Immigration: when there are empty beds in homes connected to the Imperial
+ * road and the city mood is good enough, groups of settlers walk in from the
+ * entry point. Rate scales with sentiment.
+ *
+ * Sentiment (0-100) is recalculated monthly from taxes, wages, unemployment,
+ * food supply, housing quality and the gods' moods. Below ~30 people stop
+ * coming, below 25 they start leaving.
+ * ----------------------------------------------------------------------------
+ */
+
+import { CONFIG } from '../config.js';
+import { GOD_KEYS } from '../data/gods.js';
+import { HOUSE_GOODS } from '../data/goods.js';
+import { HOUSE_TIERS, houseCapacity } from '../data/housing.js';
+import { spawnWalker, killWalker } from './entities.js';
+import { followPath, walkTo } from './movement.js';
+import { houseWantsGood } from './market.js';
+import { sendEmigrants } from './housing.js';
+
+/** Daily: recompute population, workforce inputs and goods demand. */
+export function computeCityStats(game) {
+  const c = game.city;
+  let pop = 0;
+  let plebs = 0;
+  let houses = 0;
+  let fed = 0;
+  let tierSum = 0;
+  const tiers = new Array(HOUSE_TIERS.length).fill(0);
+  const demand = {};
+  for (const g of HOUSE_GOODS) demand[g] = 0;
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h) continue;
+    tiers[h.tier] += 1;
+    if (h.pop <= 0) continue;
+    houses++;
+    pop += h.pop;
+    tierSum += h.tier * h.pop;
+    if (!HOUSE_TIERS[h.tier].patrician) plebs += h.pop;
+    if (!h.hungry) fed += h.pop;
+    for (const g of HOUSE_GOODS) if (houseWantsGood(h, g)) demand[g]++;
+  }
+  c.population = pop;
+  c.plebs = plebs;
+  c.patricians = pop - plebs;
+  c.houses = houses;
+  c.tierCounts = tiers;
+  c.avgTier = pop > 0 ? tierSum / pop : 0;
+  c.fedShare = pop > 0 ? fed / pop : 1;
+  c.goodsDemand = demand;
+  if (pop > c.stats.peakPopulation) c.stats.peakPopulation = pop;
+}
+
+/** Entry tile index and its road network id (0 = disconnected). */
+function entryInfo(game) {
+  const { map } = game;
+  const idx = map.idx(map.entry.x, map.entry.y);
+  return { idx, net: map.road[idx] ? map.roadNet[idx] : 0 };
+}
+
+/** Daily: settlers arrive at homes with free space. */
+export function updateImmigration(game) {
+  const c = game.city;
+  const { map } = game;
+  const entry = entryInfo(game);
+  if (!entry.net) {
+    if (!c.flags.entryWarned) {
+      c.flags.entryWarned = true;
+      game.message('The road to the map entrance is broken. No settlers can reach the city!', 'bad', map.entry.x, map.entry.y);
+    }
+    return;
+  }
+  c.flags.entryWarned = false;
+  if (c.sentiment < 30) return;
+
+  const vacancies = [];
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h || b.accessRoad < 0) continue;
+    if (map.roadNet[b.accessRoad] !== entry.net) {
+      b.noEntryRoute = true;
+      continue;
+    }
+    b.noEntryRoute = false;
+    const free = houseCapacity(h.tier, b.size) - h.pop - h.incoming;
+    if (free > 0) vacancies.push({ b, free });
+  }
+  c.vacancies = vacancies.reduce((s, v) => s + v.free, 0);
+  if (vacancies.length === 0) return;
+
+  const newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? 1.6 : 1;
+  const perDay = CONFIG.IMMIGRATION_BASE_PER_DAY * ((c.sentiment - 20) / 80) * newCity * game.difficulty.immigration;
+  c.immigrationAcc = Math.min(40, c.immigrationAcc + perDay);
+  let guard = 0;
+  while (c.immigrationAcc >= 1 && vacancies.length > 0 && guard++ < 12) {
+    const k = game.rng.int(vacancies.length);
+    const v = vacancies[k];
+    const n = Math.max(1, Math.min(CONFIG.IMMIGRANT_GROUP_MAX, v.free, Math.floor(c.immigrationAcc)));
+    const path = game.pf.roadPath(entry.idx, v.b.accessRoad);
+    if (!path) {
+      vacancies.splice(k, 1);
+      continue;
+    }
+    const w = spawnWalker(game, 'immigrant', entry.idx, null, {
+      people: n,
+      target: v.b.id,
+      state: 'toHouse',
+      reserve: { id: v.b.id, people: n },
+    });
+    if (!w) break;
+    v.b.house.incoming += n;
+    followPath(game, w, path);
+    c.immigrationAcc -= n;
+    v.free -= n;
+    if (v.free <= 0) vacancies.splice(k, 1);
+  }
+}
+
+/** Daily: unhappy citizens pack up and leave. */
+export function updateEmigration(game) {
+  const c = game.city;
+  if (c.sentiment >= 25 || c.population < 20) return;
+  const chance = (25 - c.sentiment) / 40;
+  if (!game.rng.chance(chance)) return;
+  const occupied = [];
+  for (const b of game.buildings.values()) if (b.house && b.house.pop > 0) occupied.push(b);
+  if (occupied.length === 0) return;
+  const b = game.rng.pick(occupied);
+  const n = Math.min(b.house.pop, game.rng.range(2, 6));
+  b.house.pop -= n;
+  sendEmigrants(game, b, n);
+}
+
+/** Settlers (or homeless) reached their new home. */
+export function settlerArrive(game, w) {
+  const b = game.buildings.get(w.target);
+  if (b && b.house) {
+    const h = b.house;
+    // Release the reservation first, then move in whoever fits.
+    if (w.reserve && w.reserve.id === b.id) {
+      h.incoming = Math.max(0, h.incoming - w.reserve.people);
+      w.reserve = null;
+    }
+    const free = houseCapacity(h.tier, b.size) - h.pop;
+    const n = Math.max(0, Math.min(free, w.people));
+    h.pop += n;
+    if (h.tier === 0 && h.pop > 0) {
+      h.tier = 1;
+      game.markDirty('des');
+      game.events.emit('houseChanged', b);
+    }
+    w.people -= n;
+    if (n > 0 && w.type === 'immigrant') game.city.stats.immigrated += n;
+  }
+  if (w.people > 0) {
+    // House vanished or filled up: look elsewhere.
+    seekHome(game, w);
+    return;
+  }
+  killWalker(game, w);
+}
+
+/**
+ * Homeless / redirected settlers look for the nearest home with free space.
+ * If none exists they give up and leave the city.
+ */
+export function seekHome(game, w) {
+  const { map, pf, buildings } = game;
+  const here = map.idx(w.x, w.y);
+  let found = null;
+  if (map.road[here]) {
+    const target = pf.bfsRoad(here, (i) => {
+      // A road tile qualifies if some house using it as access road has room.
+      const id = homeAt(game, i, w.people);
+      if (id) { found = id; return true; }
+      return false;
+    }, 120);
+    if (target >= 0 && found) {
+      const b = buildings.get(found);
+      b.house.incoming += w.people;
+      w.reserve = { id: b.id, people: w.people };
+      w.target = b.id;
+      w.state = 'toHouse';
+      followPath(game, w, pf.buildPath(target));
+      return;
+    }
+  }
+  // Give up: head for the exit.
+  w.type = 'emigrant';
+  w.state = 'leaving';
+  game.city.stats.emigrated += w.people;
+  const exitIdx = map.idx(map.exit.x, map.exit.y);
+  if (!walkTo(game, w, exitIdx)) killWalker(game, w);
+}
+
+/** A house whose access road is tile `i` and that can take `people`. */
+function homeAt(game, i, people) {
+  if (!game.homeByRoad) return 0;
+  const list = game.homeByRoad.get(i);
+  if (!list) return 0;
+  for (const id of list) {
+    const b = game.buildings.get(id);
+    if (!b) continue;
+    const free = houseCapacity(b.house.tier, b.size) - b.house.pop - b.house.incoming;
+    if (free >= Math.min(people, 1)) return id;
+  }
+  return 0;
+}
+
+/** Rebuild the road tile -> houses index used by seekHome (daily). */
+export function indexHomesByRoad(game) {
+  const idx = new Map();
+  for (const b of game.buildings.values()) {
+    if (!b.house || b.accessRoad < 0) continue;
+    let list = idx.get(b.accessRoad);
+    if (!list) { list = []; idx.set(b.accessRoad, list); }
+    list.push(b.id);
+  }
+  game.homeByRoad = idx;
+}
+
+/** Monthly: recompute city sentiment (0-100). Returns the factor breakdown. */
+export function computeSentiment(game) {
+  const c = game.city;
+  const f = {};
+  f.base = 50;
+  f.taxes = -(c.taxRate - CONFIG.DEFAULT_TAX_RATE) * (c.taxRate > CONFIG.DEFAULT_TAX_RATE ? 3 : 1.5);
+  f.wages = (c.wage - CONFIG.BASE_WAGE) * 0.8;
+  f.unemployment = c.unemploymentRate > 0.1 ? -Math.min(15, (c.unemploymentRate - 0.1) * 60) : 0;
+  f.food = c.population > 60 ? -(1 - c.fedShare) * 18 : 0;
+  f.housing = Math.min(10, Math.max(-4, (c.avgTier - 2) * 2));
+  let moodSum = 0;
+  for (const g of GOD_KEYS) moodSum += c.gods[g].mood;
+  f.gods = Math.max(-8, Math.min(6, (moodSum / GOD_KEYS.length - 50) * 0.15));
+  f.festival = c.festivalBoost;
+  f.newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? 20 : 0;
+  let s = 0;
+  for (const k in f) s += f[k];
+  s = Math.max(0, Math.min(100, s));
+  c.sentiment = Math.round(c.sentiment + (s - c.sentiment) * 0.5);
+  c.sentimentFactors = f;
+  c.festivalBoost *= 0.8;
+  return f;
+}

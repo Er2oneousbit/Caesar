@@ -1,0 +1,245 @@
+/**
+ * menus.js
+ * ----------------------------------------------------------------------------
+ * Main menu, campaign & sandbox setup, save/load, settings, pause menu,
+ * scenario briefing and the victory/defeat screens.
+ *
+ * Every function returns a DOM element; UI.showModal() / UI.showMainMenu()
+ * decide where it goes.
+ * ----------------------------------------------------------------------------
+ */
+
+import { h, fmt } from './dom.js';
+import { CONFIG } from '../config.js';
+import { SCENARIOS } from '../data/scenarios.js';
+import { MAP_SIZES, MAP_TYPES } from '../world/mapgen.js';
+import { DIFFICULTY } from '../core/game.js';
+import { listSlots, deleteSlot } from '../core/save.js';
+import { goalStatus } from '../sim/ratings.js';
+
+export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
+const SLOT_NAMES = { auto: 'Autosave', quick: 'Quicksave', slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3', slot4: 'Slot 4', slot5: 'Slot 5' };
+
+const FOOTER = 'Made with ❤️ from your friendly hacker - er2oneousbit';
+
+function modal(title, body, foot, cls = '', onClose = null) {
+  return h('div', { class: `modal ${cls}` },
+    h('div', { class: 'modal-head' }, h('h2', {}, title), onClose ? h('button', { class: 'panel-close', title: 'Close', onclick: onClose }, '×') : null),
+    h('div', { class: 'modal-body' }, body),
+    foot ? h('div', { class: 'modal-foot' }, foot) : null);
+}
+
+// ---------------------------------------------------------------------------
+// Main menu
+// ---------------------------------------------------------------------------
+
+/** The most recent autosave or quicksave, if any. */
+export function latestSave() {
+  const saves = listSlots(['auto', 'quick']).filter((s) => s.meta);
+  saves.sort((a, b) => String(b.meta.savedAt).localeCompare(String(a.meta.savedAt)));
+  return saves[0] || null;
+}
+
+export function mainMenu(app) {
+  const latest = latestSave();
+  const hasAuto = !!latest;
+  return h('div', { id: 'main-menu' },
+    h('div', { class: 'menu-card' },
+      h('h1', {}, CONFIG.GAME_TITLE),
+      h('div', { class: 'tagline' }, CONFIG.GAME_TAGLINE),
+      hasAuto ? h('button', { class: 'btn primary', title: `${latest.meta.city}, ${latest.meta.date}`, onclick: () => app.loadSlot(latest.slot) }, 'Continue') : null,
+      h('button', { class: `btn${hasAuto ? '' : ' primary'}`, onclick: () => app.ui.showModal(campaignMenu(app)) }, 'Campaign'),
+      h('button', { class: 'btn', onclick: () => app.ui.showModal(sandboxMenu(app)) }, 'Sandbox'),
+      h('button', { class: 'btn', onclick: () => app.ui.showModal(loadMenu(app)) }, 'Load game'),
+      h('button', { class: 'btn', onclick: () => app.ui.openHelp() }, 'How to play'),
+      h('button', { class: 'btn', onclick: () => app.ui.showModal(settingsMenu(app)) }, 'Settings'),
+      h('button', { class: 'btn', onclick: () => app.ui.showModal(creditsMenu(app)) }, 'Credits'),
+      h('div', { class: 'footer-note' }, `v${CONFIG.VERSION} · ${FOOTER}`)));
+}
+
+// ---------------------------------------------------------------------------
+// Campaign
+// ---------------------------------------------------------------------------
+
+export function campaignMenu(app) {
+  const done = app.progress.completed || [];
+  const list = SCENARIOS.map((s, i) => {
+    const unlocked = app.flags.unlockall || i === 0 || done.includes(SCENARIOS[i - 1].id) || done.includes(s.id);
+    const goals = Object.entries(s.goals).filter(([, v]) => v).map(([k, v]) => `${k} ${fmt(v)}`).join(', ');
+    return h('button', {
+      class: `scenario${unlocked ? '' : ' locked'}`,
+      title: unlocked ? s.intro : 'Complete the previous mission to unlock',
+      onclick: () => { if (unlocked) app.ui.showModal(briefing(app, s, () => app.newScenario(s.id))); },
+    }, h('span', { class: 'n' }, done.includes(s.id) ? '✔' : String(i + 1)),
+    h('span', { class: 't' }, h('b', {}, `${s.name}: ${s.title}`), h('span', { class: 'muted' }, `${MAP_TYPES[s.map.type].name} · Goals: ${goals}`)),
+    unlocked ? null : h('span', {}, '🔒'));
+  });
+  return modal('Campaign', h('div', { class: 'scenario-list' }, list),
+    [h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back')], '', () => app.ui.closeModal());
+}
+
+/** Scenario briefing shown before starting (or from the pause menu). */
+export function briefing(app, s, onBegin) {
+  const goals = Object.entries(s.goals).filter(([, v]) => v);
+  return modal(`${s.name}: ${s.title}`, [
+    h('p', {}, s.intro),
+    h('h4', {}, 'Goals'),
+    goals.length ? h('ul', {}, goals.map(([k, v]) => h('li', {}, `${k[0].toUpperCase()}${k.slice(1)}: ${fmt(v)}`))) : h('div', { class: 'muted' }, 'None: build as you like.'),
+    h('div', { class: 'row muted' }, `Starting funds: ${fmt(s.funds)} Dn · Map: ${MAP_TYPES[s.map.type].name} (${s.map.size}×${s.map.size})`),
+    s.hints && s.hints.length ? [h('h4', {}, 'Advice'), h('ul', {}, s.hints.map((t) => h('li', {}, t)))] : null,
+  ], [
+    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
+    h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); onBegin(); } }, 'Begin'),
+  ], 'narrow');
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox setup
+// ---------------------------------------------------------------------------
+
+export function sandboxMenu(app) {
+  const state = {
+    size: app.flags.map || 'medium',
+    type: app.flags.maptype || 'river',
+    seed: String(app.flags.seed ?? Math.floor(Math.random() * 1e6)),
+    difficulty: 'normal',
+    funds: 8000,
+  };
+  const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
+  const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
+  return modal('Sandbox', [
+    h('div', { class: 'grid2' },
+      h('div', { class: 'field' }, h('label', {}, 'Map size'),
+        h('select', { onchange: (e) => { state.size = e.target.value; } }, Object.entries(MAP_SIZES).map(([k, v]) => h('option', { value: k, selected: k === state.size }, `${k[0].toUpperCase()}${k.slice(1)} (${v}×${v})`)))),
+      h('div', { class: 'field' }, h('label', {}, 'Landscape'),
+        h('select', { onchange: (e) => { state.type = e.target.value; typeDesc.textContent = MAP_TYPES[state.type].desc; } }, Object.entries(MAP_TYPES).map(([k, v]) => h('option', { value: k, selected: k === state.type }, v.name))),
+        typeDesc),
+      h('div', { class: 'field' }, h('label', {}, 'Map seed (same seed = same map)'),
+        h('div', { class: 'row' }, seedInput, h('button', { class: 'btn small', onclick: () => { state.seed = String(Math.floor(Math.random() * 1e6)); seedInput.value = state.seed; } }, '🎲'))),
+      h('div', { class: 'field' }, h('label', {}, 'Difficulty'),
+        h('select', { onchange: (e) => { state.difficulty = e.target.value; } }, Object.entries(DIFFICULTY).map(([k, v]) => h('option', { value: k, selected: k === state.difficulty }, v.name))),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Affects starting money, fire/collapse risk, production and immigration.')),
+      h('div', { class: 'field' }, h('label', {}, 'Starting funds (before difficulty)'),
+        h('input', { type: 'number', min: 1000, max: 100000, step: 500, value: state.funds, onchange: (e) => { state.funds = Math.max(1000, Math.min(100000, Number(e.target.value) || 8000)); } }))),
+  ], [
+    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
+    h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.newSandbox(state); } }, 'Found the city'),
+  ], 'narrow', () => app.ui.closeModal());
+}
+
+// ---------------------------------------------------------------------------
+// Save / load
+// ---------------------------------------------------------------------------
+
+function slotRow(app, slot, meta, actions) {
+  return h('div', { class: 'card row', style: { marginBottom: '6px' } },
+    h('div', { style: { flex: 1 } },
+      h('b', {}, SLOT_NAMES[slot] || slot),
+      meta ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `${meta.city} · ${meta.date} · pop ${fmt(meta.population)} · ${new Date(meta.savedAt).toLocaleString()}`) : h('div', { class: 'muted' }, 'Empty')),
+    actions);
+}
+
+export function loadMenu(app) {
+  const slots = listSlots(SAVE_SLOTS);
+  const byName = Object.fromEntries(slots.map((s) => [s.slot, s]));
+  const fileInput = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: (e) => { const f = e.target.files[0]; if (f) app.importSave(f); } });
+  const rows = SAVE_SLOTS.map((slot) => {
+    const s = byName[slot];
+    return slotRow(app, slot, s?.meta, s ? [
+      s.corrupt ? h('span', { class: 'no' }, 'Corrupt') : h('button', { class: 'btn small primary', onclick: () => app.loadSlot(slot) }, 'Load'),
+      h('button', { class: 'btn small danger', onclick: () => { if (window.confirm(`Delete ${SLOT_NAMES[slot]}?`)) { deleteSlot(slot); app.ui.showModal(loadMenu(app)); } } }, '🗑'),
+    ] : null);
+  });
+  return modal('Load game', [rows, fileInput], [
+    h('button', { class: 'btn', onclick: () => fileInput.click() }, '📂 Import from file'),
+    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
+  ], 'narrow', () => app.ui.closeModal());
+}
+
+export function saveMenu(app) {
+  const slots = listSlots(SAVE_SLOTS);
+  const byName = Object.fromEntries(slots.map((s) => [s.slot, s]));
+  const rows = SAVE_SLOTS.filter((s) => s !== 'auto').map((slot) => slotRow(app, slot, byName[slot]?.meta,
+    h('button', { class: 'btn small primary', onclick: () => { if (!byName[slot] || window.confirm(`Overwrite ${SLOT_NAMES[slot]}?`)) { app.saveSlot(slot); app.ui.closeModal(); } } }, 'Save here')));
+  return modal('Save game', [rows, h('div', { class: 'muted' }, 'Saves live in this browser. Export to a file to keep a backup or move it to another computer.')], [
+    h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export to file'),
+    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
+  ], 'narrow', () => app.ui.closeModal());
+}
+
+// ---------------------------------------------------------------------------
+// Settings, credits, pause
+// ---------------------------------------------------------------------------
+
+export function settingsMenu(app) {
+  const s = app.settings;
+  const vol = h('b', {}, `${Math.round(s.volume * 100)}%`);
+  const check = (key, label, help) => h('label', { class: 'row', style: { margin: '6px 0' } },
+    h('input', { type: 'checkbox', checked: !!s[key], onchange: (e) => { s[key] = e.target.checked; app.applySettings(); } }),
+    h('span', {}, label, help ? h('div', { class: 'muted', style: { fontSize: '12px' } }, help) : null));
+  return modal('Settings', [
+    h('div', { class: 'field' }, h('label', {}, 'Sound volume'), vol,
+      h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: s.volume, oninput: (e) => { s.volume = Number(e.target.value); vol.textContent = `${Math.round(s.volume * 100)}%`; app.applySettings(); } })),
+    check('muted', 'Mute all sounds'),
+    check('edgeScroll', 'Scroll when the mouse touches the screen edge'),
+    check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months`),
+    check('showFps', 'Show performance counters (debug HUD)'),
+    h('div', { class: 'field' }, h('label', {}, 'Theme'),
+      h('select', { onchange: (e) => { s.theme = e.target.value; app.applySettings(); } },
+        [['auto', 'Match system'], ['light', 'Marble (light)'], ['dark', 'Basalt (dark)']].map(([k, n]) => h('option', { value: k, selected: s.theme === k }, n)))),
+  ], [h('button', { class: 'btn primary', onclick: () => app.ui.closeModal() }, 'Done')], 'narrow', () => app.ui.closeModal());
+}
+
+export function creditsMenu(app) {
+  return modal('Credits', [
+    h('p', {}, `${CONFIG.GAME_TITLE} is an original city builder inspired by the classic Roman city-building games of the late 1990s. All art is drawn procedurally in code, all sounds are synthesized, and all text is original.`),
+    h('p', {}, 'Developed with Claude (Anthropic) using Claude Code.'),
+    h('p', {}, 'Roman gods, places and history belong to everyone.'),
+    h('p', { class: 'muted' }, FOOTER),
+  ], [h('button', { class: 'btn primary', onclick: () => app.ui.closeModal() }, 'Close')], 'narrow', () => app.ui.closeModal());
+}
+
+export function pauseMenu(app) {
+  const g = app.game;
+  const btn = (label, fn, cls = '') => h('button', { class: `btn ${cls}`, style: { display: 'block', width: '100%', margin: '6px 0' }, onclick: fn }, label);
+  return modal('Game menu', [
+    btn('Resume', () => app.ui.closeModal(), 'primary'),
+    btn('Save game', () => app.ui.showModal(saveMenu(app))),
+    btn('Load game', () => app.ui.showModal(loadMenu(app))),
+    btn('Mission briefing', () => app.ui.showModal(briefing(app, g.scenario, () => {}))),
+    btn('Settings', () => app.ui.showModal(settingsMenu(app))),
+    btn('How to play', () => app.ui.openHelp()),
+    btn('Restart this map', () => { if (window.confirm('Restart and lose progress on this map?')) app.restart(); }),
+    btn('Quit to main menu', () => { if (window.confirm('Quit to the main menu? Unsaved progress is lost (the autosave remains).')) app.toMainMenu(); }, 'danger'),
+  ], null, 'narrow', () => app.ui.closeModal());
+}
+
+// ---------------------------------------------------------------------------
+// Outcome screens
+// ---------------------------------------------------------------------------
+
+export function victoryMenu(app) {
+  const g = app.game;
+  const idx = SCENARIOS.findIndex((s) => s.id === g.scenario.id);
+  const next = idx >= 0 ? SCENARIOS[idx + 1] : null;
+  return modal('Victory!', [
+    h('p', {}, `The Senate is delighted with ${g.city.name}. You have met every goal of this mission.`),
+    h('table', { class: 'tbl' }, goalStatus(g).map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'r num ok' }, `${fmt(r.have)} / ${fmt(r.need)}`)))),
+    h('p', { class: 'muted' }, `Founded ${fmt(g.time.totalMonths / 12)} years ago · ${fmt(g.city.stats.fires)} fires · ${fmt(g.city.stats.collapses)} collapses`),
+  ], [
+    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Keep building'),
+    next ? h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.ui.showModal(briefing(app, next, () => app.newScenario(next.id))); } }, `Next: ${next.name}`) : null,
+    h('button', { class: 'btn', onclick: () => app.toMainMenu() }, 'Main menu'),
+  ], 'narrow');
+}
+
+export function defeatMenu(app, reason) {
+  return modal('Recalled to Rome', [
+    h('p', {}, reason || 'Your governorship has ended.'),
+    h('p', { class: 'muted' }, 'Tip: keep the treasury out of debt, fulfill the Emperor\'s requests and send gifts when favor runs low.'),
+  ], [
+    h('button', { class: 'btn', onclick: () => app.ui.showModal(loadMenu(app)) }, 'Load a save'),
+    h('button', { class: 'btn', onclick: () => app.restart() }, 'Try again'),
+    h('button', { class: 'btn primary', onclick: () => app.toMainMenu() }, 'Main menu'),
+  ], 'narrow');
+}

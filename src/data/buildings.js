@@ -1,0 +1,389 @@
+/**
+ * buildings.js (data)
+ * ----------------------------------------------------------------------------
+ * Every placeable building, plus the build-menu categories and the tile tools
+ * (road, plaza, aqueduct, bridge, clear).
+ *
+ * Field reference:
+ *   name, desc      display text
+ *   category       build menu category key (see CATEGORIES)
+ *   size           square footprint in tiles (1..5)
+ *   cost           construction cost in Dn
+ *   workers        employees needed at full efficiency (0 = none)
+ *   labor          labor category (see LABOR_CATEGORIES) used for priorities
+ *   des            desirability [value, step, stepSize, range]
+ *                  value at distance 1, changes by stepSize every `step` tiles,
+ *                  zero beyond `range`. Negative value = unpleasant neighbor.
+ *   fire, damage   risk points gained per day (0 = immune). 100 = disaster.
+ *   walker         roaming walker type spawned by the building
+ *   spawnDays      days between walker spawns at full staff
+ *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
+ *   kind           behavior family (drives sim dispatch):
+ *                    service | farm | raw | workshop | granary | warehouse |
+ *                    market | venue | training | water | reservoir |
+ *                    fountain | well | decor | hospital | house
+ *   produces       good produced (farm/raw/workshop)
+ *   consumes       raw good consumed (workshop)
+ *   productionDays days per 100-unit batch at full efficiency
+ *   god            temple patron (temples only)
+ *   venue          entertainment venue type (venues/training)
+ *   needsPiped     requires piped water from a reservoir to operate
+ * ----------------------------------------------------------------------------
+ */
+
+/** Build menu categories, in display order. */
+export const CATEGORIES = Object.freeze([
+  { key: 'housing', name: 'Housing', icon: '🏠', hotkey: 'H' },
+  { key: 'roads', name: 'Roads', icon: '🛣', hotkey: 'R' },
+  { key: 'water', name: 'Water', icon: '💧' },
+  { key: 'health', name: 'Health', icon: '⚕' },
+  { key: 'religion', name: 'Temples', icon: '🏛' },
+  { key: 'education', name: 'Education', icon: '📜' },
+  { key: 'entertainment', name: 'Entertainment', icon: '🎭' },
+  { key: 'government', name: 'Government & Decor', icon: '⚖' },
+  { key: 'engineering', name: 'Engineering', icon: '🔨' },
+  { key: 'security', name: 'Security', icon: '🔥' },
+  { key: 'farms', name: 'Farms', icon: '🌾' },
+  { key: 'industry', name: 'Industry', icon: '⚒' },
+  { key: 'commerce', name: 'Storage & Markets', icon: '📦' },
+]);
+
+/** Labor categories (used by the labor advisor and priorities). */
+export const LABOR_CATEGORIES = Object.freeze({
+  industry: 'Industry & Commerce',
+  food: 'Food Production',
+  engineering: 'Engineering',
+  water: 'Water',
+  safety: 'Prefectures',
+  entertainment: 'Entertainment',
+  healthEdu: 'Health & Education',
+  govReligion: 'Government & Religion',
+});
+
+/**
+ * Tile tools: not buildings, they edit map layers directly.
+ * `drag`: 'path' draws a connected line, 'area' fills a rectangle, 'line' is a straight line.
+ */
+export const TOOLS = Object.freeze({
+  road: { name: 'Road', category: 'roads', cost: 4, drag: 'path', desc: 'Walkers only travel on roads. Most buildings need a road next to them.' },
+  plaza: { name: 'Plaza', category: 'roads', cost: 15, drag: 'area', desc: 'Paves existing roads with decorative stone. Raises desirability nearby.' },
+  bridge: { name: 'Bridge', category: 'roads', cost: 40, drag: 'line', desc: 'A straight road across water. Start and end on the banks.' },
+  aqueduct: { name: 'Aqueduct', category: 'water', cost: 8, drag: 'path', desc: 'Carries water between reservoirs. Can cross roads.' },
+  clear: { name: 'Clear Land', category: null, cost: 0, drag: 'area', desc: 'Demolish buildings, roads and aqueducts, or clear trees and rubble.' },
+});
+
+// Helper to keep the table compact. Every building gets sane defaults.
+function B(def) {
+  return Object.freeze({
+    size: 1,
+    cost: 10,
+    workers: 0,
+    labor: null,
+    des: [0, 1, 0, 0],
+    fire: 1,
+    damage: 1,
+    walker: null,
+    spawnDays: 4,
+    placement: null,
+    kind: 'service',
+    needsRoad: true,
+    ...def,
+  });
+}
+
+export const BUILDINGS = Object.freeze({
+  // --- Housing -------------------------------------------------------------
+  house: B({
+    name: 'Housing Plot', category: 'housing', kind: 'house', cost: 10, size: 1,
+    desc: 'Marks land for settlers. Homes grow as you provide water, food, religion and more.',
+    fire: 0, damage: 0,
+  }),
+
+  // --- Water ---------------------------------------------------------------
+  well: B({
+    name: 'Well', category: 'water', kind: 'well', cost: 5, size: 1, workers: 0,
+    des: [-1, 1, 1, 1], fire: 0, damage: 0.3, needsRoad: false,
+    desc: 'Basic ground water for homes within 2 tiles. Enough for the humblest dwellings.',
+  }),
+  fountain: B({
+    name: 'Fountain', category: 'water', kind: 'fountain', cost: 15, size: 1, workers: 4, labor: 'water',
+    des: [1, 1, -1, 1], fire: 0, damage: 0.4, needsPiped: true,
+    desc: 'Clean running water for homes within 4 tiles. Must sit inside a reservoir\'s piped area.',
+  }),
+  reservoir: B({
+    name: 'Reservoir', category: 'water', kind: 'reservoir', cost: 80, size: 3, workers: 0,
+    des: [-2, 1, 1, 2], fire: 0, damage: 0.5, needsRoad: false,
+    desc: 'Fills when built next to water or linked by aqueduct to a full reservoir. Pipes water 10 tiles around.',
+  }),
+
+  // --- Health --------------------------------------------------------------
+  barber: B({
+    name: 'Barber', category: 'health', cost: 25, size: 1, workers: 2, labor: 'healthEdu',
+    des: [2, 1, -1, 2], walker: 'barber', spawnDays: 4,
+    desc: 'A shave and the latest gossip. Counts as one health service.',
+  }),
+  clinic: B({
+    name: 'Medicus', category: 'health', cost: 30, size: 1, workers: 5, labor: 'healthEdu',
+    des: [0, 1, 0, 0], walker: 'physician', spawnDays: 4,
+    desc: 'A physician visits homes to treat the sick. Counts as one health service.',
+  }),
+  baths: B({
+    name: 'Thermae', category: 'health', cost: 55, size: 2, workers: 10, labor: 'healthEdu',
+    des: [4, 1, -1, 3], walker: 'bather', spawnDays: 4, needsPiped: true,
+    desc: 'Public baths. Need piped water from a reservoir. Counts as one health service.',
+  }),
+  hospital: B({
+    name: 'Valetudinarium', category: 'health', kind: 'hospital', cost: 300, size: 3, workers: 30, labor: 'healthEdu',
+    des: [-1, 2, 1, 2], fire: 1, damage: 1,
+    desc: 'A hospital serving every home within 12 tiles. Required by the grandest homes.',
+  }),
+
+  // --- Religion ------------------------------------------------------------
+  temple_jupiter: B({
+    name: 'Temple of Jupiter', category: 'religion', cost: 60, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'jupiter', spawnDays: 4, fire: 0.6,
+    desc: 'Honors the king of the gods. Priests bring religion to nearby homes.',
+  }),
+  temple_ceres: B({
+    name: 'Temple of Ceres', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'ceres', spawnDays: 4, fire: 0.6,
+    desc: 'Honors the goddess of the harvest.',
+  }),
+  temple_neptune: B({
+    name: 'Temple of Neptune', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'neptune', spawnDays: 4, fire: 0.6,
+    desc: 'Honors the god of the waters.',
+  }),
+  temple_mars: B({
+    name: 'Temple of Mars', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'mars', spawnDays: 4, fire: 0.6,
+    desc: 'Honors the god of war and protection.',
+  }),
+  temple_vesta: B({
+    name: 'Temple of Vesta', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'vesta', spawnDays: 4, fire: 0.6,
+    desc: 'Tends the sacred hearth flame.',
+  }),
+  oracle: B({
+    name: 'Oracle', category: 'religion', kind: 'decor', cost: 200, size: 2, workers: 0,
+    des: [8, 1, -2, 6], fire: 0, damage: 0.5,
+    desc: 'A sacred shrine that pleases every god a little each month.',
+  }),
+
+  // --- Education -----------------------------------------------------------
+  school: B({
+    name: 'School', category: 'education', cost: 50, size: 2, workers: 10, labor: 'healthEdu',
+    des: [-2, 1, 1, 2], walker: 'teacher', spawnDays: 4,
+    desc: 'Teachers visit homes with children. First level of education.',
+  }),
+  library: B({
+    name: 'Library', category: 'education', cost: 80, size: 2, workers: 20, labor: 'healthEdu',
+    des: [4, 1, -1, 4], walker: 'librarian', spawnDays: 4,
+    desc: 'Scrolls for the literate. Second level of education.',
+  }),
+  academy: B({
+    name: 'Academy', category: 'education', cost: 150, size: 3, workers: 30, labor: 'healthEdu',
+    des: [4, 2, -1, 6], walker: 'scholar', spawnDays: 5,
+    desc: 'Higher learning for the elite. Third level of education.',
+  }),
+
+  // --- Entertainment -------------------------------------------------------
+  theater: B({
+    name: 'Theater', category: 'entertainment', kind: 'venue', venue: 'theater', cost: 50, size: 2, workers: 8, labor: 'entertainment',
+    des: [4, 1, -1, 4], walker: 'entertainer', spawnDays: 4,
+    desc: 'Stages plays when actors arrive from an Actor Troupe. Worth 15 entertainment.',
+  }),
+  amphitheater: B({
+    name: 'Amphitheater', category: 'entertainment', kind: 'venue', venue: 'amphitheater', cost: 110, size: 3, workers: 12, labor: 'entertainment',
+    des: [4, 1, -1, 4], walker: 'entertainer', spawnDays: 4,
+    desc: 'Hosts gladiator bouts supplied by a Gladiator School. Worth 25 entertainment.',
+  }),
+  colosseum: B({
+    name: 'Colosseum', category: 'entertainment', kind: 'venue', venue: 'colosseum', cost: 400, size: 5, workers: 25, labor: 'entertainment',
+    des: [-3, 2, 1, 6], walker: 'entertainer', spawnDays: 4,
+    desc: 'Grand spectacles with gladiators and beasts from a Menagerie. Worth 35 entertainment.',
+  }),
+  actor_troupe: B({
+    name: 'Actor Troupe', category: 'entertainment', kind: 'training', venue: 'theater', cost: 50, size: 2, workers: 5, labor: 'entertainment',
+    des: [2, 1, -1, 2], spawnDays: 6,
+    desc: 'Trains actors who walk to theaters to perform.',
+  }),
+  gladiator_school: B({
+    name: 'Gladiator School', category: 'entertainment', kind: 'training', venue: 'amphitheater', cost: 75, size: 3, workers: 8, labor: 'entertainment',
+    des: [-3, 1, 1, 3], spawnDays: 7,
+    desc: 'Trains gladiators for amphitheaters and the colosseum.',
+  }),
+  menagerie: B({
+    name: 'Menagerie', category: 'entertainment', kind: 'training', venue: 'colosseum', cost: 75, size: 3, workers: 8, labor: 'entertainment',
+    des: [-4, 1, 1, 3], spawnDays: 8,
+    desc: 'Keeps exotic beasts for the colosseum games.',
+  }),
+
+  // --- Government & decoration --------------------------------------------
+  forum: B({
+    name: 'Forum', category: 'government', cost: 75, size: 2, workers: 6, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'taxman', spawnDays: 4,
+    desc: 'Tax collectors register households. Only registered homes pay taxes.',
+  }),
+  senate: B({
+    name: 'Senate', category: 'government', cost: 400, size: 4, workers: 30, labor: 'govReligion',
+    des: [8, 2, -2, 8], walker: 'taxman', spawnDays: 3,
+    desc: 'The seat of local government. Collects taxes and boosts every rating.',
+  }),
+  garden: B({
+    name: 'Garden', category: 'government', kind: 'decor', cost: 12, size: 1, needsRoad: false,
+    des: [3, 1, -1, 3], fire: 0, damage: 0,
+    desc: 'A little green. Raises desirability nearby.',
+  }),
+  statue_small: B({
+    name: 'Small Statue', category: 'government', kind: 'decor', cost: 15, size: 1, needsRoad: false,
+    des: [3, 1, -1, 3], fire: 0, damage: 0,
+    desc: 'A modest monument. Raises desirability.',
+  }),
+  statue_medium: B({
+    name: 'Statue', category: 'government', kind: 'decor', cost: 60, size: 2, needsRoad: false,
+    des: [10, 1, -2, 5], fire: 0, damage: 0,
+    desc: 'An impressive monument. Raises desirability a lot.',
+  }),
+  statue_large: B({
+    name: 'Grand Statue', category: 'government', kind: 'decor', cost: 160, size: 3, needsRoad: false,
+    des: [14, 2, -2, 7], fire: 0, damage: 0,
+    desc: 'A towering tribute. Raises desirability across a wide area.',
+  }),
+
+  // --- Engineering & security --------------------------------------------
+  engineer_post: B({
+    name: 'Engineer\'s Post', category: 'engineering', cost: 30, size: 1, workers: 5, labor: 'engineering',
+    des: [0, 1, 0, 0], walker: 'engineer', spawnDays: 3,
+    desc: 'Engineers inspect buildings and prevent collapses.',
+  }),
+  prefecture: B({
+    name: 'Prefecture', category: 'security', cost: 30, size: 1, workers: 6, labor: 'safety',
+    des: [-2, 1, 1, 2], walker: 'prefect', spawnDays: 3, fire: 0,
+    desc: 'Prefects reduce fire risk and rush to fight fires.',
+  }),
+
+  // --- Farms ---------------------------------------------------------------
+  farm_wheat: B({
+    name: 'Wheat Farm', category: 'farms', kind: 'farm', produces: 'wheat', cost: 40, size: 3, workers: 10, labor: 'food',
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 20,
+    desc: 'Grows wheat on meadow land. Output scales with the share of meadow under it.',
+  }),
+  farm_veg: B({
+    name: 'Vegetable Farm', category: 'farms', kind: 'farm', produces: 'vegetables', cost: 40, size: 3, workers: 10, labor: 'food',
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 22,
+    desc: 'Grows vegetables on meadow land.',
+  }),
+  farm_fruit: B({
+    name: 'Orchard', category: 'farms', kind: 'farm', produces: 'fruit', cost: 40, size: 3, workers: 10, labor: 'food',
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 24,
+    desc: 'Grows fruit on meadow land.',
+  }),
+  farm_pig: B({
+    name: 'Pig Farm', category: 'farms', kind: 'farm', produces: 'meat', cost: 40, size: 3, workers: 10, labor: 'food',
+    des: [-3, 1, 1, 3], fire: 0, damage: 0, placement: 'meadow', productionDays: 26,
+    desc: 'Raises pigs for meat on meadow land.',
+  }),
+  farm_olive: B({
+    name: 'Olive Grove', category: 'farms', kind: 'farm', produces: 'olives', cost: 40, size: 3, workers: 10, labor: 'industry',
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 24,
+    desc: 'Grows olives for oil presses.',
+  }),
+  farm_vine: B({
+    name: 'Vineyard', category: 'farms', kind: 'farm', produces: 'grapes', cost: 40, size: 3, workers: 10, labor: 'industry',
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 24,
+    desc: 'Grows grapes for wineries.',
+  }),
+
+  // --- Raw materials -------------------------------------------------------
+  clay_pit: B({
+    name: 'Clay Pit', category: 'industry', kind: 'raw', produces: 'clay', cost: 40, size: 2, workers: 8, labor: 'industry',
+    des: [-3, 1, 1, 3], fire: 0.8, damage: 1.5, placement: 'nearWater', productionDays: 20,
+    desc: 'Digs clay. Must be within 2 tiles of water.',
+  }),
+  timber_yard: B({
+    name: 'Timber Yard', category: 'industry', kind: 'raw', produces: 'timber', cost: 40, size: 2, workers: 8, labor: 'industry',
+    des: [-4, 1, 1, 3], fire: 2, damage: 1, placement: 'nearTrees', productionDays: 22,
+    desc: 'Fells trees for timber. Must be within 2 tiles of forest.',
+  }),
+  iron_mine: B({
+    name: 'Iron Mine', category: 'industry', kind: 'raw', produces: 'iron', cost: 50, size: 2, workers: 10, labor: 'industry',
+    des: [-6, 1, 1, 4], fire: 1, damage: 2.5, placement: 'nearRock', productionDays: 26,
+    desc: 'Mines iron ore. Must be next to rocks.',
+  }),
+  marble_quarry: B({
+    name: 'Marble Quarry', category: 'industry', kind: 'raw', produces: 'marble', cost: 50, size: 2, workers: 10, labor: 'industry',
+    des: [-6, 1, 1, 4], fire: 0.5, damage: 2.5, placement: 'nearRock', productionDays: 30,
+    desc: 'Cuts marble blocks, a valuable export. Must be next to rocks.',
+  }),
+
+  // --- Workshops -----------------------------------------------------------
+  pottery_ws: B({
+    name: 'Potter', category: 'industry', kind: 'workshop', produces: 'pottery', consumes: 'clay', cost: 40, size: 2, workers: 10, labor: 'industry',
+    des: [-4, 1, 1, 3], fire: 2.5, damage: 1, productionDays: 18,
+    desc: 'Turns clay into pottery.',
+  }),
+  furniture_ws: B({
+    name: 'Carpenter', category: 'industry', kind: 'workshop', produces: 'furniture', consumes: 'timber', cost: 40, size: 2, workers: 10, labor: 'industry',
+    des: [-4, 1, 1, 3], fire: 2.5, damage: 1, productionDays: 20,
+    desc: 'Turns timber into furniture.',
+  }),
+  oil_ws: B({
+    name: 'Oil Press', category: 'industry', kind: 'workshop', produces: 'oil', consumes: 'olives', cost: 50, size: 2, workers: 10, labor: 'industry',
+    des: [-4, 1, 1, 3], fire: 2, damage: 1, productionDays: 20,
+    desc: 'Presses olives into oil.',
+  }),
+  wine_ws: B({
+    name: 'Winery', category: 'industry', kind: 'workshop', produces: 'wine', consumes: 'grapes', cost: 45, size: 2, workers: 10, labor: 'industry',
+    des: [-1, 1, 1, 1], fire: 1.5, damage: 1, productionDays: 22,
+    desc: 'Ferments grapes into wine.',
+  }),
+  weapons_ws: B({
+    name: 'Weaponsmith', category: 'industry', kind: 'workshop', produces: 'weapons', consumes: 'iron', cost: 50, size: 2, workers: 10, labor: 'industry',
+    des: [-4, 1, 1, 3], fire: 3, damage: 1, productionDays: 22,
+    desc: 'Forges iron into weapons, a lucrative export.',
+  }),
+
+  // --- Storage & markets --------------------------------------------------
+  market: B({
+    name: 'Market', category: 'commerce', kind: 'market', cost: 40, size: 2, workers: 5, labor: 'industry',
+    des: [-2, 1, 1, 2], walker: 'vendor', spawnDays: 3,
+    desc: 'Buyers fetch food and goods from storage; vendors sell them door to door.',
+  }),
+  granary: B({
+    name: 'Granary', category: 'commerce', kind: 'granary', cost: 100, size: 3, workers: 12, labor: 'food',
+    des: [-4, 1, 1, 4], fire: 1, damage: 1,
+    desc: 'Stores food from farms. Markets buy food here.',
+  }),
+  warehouse: B({
+    name: 'Warehouse', category: 'commerce', kind: 'warehouse', cost: 70, size: 3, workers: 6, labor: 'industry',
+    des: [-5, 2, 1, 4], fire: 1.2, damage: 1,
+    desc: 'Stores raw materials and goods. Supplies workshops and trades with caravans.',
+  }),
+});
+
+export const BUILDING_KEYS = Object.freeze(Object.keys(BUILDINGS));
+
+/** Buildings grouped by category for the build menu. */
+export function buildingsInCategory(cat) {
+  const out = [];
+  for (const [key, def] of Object.entries(TOOLS)) if (def.category === cat) out.push({ key, tool: true, def });
+  for (const key of BUILDING_KEYS) if (BUILDINGS[key].category === cat) out.push({ key, tool: false, def: BUILDINGS[key] });
+  return out;
+}
+
+/** Entertainment points a house gets from each venue type. */
+export const VENUE_POINTS = Object.freeze({ theater: 15, amphitheater: 25, colosseum: 35 });
+
+/** Performer display names by venue they train for. */
+export const PERFORMER_NAMES = Object.freeze({ theater: 'Actor', amphitheater: 'Gladiator', colosseum: 'Beast Tamer' });
+
+/**
+ * Which training buildings can supply a venue.
+ * Colosseum shows need gladiators OR beasts (both = better); amphitheaters take gladiators or actors.
+ */
+export const VENUE_SUPPLIERS = Object.freeze({
+  theater: ['theater'],
+  amphitheater: ['amphitheater', 'theater'],
+  colosseum: ['amphitheater', 'colosseum'],
+});

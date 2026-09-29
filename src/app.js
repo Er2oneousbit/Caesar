@@ -1,0 +1,408 @@
+/**
+ * app.js
+ * ----------------------------------------------------------------------------
+ * The browser application: owns the canvas, renderer, UI, input, audio and
+ * the currently running Game, and drives the main loop.
+ *
+ * Main loop (requestAnimationFrame):
+ *   1. run as many fixed simulation ticks as real time allows
+ *      (TICKS_PER_SECOND * speed), capped so a slow frame cannot spiral
+ *   2. keyboard/edge scrolling
+ *   3. render (walkers are interpolated between ticks for smooth motion)
+ *   4. refresh UI widgets
+ *
+ * The simulation (core/game.js) never touches the DOM; everything
+ * browser-specific lives here and under ui/, render/, input/, audio/.
+ * ----------------------------------------------------------------------------
+ */
+
+import { CONFIG } from './config.js';
+import { log } from './core/debug.js';
+import { Game } from './core/game.js';
+import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile } from './core/save.js';
+import { Renderer } from './render/renderer.js';
+import { OVERLAYS } from './render/overlays.js';
+import { UI } from './ui/ui.js';
+import { h } from './ui/dom.js';
+import { victoryMenu, defeatMenu, briefing, latestSave } from './ui/menus.js';
+import { Input } from './input/input.js';
+import { Sfx } from './audio/sfx.js';
+import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLast } from './sim/construction.js';
+import { findScenario, sandboxScenario, SCENARIOS } from './data/scenarios.js';
+import { MAP_SIZES } from './world/mapgen.js';
+import { buildDemoCity } from './dev/demoCity.js';
+
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto' };
+
+function readJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? { ...fallback, ...JSON.parse(raw) } : { ...fallback };
+  } catch {
+    return { ...fallback };
+  }
+}
+
+function writeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage may be unavailable */ }
+}
+
+export class App {
+  /**
+   * @param {HTMLElement} root  container element
+   * @param {object} flags      parsed URL flags (core/debug.js)
+   */
+  constructor(root, flags) {
+    this.root = root;
+    this.flags = flags;
+    this.log = log;
+    this.settings = readJson(`${CONFIG.STORAGE_PREFIX}settings`, DEFAULT_SETTINGS);
+    this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [] });
+    this.sfx = new Sfx();
+    this.canvas = h('canvas', { id: 'view' });
+    root.appendChild(this.canvas);
+    this.renderer = new Renderer(this.canvas);
+    this.ui = new UI(this, root);
+    this.input = new Input(this);
+    this.game = null;
+    this.menuGame = null;
+    this.speedIndex = flags.speed && flags.speed > 0 ? Math.min(4, flags.speed) : 1;
+    this.paused = flags.speed === 0;
+    this.acc = 0;
+    this.lastFrame = performance.now();
+    this.perf = { fps: 0, frames: 0, fpsTime: 0, frameMs: 0, simMs: 0, ticks: 0 };
+    this.debugHud = !!flags.debug;
+    this.errorCount = 0;
+    this.gameUnsub = [];
+    this.applySettings();
+    window.addEventListener('resize', () => this.resize());
+    this.resize();
+    requestAnimationFrame((t) => this.frame(t));
+  }
+
+  get showDebugHud() { return this.debugHud || this.settings.showFps; }
+
+  /** Decide what to show first based on URL flags. */
+  boot() {
+    if (this.flags.scenario) {
+      const s = findScenario(this.flags.scenario);
+      if (s) { this.newScenario(s.id); return; }
+      log.warn(`Unknown scenario "${this.flags.scenario}"`);
+    }
+    if (this.flags.skipmenu) {
+      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: 'normal', funds: 8000 });
+      return;
+    }
+    this.toMainMenu();
+  }
+
+  resize() {
+    const sidebarHidden = this.ui && this.ui.sidebar.el.classList.contains('hidden');
+    const sidebarW = sidebarHidden ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 0;
+    const w = Math.max(200, window.innerWidth - sidebarW);
+    const hgt = Math.max(200, window.innerHeight);
+    this.renderer.resize(w, hgt, window.devicePixelRatio || 1);
+  }
+
+  // -------------------------------------------------------------- settings
+  applySettings() {
+    const s = this.settings;
+    this.sfx.setVolume(s.volume);
+    this.sfx.setMuted(s.muted || this.flags.mute);
+    if (s.theme === 'light' || s.theme === 'dark') document.documentElement.dataset.theme = s.theme;
+    else delete document.documentElement.dataset.theme;
+    writeJson(`${CONFIG.STORAGE_PREFIX}settings`, s);
+  }
+
+  // ------------------------------------------------------------ game setup
+  /** Start a campaign scenario by id. */
+  newScenario(id) {
+    const scenario = findScenario(id);
+    if (!scenario) { this.ui.toastError(`Unknown scenario ${id}`); return; }
+    this.startGame(new Game({ scenario, flags: this.flags }));
+    for (const hint of scenario.hints || []) this.game.message(hint, 'info');
+  }
+
+  /** Start a sandbox game with the given settings. */
+  newSandbox(opts) {
+    const scenario = sandboxScenario({
+      size: MAP_SIZES[opts.size] || MAP_SIZES.medium,
+      type: opts.type || 'river',
+      seed: opts.seed ?? Math.floor(Math.random() * 1e6),
+      funds: opts.funds || 8000,
+      difficulty: opts.difficulty || 'normal',
+    });
+    this.startGame(new Game({ scenario, flags: this.flags }));
+    this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
+  }
+
+  /** Restart the current map from scratch. */
+  restart() {
+    if (!this.game) return;
+    const scenario = this.game.scenario;
+    this.ui.closeModal();
+    this.startGame(new Game({ scenario, flags: { ...this.flags, seed: this.game.seed } }));
+  }
+
+  /** Make `game` the active game and hook up its events. */
+  startGame(game, cameraState = null) {
+    for (const u of this.gameUnsub) u();
+    this.gameUnsub = [];
+    this.menuGame = null;
+    this.game = game;
+    this.acc = 0;
+    this.renderer.attach(game);
+    if (cameraState) this.renderer.camera.restore(cameraState);
+    else this.centerOnEntry();
+    const ev = game.events;
+    this.gameUnsub.push(
+      ev.on('message', (m) => this.ui.messages.push(m)),
+      ev.on('sound', ({ name }) => this.sfx.play(name)),
+      ev.on('victory', () => this.onVictory()),
+      ev.on('defeat', ({ reason }) => this.onDefeat(reason)),
+      ev.on('month', () => this.onMonth()),
+    );
+    this.input.setTool(null);
+    this.ui.onGameStarted(game);
+    this.resize();
+    if (!cameraState) this.centerOnEntry();
+    this.paused = this.flags.speed === 0;
+    window.colonia = this;
+    log.info(`Game started: ${game.scenario.name} (${game.scenario.id}), seed ${game.seed}`);
+  }
+
+  onMonth() {
+    const g = this.game;
+    if (this.settings.autosave && g.time.totalMonths % CONFIG.AUTOSAVE_EVERY_MONTHS === 0) {
+      const res = saveToSlot(g, 'auto', { camera: this.renderer.camera.serialize() });
+      if (!res.ok) log.warn('Autosave failed:', res.reason);
+    }
+  }
+
+  onVictory() {
+    const id = this.game.scenario.id;
+    if (!this.progress.completed.includes(id)) this.progress.completed.push(id);
+    writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
+    this.sfx.play('victory');
+    this.ui.showModal(victoryMenu(this), { pause: true, kind: 'outcome' });
+  }
+
+  onDefeat(reason) {
+    this.sfx.play('wrath');
+    this.ui.showModal(defeatMenu(this, reason), { pause: true, kind: 'outcome' });
+  }
+
+  /** Leave the current game and show the main menu over a living demo city. */
+  toMainMenu() {
+    for (const u of this.gameUnsub) u();
+    this.gameUnsub = [];
+    this.game = null;
+    this.input.setTool(null);
+    this.ui.closeModal();
+    this.ui.showMainMenu();
+    this.resize();
+    this.startMenuBackground();
+  }
+
+  startMenuBackground() {
+    try {
+      const types = ['river', 'lakes', 'coast'];
+      const scenario = sandboxScenario({ size: 64, type: types[Math.floor(Math.random() * types.length)], seed: `menu-${Math.floor(Math.random() * 1000)}` });
+      const g = new Game({ scenario, flags: { unlockall: true, money: 100000 } });
+      g.log = { ...log, info() {}, debug() {} };
+      const res = buildDemoCity(g, { level: 2 });
+      g.runDays(16 * 5);
+      this.menuGame = g;
+      this.renderer.attach(g);
+      this.renderer.camera.zoomIndex = 2;
+      if (res.center) this.renderer.camera.centerOnTile(res.center.x, res.center.y);
+      else this.renderer.camera.centerOnTile(32, 32);
+    } catch (err) {
+      log.warn('Menu background failed (harmless):', err);
+      this.menuGame = null;
+    }
+  }
+
+  // --------------------------------------------------------- save / load
+  saveSlot(slot) {
+    if (!this.game) return;
+    const res = saveToSlot(this.game, slot, { camera: this.renderer.camera.serialize() });
+    if (res.ok) this.ui.messages.push({ text: `Game saved (${Math.round(res.bytes / 1024)} KB).`, level: 'good', date: '' });
+    else this.ui.toastError(res.reason);
+  }
+
+  loadSlot(slot) {
+    try {
+      const data = readSlot(slot);
+      if (!data) { this.ui.toastError('That save slot is empty.'); return; }
+      this.loadData(data);
+    } catch (err) {
+      log.error('Load failed:', err);
+      this.ui.toastError(`Could not load: ${err.message}`);
+    }
+  }
+
+  loadData(data) {
+    const game = deserializeGame(data, this.flags);
+    this.startGame(game, data.camera || null);
+    this.ui.messages.push({ text: `Loaded ${data.meta?.city || 'city'} (${data.meta?.date || ''}).`, level: 'good', date: '' });
+  }
+
+  continueAutosave() {
+    const latest = latestSave();
+    this.loadSlot(latest ? latest.slot : 'auto');
+  }
+  quickSave() { this.saveSlot('quick'); }
+  quickLoad() { this.loadSlot('quick'); }
+
+  exportSave() {
+    if (!this.game) return;
+    try {
+      exportToFile(this.game, { camera: this.renderer.camera.serialize() });
+    } catch (err) {
+      this.ui.toastError(`Export failed: ${err.message}`);
+    }
+  }
+
+  async importSave(file) {
+    try {
+      const data = await importFromFile(file);
+      this.loadData(data);
+    } catch (err) {
+      log.error('Import failed:', err);
+      this.ui.toastError(`Could not import: ${err.message}`);
+    }
+  }
+
+  // ------------------------------------------------------------- actions
+  blockingModal() { return this.ui.mainMenuOpen || (this.ui.hasModal() && this.ui.modalKind !== 'advisors'); }
+
+  applyPlan(plan) {
+    if (!this.game || !plan) return;
+    const res = applyConstruction(this.game, plan);
+    if (!res.ok) {
+      this.ui.toastError(res.reason || plan.reason || 'Cannot build there.');
+      return;
+    }
+    // A single-building tool stays selected so you can place several.
+  }
+
+  canUndo() { return !!this.game && canUndoConstruction(this.game); }
+
+  undo() {
+    if (!this.game) return;
+    const res = undoLast(this.game);
+    if (res.ok) this.ui.messages.push({ text: `Undone. Refunded ${res.refund} Dn.`, level: 'info', date: '' });
+    else this.ui.toastError(res.reason);
+  }
+
+  clickTile(x, y) {
+    const g = this.game;
+    if (!g || !g.map.inBounds(x, y)) { this.ui.info.close(); return; }
+    this.sfx.play('click');
+    const id = g.map.buildingAt(x, y);
+    if (id) this.ui.info.showBuilding(id);
+    else this.ui.info.showTile(x, y);
+  }
+
+  rightClick() {
+    if (this.input.tool) this.ui.selectTool(null);
+    else if (this.ui.info.open) this.ui.info.close();
+  }
+
+  escape() {
+    if (this.ui.console.open) { this.ui.console.toggle(); return; }
+    if (this.ui.hasModal()) {
+      if (this.ui.modalKind !== 'outcome') this.ui.closeModal();
+      return;
+    }
+    if (this.ui.mainMenuOpen) return;
+    if (this.input.tool) { this.ui.selectTool(null); return; }
+    if (this.ui.info.open) { this.ui.info.close(); return; }
+    this.ui.openPauseMenu();
+  }
+
+  togglePause() { this.paused = !this.paused; }
+
+  setSpeed(i) {
+    this.speedIndex = Math.max(1, Math.min(CONFIG.SPEEDS.length - 1, i));
+    this.paused = false;
+  }
+
+  setOverlay(key) { this.renderer.setOverlay(key); }
+
+  cycleOverlay(dir) {
+    const i = OVERLAYS.findIndex((o) => o.key === this.renderer.overlay.key);
+    const next = OVERLAYS[(i + dir + OVERLAYS.length) % OVERLAYS.length];
+    this.setOverlay(next.key);
+    this.ui.messages.push({ text: `Overlay: ${next.name}`, level: 'info', date: '' });
+  }
+
+  centerOnEntry() {
+    const g = this.game;
+    if (!g) return;
+    const e = g.map.entry;
+    // Aim a little inside the map from the entrance.
+    const cx = Math.round(e.x + (g.map.w / 2 - e.x) * 0.25);
+    const cy = Math.round(e.y + (g.map.h / 2 - e.y) * 0.25);
+    this.renderer.camera.centerOnTile(cx, cy);
+  }
+
+  toggleDebugHud() { this.debugHud = !this.debugHud; }
+  toggleConsole() { this.ui.console.toggle(); }
+
+  showBriefing() {
+    if (this.game) this.ui.showModal(briefing(this, this.game.scenario, () => {}));
+  }
+
+  // ----------------------------------------------------------- main loop
+  isPaused() { return this.paused || this.ui.modalPause || this.crashed; }
+
+  frame(now) {
+    requestAnimationFrame((t) => this.frame(t));
+    const dt = Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1000));
+    this.lastFrame = now;
+    const frameStart = performance.now();
+    try {
+      const g = this.game || this.menuGame;
+      let alpha = 0;
+      let ticks = 0;
+      let simMs = 0;
+      if (g && !(this.game && this.isPaused())) {
+        const speed = this.game ? CONFIG.SPEEDS[this.speedIndex] : 1;
+        this.acc += dt * CONFIG.TICKS_PER_SECOND * speed;
+        const t0 = performance.now();
+        while (this.acc >= 1 && ticks < CONFIG.MAX_TICKS_PER_FRAME) {
+          g.tick();
+          this.acc -= 1;
+          ticks++;
+        }
+        if (ticks >= CONFIG.MAX_TICKS_PER_FRAME) this.acc = 0; // drop backlog, do not spiral
+        simMs = performance.now() - t0;
+        alpha = this.acc;
+      }
+      if (!this.game && this.menuGame) this.renderer.camera.panScreen(-dt * 12, -dt * 4);
+      this.input.update(dt);
+      this.renderer.render(alpha, dt);
+      this.ui.update(dt, now);
+      // performance counters
+      const p = this.perf;
+      p.frames++;
+      p.fpsTime += dt;
+      p.simMs = simMs;
+      p.ticks = ticks;
+      p.frameMs = performance.now() - frameStart;
+      if (p.fpsTime >= 1) { p.fps = p.frames; p.frames = 0; p.fpsTime = 0; }
+      this.errorCount = Math.max(0, this.errorCount - 0.02);
+    } catch (err) {
+      this.errorCount++;
+      log.error('Frame failed:', err);
+      if (this.errorCount > 3 && !this.crashed) {
+        this.crashed = true;
+        if (typeof window.__coloniaCrash === 'function') window.__coloniaCrash(err);
+      }
+    }
+  }
+}
+
+export { SCENARIOS };

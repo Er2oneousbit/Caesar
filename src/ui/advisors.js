@@ -1,0 +1,381 @@
+/**
+ * advisors.js
+ * ----------------------------------------------------------------------------
+ * The Advisors window: one tab per area of city management.
+ *
+ *   Overview   scenario goals, city mood and what drives it
+ *   Labor      workforce, wages, hiring priorities per category
+ *   Population housing tiers, immigration
+ *   Finance    tax rate and the yearly ledger
+ *   Trade      trade routes and import/export settings per good
+ *   Religion   gods' moods and festivals
+ *   Ratings    culture / prosperity / peace / favor explained
+ *   Imperial   the Emperor's requests and gifts
+ *   Messages   the full message log
+ * ----------------------------------------------------------------------------
+ */
+
+import { h, mount, fmt, pct, bar, kv } from './dom.js';
+import { CONFIG } from '../config.js';
+import { LABOR_CATEGORIES } from '../data/buildings.js';
+import { HOUSE_TIERS } from '../data/housing.js';
+import { GOODS, GOOD_KEYS } from '../data/goods.js';
+import { GODS, GOD_KEYS } from '../data/gods.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { goalStatus } from '../sim/ratings.js';
+import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
+import { openRoute, setTradeMode } from '../sim/trade.js';
+import { cityStock } from '../sim/storage.js';
+import { festivalCost, holdFestival } from '../sim/religion.js';
+import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
+
+export const ADVISOR_TABS = [
+  ['overview', 'Overview'],
+  ['labor', 'Labor'],
+  ['population', 'Population'],
+  ['finance', 'Finance'],
+  ['trade', 'Trade'],
+  ['religion', 'Religion'],
+  ['ratings', 'Ratings'],
+  ['imperial', 'Imperial'],
+  ['messages', 'Messages'],
+];
+
+const MOOD_LABELS = {
+  base: 'Base contentment',
+  taxes: 'Tax rate',
+  wages: 'Wages',
+  unemployment: 'Unemployment',
+  food: 'Food supply',
+  housing: 'Housing quality',
+  gods: 'The gods\' moods',
+  festival: 'Recent festivals',
+  newCity: 'New city optimism',
+};
+
+export class Advisors {
+  constructor(app) {
+    this.app = app;
+    this.tab = 'overview';
+    this.body = null;
+    this.timer = 0;
+    this.interacting = false;
+  }
+
+  /** Build the modal element (UI puts it in the modal root). */
+  element(tab) {
+    if (tab) this.tab = tab;
+    this.tabsEl = h('div', { class: 'tabs' });
+    this.body = h('div', { class: 'modal-body' });
+    const modal = h('div', { class: 'modal' },
+      h('div', { class: 'modal-head' }, h('h2', {}, 'Advisors'), h('button', { class: 'panel-close', title: 'Close (Esc)', onclick: () => this.app.ui.closeModal() }, '×')),
+      this.tabsEl,
+      this.body);
+    // Pause auto refresh while dragging sliders.
+    modal.addEventListener('pointerdown', (e) => { if (e.target.tagName === 'INPUT') this.interacting = true; });
+    modal.addEventListener('pointerup', () => { this.interacting = false; });
+    this.render();
+    return modal;
+  }
+
+  switchTab(tab) {
+    this.tab = tab;
+    this.render();
+  }
+
+  update(dt) {
+    this.timer += dt;
+    if (this.timer < 1.5 || this.interacting) return;
+    this.timer = 0;
+    const active = document.activeElement;
+    if (active && this.body && this.body.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'SELECT')) return;
+    this.render();
+  }
+
+  render() {
+    if (!this.body || !this.app.game) return;
+    mount(this.tabsEl, ADVISOR_TABS.map(([k, name]) => h('button', { class: `tab${k === this.tab ? ' active' : ''}`, onclick: () => this.switchTab(k) }, name)));
+    const fn = this[`tab_${this.tab}`];
+    const scroll = this.body.scrollTop;
+    mount(this.body, fn ? fn.call(this, this.app.game) : 'Unknown tab');
+    this.body.scrollTop = scroll;
+  }
+
+  // ------------------------------------------------------------------ tabs
+  tab_overview(g) {
+    const c = g.city;
+    const goals = goalStatus(g);
+    const f = c.sentimentFactors || {};
+    return [
+      h('div', { class: 'grid2' },
+        h('div', { class: 'card' },
+          h('h4', {}, `${g.scenario.name}: ${g.scenario.title}`),
+          goals.length === 0 ? h('div', { class: 'muted' }, 'Sandbox: no goals. Build freely!') :
+            goals.map((r) => h('div', {}, kv(`${r.ok ? '✔' : '✖'} ${r.label}`, `${fmt(r.have)} / ${fmt(r.need)}`, r.ok ? 'ok' : ''), bar(r.have, r.need))),
+          c.victory ? h('div', { class: 'status good', style: { marginTop: '6px' } }, 'All goals achieved!') : null),
+        h('div', { class: 'card' },
+          h('h4', {}, 'At a glance'),
+          kv('Population', fmt(c.population)),
+          kv('Treasury', `${fmt(c.treasury)} Dn`),
+          kv('Workforce / jobs', `${fmt(c.workforce)} / ${fmt(c.jobs)}`),
+          kv('Unemployment', pct(c.unemploymentRate)),
+          kv('Homes with food', pct(c.fedShare)),
+          kv('Free housing space', fmt(c.vacancies || 0)),
+          kv('Emperor\'s favor', `${Math.round(c.ratings.favor)}`))),
+      h('div', { class: 'card', style: { marginTop: '10px' } },
+        h('h4', {}, `City mood: ${c.sentiment} / 100`),
+        bar(c.sentiment, 100),
+        h('div', { class: 'muted', style: { margin: '4px 0' } }, 'Above 30 settlers keep arriving. Below 25 people start leaving.'),
+        h('table', { class: 'tbl' }, Object.entries(f).map(([k, v]) => h('tr', {}, h('td', {}, MOOD_LABELS[k] || k), h('td', { class: `r num ${v > 0 ? 'ok' : v < 0 ? 'no' : ''}` }, `${v > 0 ? '+' : ''}${Math.round(v)}`))))),
+    ];
+  }
+
+  tab_labor(g) {
+    const c = g.city;
+    const pri = c.laborPriority;
+    const wageInput = h('input', {
+      type: 'range', min: 8, max: 48, step: 1, value: c.wage,
+      oninput: (e) => { c.wage = Number(e.target.value); wageVal.textContent = `${c.wage} Dn / worker / year`; },
+    });
+    const wageVal = h('b', {}, `${c.wage} Dn / worker / year`);
+    const rows = Object.entries(LABOR_CATEGORIES).map(([key, name]) => {
+      const d = c.laborByCat?.[key] || { demand: 0, employed: 0, buildings: 0 };
+      const idx = pri.indexOf(key);
+      return h('tr', {},
+        h('td', {}, name),
+        h('td', { class: 'r num' }, `${fmt(d.employed)} / ${fmt(d.demand)}`),
+        h('td', {}, bar(d.employed, d.demand || 1)),
+        h('td', { class: 'r' }, h('button', {
+          class: `btn small${idx >= 0 ? ' primary' : ''}`,
+          title: 'Priority categories are staffed first, in order',
+          onclick: () => {
+            if (idx >= 0) pri.splice(idx, 1);
+            else pri.push(key);
+            this.render();
+          },
+        }, idx >= 0 ? `Priority ${idx + 1}` : 'Set priority')));
+    });
+    return [
+      h('div', { class: 'grid2' },
+        h('div', { class: 'card' },
+          kv('Workforce', fmt(c.workforce)),
+          kv('Jobs', fmt(c.jobs)),
+          kv('Employed', fmt(c.employed)),
+          kv('Unemployed', `${fmt(c.unemployed)} (${pct(c.unemploymentRate)})`),
+          h('div', { class: 'muted', style: { marginTop: '4px' } }, `About ${Math.round(CONFIG.WORKFORCE_RATIO * 100)}% of plebeians work. Patricians never do.`)),
+        h('div', { class: 'card' },
+          h('h4', {}, 'Wages'),
+          wageVal, wageInput,
+          h('div', { class: 'muted' }, `Rome pays ${CONFIG.BASE_WAGE}. Higher wages please citizens; lower wages save money but hurt mood.`),
+          kv('Wages last month', `${fmt(c.lastMonth?.wages || 0)} Dn`))),
+      h('h4', {}, 'Labor categories'),
+      h('div', { class: 'muted' }, 'When workers are short, priority categories are staffed first; the rest share what is left.'),
+      h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Category'), h('th', { class: 'r' }, 'Staffed'), h('th', {}, ''), h('th', {}, '')), rows),
+    ];
+  }
+
+  tab_population(g) {
+    const c = g.city;
+    const tiers = c.tierCounts || [];
+    return [
+      h('div', { class: 'grid2' },
+        h('div', { class: 'card' },
+          kv('Population', fmt(c.population)),
+          kv('Plebeians', fmt(c.plebs)),
+          kv('Patricians', fmt(c.patricians)),
+          kv('Occupied homes', fmt(c.houses)),
+          kv('Free housing space', fmt(c.vacancies || 0)),
+          kv('Peak population', fmt(c.stats.peakPopulation))),
+        h('div', { class: 'card' },
+          h('h4', {}, 'Immigration'),
+          h('div', {}, c.sentiment >= 30 ? (c.vacancies > 0 ? 'Settlers are arriving to fill empty homes.' : 'People want to come, but there is no free housing. Build more homes!') : 'The city mood is too low: nobody wants to move here.'),
+          kv('Arrived (total)', fmt(c.stats.immigrated)),
+          kv('Left (total)', fmt(c.stats.emigrated)),
+          kv('Houses improved', fmt(c.stats.evolutions)),
+          kv('Houses declined', fmt(c.stats.devolutions)))),
+      h('h4', {}, 'Homes by level'),
+      h('table', { class: 'tbl' },
+        h('tr', {}, h('th', {}, 'Level'), h('th', { class: 'r' }, 'Homes'), h('th', {}, 'Needs to reach this level')),
+        HOUSE_TIERS.map((t, i) => (i === 0 ? null : h('tr', {},
+          h('td', {}, `${i}. ${t.name}`),
+          h('td', { class: 'r num' }, fmt(tiers[i] || 0)),
+          h('td', { class: 'muted', style: { fontSize: '12px' } }, tierNeeds(i)))))),
+    ];
+  }
+
+  tab_finance(g) {
+    const c = g.city;
+    const taxVal = h('b', {}, `${c.taxRate}%`);
+    const taxInput = h('input', {
+      type: 'range', min: 0, max: 25, step: 1, value: c.taxRate,
+      oninput: (e) => { c.taxRate = Number(e.target.value); taxVal.textContent = `${c.taxRate}%`; est.textContent = `${fmt(estTax())} Dn / month`; },
+    });
+    const estTax = () => {
+      let t = 0;
+      for (const b of g.buildings.values()) if (b.house && b.house.pop > 0 && b.house.tax > 0) t += houseMonthlyTax(g, b.house);
+      return t;
+    };
+    const est = h('span', { class: 'num' }, `${fmt(estTax())} Dn / month`);
+    const ly = c.finance.lastYear;
+    const ty = c.finance.thisYear;
+    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Gifts & requests' };
+    const income = ['taxes', 'exports', 'other'];
+    return [
+      h('div', { class: 'grid2' },
+        h('div', { class: 'card' },
+          h('h4', {}, 'Tax rate'),
+          taxVal, taxInput,
+          kv('Expected taxes', ''), est,
+          kv('Homes registered', pct(c.taxCoverage)),
+          h('div', { class: 'muted' }, `Only homes visited by a tax collector (Forum/Senate) pay. Above ${CONFIG.DEFAULT_TAX_RATE}% citizens grumble.`)),
+        h('div', { class: 'card' },
+          kv('Treasury', `${fmt(c.treasury)} Dn`),
+          kv('Wages last month', `${fmt(c.lastMonth?.wages || 0)} Dn`),
+          kv('Taxes last month', `${fmt(c.lastMonth?.taxes || 0)} Dn`),
+          kv('Net this year', `${fmt(ledgerNet(ty))} Dn`),
+          ly ? kv('Net last year', `${fmt(ledgerNet(ly))} Dn`) : null)),
+      h('h4', {}, 'Ledger'),
+      h('table', { class: 'tbl' },
+        h('tr', {}, h('th', {}, ''), h('th', { class: 'r' }, 'This year'), h('th', { class: 'r' }, 'Last year')),
+        LEDGER_KEYS.map((k) => h('tr', {},
+          h('td', {}, `${income.includes(k) ? '+' : '−'} ${labels[k]}`),
+          h('td', { class: 'r num' }, fmt(ty[k] || 0)),
+          h('td', { class: 'r num' }, ly ? fmt(ly[k] || 0) : '-')))),
+    ];
+  }
+
+  tab_trade(g) {
+    const t = g.city.trade;
+    const partners = Object.entries(t.routes);
+    if (!partners.length) return h('div', { class: 'muted' }, 'No trade partners are available in this scenario.');
+    const routeCards = partners.map(([id, r]) => {
+      const p = TRADE_PARTNERS[id];
+      const list = (obj, used) => Object.entries(obj).map(([good, cap]) => h('span', { class: 'chip', title: `${fmt(used[good] || 0)} of ${fmt(cap)} this year` }, `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)}`));
+      return h('div', { class: 'card' },
+        h('div', { class: 'row' }, h('h4', { style: { flex: 1 } }, p.name),
+          r.open ? h('span', { class: 'chip ok' }, 'Open') : h('button', {
+            class: 'btn small primary',
+            onclick: () => { const res = openRoute(g, id); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
+          }, `Open route (${fmt(p.openCost)} Dn)`)),
+        h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought)),
+        h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(p.buys, r.sold)));
+    });
+    const tradeable = GOOD_KEYS.filter((k) => partners.some(([id]) => TRADE_PARTNERS[id].sells[k] || TRADE_PARTNERS[id].buys[k]));
+    const rows = tradeable.map((k) => {
+      const s = t.settings[k];
+      const canImport = partners.some(([id]) => TRADE_PARTNERS[id].sells[k]);
+      const canExport = partners.some(([id]) => TRADE_PARTNERS[id].buys[k]);
+      return h('tr', {},
+        h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
+        h('td', { class: 'r num' }, fmt(cityStock(g, k))),
+        h('td', {}, h('select', {
+          onchange: (e) => { setTradeMode(g, k, e.target.value); this.render(); },
+        }, h('option', { value: 'none', selected: s.mode === 'none' }, 'No trade'),
+        canImport ? h('option', { value: 'import', selected: s.mode === 'import' }, `Import (buy ${GOODS[k].buy})`) : null,
+        canExport ? h('option', { value: 'export', selected: s.mode === 'export' }, `Export (sell ${GOODS[k].sell})`) : null)),
+        h('td', {}, s.mode === 'none' ? '' : h('input', {
+          type: 'number', min: 0, max: 3200, step: 100, value: s.level, style: { width: '80px' },
+          title: s.mode === 'export' ? 'Keep at least this much in storage' : 'Buy until storage holds this much',
+          onchange: (e) => setTradeMode(g, k, null, Number(e.target.value)),
+        })),
+        h('td', { class: 'muted', style: { fontSize: '12px' } }, s.mode === 'export' ? 'keep' : s.mode === 'import' ? 'target' : ''));
+    });
+    const log = t.log.slice(0, 6).map((e) => h('div', { class: 'muted', style: { fontSize: '12px' } }, `${e.date} ${e.partner}: +${fmt(e.earned)} / −${fmt(e.spent)} Dn`));
+    return [
+      h('div', { class: 'muted' }, 'Caravans trade only with staffed warehouses connected to the Imperial road. Prices are per 100 units.'),
+      h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
+      h('h4', {}, 'Goods'),
+      h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'In storage'), h('th', {}, 'Mode'), h('th', {}, 'Level'), h('th', {}, '')), rows),
+      log.length ? h('h4', {}, 'Recent caravans') : null, log,
+    ];
+  }
+
+  tab_religion(g) {
+    const c = g.city;
+    return [
+      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens. Once the city passes 800 people, gods without any temple grow angry. Festivals and oracles can lift moods high enough for blessings.`),
+      GOD_KEYS.map((k) => {
+        const s = c.gods[k];
+        return h('div', { class: 'card', style: { marginTop: '8px' } },
+          h('div', { class: 'row' }, h('h4', { style: { flex: 1, color: GODS[k].color } }, GODS[k].name), h('span', { class: 'muted' }, GODS[k].domain)),
+          kv('Mood', `${Math.round(s.mood)} / 100`), bar(s.mood, 100),
+          kv('Staffed temples', `${s.temples}`),
+          h('div', { class: 'muted', style: { fontSize: '12px' } }, `Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`),
+          h('div', { class: 'row', style: { marginTop: '6px' } },
+            ['Small', 'Large', 'Grand'].map((name, size) => h('button', {
+              class: 'btn small',
+              disabled: c.festivalCooldown > 0,
+              onclick: () => { const r = holdFestival(g, k, size); if (!r.ok) this.app.ui.toastError(r.reason); this.render(); },
+            }, `${name} festival (${fmt(festivalCost(g, size))} Dn)`))));
+      }),
+      c.festivalCooldown > 0 ? h('div', { class: 'muted', style: { marginTop: '6px' } }, `Next festival possible in ${c.festivalCooldown} months.`) : null,
+    ];
+  }
+
+  tab_ratings(g) {
+    const r = g.city.ratings;
+    const cov = g.city.coverage || {};
+    const goals = g.scenario.goals;
+    const row = (key, name, tip) => h('div', { class: 'card', style: { marginTop: '8px' } },
+      kv(name, `${Math.floor(r[key])}${goals[key] ? ` (goal ${goals[key]})` : ''}`), bar(r[key], 100),
+      h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '3px' } }, tip));
+    return [
+      row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. Build temples, schools, libraries and venues where people live.`),
+      row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Senate. Changes slowly.'),
+      row('peace', 'Peace', 'Grows each month the city is content (mood 45+). Falls with unrest and the wrath of Mars.'),
+      row('favor', 'Favor', 'The Emperor likes paid tributes, fulfilled requests and gifts. Debt and missed requests anger him. At 0 you are recalled!'),
+    ];
+  }
+
+  tab_imperial(g) {
+    const c = g.city;
+    const r = c.request;
+    return [
+      h('div', { class: 'card' },
+        kv('Emperor\'s favor', `${Math.round(c.ratings.favor)} / 100`), bar(c.ratings.favor, 100),
+        h('div', { class: 'muted' }, 'Each year Rome collects a tribute based on your population.')),
+      h('div', { class: 'card', style: { marginTop: '10px' } },
+        h('h4', {}, 'Current request'),
+        r ? [
+          h('div', {}, `The Emperor asks for ${describeRequest(r)}.`),
+          kv('Deadline', `${Math.max(0, r.deadline - g.time.totalMonths)} months left`),
+          r.kind === 'goods' ? kv('In storage', `${fmt(cityStock(g, r.good))} / ${fmt(r.amount)}`) : kv('Treasury', `${fmt(c.treasury)} / ${fmt(r.amount)}`),
+          h('button', {
+            class: 'btn primary', style: { marginTop: '6px' }, disabled: !canFulfill(g),
+            onclick: () => { const res = fulfillRequest(g); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('fanfare'); this.render(); },
+          }, 'Send it to Rome'),
+        ] : h('div', { class: 'muted' }, g.scenario.requests ? 'No requests at the moment.' : 'The Emperor makes no requests in this scenario.')),
+      h('div', { class: 'card', style: { marginTop: '10px' } },
+        h('h4', {}, 'Send a personal gift'),
+        c.giftCooldown > 0 ? h('div', { class: 'muted' }, `The Emperor was gifted recently. Wait ${c.giftCooldown} months.`) : null,
+        h('div', { class: 'row' }, GIFT_SIZES.map((gs, i) => h('button', {
+          class: 'btn small', disabled: c.giftCooldown > 0,
+          onclick: () => { const res = sendGift(g, i); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('coin'); this.render(); },
+        }, `${gs.name}: ${fmt(gs.cost)} Dn (+${gs.favor})`)))),
+    ];
+  }
+
+  tab_messages(g) {
+    if (!g.messages.length) return h('div', { class: 'muted' }, 'No messages yet.');
+    return h('div', {}, g.messages.map((m) => h('div', {
+      class: `toast ${m.level}`, style: { animation: 'none', marginBottom: '5px' },
+      onclick: () => { if (m.x !== undefined) { this.app.renderer.camera.centerOnTile(m.x, m.y); this.app.ui.closeModal(); } },
+    }, h('span', { class: 'date' }, m.date), m.text)));
+  }
+}
+
+/** Short summary of what a tier needs (Population tab). */
+export function tierNeeds(i) {
+  const t = HOUSE_TIERS[i];
+  const parts = [];
+  if (t.water) parts.push(t.water === 2 ? 'fountain' : 'well');
+  if (t.food) parts.push(`${t.food} food`);
+  if (t.religion) parts.push(`${t.religion} god${t.religion > 1 ? 's' : ''}`);
+  if (t.ent) parts.push(`ent ${t.ent}`);
+  if (t.edu) parts.push(['', 'school', 'school+library', 'school+library+academy'][t.edu]);
+  if (t.health) parts.push(`${t.health} health`);
+  if (t.goods.length) parts.push(t.goods.join(', '));
+  if (t.des > -50) parts.push(`des ${t.des}`);
+  if (t.size > 1) parts.push(`${t.size}x${t.size}`);
+  return parts.join(' · ') || 'settlers';
+}

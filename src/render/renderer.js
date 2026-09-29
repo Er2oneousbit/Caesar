@@ -1,0 +1,465 @@
+/**
+ * renderer.js
+ * ----------------------------------------------------------------------------
+ * Draws the city every frame.
+ *
+ * Passes:
+ *   1. Ground: terrain tiles, shorelines, roads, plazas, bridges, rubble and
+ *      overlay tints. Flat things never overlap each other, so order is free.
+ *   2. Objects: trees, rocks, aqueducts, buildings, walkers, flames, overlay
+ *      columns. Sorted back-to-front by "depth" (x + y of their front point).
+ *
+ * Multi-tile buildings are drawn as vertical strips half a tile wide. Each
+ * strip is sorted by the front-most footprint tile it covers. This is the
+ * classic trick that lets walkers pass correctly in front of and behind
+ * big buildings with a simple depth sort.
+ *
+ *   3. Tool previews (ghost building, green/red tiles), hover and selection.
+ *   4. Particles (dust, smoke).
+ * ----------------------------------------------------------------------------
+ */
+
+import { CONFIG, HALF_W, HALF_H } from '../config.js';
+import { Terrain, Road, WaterBits } from '../world/map.js';
+import { BUILDINGS } from '../data/buildings.js';
+import { Camera, tileOfWorld } from './camera.js';
+import { SpriteCache } from './sprites.js';
+import { groundTileSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec } from './terrainArt.js';
+import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock } from './buildingArt.js';
+import { drawWalker } from './walkerArt.js';
+import { Effects, drawFlames } from './effects.js';
+import { overlayByKey, columnColor } from './overlays.js';
+
+const K_STRIP = 0;
+const K_WALKER = 1;
+const K_FIRE = 2;
+const K_COLUMN = 3;
+const K_EXTRA = 4;
+
+export class Renderer {
+  /** @param {HTMLCanvasElement} canvas */
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.camera = new Camera();
+    this.sprites = new SpriteCache();
+    this.effects = new Effects();
+    this.game = null;
+    this.overlay = overlayByKey('none');
+    this.hoverTile = null; // {x, y}
+    this.plan = null; // construction preview from the input tool
+    this.tool = null;
+    this.selectedId = 0;
+    this.time = 0;
+    this.frame = 0;
+    this.stats = { tiles: 0, objects: 0, ms: 0 };
+    this.stripCache = new WeakMap();
+    this.unsub = [];
+  }
+
+  /** Point the renderer at a (new) game. */
+  attach(game) {
+    for (const u of this.unsub) u();
+    this.unsub = [];
+    this.game = game;
+    this.camera.setMapBounds(game.map.w, game.map.h);
+    this.stripCache = new WeakMap();
+    this.effects = new Effects();
+    this.unsub.push(game.events.on('collapse', ({ x, y, size }) => {
+      const cx = x + size / 2;
+      const cy = y + size / 2;
+      this.effects.dust((cx - cy) * HALF_W, (cx + cy) * HALF_H, size);
+    }));
+  }
+
+  resize(cssW, cssH, dpr) {
+    const oldDpr = this.camera.dpr;
+    this.camera.resize(cssW, cssH, dpr);
+    this.canvas.width = this.camera.viewW;
+    this.canvas.height = this.camera.viewH;
+    this.canvas.style.width = `${cssW}px`;
+    this.canvas.style.height = `${cssH}px`;
+    if (oldDpr !== this.camera.dpr) this.sprites.clear();
+  }
+
+  setOverlay(key) { this.overlay = overlayByKey(key); }
+
+  /** Screen-space depth strips for a building (cached until it moves/grows). */
+  stripsFor(b) {
+    const sig = `${b.x},${b.y},${b.size}`;
+    const hit = this.stripCache.get(b);
+    if (hit && hit.sig === sig) return hit.depths;
+    const S = b.size;
+    const depths = new Array(2 * S);
+    for (let j = 0; j < 2 * S; j++) {
+      const m = b.x - b.y - S + j;
+      let best = -Infinity;
+      for (let dy = 0; dy < S; dy++) {
+        for (let dx = 0; dx < S; dx++) {
+          const x = b.x + dx;
+          const y = b.y + dy;
+          const k = x - y;
+          if (k === m || k === m + 1) best = Math.max(best, x + y + 1);
+        }
+      }
+      depths[j] = best;
+    }
+    this.stripCache.set(b, { sig, depths });
+    return depths;
+  }
+
+  /**
+   * Render one frame.
+   * @param {number} alpha  0..1 progress toward the next sim tick (smooth walkers)
+   * @param {number} dt     seconds since the last frame
+   */
+  render(alpha, dt) {
+    const t0 = performance.now();
+    this.time += dt;
+    this.frame++;
+    const { ctx, camera: cam, game } = this;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#2a241c';
+    ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+    if (!game) return;
+    const k = cam.scale;
+    this.sprites.setScale(k);
+    const { map } = game;
+    const ov = this.overlay;
+    const overlayOn = ov.key !== 'none';
+
+    // --- visible tile range -------------------------------------------------
+    const vr = cam.viewRect();
+    const x0w = vr.x - HALF_W * 2;
+    const x1w = vr.x + vr.w + HALF_W * 2;
+    const y0w = vr.y - CONFIG.TILE_H * 2;
+    const y1w = vr.y + vr.h + 140; // tall sprites below the view reach up into it
+    const corners = [tileOfWorld(x0w, y0w), tileOfWorld(x1w, y0w), tileOfWorld(x0w, y1w), tileOfWorld(x1w, y1w)];
+    const tx0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.x))));
+    const tx1 = Math.min(map.w - 1, Math.ceil(Math.max(...corners.map((c) => c.x))));
+    const ty0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.y))));
+    const ty1 = Math.min(map.h - 1, Math.ceil(Math.max(...corners.map((c) => c.y))));
+    const groundBottom = vr.y + vr.h + 4;
+    const waterFrame = Math.floor(this.time * 2.5) % 4;
+
+    const items = [];
+    const seenBuildings = new Set();
+    let tiles = 0;
+
+    const drawSpr = (spr, wx, wy, a = 1) => {
+      const dx = Math.round((wx - cam.x) * k) - spr.ax;
+      const dy = Math.round((wy - cam.y) * k) - spr.ay;
+      if (a !== 1) ctx.globalAlpha = a;
+      ctx.drawImage(spr.canvas, dx, dy);
+      if (a !== 1) ctx.globalAlpha = 1;
+    };
+
+    // --- pass 1: ground -----------------------------------------------------
+    for (let y = ty0; y <= ty1; y++) {
+      for (let x = tx0; x <= tx1; x++) {
+        const wx = (x - y) * HALF_W;
+        const wy = (x + y) * HALF_H;
+        if (wx < x0w || wx > x1w || wy < y0w || wy > y1w) continue;
+        const i = y * map.w + x;
+        const terr = map.terrain[i];
+        const variant = map.variant[i] & 3;
+        const bid = map.building[i];
+        if (wy <= groundBottom) {
+          tiles++;
+          if (terr === Terrain.WATER) {
+            drawSpr(this.sprites.get(`w${variant}.${waterFrame}`, () => waterTileSpec(variant, waterFrame)), wx, wy);
+            const mask = this.shoreMask(x, y);
+            if (mask) drawSpr(this.sprites.get(`sh${mask}`, () => shoreSpec(mask)), wx, wy);
+          } else {
+            drawSpr(this.sprites.get(`g${terr}.${variant}`, () => groundTileSpec(terr, variant)), wx, wy);
+          }
+          const road = map.road[i];
+          if (road === Road.ROAD) {
+            const mask = this.roadMask(x, y);
+            drawSpr(this.sprites.get(`r${mask}.${variant}`, () => roadSpec(mask, variant)), wx, wy);
+          } else if (road === Road.PLAZA) {
+            drawSpr(this.sprites.get(`pz${variant & 1}`, () => plazaSpec(variant & 1)), wx, wy);
+          } else if (road === Road.BRIDGE) {
+            const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
+            drawSpr(this.sprites.get(`br${axis}`, () => bridgeSpec(axis)), wx, wy);
+          }
+          if (map.rubble[i] && !bid) drawSpr(this.sprites.get(`rb${variant}`, () => rubbleSpec(variant)), wx, wy);
+          if (overlayOn && ov.tile) {
+            const c = ov.tile(game, i);
+            if (c) this.fillDiamond(wx, wy, c);
+          }
+        }
+        // --- collect objects on this tile ---
+        const depth = x + y + 1;
+        if (bid) {
+          if (!seenBuildings.has(bid)) {
+            seenBuildings.add(bid);
+            const b = game.buildings.get(bid);
+            if (b) this.collectBuilding(b, items, overlayOn);
+          }
+        } else if (terr === Terrain.TREES && !map.road[i]) {
+          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${map.variant[i] & 7}`, () => treesSpec(map.variant[i] & 7)), wx, wy, full: true });
+        } else if (terr === Terrain.ROCK) {
+          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`k${variant}`, () => rocksSpec(variant)), wx, wy, full: true });
+        }
+        if (map.aqueduct[i]) {
+          const mask = this.aqueductMask(x, y);
+          const filled = map.aqueduct[i] === 2;
+          items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`aq${mask}.${filled ? 1 : 0}`, () => aqueductSpec(mask, filled)), wx, wy, full: true });
+        }
+        if (game.fires.size && game.fires.has(i)) {
+          items.push({ d: depth + 0.002, kind: K_FIRE, wx, wy: wy + HALF_H, seed: i });
+          if (Math.random() < dt * 2) this.effects.smoke(wx, wy - 4, true);
+        }
+      }
+    }
+
+    // --- walkers ------------------------------------------------------------
+    for (const w of game.walkers.values()) {
+      if (overlayOn && ov.walkers && !ov.walkers.includes(w.type)) continue;
+      const p = w.moving ? Math.min(1, w.progress + alpha * w.speed) : 0;
+      const fx = w.x + (w.tx - w.x) * p + 0.5;
+      const fy = w.y + (w.ty - w.y) * p + 0.5;
+      const wx = (fx - fy) * HALF_W;
+      const wy = (fx + fy) * HALF_H;
+      if (wx < x0w || wx > x1w || wy < y0w || wy > vr.y + vr.h + 30) continue;
+      const ddx = (w.tx - w.x) - (w.ty - w.y);
+      const ddy = (w.tx - w.x) + (w.ty - w.y);
+      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
+    }
+
+    // --- pass 2: sorted objects --------------------------------------------
+    items.sort((a, b) => a.d - b.d || a.kind - b.kind);
+    for (const it of items) {
+      switch (it.kind) {
+        case K_STRIP: {
+          const spr = it.spr;
+          const dx = Math.round((it.wx - cam.x) * k) - spr.ax;
+          const dy = Math.round((it.wy - cam.y) * k) - spr.ay;
+          if (it.alpha) ctx.globalAlpha = it.alpha;
+          if (it.full) {
+            ctx.drawImage(spr.canvas, dx, dy);
+          } else {
+            const sx0 = Math.round((it.j * spr.w) / it.n);
+            const sx1 = Math.round(((it.j + 1) * spr.w) / it.n);
+            if (sx1 > sx0) ctx.drawImage(spr.canvas, sx0, 0, sx1 - sx0, spr.h, dx + sx0, dy, sx1 - sx0, spr.h);
+          }
+          if (it.alpha) ctx.globalAlpha = 1;
+          break;
+        }
+        case K_WALKER:
+          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY);
+          break;
+        case K_FIRE:
+          drawFlames(ctx, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, this.time, it.seed);
+          break;
+        case K_COLUMN:
+          this.drawColumn(it);
+          break;
+        case K_EXTRA:
+          this.drawExtra(it);
+          break;
+        default:
+          break;
+      }
+    }
+
+    // --- pass 3: previews, hover, selection --------------------------------
+    this.drawToolPreview();
+    if (this.selectedId) {
+      const b = game.buildings.get(this.selectedId);
+      if (b) this.outlineFootprint(b.x, b.y, b.size, 'rgba(255,230,120,0.95)', 2);
+      else this.selectedId = 0;
+    }
+
+    // --- pass 4: particles -------------------------------------------------
+    this.effects.update(dt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.effects.draw(ctx, cam);
+
+    this.stats.tiles = tiles;
+    this.stats.objects = items.length;
+    this.stats.ms = performance.now() - t0;
+  }
+
+  /** Queue a building's strips (or its overlay stand-in). */
+  collectBuilding(b, items, overlayOn) {
+    const ov = this.overlay;
+    const wx = (b.x - b.y) * HALF_W;
+    const wy = (b.x + b.y) * HALF_H;
+    const depths = this.stripsFor(b);
+    const front = Math.max(...depths);
+    if (overlayOn && ov.show && !ov.show(b)) {
+      // Flat footprint + optional info column.
+      const color = b.house ? 'rgba(214,190,140,0.9)' : 'rgba(150,145,135,0.85)';
+      items.push({ d: front - 0.5, kind: K_EXTRA, b, flat: color, wx, wy });
+      let v = null;
+      if (b.house && ov.house) v = b.house.pop > 0 ? ov.house(b) : null;
+      else if (ov.value) v = ov.value(b);
+      if (v !== null && v !== undefined) {
+        const cx = b.x + b.size / 2;
+        const cy = b.y + b.size / 2;
+        items.push({ d: front + 0.001, kind: K_COLUMN, wx: (cx - cy) * HALF_W, wy: (cx + cy) * HALF_H, v: Math.max(0, Math.min(1, v)), bad: !!ov.bad, S: b.size });
+      }
+      return;
+    }
+    const state = artState(b);
+    const key = `b:${b.type}:${b.size}:${b.variant}:${state}`;
+    const spr = this.sprites.get(key, () => buildingSpec(b.type, b.size, b.variant, state));
+    const n = depths.length;
+    if (b.size === 1) {
+      items.push({ d: front, kind: K_STRIP, spr, wx, wy, full: true });
+    } else {
+      for (let j = 0; j < n; j++) items.push({ d: depths[j], kind: K_STRIP, spr, wx, wy, j, n });
+    }
+    const kind = b.def.kind;
+    if (kind === 'warehouse' || kind === 'granary') {
+      items.push({ d: front + 0.0005, kind: K_EXTRA, b, wx, wy, stock: true });
+    }
+    if ((b.type === 'pottery_ws' || b.type === 'weapons_ws') && b.efficiency > 0 && b.progress > 0 && Math.random() < 0.03) {
+      this.effects.smoke(wx + (0.99 - 0.34) * HALF_W, wy + (0.99 + 0.34) * HALF_H - 32);
+    }
+  }
+
+  /** Neighbor road mask: 1=N 2=E 4=S 8=W */
+  roadMask(x, y) {
+    const m = this.game.map;
+    return (m.hasRoad(x, y - 1) ? 1 : 0) | (m.hasRoad(x + 1, y) ? 2 : 0) | (m.hasRoad(x, y + 1) ? 4 : 0) | (m.hasRoad(x - 1, y) ? 8 : 0);
+  }
+
+  /** Land neighbors of a water tile. */
+  shoreMask(x, y) {
+    const m = this.game.map;
+    const land = (tx, ty) => m.inBounds(tx, ty) && m.terrain[m.idx(tx, ty)] !== Terrain.WATER;
+    return (land(x, y - 1) ? 1 : 0) | (land(x + 1, y) ? 2 : 0) | (land(x, y + 1) ? 4 : 0) | (land(x - 1, y) ? 8 : 0);
+  }
+
+  /** Aqueduct connections: other aqueducts or reservoirs. */
+  aqueductMask(x, y) {
+    const { map, buildings } = this.game;
+    const conn = (tx, ty) => {
+      if (!map.inBounds(tx, ty)) return false;
+      const i = map.idx(tx, ty);
+      if (map.aqueduct[i]) return true;
+      const b = buildings.get(map.building[i]);
+      return !!b && b.def.kind === 'reservoir';
+    };
+    return (conn(x, y - 1) ? 1 : 0) | (conn(x + 1, y) ? 2 : 0) | (conn(x, y + 1) ? 4 : 0) | (conn(x - 1, y) ? 8 : 0);
+  }
+
+  /** Fill a tile diamond (world coords of its top corner) with a color. */
+  fillDiamond(wx, wy, color, S = 1) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const x = (wx - cam.x) * k;
+    const y = (wy - cam.y) * k;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + HALF_W * S * k, y + HALF_H * S * k);
+    ctx.lineTo(x, y + CONFIG.TILE_H * S * k);
+    ctx.lineTo(x - HALF_W * S * k, y + HALF_H * S * k);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  outlineFootprint(tx, ty, S, color, width = 1.5) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const wx = (tx - ty) * HALF_W;
+    const wy = (tx + ty) * HALF_H;
+    const x = (wx - cam.x) * k;
+    const y = (wy - cam.y) * k;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width * cam.dpr;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + HALF_W * S * k, y + HALF_H * S * k);
+    ctx.lineTo(x, y + CONFIG.TILE_H * S * k);
+    ctx.lineTo(x - HALF_W * S * k, y + HALF_H * S * k);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  drawColumn(it) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const x = (it.wx - cam.x) * k;
+    const y = (it.wy - cam.y) * k;
+    const h = (6 + it.v * 44) * k;
+    const r = (3 + it.S) * k;
+    const color = columnColor(it.v, it.bad);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x + 2 * k, y, r * 1.3, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillRect(x - r, y - h, r * 2, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(x - r, y - h, r * 0.7, h);
+    ctx.beginPath();
+    ctx.ellipse(x, y - h, r, r * 0.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  /** Flat overlay footprints and dynamic stock displays. */
+  drawExtra(it) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const b = it.b;
+    if (it.flat) {
+      this.fillDiamond(it.wx, it.wy, it.flat, b.size);
+      return;
+    }
+    if (it.stock) {
+      ctx.save();
+      ctx.setTransform(k, 0, 0, k, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k));
+      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock);
+      else {
+        let used = 0;
+        for (const key in b.stock) used += b.stock[key];
+        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY);
+      }
+      ctx.restore();
+    }
+  }
+
+  /** Construction previews: ghost building, tile markers, coverage radius. */
+  drawToolPreview() {
+    const { game, plan } = this;
+    if (!plan) {
+      if (this.hoverTile) this.outlineFootprint(this.hoverTile.x, this.hoverTile.y, 1, 'rgba(255,255,255,0.55)', 1);
+      return;
+    }
+    const map = game.map;
+    const def = BUILDINGS[plan.tool];
+    // Coverage radius hint for area-of-effect buildings.
+    const radius = { well: CONFIG.WELL_RADIUS, fountain: CONFIG.FOUNTAIN_RADIUS, reservoir: CONFIG.RESERVOIR_RADIUS, hospital: CONFIG.HOSPITAL_RADIUS }[plan.tool];
+    if (radius && plan.items.length === 1) {
+      const it = plan.items[0];
+      const S = it.size;
+      for (let y = it.y - radius; y < it.y + S + radius; y++) {
+        for (let x = it.x - radius; x < it.x + S + radius; x++) {
+          if (!map.inBounds(x, y)) continue;
+          this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, 'rgba(80,160,255,0.16)');
+        }
+      }
+    }
+    for (const it of plan.items) {
+      const color = it.ok ? (plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : 'rgba(80,220,90,0.38)') : 'rgba(230,40,40,0.5)';
+      const wx = (it.x - it.y) * HALF_W;
+      const wy = (it.x + it.y) * HALF_H;
+      if (def && plan.kind === 'building' && it.ok) {
+        const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:${plan.tool === 'house' ? 0 : 0}`, () => buildingSpec(plan.tool, it.size, 0, 0));
+        this.fillDiamond(wx, wy, color, it.size);
+        const k = this.camera.scale;
+        this.ctx.globalAlpha = 0.72;
+        this.ctx.drawImage(spr.canvas, Math.round((wx - this.camera.x) * k) - spr.ax, Math.round((wy - this.camera.y) * k) - spr.ay);
+        this.ctx.globalAlpha = 1;
+      } else {
+        this.fillDiamond(wx, wy, color, it.size);
+      }
+    }
+  }
+}

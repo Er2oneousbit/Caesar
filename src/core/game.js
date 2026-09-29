@@ -1,0 +1,282 @@
+/**
+ * game.js
+ * ----------------------------------------------------------------------------
+ * The Game object owns the whole simulation state and runs the systems in a
+ * fixed order every tick. It has NO knowledge of the DOM or canvas, so it runs
+ * identically in the browser and in Node (tests, balance scripts).
+ *
+ * Tick order:
+ *   1. advance the calendar
+ *   2. move walkers
+ *   3. daily logic for the buildings whose "phase" matches this tick
+ *      (spreads work evenly across the day instead of spiking at midnight)
+ *   4. on a new day:   labor, water, desirability, immigration, fires, trade
+ *   5. on a new month: consumption, finances, mood, religion, ratings, Emperor
+ *   6. on a new year:  tribute, ledger rollover, trade quotas
+ * ----------------------------------------------------------------------------
+ */
+
+import { CONFIG } from '../config.js';
+import { EventBus } from './events.js';
+import { RNG } from './rng.js';
+import { log } from './debug.js';
+import { generateMap } from '../world/mapgen.js';
+import { PathFinder } from '../world/pathfinding.js';
+import { BUILDINGS } from '../data/buildings.js';
+import { GameTime } from '../sim/time.js';
+import { computeAccessRoad } from '../sim/entities.js';
+import { updateWalkers } from '../sim/walkers.js';
+import { updateHouse, consumeHouse } from '../sim/housing.js';
+import { updateProducer, updateWorkshop, updateWarehouseSupply } from '../sim/production.js';
+import { updateMarketBuyer } from '../sim/market.js';
+import { updateTraining, updateVenue } from '../sim/entertainment.js';
+import { updateServiceSpawns, updateLaborAccess } from '../sim/services.js';
+import { updateRisk, updateFires } from '../sim/risk.js';
+import { updateLabor } from '../sim/labor.js';
+import { updateWater } from '../sim/water.js';
+import { updateDesirability } from '../sim/desirability.js';
+import { computeCityStats, computeSentiment, updateImmigration, updateEmigration, indexHomesByRoad } from '../sim/population.js';
+import { monthlyEconomy, yearlyEconomy, newLedger } from '../sim/economy.js';
+import { newGodState, updateReligion } from '../sim/religion.js';
+import { newTradeState, updateTrade, resetTradeYear } from '../sim/trade.js';
+import { updateRatings, checkOutcome } from '../sim/ratings.js';
+import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
+
+/** Difficulty multipliers. */
+export const DIFFICULTY = Object.freeze({
+  easy: { name: 'Easy', risk: 0.7, production: 1.15, immigration: 1.25 },
+  normal: { name: 'Normal', risk: 1, production: 1, immigration: 1 },
+  hard: { name: 'Hard', risk: 1.3, production: 0.9, immigration: 0.85 },
+});
+
+/** Fresh city-wide state for a new game. */
+export function newCityState(scenario, funds) {
+  return {
+    name: scenario.name,
+    treasury: funds,
+    taxRate: CONFIG.DEFAULT_TAX_RATE,
+    wage: CONFIG.DEFAULT_WAGE,
+    population: 0,
+    plebs: 0,
+    patricians: 0,
+    houses: 0,
+    tierCounts: [],
+    avgTier: 0,
+    fedShare: 1,
+    workforce: 0,
+    jobs: 0,
+    employed: 0,
+    unemployed: 0,
+    unemploymentRate: 0,
+    laborPriority: [],
+    laborByCat: {},
+    sentiment: 60,
+    sentimentFactors: {},
+    festivalBoost: 0,
+    festivalCooldown: 0,
+    immigrationAcc: 0,
+    vacancies: 0,
+    goodsDemand: {},
+    ratings: { culture: 0, prosperity: 0, peace: 20, favor: CONFIG.FAVOR_START },
+    coverage: {},
+    gods: newGodState(),
+    trade: newTradeState(scenario.partners || []),
+    finance: { thisYear: newLedger(), lastYear: null },
+    request: null,
+    nextRequestMonth: 12,
+    giftCooldown: 0,
+    produced: {},
+    foodFlow: { harvested: 0, stored: 0, toMarket: 0, sold: 0, eaten: 0, shortfall: 0 },
+    foodFlowLast: null,
+    lostCitizens: 0,
+    taxCoverage: 0,
+    lastMonth: { wages: 0, taxes: 0 },
+    history: [],
+    stats: { fires: 0, collapses: 0, evolutions: 0, devolutions: 0, immigrated: 0, emigrated: 0, peakPopulation: 0, requestsMet: 0, requestsFailed: 0 },
+    flags: {},
+    victory: false,
+    defeat: false,
+  };
+}
+
+export class Game {
+  /**
+   * @param {object} opts
+   * @param {object} opts.scenario   scenario definition (data/scenarios.js)
+   * @param {object} [opts.flags]    debug flags (core/debug.js)
+   * @param {object} [opts.restore]  internal: prebuilt state from a save file
+   */
+  constructor({ scenario, flags = {}, restore = null }) {
+    if (!scenario) throw new Error('Game needs a scenario');
+    this.flags = flags;
+    this.log = log;
+    this.events = new EventBus();
+    this.scenario = scenario;
+    this.difficultyKey = scenario.difficulty || 'normal';
+    this.difficulty = DIFFICULTY[this.difficultyKey] || DIFFICULTY.normal;
+    this.cheats = { freeBuild: false };
+    this.buildings = new Map();
+    this.walkers = new Map();
+    this.fires = new Map(); // tile index -> days left burning
+    this.messages = [];
+    this.dirty = { des: true, water: true, roads: true };
+    this.lastUndo = null;
+    this.homeByRoad = new Map();
+    this.unlockedSet = new Set(scenario.unlocks === 'all' ? Object.keys(BUILDINGS) : scenario.unlocks || []);
+
+    if (restore) {
+      // save.js fills in map, time, rng, city, entities
+      Object.assign(this, restore);
+    } else {
+      const seed = flags.seed ?? scenario.map.seed;
+      this.seed = seed;
+      this.rng = new RNG(`${seed}:sim`);
+      const { map, info } = generateMap({ width: scenario.map.size, height: scenario.map.size, seed, type: scenario.map.type });
+      this.map = map;
+      this.mapInfo = info;
+      this.time = new GameTime(scenario.startYear);
+      this.nextBuildingId = 1;
+      this.nextWalkerId = 1;
+      this.nextMessageId = 1;
+      this.city = newCityState(scenario, flags.money ?? scenario.funds);
+      scheduleNextRequest(this);
+    }
+    this.pf = new PathFinder(this.map);
+    this.processRoadChanges();
+  }
+
+  /** Can the player build this building/tool in the current scenario? */
+  isUnlocked(key) {
+    if (key === 'clear') return true;
+    if (this.flags.unlockall || this.scenario.unlocks === 'all') return true;
+    return this.unlockedSet.has(key);
+  }
+
+  markDirty(...keys) {
+    for (const k of keys) this.dirty[k] = true;
+  }
+
+  /** Player-facing notification. level: info | good | warn | bad | imperial */
+  message(text, level = 'info', x, y) {
+    const m = { id: this.nextMessageId++, text, level, x, y, date: this.time.shortLabel() };
+    this.messages.unshift(m);
+    if (this.messages.length > 150) this.messages.pop();
+    this.events.emit('message', m);
+    this.log.info(`[msg:${level}] ${text}`);
+    return m;
+  }
+
+  /** Called by construction after any map edit. */
+  onMapEdited() {
+    this.markDirty('roads', 'des', 'water');
+    this.processRoadChanges();
+    updateWater(this);
+    this.map.touch();
+  }
+
+  /** Road network ids + every building's access road. */
+  processRoadChanges() {
+    this.map.computeRoadNetworks();
+    for (const b of this.buildings.values()) computeAccessRoad(this, b);
+    indexHomesByRoad(this);
+    this.dirty.roads = false;
+  }
+
+  /**
+   * Rebuild every derived layer (water coverage, desirability, road networks,
+   * statistics) WITHOUT advancing the simulation. Used after loading a save.
+   */
+  recomputeDerived() {
+    this.processRoadChanges();
+    updateWater(this);
+    updateDesirability(this);
+    this.dirty.des = false;
+    computeCityStats(this);
+    this.map.touch();
+  }
+
+  /** Advance the simulation one tick. */
+  tick() {
+    const t = this.time.advance();
+    updateWalkers(this);
+    const phase = this.time.tick;
+    for (const b of this.buildings.values()) {
+      if (b.phase === phase) this.updateBuilding(b);
+    }
+    if (t.newDay) this.onDay();
+    if (t.newMonth) this.onMonth();
+    if (t.newYear) this.onYear();
+  }
+
+  /** Daily logic for one building (called on its phase tick). */
+  updateBuilding(b) {
+    try {
+      switch (b.def.kind) {
+        case 'house': updateHouse(this, b); break;
+        case 'farm':
+        case 'raw': updateProducer(this, b); break;
+        case 'workshop': updateWorkshop(this, b); break;
+        case 'warehouse': updateWarehouseSupply(this, b); break;
+        case 'market': updateMarketBuyer(this, b); break;
+        case 'training': updateTraining(this, b); break;
+        case 'venue': updateVenue(this, b); break;
+        default: break;
+      }
+      if (!this.buildings.has(b.id)) return;
+      updateServiceSpawns(this, b);
+      updateLaborAccess(this, b);
+      updateRisk(this, b);
+    } catch (err) {
+      this.log.error(`Building ${b.id} (${b.type}) update failed:`, err);
+    }
+  }
+
+  onDay() {
+    if (this.dirty.roads) this.processRoadChanges();
+    updateLabor(this);
+    updateWater(this);
+    if (this.dirty.des) {
+      updateDesirability(this);
+      this.dirty.des = false;
+    }
+    computeCityStats(this);
+    indexHomesByRoad(this);
+    updateImmigration(this);
+    updateEmigration(this);
+    updateFires(this);
+    updateTrade(this);
+    this.events.emit('day', this.time);
+  }
+
+  onMonth() {
+    for (const b of this.buildings.values()) if (b.house) consumeHouse(this, b);
+    monthlyEconomy(this);
+    computeSentiment(this);
+    updateReligion(this);
+    updateRatings(this);
+    updateEmperor(this);
+    const c = this.city;
+    c.foodFlowLast = { ...c.foodFlow };
+    for (const k in c.foodFlow) c.foodFlow[k] = 0;
+    if (c.festivalCooldown > 0) c.festivalCooldown--;
+    if (c.giftCooldown > 0) c.giftCooldown--;
+    c.history.push({ m: this.time.totalMonths, pop: c.population, treasury: Math.round(c.treasury), sentiment: c.sentiment });
+    if (c.history.length > 240) c.history.shift();
+    checkOutcome(this);
+    this.events.emit('month', this.time);
+  }
+
+  onYear() {
+    yearlyEconomy(this);
+    resetTradeYear(this);
+    this.events.emit('year', this.time);
+  }
+
+  /** Run many ticks at once (tests, fast-forward). */
+  runTicks(n) {
+    for (let i = 0; i < n; i++) this.tick();
+  }
+
+  /** Convenience: run whole days. */
+  runDays(days) { this.runTicks(days * CONFIG.TICKS_PER_DAY); }
+}

@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Test output (screenshots etc.)
+tests/e2e/out/
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# NOTE: dist/colonia.html IS committed on purpose, so players can download
+# and double-click it without installing anything. Rebuild with `npm run build`.

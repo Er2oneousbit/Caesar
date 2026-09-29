@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colonia render check</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;background:#222;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<!--
+  Render showcase used by tests/e2e/screenshots.mjs (and handy for artists):
+  builds the demo city headlessly, fast-forwards, then draws one frame.
+  Query params: scenario=c1  months=6  zoom=2  overlay=none  level=2  w=1280 h=800
+-->
+<canvas id="c"></canvas>
+<script type="module">
+  import { Game } from '../../src/core/game.js';
+  import { SCENARIOS, sandboxScenario } from '../../src/data/scenarios.js';
+  import { buildDemoCity } from '../../src/dev/demoCity.js';
+  import { Renderer } from '../../src/render/renderer.js';
+
+  const q = new URLSearchParams(location.search);
+  const scen = q.get('scenario') === 'sandbox' ? sandboxScenario({ size: 64, type: q.get('maptype') || 'river', seed: q.get('seed') || 'demo' }) : (SCENARIOS.find((s) => s.id === (q.get('scenario') || 'c1')) || SCENARIOS[0]);
+  const game = new Game({ scenario: scen, flags: { unlockall: true, money: 50000 } });
+  const res = buildDemoCity(game, { level: Number(q.get('level') || 2) });
+  const months = Number(q.get('months') || 6);
+  const t0 = performance.now();
+  game.runDays(months * 16);
+  const simMs = performance.now() - t0;
+  const W = Number(q.get('w') || 1280), H = Number(q.get('h') || 800);
+  const r = new Renderer(document.getElementById('c'));
+  r.attach(game);
+  r.camera.zoomIndex = Number(q.get('zoom') ?? 2);
+  r.resize(W, H, 1);
+  if (res.center) r.camera.centerOnTile(res.center.x, res.center.y);
+  r.setOverlay(q.get('overlay') || 'none');
+  r.render(0, 0.016);
+  r.render(0.5, 0.016);
+  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
+  window.__done = true;
+</script>
+</body>
+</html>

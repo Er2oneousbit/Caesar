@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Colonia</title>
+<meta name="description" content="Colonia: an original browser city builder inspired by classic Roman city-building games.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%238e1b1b'/%3E%3Cpath d='M10 26 32 12 54 26Z' fill='%23d6ab3c'/%3E%3Crect x='14' y='28' width='6' height='20' fill='%23f3ecdc'/%3E%3Crect x='29' y='28' width='6' height='20' fill='%23f3ecdc'/%3E%3Crect x='44' y='28' width='6' height='20' fill='%23f3ecdc'/%3E%3Crect x='10' y='50' width='44' height='5' fill='%23d6ab3c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<!-- Development entry point. Needs a local web server (npm run dev).
+     For a double-click playable file use dist/colonia.html (npm run build). -->
+<link rel="stylesheet" href="src/ui/styles.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="color:#fff;padding:20px">Colonia needs JavaScript enabled.</p></noscript>
+<div id="file-warning" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#1f1b16;color:#f3ecdc;font:16px/1.5 system-ui,sans-serif;padding:24px;text-align:center">
+  <div>
+    <h2>This is the developer version</h2>
+    <p>Browsers block ES modules on file:// pages. Either open <b>dist/colonia.html</b> (works from disk),<br>
+    or run <code>npm run dev</code> (or <code>scripts/run.ps1</code> / <code>scripts/run.sh</code>) and browse to http://localhost:8080/</p>
+  </div>
+</div>
+<script>
+  if (location.protocol === 'file:') document.getElementById('file-warning').style.display = 'flex';
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

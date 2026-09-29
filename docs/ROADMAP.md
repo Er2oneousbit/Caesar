@@ -1,6 +1,6 @@
 # Roadmap
 
-What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order.
+What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order. New feature requests are added here first; bugs are fixed right away.
 
 ## Done (v0.6)
 
@@ -92,13 +92,13 @@ What exists, what the classic game had that Colonia does not (yet), and ideas. R
 9. **Events**: floods, earthquakes, price changes, trade route disruptions.
 10. **Warehouse/granary orders** ("get goods", "empty storage") and granary-to-granary transfers.
 11. **Walker click-to-inspect** (currently only buildings and tiles).
+12. **Regional map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), whether clicking a warband pans the city view to its entry edge, and whether the geography is Italy-centred or the whole inland sea (the partners reach from Tarraco to Alexandria).
 
 ## Polish ideas
 
 * Charts in the advisors (population, treasury and mood history are already recorded in `city.history`).
 * More building animation: turning mill wheels, laundry flapping, working farmers and fishermen.
 * Optional sprite packs: load PNG art (hand-drawn or AI-assisted) over the procedural sprites, keyed like the sprite cache, with the procedural art as the fallback. The art sheet (`tests/e2e/artsheet.html`) is the reference for sizes and anchors.
-* Snow settling on roofs and fields during long winter snowfalls.
 * Keyboard remapping and a colorblind-friendly overlay palette.
 * Performance: cache static terrain into chunk canvases for the most zoomed-out view. When the screen is full of tiles (the middle of a Large or Uber map) that view costs about 16 ms a frame in headless Chromium against 4 ms one zoom level in; chunks would cut its thousands of ground draw calls to a few dozen (see ARCHITECTURE.md, *Draw calls*).
 * Smaller saves for very big cities: buildings are about 0.8 KB each in a save (mostly the house record), so a 1,500-building capital needs about 1.5 MB per slot. Dropping default-valued fields, or compressing the whole save, would stretch the ~5 MB browser allowance further.

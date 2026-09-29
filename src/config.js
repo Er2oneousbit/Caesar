@@ -16,7 +16,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.3.0',
+  VERSION: '0.4.0',
   SAVE_VERSION: 2, // v2 added the military (units, walls, raids); v1 saves still load
   STORAGE_PREFIX: 'colonia.',
 

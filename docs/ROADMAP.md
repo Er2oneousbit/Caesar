@@ -2,6 +2,11 @@
 
 What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order.
 
+## Done (v0.4)
+
+* **Music**: generative soundtrack composed live in modal scales, played by synthesized lyre (Karplus-Strong), reed pipe, pan flute, frame drums, horn and sistrum through a generated reverb; moods for the menu, day, night, festivals and raids with crossfades; music switch and volume in Settings, M key, console controls and WAV export
+* Music lab page (`tests/e2e/music.html`), 9 composer tests, 4 new smoke checks (63 unit tests, 40 browser checks)
+
 ## Done (v0.3)
 
 * **Day and night**: sky tint by time of day, lit windows (positions recorded from the art), torches, lanterns on walkers, glowing fires; a setting
@@ -60,7 +65,6 @@ What exists, what the classic game had that Colonia does not (yet), and ideas. R
 
 ## Polish ideas
 
-* Background music (procedural, like the sound effects).
 * Charts in the advisors (population, treasury and mood history are already recorded in `city.history`).
 * More building animation: turning mill wheels, laundry flapping, working farmers and fishermen.
 * Optional sprite packs: load PNG art (hand-drawn or AI-assisted) over the procedural sprites, keyed like the sprite cache, with the procedural art as the fallback. The art sheet (`tests/e2e/artsheet.html`) is the reference for sizes and anchors.

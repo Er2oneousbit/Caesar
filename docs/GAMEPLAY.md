@@ -189,3 +189,17 @@ None of this changes the simulation: the same seed plays out the same way with e
 * **Weather** (*Settings*: Weather). A spell of weather lasts 35 to 110 seconds of game time, then the next is drawn with odds by season (summer is mostly clear with the odd thunderstorm; autumn and winter bring more rain; snow falls only in winter and turns to rain when spring comes). Overcast dims the scene and hides sun shadows and cloud shade. Thunderstorms flash (at most every 5 seconds) and thunder rolls in a moment later; heavy storms make some homes light their lamps by day. Birds stay home at night and in rain or snow.
 * **Reduced motion.** When the system asks for reduced motion, decorative motion stops: no swaying trees, glints, falling rain or snow, lightning flashes, fling or zoom animation. Colors, lights and flags (held still) remain.
 * **Debug console:** `weather rain` (clear, cloudy, rain, storm, snow) changes the weather now; `sky 0.8` freezes the time of day (0.3 noon, 0.67 sunset, 0.8 night) and `sky off` lets it run again.
+
+## Music
+
+Original music, composed while you play and played by synthesized instruments (nothing is recorded, so it never loops). It starts after your first click or key press (a browser rule), and follows the city:
+
+| Mood | When | Sounds like |
+|---|---|---|
+| Menu | The main menu | Stately reed pipe over lyre, dorian or aeolian |
+| Day | Building the city | Lyre, reed pipe or pan flute, light frame drum; mixolydian, dorian or ionian, in 4/4 or a lilting 6/8; 8 to 20 seconds of silence between pieces |
+| Night | After dusk (with *Day and night* on) | Slow pan flute and sparse lyre, no drums |
+| Festival | For a while after a festival, and on victory | Bright lydian or mixolydian dance with jingles |
+| Danger | While raiders are on the map | Fast phrygian war drums, horn calls, no pauses |
+
+A new mood takes over at once: the old piece fades out in a second and a half. *Settings* has a music switch and its own volume (separate from sound effects); **M** switches it too; *Mute all sounds* silences everything. Console: `music` (status), `music next`, `music mood danger` (or `auto`), `music check` (render and measure every mood), `music wav day 60` (download a WAV).

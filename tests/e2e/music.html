@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colonia music lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; background: #f6f1e6; color: #2a241c; }
+  button { font: inherit; margin: 2px 4px 2px 0; padding: 4px 10px; }
+  table { border-collapse: collapse; margin-top: 10px; }
+  td, th { border-bottom: 1px solid #d8ccb0; padding: 3px 10px; text-align: left; }
+  .bad { color: #b0302a; font-weight: 600; }
+  #now { margin: 8px 0; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<!--
+  Music lab: listen to each mood live, and an automatic check of the synth.
+  Open with the dev server: npm run dev, then /tests/e2e/music.html
+  The check renders every mood offline and reports peak, loudness and
+  tuning; ?check=1 runs it on load (the browser tests use window.__result).
+-->
+<h1>Music lab</h1>
+<p>Play a mood (your browser needs a click before it makes sound):
+  <span id="moods"></span> <button id="stop">Stop</button></p>
+<div id="now"></div>
+<p><button id="run">Run the check</button> renders every mood offline and measures it.</p>
+<div id="out"></div>
+<script type="module">
+  import { Music, renderMood, renderNote, estimatePitch, measure } from '../../src/audio/music.js';
+  import { MOODS } from '../../src/audio/composer.js';
+  import { midiToHz } from '../../src/audio/instruments.js';
+
+  const music = new Music();
+  let ac = null;
+  const moods = document.getElementById('moods');
+  for (const m of Object.keys(MOODS)) {
+    const b = document.createElement('button');
+    b.textContent = m;
+    b.onclick = () => {
+      if (!ac) { ac = new AudioContext(); music.attach(ac); }
+      ac.resume();
+      music.setEnabled(true);
+      music.force(m);
+      music.skip();
+    };
+    moods.appendChild(b);
+  }
+  document.getElementById('stop').onclick = () => music.setEnabled(false);
+  setInterval(() => { document.getElementById('now').textContent = ac ? music.describe() : ''; }, 500);
+
+  /** Render every mood and a few tuned notes; report numbers. */
+  async function check() {
+    const rows = [];
+    let seed = 99;
+    const rng = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    const moodsOut = {};
+    for (const m of Object.keys(MOODS)) {
+      const t0 = performance.now();
+      const buf = await renderMood(m, 16, rng);
+      const s = measure(buf);
+      moodsOut[m] = { ...s, ms: Math.round(performance.now() - t0) };
+      rows.push([`mood ${m}`, `peak ${s.peak.toFixed(3)}`, `RMS ${s.rmsDb.toFixed(1)} dBFS`, `${moodsOut[m].ms} ms to render 16 s`, s.bad || s.peak >= 0.999 || s.rms < 0.005]);
+    }
+    const tuning = [];
+    for (const [inst, midi] of [['lyre', 45], ['lyre', 57], ['lyre', 64], ['lyre', 69], ['aulos', 62], ['aulos', 74], ['syrinx', 72], ['horn', 45]]) {
+      const buf = await renderNote(inst, midi, 0.8);
+      const hz = estimatePitch(buf, 0.15, 0.55);
+      const cents = 1200 * Math.log2(hz / midiToHz(midi));
+      tuning.push({ inst, midi, hz, cents });
+      rows.push([`${inst} ${midi}`, `${hz.toFixed(1)} Hz`, `expected ${midiToHz(midi).toFixed(1)}`, `${cents.toFixed(1)} cents`, Math.abs(cents) > 10]);
+    }
+    document.getElementById('out').innerHTML = `<table><tr><th>What</th><th></th><th></th><th></th></tr>${rows.map((r) => `<tr class="${r[4] ? 'bad' : ''}"><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</table>`;
+    return { moods: moodsOut, tuning };
+  }
+  document.getElementById('run').onclick = () => check();
+  if (new URLSearchParams(location.search).get('check')) {
+    check().then((r) => { window.__result = r; window.__done = true; }).catch((e) => { window.__result = { error: String(e) }; window.__done = true; });
+  }
+</script>
+</body>
+</html>

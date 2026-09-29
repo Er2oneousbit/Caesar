@@ -70,6 +70,10 @@ try {
   await page.click('text=Found the city');
   await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   check('sandbox starts from the menu', true);
+  // The clicks above count as the player's first interaction: music may start.
+  await page.waitForTimeout(800);
+  const music = await page.evaluate(() => { const m = window.colonia.music; return { playing: m.playing, mood: m.mood, bars: m.barsPlayed, now: m.nowPlaying }; });
+  check('music starts after the first click, in the day mood', music.playing && music.mood === 'day' && music.bars > 0, JSON.stringify(music));
 
   // 3. Build with real input: road drag + housing drag near the map entrance
   const info = await page.evaluate(() => {
@@ -257,7 +261,22 @@ try {
   await page.click('label:has-text("Day and night") input');
   const dayOn = await page.evaluate(() => window.colonia.renderer.dayNightOn === true);
   check('settings switch day/night, seasons and weather', worldToggles && dayOff && dayOn, JSON.stringify({ worldToggles, dayOff, dayOn }));
+  const musicVol = await page.isVisible('text=Music volume');
+  await page.click('label:has-text("Music (M)") input');
+  const musicOff = await page.evaluate(() => window.colonia.music.enabled === false && !window.colonia.music.playing);
+  await page.click('label:has-text("Music (M)") input');
+  const musicOn = await page.evaluate(() => window.colonia.music.enabled === true);
+  check('settings: music switch and volume', musicVol && musicOff && musicOn, JSON.stringify({ musicVol, musicOff, musicOn }));
   await page.click('.modal button:has-text("Done")'); // closes the menus: back to the game
+  await page.keyboard.press('m');
+  const mOff = await page.evaluate(() => window.colonia.settings.music === false && window.colonia.music.enabled === false);
+  await page.keyboard.press('m');
+  const mOn = await page.evaluate(() => window.colonia.settings.music === true);
+  check('M key switches the music off and on', mOff && mOn);
+  // The synthesized music itself: every mood rendered offline, measured.
+  const mc = await page.evaluate(() => window.colonia.musicSelfCheck(4));
+  const mcOk = Object.values(mc).every((m) => !m.bad && m.peak > 0.02 && m.peak < 0.99 && m.rmsDb > -45);
+  check('every music mood renders: audible, not clipping', mcOk, Object.entries(mc).map(([k, v]) => `${k} ${v.rmsDb}dB/${v.peak}`).join(', '));
   const savedNow = await page.evaluate(() => ({ b: window.colonia.game.buildings.size }));
   await page.keyboard.press('F5');
   // Leaving the page writes the autosave slot (localStorage).

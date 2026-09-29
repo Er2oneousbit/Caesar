@@ -28,6 +28,7 @@ export const KEY_HELP = [
   ['Left drag (no tool)', 'Scroll the map; let go while moving to fling it'],
   ['Right click', 'Cancel tool / close panel'],
   ['Space or P', 'Pause / resume'],
+  ['M', 'Music on / off'],
   ['1 2 3 4', 'Game speed 1x, 2x, 3x, 5x'],
   ['H', 'Housing tool'],
   ['R', 'Road tool'],
@@ -320,6 +321,7 @@ export class Input {
       case 'r': case 'R': a.ui.selectTool('road'); break;
       case 'x': case 'X': case 'Delete': a.ui.selectTool('clear'); break;
       case 'u': case 'U': a.undo(); break;
+      case 'm': case 'M': a.toggleMusic(); break;
       case 'o': a.cycleOverlay(1); break;
       case 'O': a.setOverlay('none'); break;
       case '+': case '=': this.app.renderer.camera.zoomStep(1); break;

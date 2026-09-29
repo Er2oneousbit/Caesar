@@ -10,7 +10,7 @@ How Colonia is put together, for whoever touches the code next.
  index.html |  main.js -> App (app.js) ---- Renderer (render/*)  canvas       |
  or dist/   |               |  \-------- UI (ui/*)            DOM widgets    |
             |               |  \-------- Input (input/*)      mouse/touch/keys|
-            |               |  \-------- Sfx (audio/*)        WebAudio       |
+            |               |  \-------- Sfx, Music (audio/*) WebAudio       |
             +---------------|-------------------------------------------------+
                             v
             +-------------- runs anywhere (browser AND Node) ----------------+
@@ -105,6 +105,16 @@ Everything is serializable JSON (typed arrays go through base64), see `core/save
 * **Coverage hints**: clicking a well/fountain/reservoir, or placing one, paints its supply area (dark blue) over the area already covered by that kind (pale blue, read from the sim's water layer).
 * **Military layer** (`militaryArt.js`): walls/gates are cached sprites keyed by their neighbor mask (like aqueducts); soldiers, raiders, arrows, sling stones and rally flags are drawn live each frame and depth-sorted with everything else.
 
+## Audio (`audio/`)
+
+* **Sound effects** (`sfx.js`): a few oscillators or a noise burst per sound, created on the first click (browsers only allow sound after a user gesture). The app suspends the audio context while the tab is hidden.
+* **Music** is generated, never recorded, in three layers:
+  * `composer.js` writes the notes and nothing else (pure, deterministic for a random source, tested in node). A `Piece` has a mood (tempo range, meters, modes, keys, lead instrument, drum and lyre styles, silence after it), a form (intro, A, A2, B, A3, outro), a one-bar theme that returns varied in the A sections, harmonies with perfect fifths under a drone, and melodies that move mostly by step, put chord tones on strong beats and long notes, and end phrases on the tonic or the fifth. `nextBar()` returns timed events (`{ t, dur, inst, midi, vel, pan }`).
+  * `instruments.js` synthesizes them: Karplus-Strong lyre (cached per note, tuned with `playbackRate`), reed pipe, pan flute, drone, frame drum, horn, sistrum, plus a generated reverb and a gentle high-pass. `Studio` holds what all pieces share; each piece plays through its own `Band` so it can fade out while the next begins.
+  * `music.js` schedules bars half a second ahead on the audio clock (look-ahead scheduling: steady timing even when frames stutter), switches pieces at once when the mood changes, leaves silence between calm pieces, and can render any mood offline (`renderMood`) for WAV export and tests.
+* The app picks the mood every frame (`App.musicMood()`): raiders on the map, then a recent festival, then night (the sky's lamps) or day; the main menu has its own. Victory plays festival music, defeat the night music.
+* Checking what you cannot hear: `tests/e2e/music.html` renders every mood and measures peak and loudness and each instrument's tuning; the smoke test runs `App.musicSelfCheck()` in the built game.
+
 ## Adding things
 
 * **A new building**: add an entry to `data/buildings.js` (pick an existing `kind` if possible), add an art function in `render/buildingArt.js` (`ART` map, and a height in `HEIGHT`), unlock it in `data/scenarios.js`. If it needs new behavior, add a case in `Game.updateBuilding()` and a module in `sim/`. Draw windows and doors with `windows()` / `door()` and they light up at night by themselves; torches go in `TORCHES` (`render/lighting.js`), flags in `FLAG_SPECS` (drawn with `flagPoles()`). Check the result in `tests/e2e/artsheet.html` and `tests/e2e/render.html` (`time=0.8` for night).
@@ -116,7 +126,7 @@ Everything is serializable JSON (typed arrays go through base64), see `core/save
 
 ## Testing
 
-* `npm test`: 37 node:test tests (`tests/sim.test.mjs` core city, `tests/military.test.mjs`, `tests/trade.test.mjs`) drive the real sim through the public construction API.
-* `npm run test:e2e`: 29 checks; the build is opened in headless Chromium and played with real mouse/keyboard input: building, advisors, a garrison with deploy-by-click, a raid alert, the empire map, autosave on page hide, save + reload + load, and a phone layout.
+* `npm test`: 63 node:test tests: `tests/sim.test.mjs` (core city), `tests/military.test.mjs` and `tests/trade.test.mjs` drive the real sim through the public construction API; `tests/render.test.mjs` covers the camera, sprite cache, sky, seasons, weather and terrain blending; `tests/music.test.mjs` the composer.
+* `npm run test:e2e`: 40 checks; the build is opened in headless Chromium and played with real mouse/keyboard input: building, advisors, a garrison with deploy-by-click, a raid alert, the empire map, smooth zoom, night lights, weather, settings, music (starts after the first click, M key, every mood rendered and measured), autosave on page hide, save + reload + load, and a phone layout.
 * CI (`.github/workflows/ci.yml`) runs both, and fails if `dist/colonia.html` is not the output of `npm run build` (the build is byte-for-byte reproducible).
 * `npm run sim`: prints monthly stats (population, jobs, mood, fed %, granary/market stock, treasury, house tiers) for a scripted demo city.

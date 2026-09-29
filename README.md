@@ -7,7 +7,7 @@
 
 An original, open-source browser city builder in the spirit of **Caesar III**: lay out roads, settle families, keep them fed, safe, faithful and entertained, and watch tents grow into palaces as walkers carry services through the streets. Trade with the empire by caravan and by ship, and raise legions, archers and cavalry (on horses you breed yourself) to hold the walls when the raiders come.
 
-Everything is made from scratch: the art is drawn procedurally in code, the sounds are synthesized, and all names and text are original. No files, graphics, music or text from any commercial game are used. (If you want the *original* Caesar III, you need to own it; the open-source [Julius](https://github.com/bvschaik/julius) engine runs it on modern systems.)
+Everything is made from scratch: the art is drawn procedurally in code, the sounds and music are synthesized live (the music is composed on the fly, so it never loops), and all names and text are original. No files, graphics, music or text from any commercial game are used. (If you want the *original* Caesar III, you need to own it; the open-source [Julius](https://github.com/bvschaik/julius) engine runs it on modern systems.)
 
 ---
 
@@ -55,6 +55,7 @@ The city lives through the day and the year, all drawn in code:
 * **Weather.** Clouds, rain, thunderstorms (with thunder) and, in winter, snow. Purely visual: it never affects the city.
 * **Animation.** Flags and banners flutter, shoppers browse stocked markets, crowds fill theaters and arenas during shows, smiths throw sparks, altar fires flicker, forests sway, fountains spray, clouds and birds drift over.
 * **Smooth camera.** Zoom eases toward the cursor, a fast drag flings the map, and jumping to a message or the entrance glides there.
+* **Music.** An original soundtrack composed live as you play, in the old modes (dorian, phrygian, mixolydian...), played by synthesized lyre, reed pipes, pan flute, frame drums and horns. It follows the city: calm melodies while you build, quiet pan flute at night, merry tunes after a festival, war drums and horn calls when raiders attack. It never repeats. Press **M** to switch it off, or set its volume in *Settings*.
 
 Each of these can be switched off in *Settings*; the system's *reduce motion* preference stops the decorative motion (no falling rain or lightning flashes).
 
@@ -68,6 +69,7 @@ Each of these can be switched off in *Settings*; the system's *reduce motion* pr
 | Left click | Inspect / place |
 | Right click | Cancel tool / close panel |
 | Space or P | Pause |
+| M | Music on / off |
 | 1 2 3 4 | Speed 1x 2x 3x 5x |
 | H / R / X | Housing / Road / Clear tool |
 | Ctrl+Z | Undo last construction (full refund, for a few days) |
@@ -99,7 +101,7 @@ Append to the address, for example `dist/colonia.html?debug=1&seed=42&skipmenu=1
 | `raids=off\|occasional\|frequent` | Override raids for new games |
 | `mute=1` | Sound off |
 
-**Debug console** (`` ` ``): `help`, `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army` (forts, supplies, raid schedule), `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `weather storm` (clear, cloudy, rain, storm, snow), `sky 0.8` (freeze the time of day: 0.3 noon, 0.67 sunset, 0.8 night; `sky off` lets it run), `loglevel debug`.
+**Debug console** (`` ` ``): `help`, `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army` (forts, supplies, raid schedule), `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `weather storm` (clear, cloudy, rain, storm, snow), `sky 0.8` (freeze the time of day: 0.3 noon, 0.67 sunset, 0.8 night; `sky off` lets it run), `music` (status; `music next`, `music mood danger`, `music mood auto`, `music check`, `music wav day 60` downloads a WAV), `loglevel debug`.
 
 In browser dev tools, `window.colonia` is the running app (`colonia.game` is the simulation).
 
@@ -111,7 +113,7 @@ In browser dev tools, `window.colonia` is the running app (`colonia.game` is the
 npm install          # esbuild (only needed for building)
 npm run dev          # dev server with live source files
 npm test             # headless simulation tests (node:test, no browser)
-npm run build        # -> dist/colonia.html (single file, ~380 KB, reproducible)
+npm run build        # -> dist/colonia.html (single file, ~405 KB, reproducible)
 npm run test:e2e     # drives the built game in headless Chromium (needs Playwright)
 npm run sim -- --years 5 --type lakes    # headless balance simulation
 npm run screenshots  # render the demo city to tests/e2e/out/*.png (day, night, seasons, weather...)
@@ -141,11 +143,13 @@ src/
   ui/                   DOM widgets: HUD, sidebar, info panel, advisors, empire map,
                         menus, help
   input/                mouse / touch / keyboard
-  audio/                synthesized sound effects
+  audio/                synthesized sound effects; generative music: composer.js
+                        (writes the notes), instruments.js (synth), music.js (player)
   dev/demoCity.js       builds a sample city through the public construction API
 scripts/                serve.mjs, build.mjs, simulate.mjs, run.ps1, run.sh
-tests/                  *.test.mjs (sim, military, trade, render), e2e/smoke.mjs,
-                        e2e/screenshots.mjs, e2e/render.html, e2e/artsheet.html
+tests/                  *.test.mjs (sim, military, trade, render, music), e2e/smoke.mjs,
+                        e2e/screenshots.mjs, e2e/render.html, e2e/artsheet.html,
+                        e2e/music.html (listen to each mood, check levels and tuning)
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md
 .github/                CI workflow, issue and pull request templates
 LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
@@ -160,6 +164,7 @@ Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit, 
 | "This is the developer version" page | You opened `index.html` from disk. Use `dist/colonia.html` or `npm run dev`. |
 | Titles use a plain serif font | The Cinzel web font could not load (offline). Purely cosmetic. |
 | Saves disappeared | Saves live in the browser's local storage for that exact file/URL (a different browser, a private window or clearing site data means no saves). Use *Save game > Export to file* or *Copy save data* for backups. |
+| No music | Browsers only allow sound after your first click or key press. Check *Settings* (Music, Music volume, Mute all sounds) and press M. |
 | Night is too dark, or rain distracts | *Settings*: switch off *Day and night* or *Weather* (each is purely visual). |
 | Zooming out feels slow on an old computer | Switch off *Ambient effects* and *Weather* in *Settings*; the far zoom levels draw thousands of tiles. |
 | "Could not save: storage is full" | Delete old slots in *Load game* (each save shows its size), or export them to files first. |

@@ -19,7 +19,7 @@
 import { CONFIG } from './config.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
-import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile, serializeGame } from './core/save.js';
+import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile, serializeGame, canDownloadFiles } from './core/save.js';
 import { Renderer } from './render/renderer.js';
 import { OVERLAYS } from './render/overlays.js';
 import { UI } from './ui/ui.js';
@@ -27,13 +27,15 @@ import { h } from './ui/dom.js';
 import { victoryMenu, defeatMenu, briefing, latestSave } from './ui/menus.js';
 import { Input } from './input/input.js';
 import { Sfx } from './audio/sfx.js';
+import { Music, renderMood, encodeWav, measure } from './audio/music.js';
+import { MOODS } from './audio/composer.js';
 import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLast } from './sim/construction.js';
 import { findScenario, sandboxScenario, SCENARIOS } from './data/scenarios.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
-import { deployFort } from './sim/military.js';
+import { deployFort, enemyCount } from './sim/military.js';
 
-const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true };
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true };
 
 /** Does the player's system ask for less motion (accessibility setting)? */
 function prefersReducedMotion() {
@@ -69,6 +71,8 @@ export class App {
     this.settings = readJson(`${CONFIG.STORAGE_PREFIX}settings`, DEFAULT_SETTINGS);
     this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [] });
     this.sfx = new Sfx();
+    this.music = new Music();
+    this.musicOverride = null; // mood after victory/defeat
     this.canvas = h('canvas', { id: 'view' });
     root.appendChild(this.canvas);
     this.renderer = new Renderer(this.canvas);
@@ -92,7 +96,22 @@ export class App {
     this.applySettings();
     // Autosave when the tab is hidden or the page is being closed/reloaded.
     // localStorage writes are synchronous, so this finishes before the page goes.
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this.autosaveNow('hidden'); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.autosaveNow('hidden');
+      // Hidden tab: pause all sound (the music carries on when it comes back).
+      const ctx = this.sfx.ctx;
+      if (ctx) {
+        if (document.visibilityState === 'hidden') ctx.suspend().catch(() => {});
+        else if (this.audioUnlocked) ctx.resume().catch(() => {});
+      }
+    });
+    // Browsers only allow sound after the player interacts: start the audio
+    // (and the music) on the first click, tap or key press anywhere.
+    this.audioUnlocked = false;
+    const unlock = () => this.unlockAudio();
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
+    this.unlockHandlers = unlock;
     window.addEventListener('pagehide', () => this.autosaveNow('pagehide'));
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -130,6 +149,9 @@ export class App {
     const s = this.settings;
     this.sfx.setVolume(s.volume);
     this.sfx.setMuted(s.muted || this.flags.mute);
+    this.music.setVolume(s.musicVolume ?? DEFAULT_SETTINGS.musicVolume);
+    this.music.setEnabled(s.music !== false);
+    this.music.setMuted(s.muted || this.flags.mute);
     // Decorative motion: clouds/birds follow the setting; swaying trees, glints
     // and build animations also stop when the system asks for reduced motion.
     const reduced = prefersReducedMotion();
@@ -191,6 +213,7 @@ export class App {
     this.cancelDeploy();
     this.menuGame = null;
     this.game = game;
+    this.musicOverride = null;
     this.acc = 0;
     this.renderer.attach(game);
     if (cameraState) this.renderer.camera.restore(cameraState);
@@ -245,12 +268,83 @@ export class App {
     if (!this.progress.completed.includes(id)) this.progress.completed.push(id);
     writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
     this.sfx.play('victory');
+    this.musicOverride = 'festival';
     this.ui.showModal(victoryMenu(this), { pause: true, kind: 'outcome' });
   }
 
   onDefeat(reason) {
     this.sfx.play('wrath');
+    this.musicOverride = 'night';
     this.ui.showModal(defeatMenu(this, reason), { pause: true, kind: 'outcome' });
+  }
+
+  // ------------------------------------------------------------------ audio
+  /** First user gesture: create/resume the audio context and start the music. */
+  unlockAudio() {
+    const ctx = this.sfx._ensure();
+    if (!ctx) return;
+    this.music.attach(ctx);
+    // Some key presses (Escape...) do not count as a real interaction, so keep
+    // listening until the browser has actually let the sound start.
+    const done = () => {
+      if (ctx.state !== 'running' || this.audioUnlocked) return;
+      this.audioUnlocked = true;
+      window.removeEventListener('pointerdown', this.unlockHandlers, true);
+      window.removeEventListener('keydown', this.unlockHandlers, true);
+    };
+    if (ctx.state === 'running') done();
+    else ctx.resume().then(done).catch(() => {});
+  }
+
+  /**
+   * The music's mood for what is happening: raiders on the map beat
+   * everything, then a recent festival, then night or day.
+   */
+  musicMood() {
+    const g = this.game;
+    if (!g) return 'menu';
+    if (this.musicOverride) return this.musicOverride;
+    if (g.military && (g.military.active || enemyCount(g) > 0)) return 'danger';
+    if (g.city.festivalBoost >= 2.5) return 'festival';
+    if (this.renderer.sky.lamps >= 0.6) return 'night';
+    return 'day';
+  }
+
+  /** M key / Settings: music on or off. */
+  toggleMusic() {
+    this.settings.music = this.settings.music === false;
+    this.applySettings();
+    this.ui.messages.push({ text: `Music ${this.settings.music ? 'on' : 'off'} (M).`, level: 'info', date: '' });
+  }
+
+  /**
+   * Render a few seconds of every mood offline and measure it: peak and RMS
+   * loudness. Catches silent, clipping or broken music (console `music check`,
+   * browser smoke test).
+   * @returns {Promise<Object<string,{peak:number, rmsDb:number, bad:boolean}>>}
+   */
+  async musicSelfCheck(seconds = 6) {
+    const out = {};
+    for (const mood of Object.keys(MOODS)) {
+      const m = measure(await renderMood(mood, seconds));
+      out[mood] = { peak: Math.round(m.peak * 1000) / 1000, rmsDb: Math.round(m.rmsDb * 10) / 10, bad: m.bad };
+    }
+    return out;
+  }
+
+  /**
+   * Render `seconds` of a mood and download it as a WAV file (console).
+   * @returns {Promise<string>} a status line
+   */
+  async exportMusic(mood, seconds) {
+    const buf = await renderMood(mood, seconds);
+    const blob = encodeWav(buf);
+    if (!canDownloadFiles()) return `Rendered ${seconds} s of ${mood} music (${Math.round(blob.size / 1024)} KB), but downloads are not available in this embedded version.`;
+    const a = h('a', { href: URL.createObjectURL(blob), download: `colonia-${mood}.wav` });
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    return `Saved colonia-${mood}.wav (${seconds} s, ${Math.round(blob.size / 1024)} KB).`;
   }
 
   /** Leave the current game and show the main menu over a living demo city. */
@@ -258,6 +352,7 @@ export class App {
     for (const u of this.gameUnsub) u();
     this.gameUnsub = [];
     this.game = null;
+    this.musicOverride = null;
     this.input.setTool(null);
     this.ui.closeModal();
     this.ui.showMainMenu();
@@ -512,6 +607,7 @@ export class App {
       if (!this.game && this.menuGame) this.renderer.camera.panScreen(-dt * 12, -dt * 4);
       this.input.update(dt);
       this.renderer.render(alpha, dt);
+      this.music.setMood(this.musicMood());
       this.ui.update(dt, now);
       // performance counters
       const p = this.perf;

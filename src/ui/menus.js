@@ -196,12 +196,16 @@ export function saveMenu(app) {
 export function settingsMenu(app) {
   const s = app.settings;
   const vol = h('b', {}, `${Math.round(s.volume * 100)}%`);
+  const mvol = h('b', {}, `${Math.round((s.musicVolume ?? 0.35) * 100)}%`);
   const check = (key, label, help) => h('label', { class: 'row', style: { margin: '6px 0' } },
     h('input', { type: 'checkbox', checked: !!s[key], onchange: (e) => { s[key] = e.target.checked; app.applySettings(); } }),
     h('span', {}, label, help ? h('div', { class: 'muted', style: { fontSize: '12px' } }, help) : null));
   return modal('Settings', [
-    h('div', { class: 'field' }, h('label', {}, 'Sound volume'), vol,
+    h('div', { class: 'field' }, h('label', {}, 'Sound effects volume'), vol,
       h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: s.volume, oninput: (e) => { s.volume = Number(e.target.value); vol.textContent = `${Math.round(s.volume * 100)}%`; app.applySettings(); } })),
+    check('music', 'Music (M)', 'Original music played live by synthesized lyre, pipes and drums, changing with the day, the night, festivals and raids.'),
+    h('div', { class: 'field' }, h('label', {}, 'Music volume'), mvol,
+      h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: s.musicVolume ?? 0.35, 'aria-label': 'Music volume', oninput: (e) => { s.musicVolume = Number(e.target.value); mvol.textContent = `${Math.round(s.musicVolume * 100)}%`; app.applySettings(); } })),
     check('muted', 'Mute all sounds'),
     check('edgeScroll', 'Scroll when the mouse touches the screen edge'),
     check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months and when you leave the page`, 'Uses the "Autosave" slot in this browser\'s local storage.'),
@@ -218,7 +222,7 @@ export function settingsMenu(app) {
 
 export function creditsMenu(app) {
   return modal('Credits', [
-    h('p', {}, `${CONFIG.GAME_TITLE} is an original city builder inspired by the classic Roman city-building games of the late 1990s. All art is drawn procedurally in code, all sounds are synthesized, and all text is original.`),
+    h('p', {}, `${CONFIG.GAME_TITLE} is an original city builder inspired by the classic Roman city-building games of the late 1990s. All art is drawn procedurally in code, the sound effects and music are synthesized live (the music is composed as you play), and all text is original.`),
     h('p', {}, 'Developed with Claude (Anthropic) using Claude Code.'),
     h('p', {}, 'Roman gods, places and history belong to everyone.'),
     h('p', { class: 'muted' }, FOOTER),

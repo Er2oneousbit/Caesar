@@ -17,6 +17,7 @@ import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../si
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
 import { WEATHER } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
+import { MOODS } from '../audio/composer.js';
 import { log } from '../core/debug.js';
 
 export const CONSOLE_HELP = [
@@ -40,6 +41,10 @@ export const CONSOLE_HELP = [
   ['goto <x> <y>', 'Center the view on a tile'],
   ['weather <kind>', 'Change the weather now: clear | cloudy | rain | storm | snow'],
   ['sky <0-1>|off', 'Freeze the time of day (0.3 noon, 0.67 sunset, 0.8 night) or let it run'],
+  ['music [on|off|next]', 'Music status, switch it, or skip to a new piece'],
+  ['music mood <m>|auto', 'Force a mood: menu, day, night, danger, festival (auto = follow the game)'],
+  ['music wav [mood] [s]', 'Render music offline and download it as a WAV file (default: day, 60 s)'],
+  ['music check', 'Render every mood offline and print its loudness (finds silent or clipping music)'],
   ['loglevel <lvl>', 'error | warn | info | debug'],
   ['clear', 'Clear the console'],
 ];
@@ -254,6 +259,33 @@ export class DebugConsole {
         if (!(t >= 0 && t <= 1)) throw new Error('usage: sky <0-1> | off');
         r.fixedTime = t;
         return `Time of day frozen at ${t} (sky off to release).`;
+      }
+      case 'music': {
+        const mu = app.music;
+        const sub = (args[0] || '').toLowerCase();
+        if (sub === 'on' || sub === 'off') {
+          app.settings.music = sub === 'on';
+          app.applySettings();
+          return mu.describe();
+        }
+        if (sub === 'next') { mu.skip(); return 'Starting a new piece.'; }
+        if (sub === 'mood') {
+          const m = (args[1] || '').toLowerCase();
+          if (m !== 'auto' && !MOODS[m]) throw new Error(`usage: music mood ${Object.keys(MOODS).join('|')}|auto`);
+          mu.force(m);
+          return m === 'auto' ? 'The music follows the game again.' : `Music mood forced to ${m} (music mood auto to release).`;
+        }
+        if (sub === 'check') {
+          app.musicSelfCheck().then((r) => this.print(Object.entries(r).map(([k, v]) => `${k.padEnd(9)} peak ${v.peak.toFixed(2)}  ${v.rmsDb} dBFS${v.bad ? '  BROKEN' : ''}`).join('\n'))).catch((err) => this.print(`Error: ${err.message}`));
+          return 'Rendering every mood...';
+        }
+        if (sub === 'wav') {
+          const mood = MOODS[args[1]] ? args[1] : 'day';
+          const secs = Math.max(5, Math.min(300, Number(args[2]) || Number(args[1]) || 60));
+          app.exportMusic(mood, secs).then((msg) => this.print(msg)).catch((err) => this.print(`Error: ${err.message}`));
+          return `Rendering ${secs} s of ${mood} music...`;
+        }
+        return mu.describe();
       }
       case 'loglevel':
         log.setLevel(args[0]);

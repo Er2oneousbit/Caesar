@@ -8,7 +8,7 @@ By contributing you agree that your work is released under the project's [MIT Li
 
 ## The one hard rule: original work only
 
-Colonia is inspired by *Caesar III*, but it contains **nothing** from it or any other commercial game: no graphics, sounds, music, maps, text or data files, and no copied code from decompiled games. All art is drawn in code (`src/render/*Art.js`), sounds are synthesized (`src/audio/sfx.js`), and all names and text are written for this project.
+Colonia is inspired by *Caesar III*, but it contains **nothing** from it or any other commercial game: no graphics, sounds, music, maps, text or data files, and no copied code from decompiled games. All art is drawn in code (`src/render/*Art.js`), sounds are synthesized (`src/audio/sfx.js`), the music is generated and synthesized live (`src/audio/composer.js`, `instruments.js`, `music.js`; no melodies from other works, please), and all names and text are written for this project.
 
 Please keep it that way. Pull requests that add extracted or traced assets will be closed. Roman history, gods and place names belong to everyone and are fine.
 
@@ -28,6 +28,8 @@ npm run dev        # dev server at http://localhost:8080/ with live source files
 Handy URL flags while developing: `?debug=1&skipmenu=1&unlockall=1&seed=42`, `?scenario=c4`, `?raids=frequent`. The debug console (backtick key) has `demo`, `invade`, `army`, `days 120`, `money 5000` and more. See the in-game help (F1 → Debug).
 
 Working on art? With `npm run dev` running, open `/tests/e2e/artsheet.html` (every home in all 8 looks, flags) and `/tests/e2e/render.html?zoom=3&time=0.8` (the demo city; `time`, `month`, `weather`, `look`, `busy` and more are listed at the top of the file). The console's `sky 0.8` and `weather storm` help check night lights and weather in a running game.
+
+Working on the music? Open `/tests/e2e/music.html` with the dev server: play each mood, and *Run the check* renders every mood offline and reports peak level, loudness and each instrument's tuning in cents. `npm test` checks the composer (notes in the mode and in range, cadences, form). In a game, the console's `music mood danger`, `music next` and `music wav day 60` help too.
 
 ### Everyday commands
 

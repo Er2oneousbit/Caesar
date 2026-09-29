@@ -10,29 +10,54 @@
  *   startYear                     negative = BC
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
  *   unlocks: 'all' | string[]     building keys + tool keys available
- *   partners: string[]            trade partner ids (see TRADE_PARTNERS)
+ *   partners: string[]            trade partner ids (see TRADE_PARTNERS). Only list
+ *                                 sea partners on maps with navigable water
+ *                                 (river, coast, or a big lake at the map edge)
  *   requests: boolean             Emperor makes requests
  *   hints: string[]               tips shown at start
  * ----------------------------------------------------------------------------
  */
 
 /**
- * Trade partners. `sells` = goods the city can IMPORT from them (units/year),
- * `buys` = goods the city can EXPORT to them (units/year).
+ * Trade partners.
+ *   route  'land': caravans walk in along the Imperial road to a warehouse.
+ *          'sea':  merchant ships sail in from the map edge to a Dock (needs
+ *                  navigable water: a river, the coast or a big edge lake).
+ *   sells  goods the city can IMPORT from them (units/year)
+ *   buys   goods the city can EXPORT to them (units/year)
+ *   pos    [x, y] on the Trade advisor's empire map (0..100 x 0..60)
+ *   color  sail / banner color
  */
 export const TRADE_PARTNERS = Object.freeze({
-  tarraco: { name: 'Tarraco', openCost: 500, sells: { timber: 1200, olives: 1000 }, buys: { wheat: 1500, pottery: 800 } },
-  massilia: { name: 'Massilia', openCost: 700, sells: { clay: 1200, wine: 600 }, buys: { furniture: 800, vegetables: 1200, pottery: 600 } },
-  lugdunum: { name: 'Lugdunum', openCost: 800, sells: { iron: 1000, meat: 1200 }, buys: { oil: 800, wine: 800, fruit: 1000 } },
-  carthago: { name: 'Carthago', openCost: 1000, sells: { fruit: 1500, grapes: 1200, furniture: 500 }, buys: { weapons: 800, marble: 600, timber: 1000 } },
-  corinthus: { name: 'Corinthus', openCost: 1200, sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000 } },
-  aquileia: { name: 'Aquileia', openCost: 600, sells: { pottery: 600, vegetables: 1500 }, buys: { clay: 1200, olives: 1000, meat: 1000 } },
+  tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: [14, 24], color: '#b8573a', sells: { timber: 1200, olives: 1000 }, buys: { wheat: 1500, pottery: 800 } },
+  massilia: { name: 'Massilia', route: 'sea', openCost: 700, pos: [30, 17], color: '#3f6fb0', sells: { clay: 1200, wine: 600 }, buys: { furniture: 800, vegetables: 1200, pottery: 600 } },
+  lugdunum: { name: 'Lugdunum', route: 'land', openCost: 800, pos: [30, 6], color: '#6d7480', sells: { iron: 1000, meat: 1200, arrows: 400 }, buys: { oil: 800, wine: 800, fruit: 1000 } },
+  aquileia: { name: 'Aquileia', route: 'land', openCost: 600, pos: [55, 8], color: '#7a9c5a', sells: { pottery: 600, vegetables: 1500 }, buys: { clay: 1200, olives: 1000, meat: 1000 } },
+  capua: { name: 'Capua', route: 'land', openCost: 700, pos: [57, 25], color: '#a38b3d', sells: { wheat: 1500, wine: 600 }, buys: { pottery: 800, furniture: 600, iron: 600 } },
+  carthago: { name: 'Carthago', route: 'sea', openCost: 1000, pos: [46, 42], color: '#8a3a9a', sells: { fruit: 1500, grapes: 1200, furniture: 500 }, buys: { weapons: 800, marble: 600, timber: 1000 } },
+  cirta: { name: 'Cirta', route: 'sea', openCost: 900, pos: [36, 49], color: '#c9962e', sells: { horses: 600, fruit: 800 }, buys: { weapons: 600, pottery: 800, oil: 600 } },
+  corinthus: { name: 'Corinthus', route: 'sea', openCost: 1200, pos: [76, 30], color: '#2f8a8a', sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000, arrows: 600 } },
+  alexandria: { name: 'Alexandria', route: 'sea', openCost: 1400, pos: [88, 50], color: '#d6ab3c', sells: { wheat: 2500, vegetables: 1000 }, buys: { wine: 800, oil: 800, weapons: 600, furniture: 600 } },
+});
+
+/** Where the player's province sits on the empire map. */
+export const HOME_POS = Object.freeze([48, 22]);
+
+/**
+ * Invasion settings. `first` = months until the first raid, `interval` = months
+ * between raids, `base` = raiders in the first warband (grows with the city).
+ */
+export const INVASION_PRESETS = Object.freeze({
+  none: null,
+  occasional: { first: 30, interval: [24, 36], base: 5 },
+  frequent: { first: 18, interval: [12, 20], base: 7 },
 });
 
 const BASIC = ['house', 'road', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_jupiter', 'garden'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_vesta', 'forum', 'statue_small', 'plaza'];
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit'];
-const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'amphitheater', 'gladiator_school', 'farm_olive', 'oil_ws', 'farm_pig'];
+const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'amphitheater', 'gladiator_school', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',
+  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall'];
 
 export const SCENARIOS = Object.freeze([
   {
@@ -84,9 +109,12 @@ export const SCENARIOS = Object.freeze([
     funds: 8000, startYear: -240,
     goals: { population: 2000, culture: 30, prosperity: 25, peace: 10, favor: 0 },
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
+    military: { first: 36, interval: [30, 40], base: 4 },
     hints: [
       'Bridges must start and end on land and run straight across water.',
+      'Massilia trades by sea: build a Dock on the river bank. Tarraco and Lugdunum send caravans along the Imperial road.',
       'Insulae need furniture; Upper Insulae also need oil.',
+      'Raiders roam these hills. A Barracks trains soldiers for your forts: legionaries need weapons (Weaponsmith), archers need arrows (Fletcher, from timber).',
     ],
   },
   {
@@ -95,8 +123,12 @@ export const SCENARIOS = Object.freeze([
     map: { size: 112, type: 'coast', seed: 'portus-mercatorum' },
     funds: 9000, startYear: -225,
     goals: { population: 3000, culture: 40, prosperity: 35, peace: 20, favor: 40 },
-    unlocks: 'all', partners: ['massilia', 'lugdunum', 'carthago', 'corinthus'], requests: true,
-    hints: ['Villas need wine and three food types. Patricians do not work, but pay handsome taxes.'],
+    unlocks: 'all', partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
+    military: { first: 28, interval: [22, 32], base: 6 },
+    hints: [
+      'Villas need wine and three food types. Patricians do not work, but pay handsome taxes.',
+      'Cavalry needs horses. Breed them at a Horse Ranch on meadow (the herd grows over time), or import them from Cirta by sea.',
+    ],
   },
   {
     id: 'c6', name: 'Oasis Aurea', title: 'Sands of Gold',
@@ -104,8 +136,9 @@ export const SCENARIOS = Object.freeze([
     map: { size: 96, type: 'desert', seed: 'oasis-aurea' },
     funds: 10000, startYear: -210,
     goals: { population: 2500, culture: 35, prosperity: 30, peace: 20, favor: 35 },
-    unlocks: 'all', partners: ['carthago', 'corinthus', 'aquileia'], requests: true,
-    hints: ['Import food if the oases cannot feed everyone.'],
+    unlocks: 'all', partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
+    military: { first: 24, interval: [20, 30], base: 6 },
+    hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
   {
     id: 'c7', name: 'Urbs Magna', title: 'The Great City',
@@ -113,13 +146,14 @@ export const SCENARIOS = Object.freeze([
     map: { size: 128, type: 'lakes', seed: 'urbs-magna' },
     funds: 12000, startYear: -190,
     goals: { population: 6000, culture: 60, prosperity: 55, peace: 40, favor: 55 },
-    unlocks: 'all', partners: ['tarraco', 'massilia', 'lugdunum', 'carthago', 'corinthus', 'aquileia'], requests: true,
-    hints: ['Palatia need four gods, four health services and every entertainment venue.'],
+    unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
+    military: { first: 20, interval: [14, 22], base: 8 },
+    hints: ['Palatia need four gods, four health services and every entertainment venue.', 'Expect regular raids. Walls with gates, towers and a mixed army keep the capital safe.'],
   },
 ]);
 
 /** Sandbox settings template. The New Game screen fills in the blanks. */
-export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal' } = {}) {
+export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional' } = {}) {
   const fundsByDiff = { easy: 1.5, normal: 1, hard: 0.6 };
   return {
     id: 'sandbox', name: 'Sandbox', title: 'Free Build',
@@ -129,6 +163,8 @@ export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', f
     startYear: -300,
     goals: { population: 0, culture: 0, prosperity: 0, peace: 0, favor: 0 },
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
+    military: INVASION_PRESETS[invasions] ?? null,
+    invasions,
     difficulty,
     hints: ['Tip: press F1 for help at any time.'],
   };

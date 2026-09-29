@@ -5,9 +5,10 @@
  * where a cart should deliver its load.
  *
  * Delivery priority for a cart carrying good G:
- *   1. a workshop that consumes G and has room (raw materials go straight in)
- *   2. a granary that accepts G (food only)
- *   3. a warehouse that accepts G
+ *   1. a barracks that needs G to equip recruits (weapons, arrows, horses)
+ *   2. a workshop whose recipe uses G and has room (raw materials go straight in)
+ *   3. a granary that accepts G (food only)
+ *   4. a warehouse that accepts G
  * "Room" includes loads already on their way (reservations in b.incoming),
  * so two carts never race to fill the same last slot.
  * ----------------------------------------------------------------------------
@@ -15,6 +16,11 @@
 
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
+import { BUILDINGS } from '../data/buildings.js';
+import { militaryNeed, barracksHasRoom } from './military.js';
+
+/** Goods a barracks takes by cart (weapons, arrows, horses). */
+const BARRACKS_INPUTS = BUILDINGS.barracks.inputs;
 
 export function isStorage(b) {
   const k = b.def.kind;
@@ -56,8 +62,18 @@ export function receiveGoods(b, good, amount) {
     b.stock[good] += n;
     return n;
   }
-  if (kind === 'workshop' && b.def.consumes === good) {
+  if (kind === 'workshop' && b.def.recipe[good] !== undefined) {
     const room = Math.max(0, CONFIG.WORKSHOP_RAW_CAP - b.stock[good]);
+    const n = Math.min(room, amount);
+    b.stock[good] += n;
+    return n;
+  }
+  if (kind === 'dock' && b.stock[good] !== undefined) {
+    b.stock[good] += amount; // a dock cart came back with undeliverable cargo
+    return amount;
+  }
+  if (kind === 'barracks' && b.stock[good] !== undefined) {
+    const room = Math.max(0, b.def.inputCap - b.stock[good]);
     const n = Math.min(room, amount);
     b.stock[good] += n;
     return n;
@@ -81,10 +97,15 @@ export function takeGoods(b, good, amount) {
   return n;
 }
 
-/** Units of a good stored across all granaries/warehouses. */
+/** Does this building count as city storage (granaries, warehouses, dock quays)? */
+function holdsCityGoods(b) {
+  return isStorage(b) || b.def.kind === 'dock';
+}
+
+/** Units of a good stored across all granaries/warehouses (and goods waiting on dock quays). */
 export function cityStock(game, good) {
   let n = 0;
-  for (const b of game.buildings.values()) if (isStorage(b) && b.stock[good]) n += b.stock[good];
+  for (const b of game.buildings.values()) if (holdsCityGoods(b) && b.stock[good]) n += b.stock[good];
   return n;
 }
 
@@ -93,7 +114,7 @@ export function takeFromCity(game, good, amount) {
   let left = amount;
   for (const b of game.buildings.values()) {
     if (left <= 0) break;
-    if (!isStorage(b) || !b.stock[good]) continue;
+    if (!holdsCityGoods(b) || !b.stock[good]) continue;
     left -= takeGoods(b, good, left);
   }
   return amount - left;
@@ -107,10 +128,16 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
   const { pf, buildings } = game;
   const kind = GOODS[good]?.kind;
   const attempts = [];
+  if (BARRACKS_INPUTS.includes(good) && militaryNeed(game, good) > 0) {
+    attempts.push((id) => {
+      const b = buildings.get(id);
+      return b && barracksHasRoom(b, good, amount);
+    });
+  }
   if (kind === 'raw') {
     attempts.push((id) => {
       const b = buildings.get(id);
-      return b && b.def.kind === 'workshop' && b.def.consumes === good && b.stock[good] + b.incoming[good] + amount <= CONFIG.WORKSHOP_RAW_CAP;
+      return b && b.def.kind === 'workshop' && b.def.recipe[good] !== undefined && b.stock[good] + b.incoming[good] + amount <= CONFIG.WORKSHOP_RAW_CAP;
     });
   }
   if (kind === 'food') {

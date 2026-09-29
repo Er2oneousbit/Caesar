@@ -24,6 +24,7 @@ const CATEGORY_COLORS = {
   farms: [210, 190, 90],
   industry: [150, 110, 80],
   commerce: [200, 120, 60],
+  military: [170, 60, 50],
 };
 
 export class Minimap {
@@ -58,6 +59,7 @@ export class Minimap {
         const i = y * map.w + x;
         let c = MINIMAP_TERRAIN[map.terrain[i]];
         if (map.road[i]) c = [196, 176, 140];
+        if (map.wall[i]) c = [120, 112, 98];
         const bid = map.building[i];
         if (bid) {
           const b = game.buildings.get(bid);
@@ -111,6 +113,13 @@ export class Minimap {
     ctx.strokeStyle = '#fff5d6';
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(fx) + 0.5, Math.round(fy) + 0.5, Math.round((v.w / unit) * scale), Math.round((v.h / unit) * scale));
+    // soldiers (white) and raiders (red), drawn live every frame
+    for (const u of game.units.values()) {
+      const px = ox + (u.x - u.y + game.map.h - 1) * scale;
+      const py = oy + ((u.x + u.y) / 2) * scale;
+      ctx.fillStyle = u.side === 'enemy' ? '#ff3b2f' : '#f4f0e6';
+      ctx.fillRect(px - 1, py - 1, 2.5, 2.5);
+    }
     // entry/exit markers
     for (const [pt, col] of [[game.map.entry, '#6cf06c'], [game.map.exit, '#f06c6c']]) {
       const px = ox + (pt.x - pt.y + game.map.h - 1) * scale;

@@ -1,7 +1,7 @@
 /**
  * sim.test.mjs - headless simulation tests (node:test, no dependencies)
  * ----------------------------------------------------------------------------
- * Run:  npm test      (or: node --test tests/)
+ * Run:  npm test      (runs every tests/*.test.mjs file)
  *
  * These tests drive the real simulation through the same construction API the
  * player uses, so they catch regressions in the whole pipeline: map gen,
@@ -32,9 +32,9 @@ import { buildDemoCity } from '../src/dev/demoCity.js';
 
 log.setLevel('error');
 
-/** A small sandbox game on a known map. */
+/** A small sandbox game on a known map (no raids: military tests live in military.test.mjs). */
 function newGame(opts = {}) {
-  const scenario = sandboxScenario({ size: 64, type: opts.type || 'river', seed: opts.seed || 'test-seed' });
+  const scenario = sandboxScenario({ size: 64, type: opts.type || 'river', seed: opts.seed || 'test-seed', invasions: 'none' });
   return new Game({ scenario, flags: { unlockall: true, money: opts.money ?? 50000 } });
 }
 

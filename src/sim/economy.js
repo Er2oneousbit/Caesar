@@ -14,7 +14,7 @@
 import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 
-export const LEDGER_KEYS = ['taxes', 'exports', 'other', 'wages', 'imports', 'construction', 'tribute', 'festivals', 'gifts'];
+export const LEDGER_KEYS = ['taxes', 'exports', 'other', 'wages', 'imports', 'construction', 'tribute', 'festivals', 'gifts', 'military', 'plunder'];
 
 export function newLedger() {
   const l = {};
@@ -105,5 +105,6 @@ export function yearlyEconomy(game) {
 /** Net profit of a ledger (income minus spending). */
 export function ledgerNet(l) {
   if (!l) return 0;
-  return (l.taxes + l.exports + l.other) - (l.wages + l.imports + l.construction + l.tribute + l.festivals + l.gifts);
+  // `|| 0`: ledgers from older saves have no military/plunder rows.
+  return (l.taxes + l.exports + l.other) - (l.wages + l.imports + l.construction + l.tribute + l.festivals + l.gifts + (l.military || 0) + (l.plunder || 0));
 }

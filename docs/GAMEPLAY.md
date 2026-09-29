@@ -69,16 +69,74 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 | Timber Yard → Carpenter → Furniture | within 2 tiles of forest |
 | Olive Grove → Oil Press → Oil | grove on meadow |
 | Vineyard → Winery → Wine | vineyard on meadow |
-| Iron Mine → Weaponsmith → Weapons | mine touching rocks (export good) |
+| Iron Mine → Weaponsmith → Weapons | mine touching rocks (export good; legionaries need 50 each) |
+| Timber Yard + Iron Mine → Fletcher → Arrows | 100 timber + 50 iron per 100 arrows (archers need 50 each) |
+| Horse Ranch → Horses | ranch on meadow (1 horse = 100 units; cavalry need 1 each) |
 | Marble Quarry → Marble | touching rocks (export good) |
+
+Workshops follow a **recipe**: most use 100 units of one raw material per 100-unit batch; the Fletcher needs both timber and iron and waits until it has both.
 
 ## Money
 
 * **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.
 * **Taxes:** at the default 7% rate each resident pays `2 x tier tax level` Dn per year (a Domus resident ~6, an Insula resident ~10, a Palatium resident ~32). The rate scales this linearly. Only homes a tax collector visited pay.
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
-* **Trade:** open a route once, then caravans come every 32-56 days to a staffed warehouse on the road network. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year.
+* **Trade:** open a route once (Trade advisor), then a caravan or ship comes every 32-56 days. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
+* **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").
 * Construction needs money in the treasury; running wages into debt costs 3 favor a month.
+
+## Trade
+
+| | Land route | Sea route |
+|---|---|---|
+| Who comes | a caravan (with a mule) | a merchant ship, sail striped in the partner's color |
+| From | the Imperial road entrance | the map edge where the river/sea leaves the map |
+| To | the nearest staffed warehouse on the road network | a free, staffed **Dock** |
+| Per visit | up to 800 units each way | up to 1,200 units each way |
+| Imports go | straight into that warehouse | onto the dock's quay (1,600 units); dock workers cart them to warehouses, granaries or workshops |
+| Exports come from | that warehouse | staffed warehouses within 60 road tiles of the dock |
+
+* A **Dock** (3x3, 10 workers, 120 Dn) must touch navigable water: water connected to the map edge through a body of at least 80 tiles. Rivers and coasts always qualify, big lakes touching the edge sometimes do, desert and plains maps usually do not. Ships sail under bridges.
+* One ship ties up at a dock at a time (about 6 seconds at 1x); more docks serve more routes at once.
+* Partners and routes (open cost in Dn):
+
+| Partner | Route | Sells | Buys |
+|---|---|---|---|
+| Tarraco (500) | land | timber, olives | wheat, pottery |
+| Lugdunum (800) | land | iron, meat, arrows | oil, wine, fruit |
+| Aquileia (600) | land | pottery, vegetables | clay, olives, meat |
+| Capua (700) | land | wheat, wine | pottery, furniture, iron |
+| Massilia (700) | sea | clay, wine | furniture, vegetables, pottery |
+| Carthago (1000) | sea | fruit, grapes, furniture | weapons, marble, timber |
+| Cirta (900) | sea | horses, fruit | weapons, pottery, oil |
+| Corinthus (1200) | sea | marble, oil | wine, wheat, iron, arrows |
+| Alexandria (1400) | sea | wheat, vegetables | wine, oil, weapons, furniture |
+
+## Military
+
+**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar). No raids come while the city has fewer than 120 people. A warband has about `base + population / 450 + raids so far` warriors (x0.7 easy, x1.3 hard; 3 to 40), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
+
+Repelling a raid: +8 peace, +3 favor. Each building lost: -1 peace.
+
+**Recruiting.** A staffed Barracks trains one recruit every 8 days (at full staff) and sends him by road to the emptiest staffed fort. Each fort holds 8 soldiers. Equipment is delivered to the Barracks by cart only while forts have empty places:
+
+| Soldier | Fort | Needs | HP | Attack | Defense | Range | Speed | Pay |
+|---|---|---|---|---|---|---|---|---|
+| Legionary | Legion Fort (300) | 50 weapons | 110 | 14 | 9 | melee | 1.5 tiles/s | 2 |
+| Archer | Archer Fort (220) | 50 arrows | 60 | 10 | 3 | 6.5 tiles | 1.5 | 2 |
+| Cavalryman | Cavalry Fort (350) | 1 horse | 120 | 15 | 6 | melee | 2.6 | 3 |
+
+Pay is Dn per soldier per month, on top of the wages of the forts' and barracks' staff (8 and 10 workers). A full set of three forts with a barracks employs about 34 people, so size the army to the city: an army that takes the farmers leaves the city hungry (use labor priorities).
+
+**Horse breeding.** A Horse Ranch (3x3 on meadow, 10 workers) starts with 2 breeding mares and gains one every 30 staffed days, up to 8. Foaling speed scales with the herd (a new ranch works at a quarter of a mature one's pace); at 8 mares on full meadow it produces a horse about every 30 days. Horses can also be imported from Cirta.
+
+**Orders.** A garrison guards the area around its fort (legion 16 tiles, archers 14, cavalry 26) and chases raiders up to 4 tiles beyond that. **Deploy** (fort panel or Military advisor) plants a standard anywhere: the soldiers hold that spot and fight within about 1.5x their sight. **Recall** sends them home. If a fort is destroyed or demolished, its garrison disbands. Forts never burn or decay.
+
+**Defenses.** Watchtowers (2x2, 6 workers) shoot one arrow about every 1.5 s at full staff at raiders within 8 tiles (12 damage). Walls (12 Dn per tile, 220 hp) block raiders; dragging a wall across a road builds a gate (40 Dn, 320 hp) that citizens use freely but raiders must break. Dragging a road through a wall cuts a gate. Raiders pick the cheapest way to your buildings, and breaking a wall counts as 14 extra tiles of walking, so close every gap. Damaged walls show cracks; buildings patch raid damage slowly once the fighting stops.
+
+## Saving
+
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. A save is about 40-400 KB depending on map size; browsers usually allow about 5 MB per site, and the Save/Load menus show the current usage. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 2); older saves still load.
 
 ## City mood (sentiment)
 
@@ -117,7 +175,7 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 
 * **Culture:** religion, entertainment, school, library, academy coverage (+ Senate).
 * **Prosperity:** average house level, patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
-* **Peace:** +1 a month while mood is 45+, -2 while it is under 30.
+* **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy.
 * **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over).
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.

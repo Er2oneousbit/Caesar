@@ -15,7 +15,7 @@
  */
 
 /** Minimal binary min-heap of (priority, value) pairs using typed arrays. */
-class MinHeap {
+export class MinHeap {
   constructor(capacity) {
     this.keys = new Float64Array(capacity);
     this.vals = new Int32Array(capacity);

@@ -14,7 +14,7 @@ import { CONFIG } from '../config.js';
 import { SCENARIOS } from '../data/scenarios.js';
 import { MAP_SIZES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../core/game.js';
-import { listSlots, deleteSlot, canDownloadFiles } from '../core/save.js';
+import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
 import { goalStatus } from '../sim/ratings.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
@@ -104,6 +104,7 @@ export function sandboxMenu(app) {
     seed: String(app.flags.seed ?? Math.floor(Math.random() * 1e6)),
     difficulty: 'normal',
     funds: 8000,
+    invasions: 'occasional',
   };
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
@@ -120,7 +121,11 @@ export function sandboxMenu(app) {
         h('select', { onchange: (e) => { state.difficulty = e.target.value; } }, Object.entries(DIFFICULTY).map(([k, v]) => h('option', { value: k, selected: k === state.difficulty }, v.name))),
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Affects starting money, fire/collapse risk, production and immigration.')),
       h('div', { class: 'field' }, h('label', {}, 'Starting funds (before difficulty)'),
-        h('input', { type: 'number', min: 1000, max: 100000, step: 500, value: state.funds, onchange: (e) => { state.funds = Math.max(1000, Math.min(100000, Number(e.target.value) || 8000)); } }))),
+        h('input', { type: 'number', min: 1000, max: 100000, step: 500, value: state.funds, onchange: (e) => { state.funds = Math.max(1000, Math.min(100000, Number(e.target.value) || 8000)); } })),
+      h('div', { class: 'field' }, h('label', {}, 'Raids'),
+        h('select', { onchange: (e) => { state.invasions = e.target.value; } },
+          [['none', 'Peaceful (no raids)'], ['occasional', 'Occasional raids'], ['frequent', 'Frequent raids']].map(([k, n]) => h('option', { value: k, selected: k === state.invasions }, n))),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Raiders never come before the city has 120 people, and scouts warn you about 3 months ahead.'))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.newSandbox(state); } }, 'Found the city'),
@@ -132,11 +137,26 @@ export function sandboxMenu(app) {
 // ---------------------------------------------------------------------------
 
 function slotRow(app, slot, meta, actions) {
+  const kb = Math.ceil(slotSize(slot) / 1024);
   return h('div', { class: 'card row', style: { marginBottom: '6px' } },
     h('div', { style: { flex: 1 } },
       h('b', {}, SLOT_NAMES[slot] || slot),
-      meta ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `${meta.city} · ${meta.date} · pop ${fmt(meta.population)} · ${new Date(meta.savedAt).toLocaleString()}`) : h('div', { class: 'muted' }, 'Empty')),
+      meta ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `${meta.city} · ${meta.date} · pop ${fmt(meta.population)} · ${new Date(meta.savedAt).toLocaleString()} · ${fmt(kb)} KB`) : h('div', { class: 'muted' }, 'Empty')),
     actions);
+}
+
+/** "Stored in this browser" box with a usage bar (Save and Load menus). */
+function storageNote() {
+  const u = storageUsage();
+  if (!u.available) {
+    return h('div', { class: 'status bad', style: { marginTop: '6px' } }, 'This browser is blocking local storage (private mode or site data disabled), so games cannot be saved here. Use "Copy save data" to keep your progress.');
+  }
+  const frac = Math.min(1, u.used / STORAGE_BUDGET);
+  return h('div', { class: 'card', style: { marginTop: '6px' } },
+    h('div', { class: 'row' }, h('b', { style: { flex: 1 } }, '💾 Stored in this browser (localStorage)'), h('span', { class: 'num' }, `${fmt(Math.ceil(u.used / 1024))} KB`)),
+    h('div', { class: 'bar' }, h('i', { style: { width: `${Math.round(frac * 100)}%`, background: frac > 0.85 ? 'var(--bad)' : frac > 0.6 ? 'var(--warn)' : 'var(--good)' } })),
+    h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '3px' } },
+      `Most browsers allow about ${Math.round(STORAGE_BUDGET / 1048576)} MB per site. Saves stay on this computer and browser only, and clearing site data deletes them: export or copy a save to back it up. The autosave slot is written every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months and whenever you leave the page.`));
 }
 
 export function loadMenu(app) {
@@ -150,7 +170,7 @@ export function loadMenu(app) {
       h('button', { class: 'btn small danger', title: 'Delete this save', onclick: () => app.ui.confirm(`Delete ${SLOT_NAMES[slot]}? This cannot be undone.`, () => { deleteSlot(slot); app.ui.showModal(loadMenu(app)); }, { yes: 'Delete', danger: true }) }, '🗑'),
     ] : null);
   });
-  return modal('Load game', [rows, fileInput], [
+  return modal('Load game', [rows, fileInput, storageNote()], [
     h('button', { class: 'btn', onclick: () => fileInput.click() }, '📂 Import from file'),
     h('button', { class: 'btn', onclick: () => app.ui.askText('Paste save data', 'Paste the text you copied with "Copy save data".', 'Load', (text) => app.importText(text)) }, '📋 Paste save data'),
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
@@ -162,7 +182,7 @@ export function saveMenu(app) {
   const byName = Object.fromEntries(slots.map((s) => [s.slot, s]));
   const rows = SAVE_SLOTS.filter((s) => s !== 'auto').map((slot) => slotRow(app, slot, byName[slot]?.meta,
     h('button', { class: 'btn small primary', onclick: () => { const doSave = () => { app.saveSlot(slot); app.ui.closeModal(); }; if (!byName[slot]) doSave(); else app.ui.confirm(`Overwrite ${SLOT_NAMES[slot]}?`, doSave, { yes: 'Overwrite' }); } }, 'Save here')));
-  return modal('Save game', [rows, h('div', { class: 'muted' }, 'Saves live in this browser. Export to a file (or copy the save data) to keep a backup or move it to another computer.')], [
+  return modal('Save game', [rows, storageNote()], [
     canDownloadFiles() ? h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export to file') : null,
     h('button', { class: 'btn', onclick: () => app.copySave() }, '📋 Copy save data'),
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
@@ -184,7 +204,7 @@ export function settingsMenu(app) {
       h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: s.volume, oninput: (e) => { s.volume = Number(e.target.value); vol.textContent = `${Math.round(s.volume * 100)}%`; app.applySettings(); } })),
     check('muted', 'Mute all sounds'),
     check('edgeScroll', 'Scroll when the mouse touches the screen edge'),
-    check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months`),
+    check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months and when you leave the page`, 'Uses the "Autosave" slot in this browser\'s local storage.'),
     check('showFps', 'Show performance counters (debug HUD)'),
     h('div', { class: 'field' }, h('label', {}, 'Theme'),
       h('select', { onchange: (e) => { s.theme = e.target.value; app.applySettings(); } },

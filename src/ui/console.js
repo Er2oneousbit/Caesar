@@ -10,9 +10,11 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
-import { buildDemoCity } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor } from '../dev/demoCity.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
+import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
+import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
 import { log } from '../core/debug.js';
 
 export const CONSOLE_HELP = [
@@ -27,6 +29,10 @@ export const CONSOLE_HELP = [
   ['collapse', 'Collapse a random building'],
   ['favor <n>', 'Set the Emperor\'s favor (0-100)'],
   ['mood <n>', 'Set city sentiment (0-100)'],
+  ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped)'],
+  ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
+  ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
+  ['army', 'List forts, soldiers, barracks stock and the raid schedule'],
   ['win', 'Trigger victory'],
   ['stats', 'Print city statistics'],
   ['goto <x> <y>', 'Center the view on a tile'],
@@ -163,6 +169,46 @@ export class DebugConsole {
         need();
         g.city.sentiment = Math.max(0, Math.min(100, Number(args[0]) || 50));
         return `Sentiment ${g.city.sentiment}`;
+      case 'garrison':
+      case 'harbor': {
+        need();
+        const center = cityCenter(g);
+        if (!center) return 'Build some homes first (try: demo 2).';
+        if (cmd === 'garrison') {
+          const res = buildDemoGarrison(g, center, { stock: true });
+          if (res.barracks) app.renderer.camera.centerOnTile(res.barracks.x, res.barracks.y);
+          return res.ok ? `Garrison built: ${res.forts.length} forts, ${res.towers.length} towers, ${res.wall} wall tiles. Recruits arrive over the next weeks.` : 'Could not find room for a barracks and forts near the city.';
+        }
+        const res = buildDemoHarbor(g, center);
+        if (res.dock) app.renderer.camera.centerOnTile(res.dock.x, res.dock.y);
+        return res.ok ? `Harbor built; sea routes opened: ${res.routes.join(', ') || 'none in this scenario'}.` : 'No navigable shore near the city (try a river or coast map).';
+      }
+      case 'invade': {
+        need();
+        if (g.military.active) return 'A raid is already under way.';
+        const n = args[0] ? Math.max(1, Math.min(60, Number(args[0]) || 0)) : 0;
+        const inv = launchInvasion(g, null, n || undefined);
+        app.renderer.camera.centerOnTile(inv.origin.x, inv.origin.y);
+        return `Raid of ${inv.size} launched from ${inv.origin.x},${inv.origin.y}.`;
+      }
+      case 'army': {
+        need();
+        const m = g.military;
+        const counts = garrisonCounts(g);
+        const lines = [];
+        for (const b of g.buildings.values()) {
+          if (b.def.kind === 'fort') {
+            lines.push(`${b.def.name} #${b.id} at ${b.x},${b.y}: ${counts.get(b.id) || 0}/${FORT_CAPACITY} ${UNIT_TYPES[b.def.unit].name.toLowerCase()}s, ${b.recruiting || 0} on the way, staff ${Math.round(b.efficiency * 100)}%${b.rally ? `, deployed to ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : ''}`);
+          } else if (b.def.kind === 'barracks') {
+            lines.push(`Barracks #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, training ${Math.round(b.trainProgress || 0)}%${b.blocked ? ` (${b.blocked})` : ''}`);
+          }
+        }
+        if (!lines.length) lines.push('No forts or barracks.');
+        lines.push(`Raiders on the map: ${enemyCount(g)}. ${threatSummary(g).text}`);
+        lines.push(m.settings ? `Next raid: month ${m.nextRaidMonth} (now ${g.time.totalMonths}).` : 'Raids are off in this game.');
+        lines.push(`Record: ${m.stats.raids} raids, ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.trained} trained.`);
+        return lines.join('\n');
+      }
       case 'win':
         need();
         g.city.victory = true;
@@ -194,4 +240,13 @@ export class DebugConsole {
         throw new Error(`Unknown command "${cmd}". Type help.`);
     }
   }
+}
+
+/** Average position of the city's homes (where demo extras get built). */
+function cityCenter(g) {
+  let n = 0;
+  let sx = 0;
+  let sy = 0;
+  for (const b of g.buildings.values()) if (b.house) { sx += b.x; sy += b.y; n++; }
+  return n ? { x: Math.round(sx / n), y: Math.round(sy / n) } : null;
 }

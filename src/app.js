@@ -31,6 +31,7 @@ import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLas
 import { findScenario, sandboxScenario, SCENARIOS } from './data/scenarios.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
+import { deployFort } from './sim/military.js';
 
 const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto' };
 
@@ -74,7 +75,14 @@ export class App {
     this.debugHud = !!flags.debug;
     this.errorCount = 0;
     this.gameUnsub = [];
+    this.deploying = 0; // fort id while the player picks where to deploy its soldiers
+    this.lastExitSave = -Infinity; // performance.now() of the last save-on-exit (throttle)
+    this.autosaveWarned = false;
     this.applySettings();
+    // Autosave when the tab is hidden or the page is being closed/reloaded.
+    // localStorage writes are synchronous, so this finishes before the page goes.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this.autosaveNow('hidden'); });
+    window.addEventListener('pagehide', () => this.autosaveNow('pagehide'));
     window.addEventListener('resize', () => this.resize());
     this.resize();
     requestAnimationFrame((t) => this.frame(t));
@@ -141,6 +149,7 @@ export class App {
       seed: opts.seed ?? Math.floor(Math.random() * 1e6),
       funds: opts.funds || 8000,
       difficulty: opts.difficulty || 'normal',
+      invasions: opts.invasions || 'occasional',
     });
     this.startGame(new Game({ scenario, flags: this.flags }));
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
@@ -158,6 +167,7 @@ export class App {
   startGame(game, cameraState = null) {
     for (const u of this.gameUnsub) u();
     this.gameUnsub = [];
+    this.cancelDeploy();
     this.menuGame = null;
     this.game = game;
     this.acc = 0;
@@ -183,9 +193,29 @@ export class App {
 
   onMonth() {
     const g = this.game;
-    if (this.settings.autosave && g.time.totalMonths % CONFIG.AUTOSAVE_EVERY_MONTHS === 0) {
-      const res = saveToSlot(g, 'auto', { camera: this.renderer.camera.serialize() });
-      if (!res.ok) log.warn('Autosave failed:', res.reason);
+    if (this.settings.autosave && g.time.totalMonths % CONFIG.AUTOSAVE_EVERY_MONTHS === 0) this.autosaveNow('monthly');
+  }
+
+  /**
+   * Write the autosave slot now (monthly, and when the page is hidden or
+   * closed). Skipped for finished games. Exit saves run at most once per 5 s,
+   * because closing a tab fires both visibilitychange and pagehide.
+   */
+  autosaveNow(why) {
+    const g = this.game;
+    if (!g || !this.settings.autosave || g.city.victory || g.city.defeat) return;
+    if (why !== 'monthly') {
+      // Closing a tab fires visibilitychange AND pagehide: save once.
+      const now = performance.now();
+      if (now - this.lastExitSave < 5000) return;
+      this.lastExitSave = now;
+    }
+    const res = saveToSlot(g, 'auto', { camera: this.renderer.camera.serialize() });
+    if (res.ok) { log.debug(`Autosaved (${why}, ${Math.round(res.bytes / 1024)} KB)`); return; }
+    log.warn('Autosave failed:', res.reason);
+    if (!this.autosaveWarned && why === 'monthly') {
+      this.autosaveWarned = true;
+      this.ui.toastError(`Autosave failed: ${res.reason}`);
     }
   }
 
@@ -331,8 +361,46 @@ export class App {
     else this.ui.toastError(res.reason);
   }
 
+  // ------------------------------------------------------------ military
+  /** Start picking a tile where a fort's soldiers should stand. */
+  startDeploy(fortId) {
+    const f = this.game?.buildings.get(fortId);
+    if (!f) return;
+    this.input.setTool(null);
+    this.deploying = fortId;
+    this.renderer.deployFort = fortId;
+    this.ui.messages.push({ text: `Click where the ${f.def.name}'s soldiers should stand. Right-click or Esc cancels.`, level: 'info', date: '' });
+  }
+
+  cancelDeploy() {
+    this.deploying = 0;
+    this.renderer.deployFort = 0;
+  }
+
+  /** Center the view on the raiders (or open the military advisor if none are here). */
+  focusThreat() {
+    const g = this.game;
+    if (!g) return;
+    let n = 0;
+    let sx = 0;
+    let sy = 0;
+    for (const u of g.units.values()) if (u.side === 'enemy') { sx += u.x; sy += u.y; n++; }
+    if (n) this.renderer.camera.centerOnTile(Math.floor(sx / n), Math.floor(sy / n));
+    else this.ui.openAdvisors('military');
+  }
+
   clickTile(x, y) {
     const g = this.game;
+    if (this.deploying && g) {
+      const id = this.deploying;
+      this.cancelDeploy();
+      if (g.map.inBounds(x, y) && deployFort(g, id, x, y)) {
+        this.sfx.play('horn');
+        this.ui.messages.push({ text: `Soldiers are marching to ${x}, ${y}.`, level: 'info', date: '' });
+      }
+      if (g.buildings.has(id)) this.ui.info.showBuilding(id);
+      return;
+    }
     if (!g || !g.map.inBounds(x, y)) { this.ui.info.close(); return; }
     this.sfx.play('click');
     const id = g.map.buildingAt(x, y);
@@ -341,6 +409,7 @@ export class App {
   }
 
   rightClick() {
+    if (this.deploying) { this.cancelDeploy(); return; }
     if (this.input.tool) this.ui.selectTool(null);
     else if (this.ui.info.open) this.ui.info.close();
   }
@@ -352,6 +421,7 @@ export class App {
       return;
     }
     if (this.ui.mainMenuOpen) return;
+    if (this.deploying) { this.cancelDeploy(); return; }
     if (this.input.tool) { this.ui.selectTool(null); return; }
     if (this.ui.info.open) { this.ui.info.close(); return; }
     this.ui.openPauseMenu();

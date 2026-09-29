@@ -6,8 +6,9 @@
  * Passes:
  *   1. Ground: terrain tiles, shorelines, roads, plazas, bridges, rubble and
  *      overlay tints. Flat things never overlap each other, so order is free.
- *   2. Objects: trees, rocks, aqueducts, buildings, walkers, flames, overlay
- *      columns. Sorted back-to-front by "depth" (x + y of their front point).
+ *   2. Objects: trees, rocks, aqueducts, walls, buildings, walkers, soldiers,
+ *      raiders, missiles, rally flags, flames, overlay columns. Sorted
+ *      back-to-front by "depth" (x + y of their front point).
  *
  * Multi-tile buildings are drawn as vertical strips half a tile wide. Each
  * strip is sorted by the front-most footprint tile it covers. This is the
@@ -22,6 +23,9 @@
 import { CONFIG, HALF_W, HALF_H } from '../config.js';
 import { Terrain, Road, WaterBits } from '../world/map.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { UNIT_TYPES } from '../data/units.js';
+import { wallHpOf, TOWER_RANGE } from '../sim/military.js';
+import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { groundTileSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec } from './terrainArt.js';
@@ -35,6 +39,9 @@ const K_WALKER = 1;
 const K_FIRE = 2;
 const K_COLUMN = 3;
 const K_EXTRA = 4;
+const K_UNIT = 5;
+const K_PROJ = 6;
+const K_FLAG = 7;
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -50,6 +57,7 @@ export class Renderer {
     this.plan = null; // construction preview from the input tool
     this.tool = null;
     this.selectedId = 0;
+    this.deployFort = 0; // fort id while the player picks a deployment tile
     this.time = 0;
     this.frame = 0;
     this.stats = { tiles: 0, objects: 0, ms: 0 };
@@ -69,6 +77,9 @@ export class Renderer {
       const cx = x + size / 2;
       const cy = y + size / 2;
       this.effects.dust((cx - cy) * HALF_W, (cx + cy) * HALF_H, size);
+    }));
+    this.unsub.push(game.events.on('unitDied', ({ x, y }) => {
+      this.effects.dust((x - y) * HALF_W, (x + y) * HALF_H, 0.3);
     }));
   }
 
@@ -202,6 +213,15 @@ export class Renderer {
         } else if (terr === Terrain.ROCK) {
           items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`k${variant}`, () => rocksSpec(variant)), wx, wy, full: true });
         }
+        if (map.wall[i]) {
+          const gate = map.wall[i] === 2;
+          let mask = this.wallMask(x, y);
+          // A gate with no wall beside it spans across its road.
+          if (gate && !mask) mask = map.hasRoad(x, y - 1) || map.hasRoad(x, y + 1) ? 10 : 5;
+          const hp = wallHpOf(game, i);
+          const damaged = hp.hp < hp.max * 0.5;
+          items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`wl${mask}.${gate ? 1 : 0}.${damaged ? 1 : 0}`, () => wallSpec(mask, gate, damaged)), wx, wy, full: true });
+        }
         if (map.aqueduct[i]) {
           const mask = this.aqueductMask(x, y);
           const filled = map.aqueduct[i] === 2;
@@ -227,6 +247,29 @@ export class Renderer {
       const ddy = (w.tx - w.x) + (w.ty - w.y);
       items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
     }
+
+    // --- soldiers, raiders, missiles, rally flags ---------------------------
+    const tick = game.time.totalTicks;
+    const inView = (wx, wy) => wx >= x0w && wx <= x1w && wy >= y0w && wy <= vr.y + vr.h + 40;
+    for (const u of game.units.values()) {
+      const fx = u.px + (u.x - u.px) * alpha;
+      const fy = u.py + (u.y - u.py) * alpha;
+      const wx = (fx - fy) * HALF_W;
+      const wy = (fx + fy) * HALF_H;
+      if (inView(wx, wy)) items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy });
+    }
+    for (const p of game.projectiles) {
+      const wx = (p.x - p.y) * HALF_W;
+      const wy = (p.x + p.y) * HALF_H - p.z;
+      if (inView(wx, wy)) items.push({ d: p.x + p.y + 0.5, kind: K_PROJ, p, wx, wy });
+    }
+    for (const b of game.buildings.values()) {
+      if (!b.rally) continue;
+      const wx = (b.rally.x - b.rally.y) * HALF_W;
+      const wy = (b.rally.x + b.rally.y) * HALF_H;
+      if (inView(wx, wy)) items.push({ d: b.rally.x + b.rally.y + 0.002, kind: K_FLAG, wx, wy, color: UNIT_TYPES[b.def.unit]?.color || '#a8322b' });
+    }
+    const selFort = this.selectedId && game.buildings.get(this.selectedId)?.def.kind === 'fort' ? this.selectedId : 0;
 
     // --- pass 2: sorted objects --------------------------------------------
     items.sort((a, b) => a.d - b.d || a.kind - b.kind);
@@ -259,6 +302,15 @@ export class Renderer {
         case K_EXTRA:
           this.drawExtra(it);
           break;
+        case K_UNIT:
+          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, selFort !== 0 && it.u.fort === selFort);
+          break;
+        case K_PROJ:
+          drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k);
+          break;
+        case K_FLAG:
+          drawRallyFlag(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, it.color, this.time);
+          break;
         default:
           break;
       }
@@ -268,8 +320,21 @@ export class Renderer {
     this.drawToolPreview();
     if (this.selectedId) {
       const b = game.buildings.get(this.selectedId);
-      if (b) this.outlineFootprint(b.x, b.y, b.size, 'rgba(255,230,120,0.95)', 2);
-      else this.selectedId = 0;
+      if (b) {
+        this.outlineFootprint(b.x, b.y, b.size, 'rgba(255,230,120,0.95)', 2);
+        if (b.rally) this.drawRallyLine(b);
+        if (b.def.kind === 'tower') this.drawRange(b.x, b.y, b.size, TOWER_RANGE, 'rgba(255,120,60,0.12)');
+      } else this.selectedId = 0;
+    }
+    if (this.deployFort && this.hoverTile) {
+      // Picking a deployment point: ghost standard under the cursor.
+      const f = game.buildings.get(this.deployFort);
+      const color = f ? UNIT_TYPES[f.def.unit]?.color || '#a8322b' : '#a8322b';
+      const { x, y } = this.hoverTile;
+      this.outlineFootprint(x, y, 1, 'rgba(255,230,120,0.95)', 2);
+      ctx.globalAlpha = 0.7;
+      drawRallyFlag(ctx, Math.round(((x - y) * HALF_W - cam.x) * k), Math.round(((x + y + 1) * HALF_H - cam.y) * k), k, color, this.time);
+      ctx.globalAlpha = 1;
     }
 
     // --- pass 4: particles -------------------------------------------------
@@ -332,6 +397,48 @@ export class Renderer {
     const m = this.game.map;
     const land = (tx, ty) => m.inBounds(tx, ty) && m.terrain[m.idx(tx, ty)] !== Terrain.WATER;
     return (land(x, y - 1) ? 1 : 0) | (land(x + 1, y) ? 2 : 0) | (land(x, y + 1) ? 4 : 0) | (land(x - 1, y) ? 8 : 0);
+  }
+
+  /** Wall connections: other walls/gates or watchtowers. 1=N 2=E 4=S 8=W */
+  wallMask(x, y) {
+    const { map, buildings } = this.game;
+    const conn = (tx, ty) => {
+      if (!map.inBounds(tx, ty)) return false;
+      const i = map.idx(tx, ty);
+      if (map.wall[i]) return true;
+      const b = map.building[i] ? buildings.get(map.building[i]) : null;
+      return !!b && b.def.kind === 'tower';
+    };
+    return (conn(x, y - 1) ? 1 : 0) | (conn(x + 1, y) ? 2 : 0) | (conn(x, y + 1) ? 4 : 0) | (conn(x - 1, y) ? 8 : 0);
+  }
+
+  /** Dashed line from a deployed fort to its standard. */
+  drawRallyLine(b) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const cx = b.x + b.size / 2;
+    const cy = b.y + b.size / 2;
+    const a = [((cx - cy) * HALF_W - cam.x) * k, ((cx + cy) * HALF_H - cam.y) * k];
+    const z = [((b.rally.x - b.rally.y) * HALF_W - cam.x) * k, ((b.rally.x + b.rally.y) * HALF_H - cam.y) * k];
+    ctx.save();
+    ctx.setLineDash([6 * cam.dpr, 5 * cam.dpr]);
+    ctx.strokeStyle = 'rgba(255,230,120,0.8)';
+    ctx.lineWidth = 1.5 * cam.dpr;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(z[0], z[1]);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Tint every tile within `r` (Chebyshev) of a footprint. */
+  drawRange(x0, y0, S, r, color) {
+    const map = this.game.map;
+    for (let y = y0 - r; y < y0 + S + r; y++) {
+      for (let x = x0 - r; x < x0 + S + r; x++) {
+        if (map.inBounds(x, y)) this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, color);
+      }
+    }
   }
 
   /** Aqueduct connections: other aqueducts or reservoirs. */
@@ -435,7 +542,7 @@ export class Renderer {
     const map = game.map;
     const def = BUILDINGS[plan.tool];
     // Coverage radius hint for area-of-effect buildings.
-    const radius = { well: CONFIG.WELL_RADIUS, fountain: CONFIG.FOUNTAIN_RADIUS, reservoir: CONFIG.RESERVOIR_RADIUS, hospital: CONFIG.HOSPITAL_RADIUS }[plan.tool];
+    const radius = { well: CONFIG.WELL_RADIUS, fountain: CONFIG.FOUNTAIN_RADIUS, reservoir: CONFIG.RESERVOIR_RADIUS, hospital: CONFIG.HOSPITAL_RADIUS, tower: TOWER_RANGE }[plan.tool];
     if (radius && plan.items.length === 1) {
       const it = plan.items[0];
       const S = it.size;

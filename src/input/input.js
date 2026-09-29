@@ -79,6 +79,7 @@ export class Input {
 
   /** Select a build tool (or null for inspect mode). */
   setTool(key) {
+    if (key) this.app.cancelDeploy?.();
     this.tool = key || null;
     this.drag = null;
     this.planKey = '';

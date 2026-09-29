@@ -42,6 +42,9 @@ const shots = [
   ['overlay-water', 'scenario=c1&months=8&zoom=2&overlay=water'],
   ['overlay-des', 'scenario=c1&months=8&zoom=2&overlay=desirability'],
   ['coast', 'scenario=sandbox&maptype=coast&seed=beach&months=4&zoom=1'],
+  ['military', 'scenario=c1&months=6&zoom=2&military=1&raiders=1&recruitDays=90'],
+  ['battle', 'scenario=c1&months=6&zoom=3&military=1&raiders=10&recruitDays=110&extraTicks=60'],
+  ['harbor', 'scenario=sandbox&maptype=coast&seed=beach&months=6&zoom=3&trade=1'],
 ];
 
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs'), '--port', String(port)], { stdio: 'pipe' });

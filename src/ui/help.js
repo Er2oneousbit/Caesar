@@ -12,6 +12,7 @@ import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { GOODS } from '../data/goods.js';
+import { UNIT_TYPES } from '../data/units.js';
 import { KEY_HELP } from '../input/input.js';
 import { tierNeeds } from './advisors.js';
 import { CONSOLE_HELP } from './console.js';
@@ -22,6 +23,7 @@ const TABS = [
   ['housing', 'Housing'],
   ['production', 'Production'],
   ['services', 'Services'],
+  ['military', 'Military'],
   ['debug', 'Debug & options'],
   ['about', 'About'],
 ];
@@ -37,6 +39,7 @@ export const URL_FLAGS = [
   ['money=N', 'Override the starting treasury.'],
   ['speed=0-4', 'Starting game speed (0 = paused).'],
   ['unlockall=1', 'Every building and every campaign mission available.'],
+  ['raids=off|occasional|frequent', 'Override raids for new games (testing).'],
   ['mute=1', 'Start with sound off.'],
 ];
 
@@ -87,7 +90,11 @@ function content(tab) {
         chain('Marble Quarry (by rocks)', 'Warehouse', 'Export'),
         h('p', {}, 'Raw materials go straight to a workshop that needs them, otherwise to a warehouse, which later sends them to workshops that run low.'),
         h('h4', {}, 'Trade'),
-        h('p', {}, 'Open routes in the Trade advisor. Caravans visit staffed warehouses connected to the Imperial road. Mark goods for export (keep a reserve) or import (up to a target). Prices per 100 units:'),
+        h('p', {}, 'Open routes in the Trade advisor, then mark goods for export (keep a reserve) or import (up to a target). The empire map there shows every partner and how they trade:'),
+        h('ul', {},
+          h('li', {}, h('b', {}, 'Land routes: '), 'caravans walk in along the Imperial road to a staffed warehouse, trade, and leave by the exit.'),
+          h('li', {}, h('b', {}, 'Sea routes: '), 'merchant ships sail in from the map edge to a staffed Dock. Docks must stand on the bank of a river, the coast or a big lake that reaches the map edge (ships sail under bridges). Ships unload imports onto the quay, dock workers cart them to warehouses, granaries or workshops, and ships buy exports from warehouses near the dock. Desert and plains provinces often have no sea access.')),
+        h('p', {}, 'Prices per 100 units:'),
         h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Import cost'), h('th', { class: 'r' }, 'Export price')),
           Object.entries(GOODS).map(([, g]) => h('tr', {}, h('td', {}, `${g.icon} ${g.name}`), h('td', { class: 'r num' }, g.buy), h('td', { class: 'r num' }, g.sell)))),
       ];
@@ -97,11 +104,29 @@ function content(tab) {
         return h('tr', {}, h('td', {}, h('b', {}, d.name)), h('td', { style: { fontSize: '12.5px' } }, d.desc));
       };
       return [
-        h('table', { class: 'tbl' }, ['well', 'fountain', 'reservoir', 'prefecture', 'engineer_post', 'market', 'granary', 'warehouse', 'temple_ceres', 'school', 'library', 'academy', 'theater', 'actor_troupe', 'amphitheater', 'gladiator_school', 'colosseum', 'menagerie', 'barber', 'clinic', 'baths', 'hospital', 'forum', 'senate', 'garden', 'oracle'].map(row)),
+        h('table', { class: 'tbl' }, ['well', 'fountain', 'reservoir', 'prefecture', 'engineer_post', 'market', 'granary', 'warehouse', 'dock', 'temple_ceres', 'school', 'library', 'academy', 'theater', 'actor_troupe', 'amphitheater', 'gladiator_school', 'colosseum', 'menagerie', 'barber', 'clinic', 'baths', 'hospital', 'forum', 'senate', 'garden', 'oracle'].map(row)),
         h('h4', {}, 'Ratings'),
         h('p', {}, 'Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content. Favor is the Emperor\'s opinion: pay tribute, answer his requests, avoid debt.'),
       ];
     }
+    case 'military':
+      return [
+        h('p', {}, 'Some provinces are raided by barbarian warbands. Scouts warn you about three months before a raid (the ⚠ alert in the top bar), and raiders never come before the city has 120 people. Warbands grow as your city grows.'),
+        h('h4', {}, 'Recruiting'),
+        chain('Barracks', 'recruit walks by road', 'Fort'),
+        h('p', {}, 'A staffed Barracks trains a recruit every few days and sends him to the emptiest staffed fort. Each fort holds 8 soldiers. Recruits need equipment at the Barracks, delivered by cart from workshops, ranches and warehouses:'),
+        chain('Iron Mine', 'Weaponsmith', 'Barracks', 'Legionary'),
+        chain('Timber Yard + Iron Mine', 'Fletcher', 'Barracks', 'Archer'),
+        chain('Horse Ranch (meadow)', 'Barracks', 'Cavalryman'),
+        h('p', {}, 'A Horse Ranch starts with 2 breeding mares and gains one about every 30 staffed days, up to 8. Foals come faster as the herd grows, so build ranches early. Horses can also be imported by trade.'),
+        h('h4', {}, 'Soldiers'),
+        h('table', { class: 'tbl' }, Object.values(UNIT_TYPES).map((u) => h('tr', {}, h('td', {}, h('b', { style: { color: u.color } }, u.name)), h('td', { style: { fontSize: '12.5px' } }, `${u.desc}${u.upkeep ? ` Pay ${u.upkeep} Dn/month.` : ''}`)))),
+        h('h4', {}, 'Orders'),
+        h('p', {}, 'Garrisons guard the land around their fort (cavalry ride out farther). Click a fort and press Deploy, then click the map, to post its soldiers somewhere else: at a gate, a bridge or the edge of town. Recall brings them home.'),
+        h('h4', {}, 'Defenses'),
+        h('p', {}, 'Watchtowers shoot raiders within 8 tiles. Walls must be broken before raiders can pass; drag a wall across a road to build a gate that citizens can use but raiders cannot. Raiders take the cheapest way to your buildings, so a wall with a gap is just a detour.'),
+        h('p', {}, 'Raiders burn or wreck what they reach, and a warband that is not driven off leaves with plunder from your treasury. Kill most of it and the survivors flee; repelling a raid raises Peace and the Emperor\'s favor.'),
+      ];
     case 'debug':
       return [
         h('h4', {}, 'URL options'),

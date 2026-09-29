@@ -15,6 +15,7 @@ import { BUILDINGS } from '../data/buildings.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { FOOD_TYPES, HOUSE_GOODS, GOOD_KEYS, emptyStock } from '../data/goods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
+import { HERD_START } from '../data/units.js';
 
 // ---------------------------------------------------------------------------
 // Buildings
@@ -113,10 +114,32 @@ function initKind(b, def) {
     case 'farm':
     case 'raw':
       b.stock = { [def.produces]: 0 };
+      if (def.produces === 'horses') {
+        b.herd = HERD_START; // breeding mares (see data/units.js)
+        b.herdDays = 0;
+      }
       break;
-    case 'workshop':
-      b.stock = { [def.consumes]: 0, [def.produces]: 0 };
-      b.incoming = { [def.consumes]: 0 };
+    case 'workshop': {
+      const inputs = Object.keys(def.recipe);
+      b.stock = { ...emptyStock(inputs), [def.produces]: 0 };
+      b.incoming = emptyStock(inputs);
+      break;
+    }
+    case 'barracks':
+      b.stock = emptyStock(def.inputs); // weapons, arrows, horses waiting for recruits
+      b.incoming = emptyStock(def.inputs);
+      b.trainProgress = 0;
+      break;
+    case 'fort':
+      b.recruiting = 0; // recruits walking here right now
+      b.rally = null; // deploy point {x, y} or null = stand at the fort
+      break;
+    case 'tower':
+      b.shotTimer = 0;
+      break;
+    case 'dock':
+      b.stock = emptyStock(GOOD_KEYS); // imports unloaded from ships, waiting for carts
+      b.shipId = 0; // walker id of the ship tied up here (or on its way)
       break;
     case 'venue':
       b.shows = { theater: 0, amphitheater: 0, colosseum: 0 };
@@ -334,6 +357,8 @@ export function releaseReservation(game, w) {
       b.house.incoming = Math.max(0, b.house.incoming - w.reserve.people);
     } else if (w.reserve.perf && b.pendingPerf) {
       b.pendingPerf[w.reserve.perf] = Math.max(0, (b.pendingPerf[w.reserve.perf] || 0) - 1);
+    } else if (w.reserve.recruit) {
+      b.recruiting = Math.max(0, (b.recruiting || 0) - 1); // fort's place held for a recruit
     }
   }
   w.reserve = null;

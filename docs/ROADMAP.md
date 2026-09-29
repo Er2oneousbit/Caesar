@@ -2,6 +2,15 @@
 
 What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order.
 
+## Done (v0.2)
+
+* **Military**: barracks, legion/archer/cavalry forts, watchtowers, walls and gates; raids with warnings, scaling warbands, siege, retreat and plunder; deploy/recall orders; Military advisor and raid alert
+* **Supply chains for troops**: weapons (legionaries), Fletcher arrows from timber + iron (archers), Horse Ranch with a growing breeding herd (cavalry)
+* **Sea trade**: navigable water detection, Docks, merchant ships, land/sea routes, 9 partners, empire map in the Trade advisor
+* Autosave when the page is hidden or closed; save sizes and storage usage in the menus
+* Open source: MIT license, contributing guide, code of conduct, security policy, issue/PR templates, CI with a reproducible-build check
+* Tests: 37 headless tests (core, military, trade), 29-check browser smoke test
+
 ## Done (v0.1)
 
 * Procedural maps: river, coast, lakes, plains, desert; seeds; 3 sizes
@@ -25,8 +34,8 @@ What exists, what the classic game had that Colonia does not (yet), and ideas. R
 
 ## Missing compared to the classic formula
 
-1. **Military and invasions**: forts, barracks, walls, towers, gatehouses; barbarian raids; the Emperor's legions when favor collapses. Peace currently only reacts to mood and Mars.
-2. **Sea trade and water industry**: docks, trade ships, fishing wharves (fish as a food), shipyards.
+1. **The Emperor's legions** marching on a governor whose favor collapses; distant battles the Emperor asks you to send troops to.
+2. **Water industry**: fishing wharves (fish as a food) and shipyards.
 3. **Crime**: criminals from unhappy neighborhoods, theft, riots.
 4. **Disease**: plague outbreaks that hospitals and baths prevent.
 5. **Hippodrome** (chariot races) as a fourth entertainment venue.

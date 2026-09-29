@@ -11,13 +11,17 @@ import { h, mount, fmt, pct, bar, kv } from './dom.js';
 import { CONFIG } from '../config.js';
 import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_SUPPLIERS, PERFORMER_NAMES } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
-import { GOODS, FOOD_TYPES, HOUSE_GOODS } from '../data/goods.js';
+import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
+import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX, HERD_GROWTH_DAYS } from '../data/units.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
-import { TERRAIN_NAMES, WaterBits, Road } from '../world/map.js';
+import { TERRAIN_NAMES, WaterBits, Road, Wall } from '../world/map.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
 import { venueActive } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
+import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
+import { dockBerth, dockUsed } from '../sim/trade.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 
 /** Plain-English description of one missing house requirement. */
@@ -55,10 +59,31 @@ export function buildingStatus(game, b) {
       if (b.resourceOk === false) return { level: 'bad', text: 'The natural resource nearby is gone.' };
       if (b.noStorage) return { level: 'warn', text: 'No workshop or warehouse with room is reachable.' };
       break;
-    case 'workshop':
-      if (b.stock[def.consumes] < CONFIG.CART_CAPACITY) return { level: 'warn', text: `Waiting for ${GOODS[def.consumes].name.toLowerCase()} from a producer or warehouse.` };
+    case 'workshop': {
+      const missing = Object.entries(def.recipe).filter(([good, n]) => b.stock[good] < n).map(([good]) => GOODS[good].name.toLowerCase());
+      if (missing.length) return { level: 'warn', text: `Waiting for ${missing.join(' and ')} from a producer or warehouse.` };
       if (b.noStorage) return { level: 'warn', text: 'No warehouse with room is reachable for the finished goods.' };
       break;
+    }
+    case 'barracks':
+      if (b.blocked) return { level: 'warn', text: b.blocked };
+      break;
+    case 'dock':
+      if (!game.map.seaEntry) return { level: 'bad', text: 'No river or sea here reaches the map edge: ships cannot come.' };
+      if (dockBerth(game, b) < 0) return { level: 'bad', text: 'Not beside water that ships can sail.' };
+      if (b.noStorage && dockUsed(b) > 0) return { level: 'warn', text: 'Imports are piling up: no warehouse, granary or workshop with room is reachable by road.' };
+      break;
+    case 'fort': {
+      const n = garrisonCounts(game).get(b.id) || 0;
+      if (n >= FORT_CAPACITY) return { level: 'good', text: `Garrison at full strength (${FORT_CAPACITY} soldiers).` };
+      const hasBarracks = [...game.buildings.values()].some((x) => x.def.kind === 'barracks');
+      if (!hasBarracks) return { level: 'bad', text: 'No Barracks: build one (connected by road) to train recruits for this fort.' };
+      const cost = Object.keys(RECRUIT_COST[def.unit] || {});
+      if (cost.length && b.efficiency > 0 && (b.recruiting || 0) === 0) {
+        return { level: 'warn', text: `${n} / ${FORT_CAPACITY} soldiers. Recruits need ${cost.map((g) => GOODS[g].name.toLowerCase()).join(' and ')} at the Barracks.` };
+      }
+      break;
+    }
     case 'venue':
       if (!venueActive(b)) {
         const need = VENUE_SUPPLIERS[def.venue].map((v) => PERFORMER_NAMES[v].toLowerCase() + 's').join(' or ');
@@ -226,13 +251,25 @@ export class InfoPanel {
     const sec = (title, ...kids) => h('div', { class: 'panel-sec' }, h('h5', {}, title), kids);
     switch (def.kind) {
       case 'farm':
+        if (b.herd !== undefined) {
+          parts.push(sec('Horse ranch',
+            kv('Breeding mares', `${b.herd} / ${HERD_MAX}`), bar(b.herd, HERD_MAX),
+            b.herd < HERD_MAX ? kv('Next mare', b.efficiency > 0 && b.fertility > 0 ? `in about ${Math.ceil((HERD_GROWTH_DAYS - (b.herdDays || 0)) / b.efficiency)} days` : 'not while the ranch is idle') : null,
+            kv('Pasture (meadow)', pct(b.fertility)),
+            kv('Next foal', pct(b.progress / 100)), bar(b.progress, 100),
+            kv('Horses waiting', formatAmount('horses', b.stock.horses)),
+            h('div', { class: 'muted' }, 'A bigger herd foals faster: a new ranch is 4x slower than a mature one. Horses go to a Barracks that needs them, otherwise to a warehouse.')));
+          break;
+        }
         parts.push(sec('Farm', kv('Crop', GOODS[def.produces].name), kv('Fertility', pct(b.fertility)), kv('Growth', pct(b.progress / 100)), bar(b.progress, 100), kv('Stored', `${fmt(b.stock[def.produces])} units`)));
         break;
       case 'raw':
         parts.push(sec('Production', kv('Produces', GOODS[def.produces].name), kv('Progress', pct(b.progress / 100)), bar(b.progress, 100), kv('Stored', `${fmt(b.stock[def.produces])} units`)));
         break;
       case 'workshop':
-        parts.push(sec('Workshop', kv(`${GOODS[def.consumes].name} (raw)`, `${fmt(b.stock[def.consumes])} units`), kv(GOODS[def.produces].name, `${fmt(b.stock[def.produces])} units`), kv('Progress', pct(b.progress / 100)), bar(b.progress, 100)));
+        parts.push(sec('Workshop',
+          Object.entries(def.recipe).map(([good, n]) => kv(`${GOODS[good].name} (needs ${n}/batch)`, `${fmt(b.stock[good])} units`)),
+          kv(GOODS[def.produces].name, `${fmt(b.stock[def.produces])} units`), kv('Progress', pct(b.progress / 100)), bar(b.progress, 100)));
         break;
       case 'granary':
       case 'warehouse':
@@ -253,6 +290,47 @@ export class InfoPanel {
         parts.push(sec('Training', kv('Trains', `${PERFORMER_NAMES[def.venue]}s`), kv('Performs at', venues.join(', ')), kv('Next performer', `${Math.max(0, Math.ceil(b.spawnTimer))} days`)));
         break;
       }
+      case 'barracks':
+        parts.push(sec('Equipment in store',
+          def.inputs.map((good) => kv(`${GOODS[good].icon} ${GOODS[good].name}`, `${formatAmount(good, b.stock[good])}${b.incoming[good] ? ` (+${formatAmount(good, b.incoming[good])} on the way)` : ''}`)),
+          h('div', { class: 'muted' }, 'One recruit needs: legionary 50 weapons, archer 50 arrows, cavalryman 1 horse.')));
+        parts.push(sec('Training',
+          kv('Next recruit', pct((b.trainProgress || 0) / 100)), bar(b.trainProgress || 0, 100),
+          kv('Recruits trained', fmt(g.military.stats.trained))));
+        break;
+      case 'fort': {
+        const unit = UNIT_TYPES[def.unit];
+        const n = garrisonCounts(g).get(b.id) || 0;
+        parts.push(sec('Garrison',
+          kv(`${unit.name}s`, `${n} / ${FORT_CAPACITY}`), bar(n, FORT_CAPACITY),
+          b.recruiting ? kv('Recruits on the way', `${b.recruiting}`) : null,
+          kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding the fort'),
+          kv('Pay', `${fmt(unit.upkeep * n)} Dn / month`),
+          h('div', { class: 'muted' }, unit.desc),
+          h('div', { class: 'row', style: { marginTop: '6px' } },
+            h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the map where they should stand', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
+            h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallFort(g, b.id); this.render(); } }, '↩ Recall'))));
+        break;
+      }
+      case 'dock': {
+        const ship = b.shipId ? g.walkers.get(b.shipId) : null;
+        const shipText = !ship ? 'None at the moment' : `${TRADE_PARTNERS[ship.partner]?.name || 'A'} ship ${ship.state === 'docked' ? 'tied up, loading' : ship.state === 'toDock' ? 'on its way' : 'leaving'}`;
+        const goods = Object.entries(b.stock).filter(([, v]) => v > 0);
+        const open = Object.entries(g.city.trade.routes).filter(([id, r]) => r.open && TRADE_PARTNERS[id]?.route === 'sea').map(([id]) => TRADE_PARTNERS[id].name);
+        parts.push(sec('Harbor',
+          kv('Ship', shipText),
+          kv('Sea routes open', open.join(', ') || 'None (open them in the Trade advisor)'),
+          kv('On the quay', `${fmt(dockUsed(b))} / ${fmt(CONFIG.DOCK_CAPACITY)}`), bar(dockUsed(b), CONFIG.DOCK_CAPACITY),
+          goods.length ? h('div', {}, goods.map(([k, v]) => h('span', { class: 'chip' }, `${GOODS[k].icon} ${GOODS[k].name} ${fmt(v)}`))) : null,
+          h('div', { class: 'muted' }, `Ships unload imports here; dock workers cart them to storage. Ships buy exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles.`)));
+        break;
+      }
+      case 'tower':
+        parts.push(sec('Watchtower',
+          kv('Range', `${TOWER_RANGE} tiles`),
+          kv('Shoots', b.efficiency > 0 ? `every ${(TOWER_COOLDOWN / b.efficiency / CONFIG.TICKS_PER_DAY).toFixed(1)} s at normal speed` : 'not at all (no staff)'),
+          h('div', { class: 'muted' }, 'Archers on the tower shoot raiders in range. Raiders will try to tear it down: back it with walls and soldiers.')));
+        break;
       case 'reservoir':
         parts.push(sec('Water', kv('Status', b.hasWater ? (b.source ? 'Full (fed by natural water)' : 'Full (fed by aqueduct)') : 'Dry'), kv('Piped area', `${CONFIG.RESERVOIR_RADIUS} tiles`)));
         break;
@@ -282,6 +360,9 @@ export class InfoPanel {
       parts.push(sec('Walker', kv(WALKER_TYPES[def.walker].name, out ? 'Out on patrol' : 'At the building'), h('div', { class: 'muted' }, WALKER_TYPES[def.walker].desc)));
     }
     if (def.fire || def.damage) parts.push(this.risks(b));
+    if (b.hp !== undefined && b.hp < buildingMaxHp(b)) {
+      parts.push(sec('Raid damage', kv('Condition', `${Math.max(0, Math.round(b.hp))} / ${buildingMaxHp(b)}`), bar(b.hp, buildingMaxHp(b), 'risk'), h('div', { class: 'muted' }, 'Repairs itself slowly once the fighting stops.')));
+    }
     parts.push(this.demolishButton(g, b));
     mount(this.el, parts);
   }
@@ -323,12 +404,15 @@ export class InfoPanel {
     if (map.fixedRoad[i]) notes.push('The Imperial road connects the city to the rest of the Empire.');
     if (map.rubble[i]) notes.push('Rubble from a disaster. Clear it before building.');
     if (g.fires.has(i)) notes.push('Burning! Prefects are on their way.');
+    const wall = map.wall[i];
+    if (wall) notes.push(wall === Wall.GATE ? 'A gate: citizens pass freely, raiders must break it down.' : 'A wall: raiders must break through it (or find a way around).');
     mount(this.el,
       this.head(TERRAIN_NAMES[t], `${x},${y}`),
       kv('Desirability', `${map.desirability[i]}`),
       kv('Water access', water.join(', ') || 'None'),
       road ? kv('Road', road === Road.PLAZA ? 'Plaza' : road === Road.BRIDGE ? 'Bridge' : 'Road') : null,
       map.aqueduct[i] ? kv('Aqueduct', map.aqueduct[i] === 2 ? 'Carrying water' : 'Dry') : null,
+      wall ? kv(wall === Wall.GATE ? 'Gate' : 'Wall', `${Math.round(wallHpOf(g, i).hp)} / ${wallHpOf(g, i).max} hp`) : null,
       notes.length ? h('div', { class: 'panel-sec' }, notes.map((n) => h('div', {}, n))) : null);
   }
 }

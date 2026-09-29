@@ -10,6 +10,7 @@
  *                (deliver/collect), then returns home. (carts, market buyers)
  *     'traveler' walks to a destination and disappears there.
  *                (immigrants, emigrants, performers, caravans)
+ *     'ship'     sails over navigable water, not roads. (merchant ships)
  *   effect:    what a roamer does to buildings within SERVICE_RADIUS
  *   tunic/skin/item: drawing hints for render/walkerArt.js
  *   roam:      tiles walked before turning home (roamers only)
@@ -37,5 +38,7 @@ export const WALKER_TYPES = Object.freeze({
   emigrant: { name: 'Emigrant', kind: 'traveler', tunic: '#6b6358', item: 'bundle', desc: 'Unhappy citizens leaving the city.' },
   homeless: { name: 'Homeless', kind: 'traveler', tunic: '#5a544c', item: 'bundle', desc: 'Lost their home and are searching for a new one.' },
   performer: { name: 'Performer', kind: 'traveler', tunic: '#d98c2b', item: 'mask', desc: 'Heading to a venue to perform.' },
-  caravan: { name: 'Trade Caravan', kind: 'traveler', tunic: '#6b4a2a', item: 'mule', desc: 'Merchants from a distant city.' },
+  recruit: { name: 'Recruit', kind: 'traveler', tunic: '#a8322b', item: 'spear', desc: 'A freshly trained soldier marching to his fort.' },
+  caravan: { name: 'Trade Caravan', kind: 'traveler', tunic: '#6b4a2a', item: 'mule', desc: 'Merchants from a distant city, travelling overland.' },
+  ship: { name: 'Merchant Ship', kind: 'ship', tunic: '#6b4a2a', item: null, desc: 'A trading ship on a sea route. Sails from the map edge to a Dock and back.' },
 });

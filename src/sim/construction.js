@@ -8,7 +8,11 @@
  *   applyPlan(game, plan)
  *
  * `tool` is a building key ('house', 'prefecture', ...) or a tile tool
- * ('road', 'aqueduct', 'plaza', 'bridge', 'clear').
+ * ('road', 'aqueduct', 'plaza', 'bridge', 'wall', 'clear').
+ *
+ * Walls: dragged like roads over open land. Where a wall crosses a road it
+ * becomes a gate (citizens pass, raiders must break it). Dragging a road
+ * through an existing wall turns that wall tile into a gate as well.
  *
  * A plan lists every tile/building it would touch with ok/reason flags and a
  * total cost, so the renderer can color the preview green/red and the UI can
@@ -22,9 +26,10 @@
 import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
-import { Road, Terrain, WaterBits } from '../world/map.js';
+import { Road, Terrain, WaterBits, Wall } from '../world/map.js';
 import { addBuilding, perimeterTiles, removeBuilding } from './entities.js';
 import { canAfford, transact } from './economy.js';
+import { dockBerth } from './trade.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -72,6 +77,7 @@ export function checkBuilding(game, type, x, y) {
       if (map.building[i]) return fail('Something is already built here');
       if (map.road[i]) return fail('Cannot build on a road');
       if (map.aqueduct[i]) return fail('An aqueduct is in the way');
+      if (map.wall[i]) return fail('A wall is in the way');
       if (game.fires.has(i)) return fail('The ground is on fire!');
       if (t === Terrain.TREES) trees++;
       if (t === Terrain.MEADOW) meadow++;
@@ -94,6 +100,10 @@ export function checkBuilding(game, type, x, y) {
       break;
     case 'nearRock':
       if (!map.isNearTerrain(x, y, S, Terrain.ROCK, 1)) return fail('Must be right next to rocks', cost);
+      break;
+    case 'shore':
+      if (!map.seaEntry) return fail('No river or sea here reaches the map edge: ships cannot come to this province', cost);
+      if (map.navigableBeside(x, y, S) < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
       break;
     default:
       break;
@@ -138,7 +148,7 @@ export function anchorFor(type, cx, cy) {
  */
 export function planAction(game, tool, x0, y0, x1, y1) {
   const mode = dragMode(tool);
-  if (tool === 'road' || tool === 'aqueduct') return planPath(game, tool, x0, y0, x1, y1);
+  if (tool === 'road' || tool === 'aqueduct' || tool === 'wall') return planPath(game, tool, x0, y0, x1, y1);
   if (tool === 'plaza') return planPlaza(game, x0, y0, x1, y1);
   if (tool === 'clear') return planClear(game, x0, y0, x1, y1);
   if (tool === 'bridge') return planBridge(game, x0, y0, x1, y1);
@@ -192,7 +202,7 @@ function planBuildingArea(game, tool, x0, y0, x1, y1) {
   return { tool, kind: 'area', items, cost, count, warnings: [...warnings], reason: count === 0 && firstBad ? firstBad.reason : null };
 }
 
-/** Can a road/aqueduct tile go here? Returns cost to enter (Infinity = blocked). */
+/** Can a road/aqueduct/wall tile go here? Returns cost to enter (Infinity = blocked). */
 function pathTileCost(game, tool, i) {
   const { map } = game;
   const t = map.terrain[i];
@@ -201,12 +211,21 @@ function pathTileCost(game, tool, i) {
     if (t === Terrain.WATER || t === Terrain.ROCK) return Infinity;
     if (map.building[i]) return Infinity;
     if (game.fires.has(i)) return Infinity;
+    if (map.wall[i]) return 3; // possible (becomes a gate) but the planner avoids it
+    return t === Terrain.TREES ? 1.6 : map.rubble[i] ? 1.4 : 1;
+  }
+  if (tool === 'wall') {
+    if (map.wall[i]) return 0.3;
+    if (t === Terrain.WATER || t === Terrain.ROCK) return Infinity;
+    if (map.building[i] || map.aqueduct[i]) return Infinity;
+    if (game.fires.has(i)) return Infinity;
+    if (map.road[i]) return map.road[i] === Road.ROAD ? 1.5 : Infinity; // gate; never on bridges or plazas
     return t === Terrain.TREES ? 1.6 : map.rubble[i] ? 1.4 : 1;
   }
   // aqueduct
   if (map.aqueduct[i]) return 0.3;
   if (t === Terrain.WATER || t === Terrain.ROCK) return Infinity;
-  if (map.building[i]) return Infinity;
+  if (map.building[i] || map.wall[i]) return Infinity;
   if (map.road[i] === Road.BRIDGE || map.road[i] === Road.PLAZA) return Infinity;
   if (game.fires.has(i)) return Infinity;
   return map.road[i] ? 1.5 : t === Terrain.TREES ? 1.6 : 1;
@@ -244,18 +263,26 @@ function planPath(game, tool, x0, y0, x1, y1) {
   let cost = 0;
   let count = 0;
   let budget = game.cheats.freeBuild ? Infinity : game.city.treasury - CONFIG.DEBT_LIMIT;
+  let gates = 0;
   for (const i of tiles) {
     const c = pathTileCost(game, tool, i);
-    const exists = tool === 'road' ? !!map.road[i] : !!map.aqueduct[i];
+    const exists = tool === 'road' ? !!map.road[i] : tool === 'wall' ? !!map.wall[i] : !!map.aqueduct[i];
+    // A gate: a wall crossing a road, or a road cut through a wall.
+    const gate = !exists && ((tool === 'wall' && !!map.road[i]) || (tool === 'road' && map.wall[i] === Wall.WALL));
     let ok = c < Infinity;
     let reason = ok ? null : 'Blocked';
-    const tileCost = exists ? 0 : unit + tileClearCost(game, i);
+    let tileCost = 0;
+    if (!exists) {
+      if (gate) tileCost = TOOLS.wall.gateCost + (tool === 'road' ? unit : 0);
+      else tileCost = unit + tileClearCost(game, i);
+    }
     if (ok && !exists && tileCost > budget) { ok = false; reason = 'Not enough money'; }
-    if (ok && !exists) { budget -= tileCost; cost += tileCost; count++; }
-    items.push({ x: map.xOf(i), y: map.yOf(i), size: 1, ok, reason, exists, cost: tileCost });
+    if (ok && !exists) { budget -= tileCost; cost += tileCost; count++; if (gate) gates++; }
+    items.push({ x: map.xOf(i), y: map.yOf(i), size: 1, ok, reason, exists, gate, cost: tileCost });
   }
   const bad = items.find((it) => !it.ok);
-  return { tool, kind: 'path', items, cost, count, warnings: [], reason: bad ? bad.reason : null };
+  const warnings = gates > 0 ? [`${gates} gate${gates === 1 ? '' : 's'} (${TOOLS.wall.gateCost} Dn each): citizens pass, raiders must break ${gates === 1 ? 'it' : 'them'}`] : [];
+  return { tool, kind: 'path', items, cost, count, warnings, reason: bad ? bad.reason : null };
 }
 
 function planPlaza(game, x0, y0, x1, y1) {
@@ -268,7 +295,7 @@ function planPlaza(game, x0, y0, x1, y1) {
   if (!game.isUnlocked('plaza')) return { tool: 'plaza', kind: 'area', items, cost: 0, count: 0, warnings: [], reason: 'Not available in this scenario' };
   for (const [x, y] of rectTiles(map, x0, y0, x1, y1)) {
     const i = map.idx(x, y);
-    if (map.road[i] !== Road.ROAD) continue; // only plain roads can be paved
+    if (map.road[i] !== Road.ROAD || map.wall[i]) continue; // only plain roads (not gates) can be paved
     const ok = unit <= budget;
     if (ok) { budget -= unit; cost += unit; count++; }
     items.push({ x, y, size: 1, ok, reason: ok ? null : 'Not enough money', cost: unit });
@@ -304,7 +331,7 @@ function planBridge(game, x0, y0, x1, y1) {
     const t = map.terrain[i];
     const endpoint = k === 0 || k === tiles.length - 1;
     if (endpoint) {
-      const land = t !== Terrain.WATER && t !== Terrain.ROCK && !map.building[i];
+      const land = t !== Terrain.WATER && t !== Terrain.ROCK && !map.building[i] && !map.wall[i];
       if (!land) { it.ok = false; it.reason = 'Bridges must start and end on open land'; }
       else if (!map.road[i]) { it.cost = TOOLS.road.cost; cost += it.cost; count++; }
     } else {
@@ -342,6 +369,12 @@ function planClear(game, x0, y0, x1, y1) {
       }
       continue;
     }
+    if (map.wall[i]) {
+      // Walls and gates come down first; a gate leaves its road behind.
+      items.push({ x, y, size: 1, ok: true, wall: true, cost: 0 });
+      count++;
+      continue;
+    }
     if (map.road[i]) {
       if (map.fixedRoad[i]) { items.push({ x, y, size: 1, ok: false, reason: 'The Imperial road entrance cannot be removed', cost: 0 }); continue; }
       items.push({ x, y, size: 1, ok: true, road: true, cost: 0 });
@@ -374,7 +407,7 @@ export function applyPlan(game, plan) {
   const undo = { tool: plan.tool, day: game.time.totalDays, cost: 0, ops: [] };
   let spent = 0;
   let done = 0;
-  const saveTile = (i) => ({ i, terrain: map.terrain[i], rubble: map.rubble[i] });
+  const saveTile = (i) => ({ i, terrain: map.terrain[i], rubble: map.rubble[i], wall: map.wall[i] });
   const clearTile = (i) => {
     if (map.terrain[i] === Terrain.TREES) map.terrain[i] = Terrain.GRASS;
     map.rubble[i] = 0;
@@ -394,6 +427,11 @@ export function applyPlan(game, plan) {
       } else if (it.aqueduct) {
         map.aqueduct[map.idx(it.x, it.y)] = 0;
         done++;
+      } else if (it.wall) {
+        const i = map.idx(it.x, it.y);
+        map.wall[i] = Wall.NONE;
+        game.wallHp.delete(i);
+        done++;
       } else if (it.terrainClear) {
         const i = map.idx(it.x, it.y);
         if (!game.cheats.freeBuild && game.city.treasury - it.cost < CONFIG.DEBT_LIMIT) continue;
@@ -409,7 +447,7 @@ export function applyPlan(game, plan) {
     return { ok: done > 0, count: done, cost: spent };
   }
 
-  if (plan.tool === 'road' || plan.tool === 'aqueduct' || plan.tool === 'plaza' || plan.tool === 'bridge') {
+  if (plan.tool === 'road' || plan.tool === 'aqueduct' || plan.tool === 'plaza' || plan.tool === 'bridge' || plan.tool === 'wall') {
     for (const it of plan.items) {
       if (!it.ok || it.exists) continue;
       const i = map.idx(it.x, it.y);
@@ -419,6 +457,14 @@ export function applyPlan(game, plan) {
         undo.ops.push({ op: 'road', ...saveTile(i) });
         clearTile(i);
         map.road[i] = Road.ROAD;
+        if (map.wall[i]) { map.wall[i] = Wall.GATE; game.wallHp.delete(i); } // cut a gate
+      } else if (plan.tool === 'wall') {
+        if (map.wall[i] || map.building[i] || map.aqueduct[i]) continue;
+        if (map.road[i] && map.road[i] !== Road.ROAD) continue;
+        undo.ops.push({ op: 'wall', ...saveTile(i) });
+        if (map.road[i]) map.wall[i] = Wall.GATE;
+        else { clearTile(i); map.wall[i] = Wall.WALL; }
+        game.wallHp.delete(i);
       } else if (plan.tool === 'aqueduct') {
         if (map.aqueduct[i]) continue;
         undo.ops.push({ op: 'aqueduct', ...saveTile(i) });
@@ -452,6 +498,7 @@ export function applyPlan(game, plan) {
         }
       }
       const b = addBuilding(game, plan.tool, it.x, it.y);
+      if (b.def.kind === 'dock') dockBerth(game, b); // berth + which side faces the water
       undo.ops.push({ op: 'building', id: b.id, tiles });
       spent += chk.cost;
       done++;
@@ -493,6 +540,12 @@ export function undoLast(game) {
       map.road[op.i] = Road.NONE;
       map.terrain[op.i] = op.terrain;
       map.rubble[op.i] = op.rubble;
+      map.wall[op.i] = op.wall || Wall.NONE; // a gate cut through a wall becomes wall again
+    } else if (op.op === 'wall') {
+      map.wall[op.i] = op.wall || Wall.NONE;
+      map.terrain[op.i] = op.terrain;
+      map.rubble[op.i] = op.rubble;
+      game.wallHp.delete(op.i);
     } else if (op.op === 'aqueduct') {
       map.aqueduct[op.i] = 0;
       map.terrain[op.i] = op.terrain;

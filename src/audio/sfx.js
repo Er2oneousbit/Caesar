@@ -44,7 +44,7 @@ export class Sfx {
   play(name) {
     if (this.muted || this.volume <= 0) return;
     const now = performance.now();
-    const minGap = { fire: 1500, collapse: 800, build: 60, click: 40 }[name] ?? 250;
+    const minGap = { fire: 1500, collapse: 800, build: 60, click: 40, horn: 2500, clash: 160, arrow: 140 }[name] ?? 250;
     if (now - (this.lastPlayed.get(name) || 0) < minGap) return;
     this.lastPlayed.set(name, now);
     const ctx = this._ensure();
@@ -66,6 +66,11 @@ export class Sfx {
         case 'festival': [659, 784, 880, 784, 1047].forEach((f, i) => this.tone(f, t + i * 0.1, 0.16, 'triangle', 0.14)); break;
         case 'victory': [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, t + i * 0.16, 0.5, 'triangle', 0.16)); break;
         case 'error': this.tone(220, t, 0.14, 'square', 0.12, 160); break;
+        // --- military ---
+        case 'horn': this.tone(147, t, 1.1, 'sawtooth', 0.12, 139); this.tone(220, t + 0.05, 1.0, 'triangle', 0.08, 208); break; // war horn
+        case 'clash': this.tone(1400 + Math.random() * 500, t, 0.06, 'square', 0.05, 900); this.noise(t, 0.05, 0.08, 5000); break; // blades
+        case 'arrow': this.noise(t, 0.09, 0.05, 7000); break; // whoosh
+        case 'recruit': [0, 0.12].forEach((d) => this.tone(196, t + d, 0.08, 'triangle', 0.12, 150)); break; // drum beats
         default: break;
       }
     } catch {

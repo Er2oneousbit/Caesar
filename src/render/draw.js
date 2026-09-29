@@ -300,3 +300,55 @@ export function hash01(a, b = 0, c = 0) {
   h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
 }
+
+/**
+ * A horse in profile, feet at (x, y), facing right (face 1) or left (-1).
+ * `s` is a pixel scale (1 inside sprites, zoom*dpr for live units) and
+ * `phase` (-1..1) swings the legs for a walking/galloping animation.
+ */
+export function horse(ctx, x, y, s, color = '#8a5a3c', face = 1, phase = 0, mane = '#3a2618') {
+  const f = face;
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 7 * s, 2 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // legs
+  ctx.strokeStyle = shade(color, -0.35);
+  ctx.lineWidth = 1.2 * s;
+  ctx.beginPath();
+  for (const [lx, sw] of [[-4.2, 1], [-2.6, -1], [2.8, -1], [4.3, 1]]) {
+    ctx.moveTo(x + f * lx * s, y - 5 * s);
+    ctx.lineTo(x + f * (lx + phase * sw * 1.2) * s, y);
+  }
+  ctx.stroke();
+  // body
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(x, y - 7 * s, 6 * s, 3 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // neck + head
+  ctx.beginPath();
+  ctx.moveTo(x + f * 3.5 * s, y - 8.5 * s);
+  ctx.lineTo(x + f * 6.5 * s, y - 13.5 * s);
+  ctx.lineTo(x + f * 8.5 * s, y - 12.5 * s);
+  ctx.lineTo(x + f * 5.5 * s, y - 6.5 * s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + f * 8.3 * s, y - 12.3 * s, 2.4 * s, 1.3 * s, f * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  // mane + tail
+  ctx.strokeStyle = mane;
+  ctx.lineWidth = 1.1 * s;
+  ctx.beginPath();
+  ctx.moveTo(x + f * 3.8 * s, y - 9.5 * s);
+  ctx.lineTo(x + f * 6.4 * s, y - 14 * s);
+  ctx.moveTo(x - f * 5.8 * s, y - 8 * s);
+  ctx.quadraticCurveTo(x - f * 8 * s, y - 6 * s, x - f * 7.4 * s, y - 3 * s);
+  ctx.stroke();
+  // highlight
+  ctx.fillStyle = shade(color, 0.18);
+  ctx.beginPath();
+  ctx.ellipse(x - f * 1 * s, y - 8.4 * s, 3.4 * s, 1.1 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+}

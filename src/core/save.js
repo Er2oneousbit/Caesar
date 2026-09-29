@@ -9,14 +9,22 @@
  *     meta:   { city, scenarioId, date, population, savedAt },
  *     scenario, flags, difficulty,
  *     rng, time, seed, map (base64 layers), buildings[], walkers[], fires[],
- *     city, messages[], nextIds, camera
+ *     units[], military, wallHp[], city, messages[], nextIds, camera
  *   }
+ *
+ * Version history:
+ *   1  first release
+ *   2  military: units[], military (raid schedule + stats), wallHp[], map.wall.
+ *      Version 1 saves load fine; the missing parts start empty.
  *
  * Typed-array map layers are base64 encoded. Derived data (building tile
  * layer, desirability, water coverage, road networks) is rebuilt on load.
  *
  * Browser storage: localStorage key `colonia.save.<slot>`. Every read/write
  * is wrapped in try/catch because storage can be missing, full or blocked.
+ * Slots: auto (monthly + when the page is hidden/closed), quick (F5),
+ * slot1..slot5 (manual). localStorage belongs to this browser and site only:
+ * clearing site data deletes the saves, so the menus offer export/copy.
  * ----------------------------------------------------------------------------
  */
 
@@ -26,6 +34,8 @@ import { RNG } from './rng.js';
 import { GameMap } from '../world/map.js';
 import { GameTime } from '../sim/time.js';
 import { Building, Walker, footprintTiles } from '../sim/entities.js';
+import { Unit } from '../sim/military.js';
+import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario } from '../data/scenarios.js';
@@ -64,6 +74,12 @@ export function serializeGame(game, extra = {}) {
     if (copy.path) copy.path = Array.from(copy.path);
     walkers.push(copy);
   }
+  const units = [];
+  for (const u of game.units.values()) {
+    const copy = { ...u };
+    if (copy.path) copy.path = Array.from(copy.path);
+    units.push(copy);
+  }
   const isCampaign = !!findScenario(game.scenario.id);
   return {
     format: 'colonia-save',
@@ -85,9 +101,12 @@ export function serializeGame(game, extra = {}) {
     buildings,
     walkers,
     fires: [...game.fires],
+    units,
+    military: game.military,
+    wallHp: [...game.wallHp],
     city: game.city,
     messages: game.messages.slice(0, 60),
-    nextIds: { building: game.nextBuildingId, walker: game.nextWalkerId, message: game.nextMessageId },
+    nextIds: { building: game.nextBuildingId, walker: game.nextWalkerId, message: game.nextMessageId, unit: game.nextUnitId },
     cheats: { ...game.cheats },
     ...extra,
   };
@@ -130,7 +149,11 @@ export function deserializeGame(data, flags = {}) {
     nextMessageId: data.nextIds?.message || 1,
     city: data.city,
     messages: Array.isArray(data.messages) ? data.messages : [],
+    nextUnitId: data.nextIds?.unit || 1,
+    wallHp: new Map(Array.isArray(data.wallHp) ? data.wallHp : []),
   };
+  // Military state (absent in version 1 saves: Game fills in a fresh one).
+  if (data.military && typeof data.military === 'object') restore.military = data.military;
   const game = new Game({ scenario, flags: { ...data.flags, ...flags }, restore });
   if (data.cheats) Object.assign(game.cheats, data.cheats);
 
@@ -164,6 +187,17 @@ export function deserializeGame(data, flags = {}) {
   for (const b of game.buildings.values()) b.walkers = (b.walkers || []).filter((id) => game.walkers.has(id));
 
   for (const [i, d] of data.fires || []) game.fires.set(i, d);
+
+  // Soldiers and raiders
+  let maxU = 0;
+  for (const raw of data.units || []) {
+    if (!UNIT_TYPES[raw.type]) continue;
+    const u = new Unit(raw.id, raw.type, raw.x, raw.y);
+    Object.assign(u, raw);
+    game.units.set(u.id, u);
+    maxU = Math.max(maxU, u.id);
+  }
+  game.nextUnitId = Math.max(game.nextUnitId, maxU + 1);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -218,6 +252,42 @@ export function listSlots(slots) {
 
 export function deleteSlot(slot) {
   try { localStorage.removeItem(slotKey(slot)); } catch { /* ignore */ }
+}
+
+/** Size of one slot in characters (0 if empty or unavailable). */
+export function slotSize(slot) {
+  try {
+    const v = localStorage.getItem(slotKey(slot));
+    return v ? v.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Typical per-site localStorage allowance (browsers differ; about 5 MB). */
+export const STORAGE_BUDGET = 5 * 1024 * 1024;
+
+/**
+ * How much localStorage this game uses (all `colonia.*` keys) and whether
+ * storage works at all. Sizes are in characters, which is what the usual
+ * ~5 MB per-site limit counts for these ASCII saves.
+ * @returns {{available:boolean, used:number, saves:number}}
+ */
+export function storageUsage() {
+  try {
+    let used = 0;
+    let saves = 0;
+    for (let k = 0; k < localStorage.length; k++) {
+      const key = localStorage.key(k);
+      if (!key || !key.startsWith(CONFIG.STORAGE_PREFIX)) continue;
+      const v = localStorage.getItem(key) || '';
+      used += key.length + v.length;
+      if (key.startsWith(`${CONFIG.STORAGE_PREFIX}save.`)) saves++;
+    }
+    return { available: true, used, saves };
+  } catch {
+    return { available: false, used: 0, saves: 0 };
+  }
 }
 
 /**

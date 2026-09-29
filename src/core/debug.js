@@ -17,6 +17,7 @@
  *   money=N        starting treasury override
  *   speed=N        starting speed index (0-4)
  *   unlockall=1    every building available in every scenario
+ *   raids=MODE     off | occasional | frequent  (override invasions for new games)
  *   nofog=1        reserved for future use
  *   mute=1         start with sound off
  *
@@ -40,6 +41,7 @@ export function parseFlags(source) {
     money: null,
     speed: null,
     unlockall: false,
+    raids: null,
     mute: false,
   };
   let params;
@@ -67,6 +69,7 @@ export function parseFlags(source) {
   const speed = Number(get('speed'));
   if (get('speed') !== undefined && get('speed') !== null && Number.isInteger(speed)) flags.speed = speed;
   flags.unlockall = truthy(get('unlockall'));
+  if (['off', 'occasional', 'frequent'].includes(get('raids'))) flags.raids = get('raids');
   flags.mute = truthy(get('mute'));
   return flags;
 }

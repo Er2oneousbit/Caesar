@@ -11,6 +11,7 @@
 import { WALKER_TYPES } from '../data/walkers.js';
 import { GOODS } from '../data/goods.js';
 import { GODS } from '../data/gods.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
 
 const SKIN = ['#e3b68c', '#c99a6b', '#a8784e', '#f0caa2', '#b98a5e'];
 const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
@@ -27,6 +28,7 @@ const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
  */
 export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY) {
   const def = WALKER_TYPES[w.type];
+  if (def.kind === 'ship') { drawShip(ctx, w, sx, sy, k, t, dirX); return; }
   const moving = w.moving;
   const phase = moving ? Math.sin((t * 9 + w.anim) * 1.0) : 0;
   const face = dirX < 0 ? -1 : 1;
@@ -210,4 +212,70 @@ function drawMule(ctx, cx, cy, k, face, phase) {
   ctx.fillRect(cx - 4 * k, cy - 11 * k, 7 * k, 3.5 * k);
   ctx.fillStyle = '#9b5a3a';
   ctx.fillRect(cx - 3 * k, cy - 13 * k, 5 * k, 2 * k);
+}
+
+/**
+ * Merchant ship: a round-bellied hull, one mast and a square sail striped in
+ * the trading partner's color. The sail is furled while tied up at a dock.
+ */
+function drawShip(ctx, w, sx, sy, k0, t, dirX) {
+  const k = k0 * 1.4; // ships are drawn larger than people
+  const f = dirX < 0 ? -1 : 1;
+  const y = sy + Math.sin(t * 2 + w.id) * 0.8 * k; // gentle bobbing
+  const X = (dx) => sx + dx * f * k;
+  const Y = (dy) => y + dy * k;
+  const color = TRADE_PARTNERS[w.partner]?.color || '#c0392b';
+  // wake
+  ctx.fillStyle = 'rgba(235,245,255,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 1 * k, 18 * k, 3.6 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // hull
+  ctx.fillStyle = '#5e3b20';
+  ctx.beginPath();
+  ctx.moveTo(X(-15), Y(-8));
+  ctx.lineTo(X(12), Y(-7));
+  ctx.lineTo(X(18), Y(-12));
+  ctx.lineTo(X(15), Y(-3));
+  ctx.lineTo(X(8), Y(0));
+  ctx.lineTo(X(-10), Y(0));
+  ctx.lineTo(X(-16), Y(-5));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#8a6a44'; // deck rail
+  ctx.fillRect(Math.min(X(-14), X(12)), Y(-8.2), 26 * k, 1.4 * k);
+  ctx.fillStyle = color; // painted band
+  ctx.fillRect(Math.min(X(-12), X(10)), Y(-5), 22 * k, 1.2 * k);
+  // steering oar at the stern
+  ctx.strokeStyle = '#3a2618';
+  ctx.lineWidth = 1 * k;
+  ctx.beginPath(); ctx.moveTo(X(-13), Y(-9)); ctx.lineTo(X(-17), Y(1)); ctx.stroke();
+  // mast and yard
+  ctx.fillStyle = '#4a3222';
+  ctx.fillRect(X(-1) - 0.6 * k, Y(-32), 1.2 * k, 24 * k);
+  ctx.fillRect(Math.min(X(-10), X(8)), Y(-29), 18 * k, 1.1 * k);
+  if (w.state === 'docked') {
+    // furled sail on the yard
+    ctx.fillStyle = '#efe6d0';
+    ctx.fillRect(Math.min(X(-9), X(7)), Y(-28), 16 * k, 2.2 * k);
+  } else {
+    // full sail, bellied toward the bow, with a stripe in the partner's color
+    ctx.fillStyle = '#efe6d0';
+    ctx.beginPath();
+    ctx.moveTo(X(-9), Y(-28));
+    ctx.lineTo(X(7), Y(-28));
+    ctx.quadraticCurveTo(X(10), Y(-20), X(7), Y(-12));
+    ctx.lineTo(X(-9), Y(-12));
+    ctx.quadraticCurveTo(X(-6), Y(-20), X(-9), Y(-28));
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.min(X(-8), X(8)), Y(-22), 16 * k, 3 * k);
+  }
+  // pennant
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(X(-1), Y(-32));
+  ctx.lineTo(X(-1) - f * 6 * k, Y(-31) + Math.sin(t * 4) * k);
+  ctx.lineTo(X(-1), Y(-30));
+  ctx.fill();
 }

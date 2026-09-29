@@ -16,8 +16,8 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.1.0',
-  SAVE_VERSION: 1,
+  VERSION: '0.2.0',
+  SAVE_VERSION: 2, // v2 added the military (units, walls, raids); v1 saves still load
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -109,6 +109,11 @@ export const CONFIG = {
   // --- Trade ---------------------------------------------------------------
   CARAVAN_INTERVAL_DAYS: [32, 56], // random range between visits per open route
   CARAVAN_MAX_TRADE: 800, // units bought + sold per visit (each direction)
+  SHIP_MAX_TRADE: 1200, // ships carry more than caravans
+  SHIP_SPEED: 0.06, // tiles per tick
+  SHIP_DOCK_TICKS: 120, // how long a ship stays tied up (loading/unloading)
+  DOCK_CAPACITY: 1600, // units of unloaded imports a dock can hold
+  DOCK_REACH: 60, // road tiles: warehouses this close to a dock sell exports to ships
 
   // --- Emperor -------------------------------------------------------------
   REQUEST_INTERVAL_MONTHS: [14, 26],

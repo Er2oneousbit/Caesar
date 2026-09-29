@@ -15,6 +15,9 @@
  */
 
 import { planAction, applyPlan } from '../sim/construction.js';
+import { removeBuilding } from '../sim/entities.js';
+import { openRoute, setTradeMode } from '../sim/trade.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { Terrain } from '../world/map.js';
 
 /** Try to build; returns true on success. */
@@ -245,4 +248,177 @@ function connectToRoad(game, x, y) {
     }
   }
   if (best) build(game, 'road', x, y, best.x, best.y);
+}
+
+// ---------------------------------------------------------------------------
+// Military showcase
+// ---------------------------------------------------------------------------
+
+/**
+ * Free square of `size` tiles for a building near `center` (closest first),
+ * between minD and maxD tiles away. Optionally only on meadow (ranches).
+ */
+function findSpot(game, size, center, minD, maxD, meadowOnly = false) {
+  const { map } = game;
+  const spots = [];
+  for (let y = 1; y < map.h - size - 1; y++) {
+    for (let x = 1; x < map.w - size - 1; x++) {
+      const d = Math.hypot(x - center.x, y - center.y);
+      if (d < minD || d > maxD) continue;
+      let ok = true;
+      for (let dy = 0; dy < size && ok; dy++) {
+        for (let dx = 0; dx < size; dx++) {
+          const tx = x + dx;
+          const ty = y + dy;
+          if (!map.isFree(tx, ty) || map.terrain[map.idx(tx, ty)] === Terrain.TREES) { ok = false; break; }
+        }
+      }
+      if (!ok) continue;
+      if (meadowOnly && map.countTerrain(x, y, size, Terrain.MEADOW) < size * size * 0.6) continue;
+      spots.push({ x, y, d });
+    }
+  }
+  spots.sort((a, b) => a.d - b.d);
+  return spots;
+}
+
+/**
+ * Place `type` at the nearest good spot and connect it to the road network.
+ * A spot that cannot be connected is given up (building removed) and the
+ * next one is tried, so callers always get a working, road-linked building.
+ */
+function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
+  let tries = 0;
+  for (const s of findSpot(game, size, center, minD, maxD, meadowOnly)) {
+    if (tries++ > 40) break;
+    if (!place(game, type, s.x, s.y, size)) continue;
+    const b = [...game.buildings.values()].pop();
+    if (!b || b.type !== type) continue;
+    for (const [x, y] of [[s.x + size, s.y + 1], [s.x - 1, s.y + 1], [s.x + 1, s.y + size], [s.x + 1, s.y - 1]]) {
+      if (b.accessRoad >= 0) break;
+      connectToRoad(game, x, y);
+    }
+    if (b.accessRoad >= 0) return b;
+    removeBuilding(game, b, 'undo');
+    game.onMapEdited();
+  }
+  return null;
+}
+
+/**
+ * Add a garrison to the demo city: barracks, one fort of each kind, a horse
+ * ranch, a fletcher, two watchtowers and a wall with a gate across the
+ * Imperial road. With { stock: true } the barracks gets equipment up front so
+ * soldiers appear quickly (screenshots, tests).
+ * @returns {{ok:boolean, barracks?:object, forts:object[], ranch?:object, wall:number}}
+ */
+export function buildDemoGarrison(game, center, opts = {}) {
+  const forts = [];
+  const barracks = placeNear(game, 'barracks', 3, center, 6, 30);
+  if (barracks) guard(game, barracks.x, barracks.y);
+  for (const type of ['fort_legion', 'fort_archer', 'fort_cavalry']) {
+    const f = placeNear(game, type, 3, center, 8, 34);
+    if (f) forts.push(f);
+  }
+  const ranch = placeNear(game, 'horse_ranch', 3, center, 6, 34, true) || placeNear(game, 'horse_ranch', 3, center, 6, 34);
+  const fletcher = placeNear(game, 'fletcher_ws', 2, center, 6, 30);
+  const towers = [placeNear(game, 'tower', 2, center, 10, 30), placeNear(game, 'tower', 2, center, 14, 34)].filter(Boolean);
+  const wall = demoWall(game, center);
+  if (opts.stock && barracks) {
+    barracks.stock.weapons = 400;
+    barracks.stock.arrows = 400;
+    barracks.stock.horses = 400;
+  }
+  return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall };
+}
+
+/** A wall across the Imperial road ~12 tiles from the center, with a gate on the road. */
+function demoWall(game, center) {
+  const { map } = game;
+  let best = null;
+  for (let i = 0; i < map.size; i++) {
+    if (!map.fixedRoad[i] && !map.road[i]) continue;
+    const x = map.xOf(i);
+    const y = map.yOf(i);
+    const d = Math.hypot(x - center.x, y - center.y);
+    if (d < 11 || d > 16) continue;
+    const alongX = map.hasRoad(x + 1, y) && map.hasRoad(x - 1, y) && !map.hasRoad(x, y + 1) && !map.hasRoad(x, y - 1);
+    const alongY = map.hasRoad(x, y + 1) && map.hasRoad(x, y - 1) && !map.hasRoad(x + 1, y) && !map.hasRoad(x - 1, y);
+    if (!alongX && !alongY) continue;
+    if (!best || Math.abs(d - 13) < Math.abs(best.d - 13)) best = { x, y, d, alongX };
+  }
+  if (!best) return 0;
+  const L = 5;
+  const plan = best.alongX
+    ? planAction(game, 'wall', best.x, best.y - L, best.x, best.y + L)
+    : planAction(game, 'wall', best.x - L, best.y, best.x + L, best.y);
+  if (!plan || !plan.count) return 0;
+  const res = applyPlan(game, plan);
+  return res.ok ? res.count : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Harbor showcase
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a Dock (on the nearest navigable shore), a warehouse beside it and
+ * the fire/repair posts it needs, then open every sea route of the scenario
+ * and set a few imports/exports. Used by screenshots and tests.
+ * @returns {{ok:boolean, dock?:object, warehouse?:object, routes:string[]}}
+ */
+export function buildDemoHarbor(game, center) {
+  const { map } = game;
+  if (!map.seaEntry) return { ok: false, routes: [] };
+  // Dock candidates: nearest to the city first.
+  const spots = [];
+  for (let y = 1; y < map.h - 4; y++) {
+    for (let x = 1; x < map.w - 4; x++) {
+      const d = Math.hypot(x - center.x, y - center.y);
+      if (d > 34) continue;
+      spots.push({ x, y, d });
+    }
+  }
+  spots.sort((a, b) => a.d - b.d);
+  let dock = null;
+  let tries = 0;
+  for (const s of spots) {
+    if (tries > 30) break;
+    if (!place(game, 'dock', s.x, s.y, 3)) continue;
+    tries++;
+    dock = [...game.buildings.values()].pop();
+    // Road from the dock's land side to the nearest street with homes on it
+    // (the nearest road may be the Imperial road, too far from any workers).
+    let street = null;
+    let bestD = Infinity;
+    for (const b of game.buildings.values()) {
+      if (!b.house || b.accessRoad < 0) continue;
+      const d = Math.hypot(map.xOf(b.accessRoad) - dock.x, map.yOf(b.accessRoad) - dock.y);
+      if (d < bestD) { bestD = d; street = { x: map.xOf(b.accessRoad), y: map.yOf(b.accessRoad) }; }
+    }
+    for (const [x, y] of [[dock.x + 3, dock.y + 1], [dock.x - 1, dock.y + 1], [dock.x + 1, dock.y + 3], [dock.x + 1, dock.y - 1]]) {
+      if (!map.inBounds(x, y) || map.navigable[map.idx(x, y)] || map.building[map.idx(x, y)]) continue;
+      if (!(street && build(game, 'road', x, y, street.x, street.y))) connectToRoad(game, x, y);
+      game.processRoadChanges();
+      if (dock.accessRoad >= 0) break;
+    }
+    if (dock.accessRoad >= 0) break;
+    removeBuilding(game, dock, 'undo');
+    game.onMapEdited();
+    dock = null;
+  }
+  if (!dock) return { ok: false, routes: [] };
+  guard(game, dock.x, dock.y);
+  const warehouse = placeNear(game, 'warehouse', 3, { x: dock.x, y: dock.y }, 3, 12);
+  const routes = [];
+  for (const [id, r] of Object.entries(game.city.trade.routes)) {
+    if (TRADE_PARTNERS[id].route !== 'sea') continue;
+    game.cheats.freeBuild = true;
+    if (openRoute(game, id).ok) routes.push(id);
+    game.cheats.freeBuild = false;
+  }
+  setTradeMode(game, 'wine', 'import', 800);
+  setTradeMode(game, 'fruit', 'import', 600);
+  setTradeMode(game, 'pottery', 'export', 200);
+  return { ok: true, dock, warehouse, routes };
 }

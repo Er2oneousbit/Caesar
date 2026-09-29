@@ -8,18 +8,28 @@
  *   farms). At 100 a batch of CART_CAPACITY units is ready and a cart pusher
  *   carries it to a workshop, granary or warehouse (see storage.js).
  *
- *   Workshop: consumes one batch of raw material to make one batch of goods.
+ *   Workshop: uses one batch of its recipe (usually 100 units of one raw
+ *   material; the Fletcher needs timber AND iron) to make one batch of goods.
  *   Workshops receive raw material from producers directly, or from
  *   warehouses that notice a workshop running low.
+ *
+ *   Horse Ranch: a farm whose output also scales with its breeding herd
+ *   (2 mares at first, up to 8 as the ranch matures).
+ *
+ *   Warehouses also forward weapons, arrows and horses to barracks when the
+ *   forts need recruits.
  * ----------------------------------------------------------------------------
  */
 
 import { CONFIG } from '../config.js';
 import { RAW_TYPES, FOOD_TYPES } from '../data/goods.js';
+import { BUILDINGS } from '../data/buildings.js';
+import { HERD_MAX, HERD_GROWTH_DAYS } from '../data/units.js';
 import { Terrain } from '../world/map.js';
 import { spawnWalker } from './entities.js';
 import { followPath } from './movement.js';
 import { findDeliveryTarget, takeGoods } from './storage.js';
+import { militaryNeed, barracksHasRoom } from './military.js';
 
 /** Number of cart pushers this building has out. */
 export function cartsOut(game, b) {
@@ -80,9 +90,11 @@ export function updateProducer(game, b) {
   const good = def.produces;
   const ok = def.kind === 'farm' ? b.fertility > 0 : resourceAvailable(game, b);
   b.resourceOk = ok;
+  if (b.herd !== undefined) growHerd(b);
   if (ok && b.efficiency > 0 && b.stock[good] < CONFIG.PRODUCER_MAX_STOCK) {
     let rate = (b.efficiency * 100) / def.productionDays;
     if (def.kind === 'farm') rate *= 0.25 + 0.75 * b.fertility;
+    if (b.herd !== undefined) rate *= b.herd / HERD_MAX; // young ranches foal slowly
     b.progress += rate * game.difficulty.production;
     if (b.progress >= 100) {
       b.progress -= 100;
@@ -92,6 +104,16 @@ export function updateProducer(game, b) {
     }
   }
   shipOutput(game, b, good, def.kind === 'farm' ? CONFIG.FARM_CART_LOAD : CONFIG.CART_LOAD);
+}
+
+/** Horse Ranch: a staffed ranch gains a breeding mare every HERD_GROWTH_DAYS. */
+function growHerd(b) {
+  if (b.herd >= HERD_MAX || b.efficiency <= 0 || b.fertility <= 0) return;
+  b.herdDays = (b.herdDays || 0) + b.efficiency;
+  if (b.herdDays >= HERD_GROWTH_DAYS) {
+    b.herdDays -= HERD_GROWTH_DAYS;
+    b.herd++;
+  }
 }
 
 /**
@@ -109,14 +131,15 @@ function shipOutput(game, b, good, maxLoad) {
 /** Daily update for workshops. */
 export function updateWorkshop(game, b) {
   const def = b.def;
-  const raw = def.consumes;
+  const recipe = Object.entries(def.recipe);
   const out = def.produces;
-  const working = b.efficiency > 0 && b.stock[raw] >= CONFIG.CART_CAPACITY && b.stock[out] < CONFIG.CART_CAPACITY * 2;
+  const hasInputs = recipe.every(([good, n]) => b.stock[good] >= n);
+  const working = b.efficiency > 0 && hasInputs && b.stock[out] < CONFIG.CART_CAPACITY * 2;
   if (working) {
     b.progress += ((b.efficiency * 100) / def.productionDays) * game.difficulty.production;
     if (b.progress >= 100) {
       b.progress = 0;
-      b.stock[raw] -= CONFIG.CART_CAPACITY;
+      for (const [good, n] of recipe) b.stock[good] -= n;
       b.stock[out] += CONFIG.CART_CAPACITY;
       game.city.produced[out] = (game.city.produced[out] || 0) + CONFIG.CART_CAPACITY;
     }
@@ -125,37 +148,52 @@ export function updateWorkshop(game, b) {
 }
 
 /**
- * Daily: a warehouse holding raw materials sends a cart to the nearest
- * workshop that is running low on that material.
+ * Daily: a warehouse sends one cart per day where it is needed most:
+ *   1. weapons / arrows / horses to a barracks equipping recruits
+ *   2. raw materials to the nearest workshop running low on them
  */
 export function updateWarehouseSupply(game, b) {
   if (b.efficiency <= 0 || b.accessRoad < 0) return;
   if (cartsOut(game, b) >= 1) return;
   const { buildings, pf } = game;
+  const lot = CONFIG.CART_CAPACITY;
+  for (const good of BUILDINGS.barracks.inputs) {
+    if ((b.stock[good] || 0) < lot || militaryNeed(game, good) <= 0) continue;
+    const found = pf.findNearest(b.accessRoad, (id) => {
+      const x = buildings.get(id);
+      return !!x && barracksHasRoom(x, good, lot);
+    }, 100, b.id);
+    if (found && sendSupplyCart(game, b, buildings.get(found.id), good, found.path)) return;
+  }
   for (const raw of RAW_TYPES) {
-    if ((b.stock[raw] || 0) < CONFIG.CART_CAPACITY) continue;
+    if ((b.stock[raw] || 0) < lot) continue;
     const found = pf.findNearest(b.accessRoad, (id) => {
       const ws = buildings.get(id);
-      return ws && ws.def.kind === 'workshop' && ws.def.consumes === raw
-        && ws.stock[raw] + ws.incoming[raw] + CONFIG.CART_CAPACITY <= CONFIG.WORKSHOP_RAW_CAP;
+      return ws && ws.def.kind === 'workshop' && ws.def.recipe[raw] !== undefined
+        && ws.stock[raw] + ws.incoming[raw] + lot <= CONFIG.WORKSHOP_RAW_CAP;
     }, 100, b.id);
-    if (!found) continue;
-    const ws = buildings.get(found.id);
-    const amount = takeGoods(b, raw, CONFIG.CART_CAPACITY);
-    ws.incoming[raw] += amount;
-    const w = spawnWalker(game, 'cart', b.accessRoad, b, {
-      cargo: { good: raw, amount },
-      target: ws.id,
-      reserve: { id: ws.id, good: raw, amount },
-      state: 'deliver',
-      speed: CONFIG.CART_SPEED,
-    });
-    if (!w) {
-      ws.incoming[raw] -= amount;
-      b.stock[raw] += amount;
-      return;
-    }
-    followPath(game, w, found.path);
-    return;
+    if (found && sendSupplyCart(game, b, buildings.get(found.id), raw, found.path)) return;
   }
+}
+
+/** Load one cart (CART_CAPACITY units) from a warehouse and send it to `dest`. */
+function sendSupplyCart(game, b, dest, good, path) {
+  const amount = takeGoods(b, good, CONFIG.CART_CAPACITY);
+  if (amount <= 0) return false;
+  dest.incoming[good] += amount;
+  const w = spawnWalker(game, 'cart', b.accessRoad, b, {
+    cargo: { good, amount },
+    target: dest.id,
+    reserve: { id: dest.id, good, amount },
+    state: 'deliver',
+    speed: CONFIG.CART_SPEED,
+  });
+  if (!w) {
+    // Walker cap reached: undo the reservation and keep the goods.
+    dest.incoming[good] -= amount;
+    b.stock[good] += amount;
+    return false;
+  }
+  followPath(game, w, path);
+  return true;
 }

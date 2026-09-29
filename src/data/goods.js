@@ -31,6 +31,9 @@ export const GOODS = Object.freeze({
   oil: { name: 'Oil', kind: 'goods', color: '#c9b13a', buy: 180, sell: 136, icon: '🛢' },
   wine: { name: 'Wine', kind: 'goods', color: '#7b1f3a', buy: 215, sell: 160, icon: '🍷' },
   weapons: { name: 'Weapons', kind: 'goods', color: '#9aa3ad', buy: 250, sell: 180, icon: '⚔' },
+  arrows: { name: 'Arrows', kind: 'goods', color: '#b89a64', buy: 130, sell: 95, icon: '🏹' },
+  // Military stock: 100 units = one horse
+  horses: { name: 'Horses', kind: 'stock', color: '#8a5a3c', buy: 420, sell: 300, icon: '🐎', unitSize: 100, unitName: 'horse' },
 });
 
 export const GOOD_KEYS = Object.freeze(Object.keys(GOODS));
@@ -38,7 +41,28 @@ export const FOOD_TYPES = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind ==
 export const RAW_TYPES = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'raw'));
 export const MANUFACTURED = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'goods'));
 
-/** Goods houses consume (weapons are export/military only). */
+/**
+ * Military inputs: what a barracks uses to equip one recruit (units).
+ *   legionary: half a cart of weapons (Weaponsmith: iron -> weapons)
+ *   archer:    half a cart of arrows  (Fletcher: timber -> arrows)
+ *   cavalry:   one horse              (Horse Ranch, or imports)
+ */
+export const RECRUIT_COST = Object.freeze({ legionary: { weapons: 50 }, archer: { arrows: 50 }, cavalry: { horses: 100 } });
+
+/** Where each military input comes from (barracks status messages, help). */
+export const RECRUIT_SOURCE = Object.freeze({ weapons: 'Weaponsmith', arrows: 'Fletcher', horses: 'Horse Ranch' });
+
+/** "3 horses" style display for goods with a unit size, units otherwise. */
+export function formatAmount(good, units) {
+  const g = GOODS[good];
+  if (g && g.unitSize) {
+    const n = Math.floor(units / g.unitSize);
+    return `${n} ${g.unitName}${n === 1 ? '' : 's'}`;
+  }
+  return `${Math.round(units)} units`;
+}
+
+/** Goods houses consume (weapons and arrows are export/military only). */
 export const HOUSE_GOODS = Object.freeze(['pottery', 'furniture', 'oil', 'wine']);
 
 /** Empty stock record { wheat: 0, ... } */

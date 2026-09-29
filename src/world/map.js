@@ -32,6 +32,13 @@ export const Road = Object.freeze({
   BRIDGE: 3, // road over water
 });
 
+/** Values stored in map.wall */
+export const Wall = Object.freeze({
+  NONE: 0,
+  WALL: 1, // blocks raiders and walkers
+  GATE: 2, // wall across a road: citizens pass, raiders must break it
+});
+
 /** Bit flags stored in map.water (water supply coverage) */
 export const WaterBits = Object.freeze({
   WELL: 1, // within range of a well
@@ -68,6 +75,7 @@ export class GameMap {
     this.aqueduct = new Uint8Array(this.size); // 0 none, 1 dry, 2 carrying water
     this.rubble = new Uint8Array(this.size); // 1 = collapsed/burnt debris
     this.fixedRoad = new Uint8Array(this.size); // 1 = imperial road tile that cannot be removed
+    this.wall = new Uint8Array(this.size); // Wall.*
 
     // --- derived layers (recomputed, not saved) ---
     this.building = new Int32Array(this.size); // building id occupying the tile, 0 = none
@@ -75,6 +83,10 @@ export class GameMap {
     this.water = new Uint8Array(this.size); // WaterBits
     this.roadNet = new Int32Array(this.size); // road network component id (0 = no road)
     this.waterDist = new Uint8Array(this.size); // distance to nearest water tile (capped 255)
+    this.navigable = new Uint8Array(this.size); // 1 = water that ships can sail (reaches the map edge)
+
+    /** Edge water tile where merchant ships appear and leave, or null (no sea access). */
+    this.seaEntry = null;
 
     /** Entry/exit tiles for the imperial road (set by mapgen). */
     this.entry = { x: 0, y: 0 };
@@ -108,11 +120,11 @@ export class GameMap {
     return t === Terrain.GRASS || t === Terrain.MEADOW || t === Terrain.SAND || t === Terrain.TREES;
   }
 
-  /** Tile is completely empty land: buildable terrain, no road, no building, no aqueduct. */
+  /** Tile is completely empty land: buildable terrain, no road, building, aqueduct or wall. */
   isFree(x, y) {
     if (!this.isTerrainBuildable(x, y)) return false;
     const i = this.idx(x, y);
-    return this.road[i] === 0 && this.building[i] === 0 && this.aqueduct[i] === 0;
+    return this.road[i] === 0 && this.building[i] === 0 && this.aqueduct[i] === 0 && this.wall[i] === 0;
   }
 
   /** Mark the map as changed (renderer caches, minimap). */
@@ -146,6 +158,69 @@ export class GameMap {
       if (y > 0 && dist[i - w] > d) { dist[i - w] = d; queue[tail++] = i - w; }
       if (y < h - 1 && dist[i + w] > d) { dist[i + w] = d; queue[tail++] = i + w; }
     }
+  }
+
+  /**
+   * Mark navigable water: every body of water that touches the map edge and
+   * is big enough to be a river or sea (not a tiny pond in a corner). Ships
+   * sail under bridges. Also picks `seaEntry`, the edge tile of the largest
+   * such body where ships come and go (middle of its longest edge stretch).
+   * Water never changes after map generation, so this runs once per game.
+   */
+  computeNavigation(minTiles = 80) {
+    const { w, h, size } = this;
+    const nav = this.navigable;
+    nav.fill(0);
+    this.seaEntry = null;
+    const label = new Int32Array(size);
+    const queue = new Int32Array(size);
+    const onEdge = (i) => {
+      const x = i % w;
+      const y = (i / w) | 0;
+      return x === 0 || y === 0 || x === w - 1 || y === h - 1;
+    };
+    let best = null;
+    let next = 0;
+    for (let start = 0; start < size; start++) {
+      if (!onEdge(start) || this.terrain[start] !== Terrain.WATER || label[start]) continue;
+      next++;
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = start;
+      label[start] = next;
+      const edgeTiles = [];
+      while (head < tail) {
+        const i = queue[head++];
+        if (onEdge(i)) edgeTiles.push(i);
+        const x = i % w;
+        const y = (i / w) | 0;
+        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) {
+          if (j >= 0 && !label[j] && this.terrain[j] === Terrain.WATER) { label[j] = next; queue[tail++] = j; }
+        }
+      }
+      if (tail < minTiles) continue;
+      for (let k = 0; k < tail; k++) nav[queue[k]] = 1;
+      if (!best || tail > best.count) best = { count: tail, edgeTiles };
+    }
+    if (best) {
+      // Middle of the edge stretch, so ships appear in open water, not a corner.
+      const mid = best.edgeTiles[Math.floor(best.edgeTiles.length / 2)];
+      this.seaEntry = { x: mid % w, y: (mid / w) | 0 };
+    }
+    return !!best;
+  }
+
+  /**
+   * First navigable water tile orthogonally beside a footprint (a dock's
+   * berth), or -1 if the footprint is not on a navigable shore.
+   */
+  navigableBeside(x, y, S) {
+    for (let d = 0; d < S; d++) {
+      for (const [tx, ty] of [[x + d, y - 1], [x + S, y + d], [x + d, y + S], [x - 1, y + d]]) {
+        if (this.inBounds(tx, ty) && this.navigable[this.idx(tx, ty)]) return this.idx(tx, ty);
+      }
+    }
+    return -1;
   }
 
   /**
@@ -225,14 +300,16 @@ export class GameMap {
       aqueduct: encode(this.aqueduct),
       rubble: encode(this.rubble),
       fixedRoad: encode(this.fixedRoad),
+      wall: encode(this.wall),
     };
   }
 
   /** Rebuild a map from serialized data. Derived layers are recomputed by the game. */
   static deserialize(data, decode) {
     const m = new GameMap(data.w, data.h);
-    const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad'];
+    const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad', 'wall'];
     for (const name of layers) {
+      if (data[name] === undefined && name === 'wall') continue; // older saves had no walls
       const arr = decode(data[name]);
       if (arr.length !== m.size) throw new Error(`Save file map layer "${name}" has wrong size`);
       m[name].set(arr);
@@ -241,6 +318,7 @@ export class GameMap {
     m.exit = { x: data.exit.x, y: data.exit.y };
     m.computeWaterDistance();
     m.computeRoadNetworks();
+    m.computeNavigation();
     return m;
   }
 }

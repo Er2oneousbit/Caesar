@@ -1,11 +1,28 @@
 {
   "name": "colonia",
-  "version": "0.1.0",
-  "description": "Colonia: an original browser city builder inspired by classic Roman city-building games (Caesar III style gameplay).",
+  "version": "0.2.0",
+  "description": "Colonia: an original, open-source browser city builder inspired by classic Roman city-building games (Caesar III style): housing, services, trade by land and sea, and a military with walls, forts and cavalry.",
   "type": "module",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "er2oneousbit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Er2oneousbit/Caesar.git"
+  },
+  "homepage": "https://github.com/Er2oneousbit/Caesar#readme",
+  "bugs": {
+    "url": "https://github.com/Er2oneousbit/Caesar/issues"
+  },
+  "keywords": [
+    "city-builder",
+    "game",
+    "browser-game",
+    "canvas",
+    "isometric",
+    "roman",
+    "simulation"
+  ],
   "engines": {
     "node": ">=18"
   },

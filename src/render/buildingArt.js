@@ -16,7 +16,9 @@ import { HALF_W, CONFIG } from '../config.js';
 import { GODS } from '../data/gods.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS } from '../data/goods.js';
-import { P, poly, quad, ground, box, gableRoof, hipRoof, column, colonnade, windows, door, shade, tree, cypress, hash01 } from './draw.js';
+import { BUILDINGS } from '../data/buildings.js';
+import { UNIT_TYPES } from '../data/units.js';
+import { P, poly, quad, ground, box, gableRoof, hipRoof, column, colonnade, windows, door, shade, tree, cypress, hash01, horse } from './draw.js';
 
 const TH = CONFIG.TILE_H;
 
@@ -53,6 +55,7 @@ const HEIGHT = {
   actor_troupe: 44, gladiator_school: 40, menagerie: 40, forum: 46, senate: 84, garden: 30,
   statue_small: 40, statue_medium: 64, statue_large: 90, engineer_post: 44, prefecture: 40,
   clay_pit: 30, timber_yard: 34, iron_mine: 40, marble_quarry: 40, market: 36, granary: 50, warehouse: 40,
+  barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
 };
 
 function heightFor(key, size) {
@@ -957,7 +960,7 @@ function mineArt(ctx, S, variant, state, key) {
 
 function workshopArt(ctx, S, variant, state, key) {
   quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#b9a57c');
-  const wall = key === 'wine_ws' ? '#dcc7a3' : key === 'weapons_ws' ? '#bdb2a0' : COL.cream;
+  const wall = key === 'wine_ws' ? '#dcc7a3' : key === 'weapons_ws' ? '#bdb2a0' : key === 'fletcher_ws' ? '#d8c9a8' : COL.cream;
   box(ctx, 0.12, 0.12, 1.2, 0.95, 0, 18, wall);
   gableRoof(ctx, 0.12, 0.12, 1.2, 0.95, 18, 8, key === 'weapons_ws' ? COL.slate : COL.terra, 'u');
   door(ctx, 'left', 0.12, 0.12, 1.32, 1.07, 0, 0.4, '#3d2a1a', 0.2, 9);
@@ -993,6 +996,21 @@ function workshopArt(ctx, S, variant, state, key) {
         ctx.fillRect(x - 3, y - 4, 6, 3);
         ctx.fillStyle = '#b8bec6';
         ctx.fillRect(x - 0.6, y - 12, 1.2, 8);
+        break;
+      case 'fletcher_ws':
+        // a sheaf of arrows (iron tips, white fletching) and a strung bow
+        ctx.strokeStyle = '#b89a64';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        for (let a = -2; a <= 2; a++) { ctx.moveTo(x + a * 0.6, y); ctx.lineTo(x + a * 1.3, y - 11); }
+        ctx.stroke();
+        ctx.fillStyle = '#f2eee6';
+        for (let a = -2; a <= 2; a++) ctx.fillRect(x + a * 0.6 - 0.6, y - 3, 1.2, 2);
+        ctx.fillStyle = '#6f7680';
+        for (let a = -2; a <= 2; a++) ctx.fillRect(x + a * 1.3 - 0.5, y - 12.5, 1, 1.6);
+        ctx.strokeStyle = '#6b4a2a';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath(); ctx.arc(x + 6, y - 7, 5, -Math.PI / 2 - 0.9, -Math.PI / 2 + 0.9); ctx.stroke();
         break;
       default:
         break;
@@ -1111,6 +1129,284 @@ function genericArt(ctx, S) {
   hipRoof(ctx, 0.15, 0.15, S - 0.3, S - 0.3, 14, 8, COL.terra);
 }
 
+
+// ---------------------------------------------------------------------------
+// Military
+// ---------------------------------------------------------------------------
+
+/** Pole with a swallowtail banner; (u, v, z) is the foot of the pole. */
+function banner(ctx, u, v, z, color, h = 18) {
+  const [x, y] = P(u, v, z);
+  ctx.fillStyle = COL.woodDark;
+  ctx.fillRect(x - 0.6, y - h, 1.2, h);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + 0.6, y - h);
+  ctx.lineTo(x + 9.5, y - h);
+  ctx.lineTo(x + 7.6, y - h + 2.6);
+  ctx.lineTo(x + 9.5, y - h + 5.2);
+  ctx.lineTo(x + 0.6, y - h + 5.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(x - 1.3, y - h - 2.4, 2.6, 2.4); // eagle-ish finial
+}
+
+/** Small ground tent (a gable roof sitting on the earth). */
+function tent(ctx, u, v, color = '#e3d7bb') {
+  gableRoof(ctx, u, v, 0.42, 0.34, 0, 8, color, 'u', 0);
+}
+
+function barracksArt(ctx, S) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#b4a47e'); // packed-earth drill yard
+  // long dormitory block along the back
+  box(ctx, 0.12, 0.12, S - 0.24, 1.0, 0, 18, '#d9ccb0');
+  gableRoof(ctx, 0.12, 0.12, S - 0.24, 1.0, 18, 8, COL.slate, 'u');
+  windows(ctx, 'left', 0.12, 0.12, S - 0.12, 1.12, 0, 1, 6, '#3f3126', { z: 8, h: 4 });
+  door(ctx, 'left', 0.12, 0.12, S - 0.12, 1.12, 0, 0.5, '#4a3222', 0.24, 10);
+  // armory wing along the left side
+  box(ctx, 0.12, 1.22, 0.9, S - 1.34, 0, 14, '#cfc1a2');
+  gableRoof(ctx, 0.12, 1.22, 0.9, S - 1.34, 14, 7, shade(COL.slate, 0.08), 'v');
+  door(ctx, 'right', 0.12, 1.22, 1.02, S - 0.12, 0, 0.5, '#4a3222', 0.24, 9);
+  // wooden training posts in the yard
+  for (const [u, v] of [[1.5, 1.6], [2.15, 1.6], [1.5, 2.35], [2.15, 2.35]]) {
+    const [x, y] = P(u, v);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(x + 2, y, 3, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL.woodDark;
+    ctx.fillRect(x - 1, y - 11, 2, 11);
+  }
+  // spear rack
+  const [rx, ry] = P(S - 0.22, 1.55);
+  ctx.fillStyle = COL.wood;
+  ctx.fillRect(rx - 6, ry - 8, 12, 1.4);
+  ctx.strokeStyle = '#b8bec6';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  for (let k = 0; k < 4; k++) { ctx.moveTo(rx - 4.5 + k * 3, ry); ctx.lineTo(rx - 4.5 + k * 3, ry - 15); }
+  ctx.stroke();
+  banner(ctx, S - 0.35, 0.3, 26, '#a8322b', 14);
+}
+
+/**
+ * Walled camp (castra): corner towers, a gate facing the viewer, and inside
+ * tents (legion, archers) or a stable (cavalry). Flies its soldiers' color.
+ */
+function fortArt(ctx, S, variant, state, key) {
+  const unit = BUILDINGS[key]?.unit;
+  const color = UNIT_TYPES[unit]?.color || '#a8322b';
+  const wall = '#b9ad92';
+  const T = 0.12; // wall thickness
+  const H = 11; // wall height
+  const TW = 0.44; // tower size
+  const TH2 = 21; // tower height
+  quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#a99a74');
+  const tower = (u, v) => {
+    box(ctx, u, v, TW, TW, 0, TH2, shade(wall, -0.04));
+    box(ctx, u - 0.04, v - 0.04, TW + 0.08, TW + 0.08, TH2, 3, shade(wall, 0.08));
+  };
+  // back towers and walls (drawn first: they are behind everything)
+  tower(0.02, 0.02);
+  box(ctx, TW, 0.1, S - 2 * TW, T, 0, H, wall);
+  box(ctx, 0.1, TW, T, S - 2 * TW, 0, H, wall);
+  tower(S - TW - 0.02, 0.02);
+  tower(0.02, S - TW - 0.02);
+  // interior
+  if (key === 'fort_cavalry') {
+    box(ctx, 0.5, 0.55, 0.5, S - 1.1, 0, 9, COL.wood);
+    gableRoof(ctx, 0.5, 0.55, 0.5, S - 1.1, 9, 5, '#7a5a3a', 'v');
+    const [hx, hy] = P(1.7, 1.2);
+    horse(ctx, hx, hy, 0.9, '#8a5a3c', 1);
+    const [gx, gy] = P(2.0, 1.75);
+    horse(ctx, gx, gy, 0.9, '#d9d0c0', -1, 0, '#8a7a6a');
+  } else {
+    for (const [u, v] of [[0.62, 0.62], [1.28, 0.62], [1.94, 0.62], [0.62, 1.3]]) tent(ctx, u, v);
+    if (key === 'fort_archer') {
+      // straw target on a stand
+      const [x, y] = P(2.05, 1.55);
+      ctx.fillStyle = COL.woodDark;
+      ctx.fillRect(x - 0.6, y - 10, 1.2, 10);
+      ctx.fillStyle = '#e1cf8e';
+      ctx.beginPath(); ctx.arc(x, y - 11, 4.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c0392b';
+      ctx.beginPath(); ctx.arc(x, y - 11, 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e1cf8e';
+      ctx.beginPath(); ctx.arc(x, y - 11, 1, 0, Math.PI * 2); ctx.fill();
+    } else {
+      tent(ctx, 1.94, 1.3);
+    }
+  }
+  banner(ctx, S * 0.5, S * 0.5, 0, color, 26);
+  // front walls: right face (+u), then the front-left face (+v) with the gate
+  box(ctx, S - 0.1 - T, TW, T, S - 2 * TW, 0, H, wall);
+  const g0 = S / 2 - 0.32;
+  const g1 = S / 2 + 0.32;
+  const fv = S - 0.1 - T;
+  box(ctx, TW, fv, g0 - TW, T, 0, H, wall);
+  box(ctx, g1, fv, S - TW - g1, T, 0, H, wall);
+  box(ctx, g0 - 0.12, fv - 0.04, 0.14, T + 0.08, 0, H + 6, shade(wall, -0.08));
+  box(ctx, g1 - 0.02, fv - 0.04, 0.14, T + 0.08, 0, H + 6, shade(wall, -0.08));
+  box(ctx, g0 - 0.12, fv - 0.02, g1 - g0 + 0.24, T + 0.04, H + 6, 3, shade(wall, 0.05));
+  // shields hung on the front wall in the unit color
+  for (const u of [TW + 0.25, S - TW - 0.25]) {
+    const [x, y] = P(u, S - 0.1, 6);
+    ctx.fillStyle = color;
+    ctx.fillRect(x - 2, y - 3, 4, 5);
+    ctx.fillStyle = COL.gold;
+    ctx.fillRect(x - 0.6, y - 1, 1.2, 1.2);
+  }
+  tower(S - TW - 0.02, S - TW - 0.02);
+}
+
+/** Stone watchtower with a crenellated top and an archer on watch. */
+function towerArt(ctx, S) {
+  const stone = '#b9ad92';
+  quad(ctx, 0.04, 0.04, S - 0.04, S - 0.04, 0, COL.paving);
+  const a = 0.32;
+  const w = S - 0.64;
+  const h = 44;
+  box(ctx, a, a, w, w, 0, h, stone);
+  // stone courses
+  ctx.strokeStyle = 'rgba(80,70,55,0.35)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let z = 8; z < h; z += 8) {
+    const p0 = P(a, a + w, z);
+    const p1 = P(a + w, a + w, z);
+    const p2 = P(a + w, a, z);
+    ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]);
+  }
+  ctx.stroke();
+  door(ctx, 'left', a, a, a + w, a + w, 0, 0.5, '#4a3222', 0.3, 11);
+  windows(ctx, 'left', a, a, a + w, a + w, 0, 2, 1, '#2a241c', { z: 18, h: 7, w: 0.06, gap: 13 });
+  windows(ctx, 'right', a, a, a + w, a + w, 0, 2, 1, '#2a241c', { z: 18, h: 7, w: 0.06, gap: 13 });
+  // overhanging fighting platform
+  const o = 0.1;
+  box(ctx, a - o, a - o, w + 2 * o, w + 2 * o, h, 5, shade(stone, 0.06));
+  // archer on watch (behind the front merlons)
+  const [x, y] = P(a + w / 2, a + w / 2, h + 5);
+  ctx.fillStyle = '#3f7a3a';
+  ctx.fillRect(x - 2.4, y - 9, 4.8, 7);
+  ctx.fillStyle = '#e3b68c';
+  ctx.beginPath(); ctx.arc(x, y - 11, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#6b4a2a';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.arc(x + 4, y - 7, 5, -Math.PI / 2 - 0.9, -Math.PI / 2 + 0.9); ctx.stroke();
+  // merlons along the two front edges
+  const m = 0.16;
+  for (let k = 0; k < 4; k++) {
+    const t = a - o + (k + 0.5) * ((w + 2 * o) / 4);
+    box(ctx, t - m / 2, a + w + o - m, m, m, h + 5, 4, shade(stone, 0.1));
+    box(ctx, a + w + o - m, t - m / 2, m, m, h + 5, 4, shade(stone, 0.1));
+  }
+}
+
+/** Horse ranch: stable, fenced paddock and the breeding herd (state = herd size). */
+function ranchArt(ctx, S, variant, herd) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#86a85a');
+  // trodden earth near the stable
+  quad(ctx, 0.1, 0.9, 1.2, S - 0.2, 0, '#9a9a5c');
+  // stable in the back corner
+  box(ctx, 0.12, 0.12, 1.25, 0.7, 0, 12, COL.wood);
+  gableRoof(ctx, 0.12, 0.12, 1.25, 0.7, 12, 7, '#7a5a3a', 'u');
+  door(ctx, 'left', 0.12, 0.12, 1.37, 0.82, 0, 0.3, '#3d2a1a', 0.22, 9);
+  door(ctx, 'left', 0.12, 0.12, 1.37, 0.82, 0, 0.7, '#3d2a1a', 0.22, 9);
+  // hay and water trough
+  const [hx, hy] = P(0.35, 1.25);
+  ctx.fillStyle = COL.thatch;
+  ctx.beginPath(); ctx.ellipse(hx, hy - 4, 5, 5, 0, Math.PI, 0); ctx.fill();
+  ctx.fillRect(hx - 5, hy - 4, 10, 4);
+  box(ctx, 0.9, 1.1, 0.5, 0.14, 0, 3, COL.wood, { top: COL.water });
+  // paddock fence
+  const f = [[1.5, 0.15], [S - 0.12, 0.15], [S - 0.12, S - 0.12], [0.2, S - 0.12], [0.2, 1.6]];
+  ctx.strokeStyle = '#f0e6d0';
+  ctx.lineWidth = 0.8;
+  for (const z of [3, 6]) {
+    ctx.beginPath();
+    f.forEach(([u, v], k) => { const [x, y] = P(u, v, z); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#d9ceb4';
+  for (const [u, v] of f) { const [x, y] = P(u, v); ctx.fillRect(x - 0.6, y - 7, 1.2, 7); }
+  // horses, back to front so nearer ones overlap farther ones
+  const coats = ['#8a5a3c', '#5a3a26', '#d9d0c0', '#a8744a', '#3b2a20', '#b89a78'];
+  const spots = [];
+  for (let k = 0; k < Math.max(1, herd); k++) {
+    spots.push({ u: 1.45 + hash01(variant, k, 71) * (S - 1.8), v: 0.5 + hash01(variant, k, 72) * (S - 1.0), k });
+  }
+  spots.sort((p1, p2) => p1.u + p1.v - (p2.u + p2.v));
+  for (const s of spots) {
+    const [x, y] = P(s.u, s.v);
+    horse(ctx, x, y, 0.85, coats[(s.k + variant) % coats.length], hash01(variant, s.k, 73) < 0.5 ? 1 : -1);
+  }
+}
+
+/**
+ * Dock: plank quay with a crane and bollards on the water side, a store
+ * shed and cargo on the land side. `side` = which edge faces the water
+ * (0 = -v, 1 = +u, 2 = +v, 3 = -u); the layout is designed with water on
+ * the +u edge and mirrored/rotated into place.
+ */
+function dockArt(ctx, S, variant, side = 1) {
+  const T = (u, v) => (side === 1 ? [u, v] : side === 3 ? [S - u, v] : side === 2 ? [v, u] : [v, S - u]);
+  const rect = (u0, v0, du, dv) => {
+    const a = T(u0, v0);
+    const b = T(u0 + du, v0 + dv);
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])];
+  };
+  quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#a07e55');
+  // plank seams parallel to the water edge
+  ctx.strokeStyle = 'rgba(70,45,25,0.45)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  for (let u = 0.3; u < S; u += 0.3) {
+    const p = P(...T(u, 0.04));
+    const q = P(...T(u, S - 0.04));
+    ctx.moveTo(p[0], p[1]);
+    ctx.lineTo(q[0], q[1]);
+  }
+  ctx.stroke();
+  // 3D pieces, drawn back to front by their position on screen
+  const items = [];
+  const shed = rect(0.15, 0.2, 1.15, S - 0.4);
+  items.push({ d: shed[0] + shed[1], draw: () => {
+    box(ctx, shed[0], shed[1], shed[2], shed[3], 0, 15, '#d8c9a8');
+    gableRoof(ctx, shed[0], shed[1], shed[2], shed[3], 15, 7, COL.terra, shed[2] >= shed[3] ? 'u' : 'v');
+  } });
+  for (const [cu, cv, color] of [[1.55, 0.45, '#8a5a33'], [1.55, 0.8, '#b8683c'], [1.9, 0.5, '#c9b13a'], [1.5, S - 0.7, '#7b1f3a']]) {
+    const r = rect(cu, cv, 0.26, 0.26);
+    items.push({ d: r[0] + r[1] + 0.3, draw: () => box(ctx, r[0], r[1], r[2], r[3], 0, 6, color) });
+  }
+  const [crU, crV] = T(S - 0.45, S * 0.55);
+  items.push({ d: crU + crV, draw: () => {
+    const [x, y] = P(crU, crV);
+    ctx.strokeStyle = COL.woodDark;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y); ctx.lineTo(x, y - 28); ctx.lineTo(x + 4, y);
+    const tip = P(...T(S + 0.3, S * 0.55), 34);
+    ctx.moveTo(x, y - 28); ctx.lineTo(tip[0], tip[1]);
+    ctx.stroke();
+    ctx.strokeStyle = '#3a3026';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(tip[0], tip[1]); ctx.lineTo(tip[0], tip[1] + 12); ctx.stroke();
+    ctx.fillStyle = '#c9a36b';
+    ctx.fillRect(tip[0] - 2.5, tip[1] + 12, 5, 4);
+  } });
+  for (const bv of [0.4, S / 2, S - 0.4]) {
+    const [bu, bvv] = T(S - 0.12, bv);
+    items.push({ d: bu + bvv, draw: () => {
+      const [x, y] = P(bu, bvv);
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(x - 1.3, y - 5, 2.6, 5);
+      ctx.fillStyle = '#6b5640';
+      ctx.fillRect(x - 1.8, y - 6, 3.6, 1.4);
+    } });
+  }
+  items.sort((a, b) => a.d - b.d);
+  for (const it of items) it.draw();
+}
+
 const ART = {
   house: houseArt,
   well: wellArt,
@@ -1145,12 +1441,21 @@ const ART = {
   market: marketArt,
   granary: granaryArt,
   warehouse: warehouseArt,
+  barracks: barracksArt,
+  fort_legion: fortArt,
+  fort_archer: fortArt,
+  fort_cavalry: fortArt,
+  tower: towerArt,
+  horse_ranch: ranchArt,
+  dock: dockArt,
 };
 
 /** Art state that changes the building's look (part of the sprite key). */
 export function artState(b) {
   const kind = b.def.kind;
   if (b.house) return b.house.tier;
+  if (b.herd !== undefined) return b.herd; // horse ranch: one sprite per herd size
+  if (kind === 'dock') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
   if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20));
   if (kind === 'reservoir' || kind === 'fountain') return b.hasWater ? 1 : 0;
   return 0;

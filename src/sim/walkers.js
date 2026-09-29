@@ -15,10 +15,11 @@ import { followPath, goHome, pickRoamTile, setNextTile } from './movement.js';
 import { roamerVisit } from './services.js';
 import { buyerArrive, buyerUnload } from './market.js';
 import { settlerArrive, seekHome } from './population.js';
-import { caravanArrive } from './trade.js';
+import { caravanArrive, shipArrive, shipLeave } from './trade.js';
 import { prefectArriveAtFire, afterWait } from './risk.js';
 import { performerArrive } from './entertainment.js';
 import { findDeliveryTarget, receiveGoods } from './storage.js';
+import { recruitArrive } from './military.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
 /** Advance every walker by one tick. */
@@ -41,7 +42,8 @@ function stepWalker(game, w) {
     if (w.waitTicks === 0 && w.afterWait) {
       const what = w.afterWait;
       w.afterWait = null;
-      afterWait(game, w, what);
+      if (what === 'shipLeave') shipLeave(game, w);
+      else afterWait(game, w, what);
     }
     return;
   }
@@ -76,7 +78,7 @@ function onArriveTile(game, w) {
       return;
     }
     const next = w.path[w.pathIndex + 1];
-    if (!map.road[next]) {
+    if (w.kind !== 'ship' && !map.road[next]) {
       reroute(game, w);
       return;
     }
@@ -151,6 +153,12 @@ function onPathEnd(game, w) {
       break;
     case 'toFire':
       prefectArriveAtFire(game, w);
+      break;
+    case 'toFort':
+      recruitArrive(game, w);
+      break;
+    case 'toDock':
+      shipArrive(game, w);
       break;
     default:
       killWalker(game, w);

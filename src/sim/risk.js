@@ -23,6 +23,11 @@ export function buildingLabel(b) {
   return b.house ? HOUSE_TIERS[b.house.tier].name : b.def.name;
 }
 
+/** "a Prefecture" / "an Archer Fort" */
+export function withArticle(label) {
+  return `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label}`;
+}
+
 /** Daily risk growth + disaster checks for one building. */
 export function updateRisk(game, b) {
   let fire = b.def.fire;
@@ -46,30 +51,43 @@ export function updateRisk(game, b) {
   }
 }
 
-/** Burn a building down: it becomes a burning ruin. */
+/**
+ * Burn a building down: it becomes a burning ruin.
+ * @param {'fire'|'lightning'|'raid'|'raidQuiet'} cause  raidQuiet = no message
+ *        (raiders wrecking a whole street would otherwise flood the log)
+ */
 export function igniteBuilding(game, b, cause = 'fire') {
   const tiles = footprintTiles(game.map, b.x, b.y, b.size);
   const label = buildingLabel(b);
+  const aLabel = withArticle(label);
   removeBuilding(game, b, 'fire');
   for (const i of tiles) {
     game.map.rubble[i] = 1;
     game.fires.set(i, CONFIG.FIRE_BURN_DAYS);
   }
   game.city.stats.fires++;
-  const text = cause === 'lightning' ? `Lightning struck a ${label}! It is burning.` : `Fire! A ${label} has burned down.`;
-  game.message(text, 'bad', b.x, b.y);
+  const text = {
+    lightning: `Lightning struck ${aLabel}! It is burning.`,
+    raid: `Raiders have set ${aLabel} on fire!`,
+    raidQuiet: null,
+  }[cause] ?? `Fire! ${aLabel[0].toUpperCase()}${aLabel.slice(1)} has burned down.`;
+  if (text) game.message(text, 'bad', b.x, b.y);
   game.events.emit('sound', { name: 'fire' });
   dispatchPrefect(game, tiles[0]);
 }
 
-/** Collapse a building into rubble. */
-export function collapseBuilding(game, b) {
+/**
+ * Collapse a building into rubble.
+ * @param {'decay'|'raid'|'raidQuiet'} cause
+ */
+export function collapseBuilding(game, b, cause = 'decay') {
   const tiles = footprintTiles(game.map, b.x, b.y, b.size);
-  const label = buildingLabel(b);
+  const aLabel = withArticle(buildingLabel(b));
   removeBuilding(game, b, 'collapse');
   for (const i of tiles) game.map.rubble[i] = 1;
   game.city.stats.collapses++;
-  game.message(`A ${label} has collapsed!`, 'bad', b.x, b.y);
+  if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
+  else if (cause !== 'raidQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y);
   game.events.emit('collapse', { x: b.x, y: b.y, size: b.size });
   game.events.emit('sound', { name: 'collapse' });
 }

@@ -1,0 +1,7 @@
+# Keep line endings identical on every OS so the committed build
+# (dist/colonia.html) is byte-for-byte reproducible and CI can verify it.
+* text=auto eol=lf
+*.png binary
+
+# Generated single-file build: hide it from diffs and language stats.
+dist/colonia.html linguist-generated=true -diff

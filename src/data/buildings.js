@@ -18,16 +18,27 @@
  *   walker         roaming walker type spawned by the building
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
+ *                  | 'shore' (beside navigable water: docks)
  *   kind           behavior family (drives sim dispatch):
  *                    service | farm | raw | workshop | granary | warehouse |
  *                    market | venue | training | water | reservoir |
- *                    fountain | well | decor | hospital | house
+ *                    fountain | well | decor | hospital | house | dock |
+ *                    barracks | fort | tower
  *   produces       good produced (farm/raw/workshop)
- *   consumes       raw good consumed (workshop)
+ *   consumes       raw good consumed (single-input workshops, 100 per batch)
+ *   recipe         raw goods per 100-unit batch, e.g. { timber: 100, iron: 50 }.
+ *                  Filled in automatically from `consumes`; list it yourself
+ *                  for multi-input workshops (the Fletcher). Code reads recipe.
  *   productionDays days per 100-unit batch at full efficiency
  *   god            temple patron (temples only)
  *   venue          entertainment venue type (venues/training)
  *   needsPiped     requires piped water from a reservoir to operate
+ *   inputs         goods a building accepts by cart for its own use
+ *                  (barracks: weapons, arrows, horses), with inputCap units each
+ *   unit           soldier type a fort garrisons (see data/units.js)
+ *   hp             hit points against raiders (default: by size)
+ *                  Forts never burn or decay (fire/damage 0): only raiders
+ *                  can destroy them, and then their garrison disbands.
  * ----------------------------------------------------------------------------
  */
 
@@ -46,6 +57,7 @@ export const CATEGORIES = Object.freeze([
   { key: 'farms', name: 'Farms', icon: '🌾' },
   { key: 'industry', name: 'Industry', icon: '⚒' },
   { key: 'commerce', name: 'Storage & Markets', icon: '📦' },
+  { key: 'military', name: 'Military', icon: '⚔' },
 ]);
 
 /** Labor categories (used by the labor advisor and priorities). */
@@ -58,6 +70,7 @@ export const LABOR_CATEGORIES = Object.freeze({
   entertainment: 'Entertainment',
   healthEdu: 'Health & Education',
   govReligion: 'Government & Religion',
+  military: 'Military',
 });
 
 /**
@@ -69,12 +82,16 @@ export const TOOLS = Object.freeze({
   plaza: { name: 'Plaza', category: 'roads', cost: 15, drag: 'area', desc: 'Paves existing roads with decorative stone. Raises desirability nearby.' },
   bridge: { name: 'Bridge', category: 'roads', cost: 40, drag: 'line', desc: 'A straight road across water. Start and end on the banks.' },
   aqueduct: { name: 'Aqueduct', category: 'water', cost: 8, drag: 'path', desc: 'Carries water between reservoirs. Can cross roads.' },
-  clear: { name: 'Clear Land', category: null, cost: 0, drag: 'area', desc: 'Demolish buildings, roads and aqueducts, or clear trees and rubble.' },
+  wall: { name: 'Wall', category: 'military', cost: 12, gateCost: 40, drag: 'path', desc: 'Stone walls that raiders must break through. Drag a wall across a road to build a gate that citizens (not raiders) can pass.' },
+  clear: { name: 'Clear Land', category: null, cost: 0, drag: 'area', desc: 'Demolish buildings, roads, walls and aqueducts, or clear trees and rubble.' },
 });
+
+/** Units of each raw material a single-input workshop uses per batch (= one cart). */
+const BATCH = 100;
 
 // Helper to keep the table compact. Every building gets sane defaults.
 function B(def) {
-  return Object.freeze({
+  const out = {
     size: 1,
     cost: 10,
     workers: 0,
@@ -88,7 +105,11 @@ function B(def) {
     kind: 'service',
     needsRoad: true,
     ...def,
-  });
+  };
+  // Every workshop gets a recipe so the sim only has one code path.
+  if (out.kind === 'workshop' && !out.recipe) out.recipe = { [out.consumes]: BATCH };
+  if (out.recipe) out.recipe = Object.freeze({ ...out.recipe });
+  return Object.freeze(out);
 }
 
 export const BUILDINGS = Object.freeze({
@@ -341,7 +362,12 @@ export const BUILDINGS = Object.freeze({
   weapons_ws: B({
     name: 'Weaponsmith', category: 'industry', kind: 'workshop', produces: 'weapons', consumes: 'iron', cost: 50, size: 2, workers: 10, labor: 'industry',
     des: [-4, 1, 1, 3], fire: 3, damage: 1, productionDays: 22,
-    desc: 'Forges iron into weapons, a lucrative export.',
+    desc: 'Forges iron into weapons: legionaries need them, and they sell well abroad.',
+  }),
+  fletcher_ws: B({
+    name: 'Fletcher', category: 'industry', kind: 'workshop', produces: 'arrows', recipe: { timber: 100, iron: 50 }, cost: 45, size: 2, workers: 8, labor: 'industry',
+    des: [-2, 1, 1, 2], fire: 2.5, damage: 1, productionDays: 16,
+    desc: 'Makes bows and iron-tipped arrows from timber (shafts) and iron (arrowheads): 100 timber + 50 iron per 100 arrows. Archer recruits need them at the barracks.',
   }),
 
   // --- Storage & markets --------------------------------------------------
@@ -359,6 +385,43 @@ export const BUILDINGS = Object.freeze({
     name: 'Warehouse', category: 'commerce', kind: 'warehouse', cost: 70, size: 3, workers: 6, labor: 'industry',
     des: [-5, 2, 1, 4], fire: 1.2, damage: 1,
     desc: 'Stores raw materials and goods. Supplies workshops and trades with caravans.',
+  }),
+  dock: B({
+    name: 'Dock', category: 'commerce', kind: 'dock', cost: 120, size: 3, workers: 10, labor: 'industry',
+    des: [-6, 1, 1, 3], fire: 1.2, damage: 1, placement: 'shore',
+    desc: 'Merchant ships from sea trade routes tie up here. Build it on the bank of a river or sea that reaches the map edge. Dock workers cart imports to your warehouses; ships buy exports from warehouses connected to the dock by road.',
+  }),
+
+  // --- Horses & military ----------------------------------------------------
+  horse_ranch: B({
+    name: 'Horse Ranch', category: 'farms', kind: 'farm', produces: 'horses', cost: 70, size: 3, workers: 10, labor: 'military',
+    des: [-3, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 30,
+    desc: 'Breeds horses on meadow pasture for the cavalry. The breeding herd starts with 2 mares and grows over time, so a ranch gets more productive as it matures.',
+  }),
+  barracks: B({
+    name: 'Barracks', category: 'military', kind: 'barracks', cost: 150, size: 3, workers: 10, labor: 'military',
+    des: [-6, 1, 1, 3], fire: 1, damage: 1, inputs: ['weapons', 'arrows', 'horses'], inputCap: 400,
+    desc: 'Trains recruits and sends them to your forts. Legionaries need weapons, archers need arrows, cavalry need horses. Carts deliver them from workshops, ranches and warehouses.',
+  }),
+  fort_legion: B({
+    name: 'Legion Fort', category: 'military', kind: 'fort', unit: 'legionary', cost: 300, size: 3, workers: 8, labor: 'military',
+    des: [-8, 1, 2, 4], fire: 0, damage: 0, hp: 700,
+    desc: 'Home of 8 heavily armored legionaries, the backbone of your defense. Each recruit needs a set of weapons at the barracks.',
+  }),
+  fort_archer: B({
+    name: 'Archer Fort', category: 'military', kind: 'fort', unit: 'archer', cost: 220, size: 3, workers: 8, labor: 'military',
+    des: [-6, 1, 2, 3], fire: 0, damage: 0, hp: 600,
+    desc: 'Home of 8 auxiliary archers who shoot raiders from a distance. Each recruit needs arrows from a Fletcher.',
+  }),
+  fort_cavalry: B({
+    name: 'Cavalry Fort', category: 'military', kind: 'fort', unit: 'cavalry', cost: 350, size: 3, workers: 8, labor: 'military',
+    des: [-8, 1, 2, 4], fire: 0, damage: 0, hp: 700,
+    desc: 'Home of 8 fast horsemen who run down raiders. Every recruit needs a horse from a Horse Ranch (or imported).',
+  }),
+  tower: B({
+    name: 'Watchtower', category: 'military', kind: 'tower', cost: 120, size: 2, workers: 6, labor: 'military',
+    des: [-3, 1, 1, 2], fire: 0, damage: 0.5, hp: 500, needsRoad: true,
+    desc: 'Archers on the tower shoot any raider within 8 tiles. Pairs well with walls.',
   }),
 });
 

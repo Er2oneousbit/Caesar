@@ -7,11 +7,13 @@
  *
  * Tick order:
  *   1. advance the calendar
- *   2. move walkers
+ *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
  *      (spreads work evenly across the day instead of spiking at midnight)
- *   4. on a new day:   labor, water, desirability, immigration, fires, trade
- *   5. on a new month: consumption, finances, mood, religion, ratings, Emperor
+ *   4. on a new day:   labor, water, desirability, immigration, fires, trade,
+ *                      raid progress
+ *   5. on a new month: consumption, finances, army pay, raid warnings,
+ *                      mood, religion, ratings, Emperor
  *   6. on a new year:  tribute, ledger rollover, trade quotas
  * ----------------------------------------------------------------------------
  */
@@ -38,9 +40,10 @@ import { updateDesirability } from '../sim/desirability.js';
 import { computeCityStats, computeSentiment, updateImmigration, updateEmigration, indexHomesByRoad } from '../sim/population.js';
 import { monthlyEconomy, yearlyEconomy, newLedger } from '../sim/economy.js';
 import { newGodState, updateReligion } from '../sim/religion.js';
-import { newTradeState, updateTrade, resetTradeYear } from '../sim/trade.js';
+import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
+import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
 
 /** Difficulty multipliers. */
 export const DIFFICULTY = Object.freeze({
@@ -132,6 +135,7 @@ export class Game {
       this.seed = seed;
       this.rng = new RNG(`${seed}:sim`);
       const { map, info } = generateMap({ width: scenario.map.size, height: scenario.map.size, seed, type: scenario.map.type });
+      map.computeNavigation(); // rivers/sea reaching the map edge (ships, docks)
       this.map = map;
       this.mapInfo = info;
       this.time = new GameTime(scenario.startYear);
@@ -141,6 +145,17 @@ export class Game {
       this.city = newCityState(scenario, flags.money ?? scenario.funds);
       scheduleNextRequest(this);
     }
+    // Military state. `??=` keeps what a save restored and fills in defaults
+    // for new games and for saves made before the military existed.
+    this.units ??= new Map(); // unit id -> Unit (soldiers and raiders)
+    this.nextUnitId ??= 1;
+    this.wallHp ??= new Map(); // tile index -> remaining hp of a damaged wall/gate
+    this.military ??= newMilitaryState(scenario, this.time, flags);
+    this.projectiles = []; // arrows and sling stones in flight (not saved)
+    this.enemyField = null; // raider flow field (derived, see military.js)
+    this.events.on('buildingRemoved', ({ building }) => {
+      if (building.def.kind === 'fort') disbandFort(this, building);
+    });
     this.pf = new PathFinder(this.map);
     this.processRoadChanges();
   }
@@ -192,6 +207,7 @@ export class Game {
     updateDesirability(this);
     this.dirty.des = false;
     computeCityStats(this);
+    updateDemand(this);
     this.map.touch();
   }
 
@@ -199,6 +215,7 @@ export class Game {
   tick() {
     const t = this.time.advance();
     updateWalkers(this);
+    updateMilitary(this);
     const phase = this.time.tick;
     for (const b of this.buildings.values()) {
       if (b.phase === phase) this.updateBuilding(b);
@@ -220,6 +237,8 @@ export class Game {
         case 'market': updateMarketBuyer(this, b); break;
         case 'training': updateTraining(this, b); break;
         case 'venue': updateVenue(this, b); break;
+        case 'barracks': updateBarracks(this, b); break;
+        case 'dock': updateDock(this, b); break;
         default: break;
       }
       if (!this.buildings.has(b.id)) return;
@@ -245,12 +264,14 @@ export class Game {
     updateEmigration(this);
     updateFires(this);
     updateTrade(this);
+    militaryDaily(this);
     this.events.emit('day', this.time);
   }
 
   onMonth() {
     for (const b of this.buildings.values()) if (b.house) consumeHouse(this, b);
     monthlyEconomy(this);
+    militaryMonthly(this);
     computeSentiment(this);
     updateReligion(this);
     updateRatings(this);

@@ -27,14 +27,20 @@
  * city ends about 2/3 the size of Normal's. With raids, the raid levers
  * matter less than the weaker economy; 1.5 x size, 1.15 x strength and 25%
  * shorter gaps need roughly twice Normal's army.
+ *
+ * Easy (demo city, 12 maps, 3 years): risk 0.7 meant 2.8 fires and 0.3
+ * collapses per city, the first around month 17; 0.5 brings that to 0.6 and
+ * 0.1, and most cities never have one.
  * ----------------------------------------------------------------------------
  */
 
 export const DIFFICULTY = Object.freeze({
   easy: Object.freeze({
     name: 'Easy',
-    desc: 'More money, faster growth, fewer fires and smaller raids. Good for learning.',
-    funds: 1.5, risk: 0.7, production: 1.15, immigration: 1.25, mood: 0,
+    desc: 'More money, faster growth, rare fires and collapses, smaller raids. Good for learning.',
+    // risk 0.5: an unpatrolled building takes about a year to get dangerous
+    // (0.7 still set off ~3 fires per young city; see the tuning notes above).
+    funds: 1.5, risk: 0.5, production: 1.15, immigration: 1.25, mood: 0,
     raidSize: 0.7, raidInterval: 1, enemy: 1,
     requestSize: 1, requestInterval: 1, requestTime: 1,
   }),

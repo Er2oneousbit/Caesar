@@ -14,17 +14,49 @@
  * ----------------------------------------------------------------------------
  */
 
-import { planAction, applyPlan } from '../sim/construction.js';
+import { planAction, applyPlan, undoLast } from '../sim/construction.js';
 import { removeBuilding } from '../sim/entities.js';
 import { openRoute, setTradeMode } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { Terrain } from '../world/map.js';
+import { CONFIG } from '../config.js';
+
+/** Undo records of the builds made inside the current attempt() (null outside one). */
+let recording = null;
 
 /** Try to build; returns true on success. */
 function build(game, tool, x0, y0, x1 = x0, y1 = y0) {
   const plan = planAction(game, tool, x0, y0, x1, y1);
   if (!plan || plan.count === 0) return false;
-  return applyPlan(game, plan).ok;
+  const ok = applyPlan(game, plan).ok;
+  if (ok && recording) recording.push(game.lastUndo);
+  return ok;
+}
+
+/**
+ * Try a placement: `fn` builds and returns a result, or null to give up. On
+ * null, every build it made (the building and its connecting roads) is undone
+ * with a full refund, so rejected spots cost nothing and leave no stray roads.
+ */
+function attempt(game, fn) {
+  const outer = recording;
+  const mine = [];
+  recording = mine;
+  let result = null;
+  try {
+    result = fn();
+  } finally {
+    recording = outer;
+  }
+  if (result) {
+    if (outer) outer.push(...mine);
+    return result;
+  }
+  for (const u of mine.reverse()) {
+    game.lastUndo = u;
+    undoLast(game);
+  }
+  return null;
 }
 
 /** Place a building with its top-left at (x, y) (planAction centers big ones). */
@@ -50,6 +82,34 @@ function findSite(game, W, D) {
   const cx = map.w / 2;
   const cy = map.h / 2;
   road.sort((a, b) => Math.hypot(map.xOf(a) - cx, map.yOf(a) - cy) - Math.hypot(map.xOf(b) - cx, map.yOf(b) - cy));
+  // Farmland within walking reach: meadow tiles up to FIELD_REACH steps over
+  // land (not across water) from the site's middle, outside the town itself.
+  // Fields lie ROAD_CLEARANCE+ tiles off the road, so a town placed without
+  // looking could end up nowhere near one and never staff its farms.
+  const FIELD_REACH = 28;
+  const dist = new Int16Array(map.size);
+  const fieldsNear = (sx, sy, inTown) => {
+    dist.fill(-1);
+    const start = map.idx(sx, sy);
+    const queue = [start];
+    dist[start] = 0;
+    let meadow = 0;
+    for (let q = 0; q < queue.length; q++) {
+      const i = queue[q];
+      if (map.terrain[i] === Terrain.MEADOW && !inTown.has(i)) meadow++;
+      if (dist[i] >= FIELD_REACH) continue;
+      const x = map.xOf(i);
+      const y = map.yOf(i);
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        if (!map.inBounds(nx, ny)) continue;
+        const j = map.idx(nx, ny);
+        if (dist[j] >= 0 || map.terrain[j] === Terrain.WATER) continue;
+        dist[j] = dist[i] + 1;
+        queue.push(j);
+      }
+    }
+    return meadow;
+  };
   let best = null;
   for (const i of road.slice(0, 60)) {
     const rx = map.xOf(i);
@@ -61,17 +121,24 @@ function findSite(game, W, D) {
       // Local (a, b): a runs along the road, b runs away from it (b=0 touches the road).
       const toWorld = (a, b) => (alongX ? { x: rx + a, y: ry + side * (b + 1) } : { x: rx + side * (b + 1), y: ry + a });
       let free = 0;
+      const inTown = new Set();
       for (let b = 0; b < D; b++) {
         for (let a = 0; a < W; a++) {
           const p = toWorld(a, b);
+          if (map.inBounds(p.x, p.y)) inTown.add(map.idx(p.x, p.y));
           if (map.isFree(p.x, p.y) && map.terrain[map.idx(p.x, p.y)] !== Terrain.TREES) free++;
         }
       }
+      if (free <= W * D * 0.8) continue;
       // The local street at a = 0 must reach the imperial road.
-      if (!best || free > best.free) best = { free, toWorld };
+      const mid = toWorld(W >> 1, D >> 1);
+      if (!map.inBounds(mid.x, mid.y)) continue;
+      // Enough land to build on, then as much farmland in reach as 4-6 farms want.
+      const score = free * 0.25 + Math.min(120, fieldsNear(mid.x, mid.y, inTown));
+      if (!best || score > best.score) best = { free, score, toWorld };
     }
   }
-  return best && best.free > W * D * 0.8 ? best : null;
+  return best;
 }
 
 /**
@@ -140,46 +207,74 @@ export function buildDemoCity(game, opts = {}) {
   return { ok: true, center: c, farms };
 }
 
-/** Find fertile 3x3 spots, place farms and connect them by road. */
+/**
+ * Find fertile 3x3 spots, place farms and connect them by road. Fields lie at
+ * least ROAD_CLEARANCE tiles off the Imperial road and come as a few big
+ * patches, so the nearest can be a fair walk away: search wide, prefer close.
+ */
 function placeFarms(game, center, count) {
   const { map, pf } = game;
   const spots = [];
   for (let y = 1; y < map.h - 4; y++) {
     for (let x = 1; x < map.w - 4; x++) {
       const d = Math.hypot(x - center.x, y - center.y);
-      if (d > 30) continue;
+      if (d > 48) continue;
       const meadow = map.countTerrain(x, y, 3, Terrain.MEADOW);
       if (meadow < 6) continue;
       let free = true;
       for (let dy = 0; dy < 3 && free; dy++) for (let dx = 0; dx < 3; dx++) if (!map.isFree(x + dx, y + dy)) { free = false; break; }
-      if (free) spots.push({ x, y, score: meadow * 3 - d });
+      if (free) spots.push({ x, y, d, score: meadow * 3 - d });
     }
   }
   spots.sort((a, b) => b.score - a.score);
+  // Settlers only work within LABOR_RANGE road tiles of their homes, so a farm
+  // the town cannot reach by road would never be staffed. Measure from the
+  // town's road nearest its center, with some slack for the spread of homes.
+  game.processRoadChanges();
+  let townRoad = -1;
+  let nearest = Infinity;
+  for (let i = 0; i < map.size; i++) {
+    if (!map.road[i]) continue;
+    const d = Math.hypot(map.xOf(i) - center.x, map.yOf(i) - center.y);
+    if (d < nearest) { nearest = d; townRoad = i; }
+  }
+  const staffable = (b) => {
+    if (!b || b.accessRoad < 0 || townRoad < 0) return false;
+    const path = pf.roadPath(b.accessRoad, townRoad, CONFIG.LABOR_RANGE);
+    return !!path && path.length <= CONFIG.LABOR_RANGE - 8;
+  };
+  const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
   let placed = 0;
-  let granary = false;
   const used = [];
-  for (const s of spots) {
-    if (placed >= count) break;
-    if (used.some((u) => Math.abs(u.x - s.x) < 4 && Math.abs(u.y - s.y) < 4)) continue;
-    if (!place(game, 'farm_wheat', s.x, s.y, 3)) continue;
-    used.push(s);
-    placed++;
-    // Connect the farm: road from a tile beside it to the nearest existing road.
-    connectToRoad(game, s.x + 3, s.y + 1);
-    if (!granary) {
-      // Granary right next to the first farm's road, guarded by a prefect and an engineer.
-      for (const [gx, gy] of [[s.x + 4, s.y], [s.x + 4, s.y - 3], [s.x - 3, s.y], [s.x, s.y + 4]]) {
-        if (place(game, 'granary', gx, gy, 3)) {
-          granary = true;
-          connectToRoad(game, gx - 1, gy + 1);
-          guard(game, gx + 1, gy + 1);
-          break;
-        }
-      }
+  // First only farms within hiring reach; if that leaves too few, any farm
+  // whose road at least joins the town's network.
+  for (const strict of [true, false]) {
+    for (const s of spots) {
+      if (placed >= count) break;
+      if (strict && s.d > CONFIG.LABOR_RANGE - 8) continue; // too far even as the crow flies
+      if (used.some((u) => Math.abs(u.x - s.x) < 4 && Math.abs(u.y - s.y) < 4)) continue;
+      const farm = attempt(game, () => {
+        if (!place(game, 'farm_wheat', s.x, s.y, 3)) return null;
+        const b = [...game.buildings.values()].pop();
+        // Connect the farm: road from a tile beside it to the nearest road of the town's network.
+        connectToRoad(game, s.x + 3, s.y + 1, entryNet);
+        game.processRoadChanges();
+        const joined = b.accessRoad >= 0 && map.roadNet[b.accessRoad] === entryNet;
+        return joined && (!strict || staffable(b)) ? b : null;
+      });
+      if (!farm) continue;
+      used.push(s);
+      placed++;
     }
   }
-  void pf;
+  // A granary by the first farm (short cart trips), else near the town, guarded
+  // by a prefect and an engineer. Without one the harvest never leaves the farms.
+  if (placed) {
+    const first = used[0];
+    const granary = placeNear(game, 'granary', 3, { x: first.x + 1, y: first.y + 1 }, 3, 12)
+      || placeNear(game, 'granary', 3, center, 3, 26);
+    if (granary) guard(game, granary.x + 1, granary.y + 1);
+  }
   return placed;
 }
 
@@ -239,15 +334,17 @@ function guard(game, x, y) {
 }
 
 /** Build a road from (x, y) to the nearest existing road tile. */
-function connectToRoad(game, x, y) {
+function connectToRoad(game, x, y, net = null) {
   const { map } = game;
   if (!map.inBounds(x, y) || map.hasRoad(x, y)) return;
+  // With `net`, only a road on that network counts (skip a stray, unconnected street).
+  const joins = (tx, ty) => map.hasRoad(tx, ty) && (net === null || map.roadNet[map.idx(tx, ty)] === net);
   let best = null;
   for (let r = 1; r < 40 && !best; r++) {
     for (let dy = -r; dy <= r && !best; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        if (map.hasRoad(x + dx, y + dy)) { best = { x: x + dx, y: y + dy }; break; }
+        if (joins(x + dx, y + dy)) { best = { x: x + dx, y: y + dy }; break; }
       }
     }
   }
@@ -296,21 +393,24 @@ function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
   let tries = 0;
   for (const s of findSpot(game, size, center, minD, maxD, meadowOnly)) {
     if (tries++ > 40) break;
-    if (!place(game, type, s.x, s.y, size)) continue;
-    const b = [...game.buildings.values()].pop();
-    if (!b || b.type !== type) continue;
-    for (const [x, y] of [[s.x + size, s.y + 1], [s.x - 1, s.y + 1], [s.x + 1, s.y + size], [s.x + 1, s.y - 1]]) {
-      if (b.accessRoad >= 0) break;
-      connectToRoad(game, x, y);
-    }
-    // Only keep it if its road reaches the map entry: that network is where
-    // settlers (and so workers) live. A road that only reaches an isolated
-    // street of empty homes would leave it unstaffed forever.
-    game.processRoadChanges();
-    const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
-    if (b.accessRoad >= 0 && map.roadNet[b.accessRoad] === entryNet) return b;
-    removeBuilding(game, b, 'undo');
-    game.onMapEdited();
+    const placed = attempt(game, () => {
+      if (!place(game, type, s.x, s.y, size)) return null;
+      const b = [...game.buildings.values()].pop();
+      if (!b || b.type !== type) return null;
+      // Only keep it if its road reaches the map entry: that network is where
+      // settlers (and so workers) live. A road that only reaches an isolated
+      // street of empty homes would leave it unstaffed forever.
+      game.processRoadChanges();
+      const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
+      const joined = () => b.accessRoad >= 0 && map.roadNet[b.accessRoad] === entryNet;
+      for (const [x, y] of [[s.x + size, s.y + 1], [s.x - 1, s.y + 1], [s.x + 1, s.y + size], [s.x + 1, s.y - 1]]) {
+        if (joined()) break;
+        connectToRoad(game, x, y, entryNet);
+        game.processRoadChanges();
+      }
+      return joined() ? b : null;
+    });
+    if (placed) return placed;
   }
   return null;
 }

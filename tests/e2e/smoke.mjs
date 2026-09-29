@@ -132,7 +132,14 @@ try {
     await page.mouse.move(b.x, b.y, { steps: 5 });
     await page.mouse.up();
     const roadOk = await page.evaluate(({ x, y }) => window.colonia.game.map.road[window.colonia.game.map.idx(x + 3, y)] > 0, spot);
-    check('road drag builds a road', roadOk);
+    // On failure, say where the drag went: the tiles under the mouse and the camera state.
+    const roadDetail = roadOk ? '' : await page.evaluate(([s, p, q]) => {
+      const app = window.colonia; const cam = app.renderer.camera; const m = app.game.map;
+      const r = app.canvas.getBoundingClientRect();
+      const under = (pt) => { const el = document.elementFromPoint(pt.x, pt.y); return { tile: cam.screenToTile(pt.x - r.left, pt.y - r.top), el: el ? (el.id || el.className) : null }; };
+      return JSON.stringify({ spot: s, start: under(p), end: under(q), zoom: cam.zoom, target: cam.targetZoom, moving: cam.moving, tool: app.input.tool, paused: app.paused, modal: !!document.querySelector('.modal'), terrain: [0, 1, 2, 3, 4, 5].map((k) => m.terrain[m.idx(s.x + k, s.y)]) });
+    }, [spot, a, b]);
+    check('road drag builds a road', roadOk, roadDetail);
     await page.keyboard.press('h');
     const c = await toScreen(spot.x, spot.y + 1);
     const d = await toScreen(spot.x + 5, spot.y + 2);

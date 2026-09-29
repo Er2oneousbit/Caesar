@@ -16,7 +16,7 @@ import { RNG } from '../src/core/rng.js';
 import { log } from '../src/core/debug.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
-import { generateMap, MAP_TYPES, ROAD_ROCK_CLEARANCE } from '../src/world/mapgen.js';
+import { generateMap, MAP_TYPES, ROAD_CLEARANCE, MIN_FIELD_TILES } from '../src/world/mapgen.js';
 import { Terrain, WaterBits } from '../src/world/map.js';
 import { PathFinder } from '../src/world/pathfinding.js';
 import { SCENARIOS, sandboxScenario } from '../src/data/scenarios.js';
@@ -92,9 +92,10 @@ test('every map type generates a connected imperial road', () => {
   }
 });
 
-test('rock stays clear of the Imperial road, and quarries still find outcrops', () => {
+test('rock and farm plots keep 6+ tiles from the Imperial road; fields are whole; quarries and farms still fit', () => {
   const scenarios = [
     ...Object.keys(MAP_TYPES).map((type) => sandboxScenario({ size: 64, type, seed: `rock-${type}`, invasions: 'none' })),
+    ...Object.keys(MAP_TYPES).map((type) => sandboxScenario({ size: 96, type, seed: `field-${type}`, invasions: 'none' })),
     ...SCENARIOS,
   ];
   for (const scenario of scenarios) {
@@ -104,24 +105,52 @@ test('rock stays clear of the Imperial road, and quarries still find outcrops', 
     const road = [];
     for (let i = 0; i < map.size; i++) if (map.road[i]) road.push(i);
     let rock = 0;
+    let meadow = 0;
     for (let i = 0; i < map.size; i++) {
-      if (map.terrain[i] !== Terrain.ROCK) continue;
-      rock++;
+      const t = map.terrain[i];
+      if (t !== Terrain.ROCK && t !== Terrain.MEADOW) continue;
+      if (t === Terrain.ROCK) rock++;
+      else meadow++;
       const x = map.xOf(i);
       const y = map.yOf(i);
       for (const r of road) {
         const d = Math.hypot(map.xOf(r) - x, map.yOf(r) - y);
-        assert.ok(d > ROAD_ROCK_CLEARANCE - 1, `${label}: rock at ${x},${y} only ${d.toFixed(1)} tiles from the road`);
+        assert.ok(d >= ROAD_CLEARANCE, `${label}: ${t === Terrain.ROCK ? 'rock' : 'meadow'} at ${x},${y} only ${d.toFixed(1)} tiles from the road`);
       }
     }
-    // Marble quarries and iron mines must sit right next to rock: there is still room for one.
-    let spot = false;
-    for (let y = 1; y < map.h - 2 && !spot; y++) {
-      for (let x = 1; x < map.w - 2 && !spot; x++) {
-        if (map.isNearTerrain(x, y, 2, Terrain.ROCK, 1)) spot = planAction(game, 'marble_quarry', x, y, x, y).count === 1;
+    // Fields come whole: no meadow patch (4-connected) under MIN_FIELD_TILES.
+    const seen = new Uint8Array(map.size);
+    for (let i = 0; i < map.size; i++) {
+      if (map.terrain[i] !== Terrain.MEADOW || seen[i]) continue;
+      let n = 0;
+      const stack = [i];
+      seen[i] = 1;
+      while (stack.length) {
+        const j = stack.pop();
+        n++;
+        for (const k of [j - 1, j + 1, j - map.w, j + map.w]) {
+          if (k < 0 || k >= map.size || seen[k] || map.terrain[k] !== Terrain.MEADOW) continue;
+          if (Math.abs(map.xOf(k) - map.xOf(j)) > 1) continue; // no wrapping across rows
+          seen[k] = 1;
+          stack.push(k);
+        }
+      }
+      assert.ok(n >= MIN_FIELD_TILES, `${label}: a ${n}-tile meadow patch at ${map.xOf(i)},${map.yOf(i)}`);
+    }
+    // Marble quarries and iron mines sit right next to rock; farms want all nine tiles on meadow.
+    let quarry = false;
+    let farm = false;
+    for (let y = 1; y < map.h - 3 && !(quarry && farm); y++) {
+      for (let x = 1; x < map.w - 3 && !(quarry && farm); x++) {
+        if (!quarry && map.isNearTerrain(x, y, 2, Terrain.ROCK, 1)) quarry = planAction(game, 'marble_quarry', x, y, x, y).count === 1;
+        if (!farm && map.terrain[map.idx(x + 1, y + 1)] === Terrain.MEADOW) {
+          const plan = planAction(game, 'farm_wheat', x + 1, y + 1, x + 1, y + 1);
+          farm = plan.count === 1 && plan.fertility === 1;
+        }
       }
     }
-    assert.ok(spot, `${label}: room for a quarry next to rocks (${rock} rock tiles)`);
+    assert.ok(quarry, `${label}: room for a quarry next to rocks (${rock} rock tiles)`);
+    assert.ok(farm, `${label}: room for a fully fertile farm (${meadow} meadow tiles)`);
   }
 });
 

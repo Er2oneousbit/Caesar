@@ -12,10 +12,14 @@
  *   4. Add beaches next to water.
  *   5. Lay the Imperial Road from an entry tile on one map edge to an exit tile
  *      on another edge using A* (it avoids water and rocks when it can).
- *   6. Clear rock within about ROAD_ROCK_CLEARANCE tiles of that road. Every
- *      city starts along it and rock can never be cleared, so outcrops
- *      hugging the road would wall off the first building lots. The tiles
- *      get the ground they would have had without the rock.
+ *   6. Keep a band ROAD_CLEARANCE tiles wide each side of that road free of
+ *      rock and meadow. Every city starts along it: rock can never be
+ *      cleared, and farm plots (meadow) belong out in the fields, not in the
+ *      first building lots. Rock becomes the ground it would have been,
+ *      meadow plain grass/sand.
+ *   7. Consolidate the farm plots: smooth meadow edges (fill notches, drop
+ *      slivers) and remove fields smaller than MIN_FIELD_TILES, so meadows
+ *      come as a few big fields instead of confetti.
  *
  * The same (seed, size, type) always produces the same map.
  * ----------------------------------------------------------------------------
@@ -30,10 +34,14 @@ import { PathFinder } from './pathfinding.js';
 export const MAP_SIZES = Object.freeze({ small: 64, medium: 96, large: 128, uber: 256 });
 
 /**
- * Rock-free distance each side of the Imperial road, in tiles. The edge is
- * ragged (+-1 tile of noise), so rock never comes closer than this minus 1.
+ * No rock or meadow closer than this to the Imperial road, in tiles. The
+ * band's outer edge wanders up to 2 tiles further out with noise, so the
+ * outcrops and fields beyond it keep a natural, ragged edge.
  */
-export const ROAD_ROCK_CLEARANCE = 5;
+export const ROAD_CLEARANCE = 6;
+
+/** Meadow fields smaller than this many tiles are dropped (a 3x3 farm needs 9). */
+export const MIN_FIELD_TILES = 12;
 
 /** One-line notes shown under the size picker. */
 export const MAP_SIZE_NOTES = Object.freeze({
@@ -96,13 +104,21 @@ export function generateMap({ width, height, seed, type }) {
     const x = i % w;
     const y = (i / w) | 0;
     const wd = map.waterDist[i];
-    // Meadows like water: add a bonus near rivers/lakes (floodplains).
-    const nearWater = wd <= 5 ? (6 - wd) * 0.05 : 0;
-    meadowVal[i] = nMeadow.fbm(x / 13, y / 13, 3) + nearWater;
+    // Meadows like water: add a bonus near rivers/lakes (floodplains). Low
+    // frequency and few octaves: broad fields rather than speckles.
+    // In the desert the fields ring the oases, so water counts for much more.
+    const nearWater = type === 'desert'
+      ? (wd <= 4 ? (5 - wd) * 0.12 : 0)
+      : (wd <= 5 ? (6 - wd) * 0.05 : 0);
+    meadowVal[i] = nMeadow.fbm(x / 20, y / 20, 2) + nearWater;
     treeVal[i] = nTrees.fbm(x / 11 + 50, y / 11 + 50, 4);
     rockVal[i] = nRock.fbm(x / 8 + 100, y / 8 + 100, 3);
   }
-  const meadowCut = percentile(meadowVal, type === 'desert' ? 0.93 : 0.8);
+  // Meadow share is measured over land only: water has the biggest near-water
+  // bonus and would otherwise eat the top of the ranking (coasts and oases
+  // came out nearly barren).
+  const landMeadow = meadowVal.filter((_, i) => map.terrain[i] !== Terrain.WATER);
+  const meadowCut = percentile(landMeadow, type === 'desert' ? 0.88 : 0.82);
   const treeCut = percentile(treeVal, type === 'desert' ? 0.96 : 0.84);
   const rockCut = percentile(rockVal, type === 'desert' ? 0.93 : 0.95);
   const base = type === 'desert' ? Terrain.SAND : Terrain.GRASS;
@@ -142,9 +158,10 @@ export function generateMap({ width, height, seed, type }) {
     }
   }
 
-  // 5. Imperial road, then 6. keep rock away from it
+  // 5. Imperial road, 6. a band along it without rock or meadow, 7. whole fields
   const roadPath = placeImperialRoad(map, rng, type, info);
-  clearRocksNearRoad(map, roadPath, groundAt, nDetail);
+  const nearRoad = clearNearRoad(map, roadPath, groundAt, nDetail, base);
+  consolidateFields(map, nearRoad, type, base);
 
   // Visual variants
   for (let i = 0; i < size; i++) map.variant[i] = rng.int(256);
@@ -344,14 +361,16 @@ function placeImperialRoad(map, rng, type, info) {
 }
 
 /**
- * Turn rock within about ROAD_ROCK_CLEARANCE tiles of the road back into the
- * ground it would have been (groundAt). The radius wobbles by up to a tile
- * with low-frequency noise, so the outcrops keep a natural, ragged edge
- * instead of a ruler-straight one. Rock elsewhere stays for quarries and mines.
+ * Clear the band along the road: every tile closer than ROAD_CLEARANCE plus
+ * up to 2 tiles of low-frequency noise (a ragged, natural edge) loses its
+ * rock (it becomes the forest or plain groundAt says) and its meadow (plain
+ * grass/sand). Rock and fields beyond the band are untouched.
+ * @returns {Uint8Array} 1 for tiles inside the band (step 7 keeps them clear)
  */
-function clearRocksNearRoad(map, path, groundAt, noise) {
+function clearNearRoad(map, path, groundAt, noise, base) {
   const { w } = map;
-  const reach = ROAD_ROCK_CLEARANCE + 1;
+  const near = new Uint8Array(map.size);
+  const reach = ROAD_CLEARANCE + 2;
   for (const i of path) {
     const cx = i % w;
     const cy = (i / w) | 0;
@@ -361,10 +380,71 @@ function clearRocksNearRoad(map, path, groundAt, noise) {
         const y = cy + dy;
         if (!map.inBounds(x, y)) continue;
         const j = y * w + x;
-        if (map.terrain[j] !== Terrain.ROCK) continue;
-        const r = ROAD_ROCK_CLEARANCE + (noise.noise(x / 3 + 40, y / 3 + 40) - 0.5) * 2;
-        if (dx * dx + dy * dy <= r * r) map.terrain[j] = groundAt(j);
+        if (near[j]) continue;
+        const r = ROAD_CLEARANCE + noise.noise(x / 3 + 40, y / 3 + 40) * 2; // 6..8 tiles
+        if (dx * dx + dy * dy < r * r) near[j] = 1;
       }
     }
+  }
+  for (let j = 0; j < map.size; j++) {
+    if (!near[j]) continue;
+    const t = map.terrain[j];
+    if (t !== Terrain.ROCK && t !== Terrain.MEADOW) continue;
+    const ground = groundAt(j);
+    map.terrain[j] = ground === Terrain.MEADOW ? base : ground;
+  }
+  return near;
+}
+
+/**
+ * Turn scattered meadow into proper fields: two smoothing passes (plain
+ * ground mostly surrounded by meadow joins the field, meadow with almost no
+ * meadow around it goes), then fields smaller than MIN_FIELD_TILES are
+ * dropped. Nothing grows back inside the road band, and desert meadow stays
+ * by the oases.
+ */
+function consolidateFields(map, nearRoad, type, base) {
+  const { w, h, size } = map;
+  const t = map.terrain;
+  const canGrow = (i) => !nearRoad[i] && !map.road[i] && (type !== 'desert' || map.waterDist[i] <= 6);
+  const meadowAround = (x, y) => {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if ((dx || dy) && map.inBounds(x + dx, y + dy) && t[(y + dy) * w + x + dx] === Terrain.MEADOW) n++;
+      }
+    }
+    return n;
+  };
+  for (let pass = 0; pass < 2; pass++) {
+    const next = t.slice();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (t[i] === base && canGrow(i) && meadowAround(x, y) >= 5) next[i] = Terrain.MEADOW;
+        else if (t[i] === Terrain.MEADOW && meadowAround(x, y) <= 2) next[i] = base;
+      }
+    }
+    t.set(next);
+  }
+  // Drop small fields (4-connected patches).
+  const seen = new Uint8Array(size);
+  const patch = [];
+  for (let i = 0; i < size; i++) {
+    if (t[i] !== Terrain.MEADOW || seen[i]) continue;
+    patch.length = 0;
+    const stack = [i];
+    seen[i] = 1;
+    while (stack.length) {
+      const j = stack.pop();
+      patch.push(j);
+      const x = j % w;
+      const y = (j / w) | 0;
+      if (x > 0 && !seen[j - 1] && t[j - 1] === Terrain.MEADOW) { seen[j - 1] = 1; stack.push(j - 1); }
+      if (x < w - 1 && !seen[j + 1] && t[j + 1] === Terrain.MEADOW) { seen[j + 1] = 1; stack.push(j + 1); }
+      if (y > 0 && !seen[j - w] && t[j - w] === Terrain.MEADOW) { seen[j - w] = 1; stack.push(j - w); }
+      if (y < h - 1 && !seen[j + w] && t[j + w] === Terrain.MEADOW) { seen[j + w] = 1; stack.push(j + w); }
+    }
+    if (patch.length < MIN_FIELD_TILES) for (const j of patch) t[j] = base;
   }
 }

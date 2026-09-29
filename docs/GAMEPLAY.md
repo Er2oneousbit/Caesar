@@ -11,7 +11,9 @@ The rules and numbers behind Colonia. Every number here comes from `src/config.j
 
 Sandbox maps come in Small (64x64), Medium (96x96), Large (128x128) and **Uber (256x256)**: sixteen times the land of Small, room for a capital and its whole province. Settlers walk in from the map entrance to the home they picked; on a big map that can be far, so anyone with more than a 70-tile walk rides in on a mule, up to twice walking speed (a trot): trips up to 140 tiles take no longer than a 70-tile walk. Uber costs about the same per frame as Large (only the tiles on screen are drawn) and a year-old Uber city saves in about 300 KB.
 
-**Around the Imperial road** the land is kept free of rock for about 5 tiles each side (4 at the least, where the edge of an outcrop wanders in). Rock can never be cleared and every city starts along the road, so outcrops there would wall off the first blocks. Rock elsewhere stays for marble quarries and iron mines.
+**Around the Imperial road** a band of plain land at least 6 tiles wide each side (its edge wanders out to about 8) has no rock and no meadow. Rock can never be cleared and every city starts along the road, so outcrops there would wall off the first blocks; farm plots belong out in the fields, a short road away. Rock beyond the band stays for marble quarries and iron mines.
+
+**Farm plots** (meadow, the yellow-green land farms need) come as whole fields: broad patches, most near water, with no field smaller than 12 tiles, so a 3x3 farm usually sits entirely on meadow at full fertility.
 
 ## Difficulty
 
@@ -20,7 +22,7 @@ Chosen in the Sandbox setup and in every campaign briefing (the menus remember y
 | Lever | Easy | Normal | Hard | Insane |
 |---|---|---|---|---|
 | Starting funds | x1.5 | x1 | x0.6 | x0.4 |
-| Fire and collapse risk | x0.7 | x1 | x1.3 | x1.5 |
+| Fire and collapse risk | x0.5 | x1 | x1.3 | x1.5 |
 | Farm, raw material and workshop speed | x1.15 | x1 | x0.9 | x0.8 |
 | Settlers per day | x1.25 | x1 | x0.85 | x0.7 |
 | City mood | | | | -8 |
@@ -184,7 +186,7 @@ Mood 30+ brings settlers; below 25 people start leaving.
 
 ## Fire and collapse
 
-Every building gains fire and collapse risk daily (houses by level, industry faster; x0.7 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread (3% per neighbor per day). Prefects within 24 road tiles are dispatched automatically.
+Every building gains fire and collapse risk daily (houses by level, industry faster; x0.5 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread (3% per neighbor per day). Prefects within 24 road tiles are dispatched automatically.
 
 ## Gods
 

@@ -2,10 +2,17 @@
 
 What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order.
 
+## Done (v0.5.2)
+
+* No rock or meadow within 6 tiles of the Imperial road (the first building lots are always usable; rock beyond stays for quarries and mines)
+* Farm plots come as whole fields: broader meadow noise, smoothing, no field under 12 tiles, meadow share measured over land (coasts and desert oases were nearly barren); more full-fertility farm room on almost every landscape
+* Easy: fire and collapse risk x0.5 (was x0.7); most young cities never see a fire
+* Demo city and garrison builders only use roads that reach the map entry (fixes a random smoke-test failure)
+
 ## Done (v0.5.1)
 
 * People walk instead of jog: the game clock runs at 12 ticks a second (a game day takes 1.67 s at 1x, balance unchanged), speeds are 1x/2x/4x/8x, and legs step with the distance walked; long-trip settlers ride their mules at a trot (2x)
-* No rock within about 5 tiles of the Imperial road (the first building lots are always usable; 94% of rock stays for quarries and mines)
+* No rock within about 5 tiles of the Imperial road
 * Rain and snow no longer fall at the same time
 
 ## Done (v0.5)

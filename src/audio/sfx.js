@@ -4,8 +4,10 @@
  * Tiny synthesized sound effects (WebAudio). No audio files: every sound is a
  * few oscillators or a noise burst, so the game stays a single small file.
  *
- * Browsers only allow audio after a user gesture; the context is created
- * lazily on the first play() after a click/keypress.
+ * Browsers only allow audio after a user gesture. The app creates the context
+ * at boot when the music would be heard (it starts 'suspended' where autoplay
+ * is blocked and the title gate asks for a click); otherwise lazily on the
+ * first click, tap or key press.
  * ----------------------------------------------------------------------------
  */
 

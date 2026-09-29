@@ -13,7 +13,7 @@
  *   4. on a new day:   labor, water, desirability, immigration, fires, trade,
  *                      raid progress
  *   5. on a new month: consumption, finances, army pay, raid warnings,
- *                      mood, religion, ratings, Emperor
+ *                      mood, religion, ratings, Emperor, farm season notice
  *   6. on a new year:  tribute, ledger rollover, trade quotas
  * ----------------------------------------------------------------------------
  */
@@ -29,7 +29,7 @@ import { GameTime } from '../sim/time.js';
 import { computeAccessRoad } from '../sim/entities.js';
 import { updateWalkers } from '../sim/walkers.js';
 import { updateHouse, consumeHouse } from '../sim/housing.js';
-import { updateProducer, updateWorkshop, updateWarehouseSupply } from '../sim/production.js';
+import { updateProducer, updateWorkshop, updateWarehouseSupply, farmSeasonNotice } from '../sim/production.js';
 import { updateMarketBuyer } from '../sim/market.js';
 import { updateTraining, updateVenue } from '../sim/entertainment.js';
 import { updateServiceSpawns, updateLaborAccess } from '../sim/services.js';
@@ -273,6 +273,7 @@ export class Game {
     updateReligion(this);
     updateRatings(this);
     updateEmperor(this);
+    farmSeasonNotice(this); // Insane: the farms stop in winter
     const c = this.city;
     c.foodFlowLast = { ...c.foodFlow };
     for (const k in c.foodFlow) c.foodFlow[k] = 0;

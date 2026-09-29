@@ -28,6 +28,12 @@ import { updateEmperor, scheduleNextRequest } from '../src/sim/emperor.js';
 import { updateRisk } from '../src/sim/risk.js';
 import { computeSentiment } from '../src/sim/population.js';
 import { addBuilding } from '../src/sim/entities.js';
+import { updateProducer, farmDormant, farmSeasonNotice } from '../src/sim/production.js';
+import { seasonOf, MONTH_NAMES } from '../src/sim/time.js';
+import { seasonOf as renderSeasonOf } from '../src/render/weather.js';
+import { buildingStatus } from '../src/ui/infoPanel.js';
+import { updateReligion } from '../src/sim/religion.js';
+import { HERD_START } from '../src/data/units.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { newGame, findFree } from './helpers.mjs';
 
@@ -48,7 +54,7 @@ test('difficulty: every level sets every lever, Normal is neutral, Insane is har
   }
   assert.deepEqual(DIFFICULTY_ORDER, ['easy', 'normal', 'hard', 'insane']);
   // Levers where less is harder, and where more is harder.
-  const lessIsHarder = ['funds', 'production', 'immigration', 'mood', 'raidInterval', 'requestInterval', 'requestTime'];
+  const lessIsHarder = ['funds', 'production', 'winterGrowth', 'immigration', 'mood', 'raidInterval', 'requestInterval', 'requestTime'];
   const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize'];
   for (let i = 1; i < DIFFICULTY_ORDER.length; i++) {
     const easier = DIFFICULTY[DIFFICULTY_ORDER[i - 1]];
@@ -163,6 +169,132 @@ test('difficulty: the difficulty= URL flag accepts known levels only', () => {
   assert.equal(parseFlags({ difficulty: 'insane' }).difficulty, 'insane');
   assert.equal(parseFlags({ difficulty: 'nightmare' }).difficulty, undefined);
   assert.equal(parseFlags({ map: 'uber' }).map, 'uber');
+});
+
+/**
+ * A staffed, fully fertile farm of `type` in `game` (no road: it keeps its harvest),
+ * with the calendar set to `month`.
+ */
+function winterFarm(game, type, month) {
+  const spot = findFree(game, 3, 3);
+  const b = addBuilding(game, type, spot.x, spot.y);
+  b.fertility = 1;
+  b.efficiency = 1;
+  game.time.month = month;
+  return b;
+}
+
+test('difficulty: only Insane farms rest in winter (December to Februarius)', () => {
+  assert.equal(seasonOf(11), 'winter');
+  assert.equal(renderSeasonOf, seasonOf, 'the map colors and the farms share one calendar');
+  for (const key of DIFFICULTY_ORDER) {
+    for (const month of [11, 0, 1]) {
+      const game = newGame({ difficulty: key, seed: 'winter-farm' });
+      const b = winterFarm(game, 'farm_wheat', month);
+      b.progress = 40;
+      for (let d = 0; d < 5; d++) updateProducer(game, b);
+      if (key === 'insane') {
+        assert.equal(b.progress, 40, `${MONTH_NAMES[month]} on Insane: progress kept, none added`);
+        assert.ok(farmDormant(game, b));
+        Object.assign(b, { accessRoad: 0, laborAccess: 1, noStorage: false }); // as if on a road, staffed
+        assert.match(buildingStatus(game, b).text, /^Winter: nothing grows/);
+      } else {
+        assert.ok(b.progress > 40, `${MONTH_NAMES[month]} on ${key}: the farm grows`);
+        assert.ok(!farmDormant(game, b));
+      }
+    }
+  }
+  // Other producers never rest.
+  const insane = newGame({ difficulty: 'insane', seed: 'winter-farm' });
+  insane.time.month = 0;
+  const spot = findFree(insane, 2, 2);
+  assert.ok(!farmDormant(insane, addBuilding(insane, 'pottery_ws', spot.x, spot.y)));
+});
+
+test('difficulty: Insane farms grow again from Martius and ship stored harvest all winter', () => {
+  const game = newGame({ difficulty: 'insane', seed: 'winter-farm' });
+  const b = winterFarm(game, 'farm_wheat', 1); // Februarius
+  b.progress = 50;
+  b.stock.wheat = 300;
+  updateProducer(game, b);
+  assert.equal(b.progress, 50);
+  assert.equal(b.stock.wheat, 300, 'no harvest in winter, but nothing is lost');
+  game.time.month = 2; // Martius
+  updateProducer(game, b);
+  assert.ok(b.progress > 50, 'spring: growing again');
+  assert.ok(!farmDormant(game, b));
+  // Every kind of farm rests, the ranch's herd included.
+  for (const type of ['farm_veg', 'farm_fruit', 'farm_pig', 'farm_olive', 'farm_vine', 'horse_ranch']) {
+    const g = newGame({ difficulty: 'insane', seed: `winter-${type}` });
+    const f = winterFarm(g, type, 0);
+    f.progress = 10;
+    for (let d = 0; d < 40; d++) updateProducer(g, f);
+    assert.equal(f.progress, 10, `${type} rests in winter`);
+    if (f.herd !== undefined) assert.equal(f.herd, HERD_START, 'no new mares in winter');
+  }
+});
+
+test('difficulty: a Ceres blessing still brings the harvest the next day, Insane winter or not', () => {
+  for (const difficulty of ['normal', 'insane']) {
+    const g = newGame({ difficulty, seed: 'ceres' });
+    const field = winterFarm(g, 'farm_wheat', 0); // Ianuarius
+    field.progress = 30;
+    const ceres = g.city.gods.ceres;
+    ceres.mood = 100; // a festival-happy goddess: blesses at this month's update
+    ceres.cooldown = 0;
+    updateReligion(g);
+    assert.ok(g.messages.some((m) => /Ceres/.test(m.text)), `${difficulty}: blessed`);
+    updateProducer(g, field); // the farm's next working day
+    assert.equal(field.stock.wheat, CONFIG.CART_CAPACITY, `${difficulty}: harvested`);
+  }
+});
+
+test('difficulty: over a real game year an Insane farm rests exactly the 48 winter days, with one notice each', () => {
+  const game = newGame({ difficulty: 'insane', seed: 'winter-year' });
+  const spot = findFree(game, 3, 3);
+  const farm = addBuilding(game, 'farm_wheat', spot.x, spot.y);
+  const said = [];
+  game.events.on('message', (m) => said.push(`${m.date.split(' ')[0]}: ${m.text}`));
+  let dormant = 0;
+  const days = CONFIG.DAYS_PER_MONTH * CONFIG.MONTHS_PER_YEAR;
+  for (let i = 0; i < days * CONFIG.TICKS_PER_DAY; i++) {
+    game.tick();
+    // (Game.tick moves the calendar before the buildings, so this is the month the farm saw.)
+    if (game.time.tick === farm.phase && farmDormant(game, farm)) dormant++;
+  }
+  assert.equal(dormant, 3 * CONFIG.DAYS_PER_MONTH, 'Ianuarius, Februarius and December');
+  const count = (re) => said.filter((t) => re.test(t)).length;
+  assert.equal(count(/^Oct: Winter comes/), 1, said.join('\n'));
+  assert.equal(count(/^Dec: Winter: the fields rest/), 1);
+  assert.equal(count(/^Mar: Spring: the farms grow again/), 1);
+  // The same year on Normal: no notices, no resting.
+  const normal = newGame({ difficulty: 'normal', seed: 'winter-year' });
+  const quiet = [];
+  normal.events.on('message', (m) => quiet.push(m.text));
+  normal.runDays(days);
+  assert.equal(quiet.filter((t) => /farms|fields rest/.test(t)).length, 0);
+});
+
+test('difficulty: the Insane calendar warns before winter and cheers the spring', () => {
+  const texts = (difficulty, month, starting = false) => {
+    const g = newGame({ difficulty, seed: 'notice' });
+    g.time.month = month;
+    const before = g.messages.length;
+    farmSeasonNotice(g, starting);
+    return g.messages.slice(0, g.messages.length - before).map((m) => m.text);
+  };
+  assert.equal(texts('insane', 9).length, 1, 'October: winter is coming');
+  assert.match(texts('insane', 9)[0], /import food/, 'the sandbox has partners that sell food');
+  // Mission 1 has no trade partners: no advice to import.
+  const c1 = new Game({ scenario: withDifficulty(findScenario('c1'), 'insane'), flags: {} });
+  c1.time.month = 9;
+  farmSeasonNotice(c1);
+  assert.doesNotMatch(c1.messages[0].text, /import/);
+  assert.match(texts('insane', 11)[0], /rest/);
+  assert.match(texts('insane', 2)[0], /grow again/);
+  assert.equal(texts('insane', 5).length, 0, 'nothing in summer');
+  assert.equal(texts('insane', 0, true).length, 1, 'a new game starts in winter');
+  for (const m of [0, 2, 9, 11]) assert.equal(texts('hard', m).length + texts('hard', m, true).length, 0, 'no notices on other levels');
 });
 
 // ---------------------------------------------------------------------------

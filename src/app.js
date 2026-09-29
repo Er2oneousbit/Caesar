@@ -32,9 +32,13 @@ import { MOODS } from './audio/composer.js';
 import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLast } from './sim/construction.js';
 import { findScenario, sandboxScenario, withDifficulty, SCENARIOS } from './data/scenarios.js';
 import { DIFFICULTY, DIFFICULTY_ORDER } from './data/difficulty.js';
+import { farmSeasonNotice } from './sim/production.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort, enemyCount } from './sim/military.js';
+
+/** Input events that count as a user activation (HTML spec) in some browser. */
+const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
 
 const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true, difficulty: 'normal' };
 
@@ -101,21 +105,24 @@ export class App {
       if (document.visibilityState === 'hidden') this.autosaveNow('hidden');
       // Hidden tab: pause all sound (the music carries on when it comes back).
       const ctx = this.sfx.ctx;
-      if (ctx) {
-        if (document.visibilityState === 'hidden') ctx.suspend().catch(() => {});
-        else if (this.audioUnlocked) ctx.resume().catch(() => {});
-      }
+      if (document.visibilityState === 'hidden') { if (ctx) ctx.suspend().catch(() => {}); }
+      else if (this.audioUnlocked) { if (ctx) ctx.resume().catch(() => {}); }
+      else this.tryAutoplay(); // opened in a background tab: try again now it shows
     });
     // Browsers only allow sound after the player interacts: start the audio
-    // (and the music) on the first click, tap or key press anywhere.
+    // (and the music) on the first click, tap or key press anywhere. A mouse
+    // press counts on pointerdown, but a touch or pen only on pointerup /
+    // touchend (HTML "activation-triggering" events), so listen to all of them.
     this.audioUnlocked = false;
     const unlock = () => this.unlockAudio();
-    window.addEventListener('pointerdown', unlock, true);
-    window.addEventListener('keydown', unlock, true);
+    for (const t of UNLOCK_EVENTS) window.addEventListener(t, unlock, true);
     this.unlockHandlers = unlock;
     window.addEventListener('pagehide', () => this.autosaveNow('pagehide'));
     window.addEventListener('resize', () => this.resize());
     this.resize();
+    // Where the browser (or the page embedding the game) allows autoplay, the
+    // music starts right away; elsewhere the main menu shows the title gate.
+    this.tryAutoplay();
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -195,6 +202,7 @@ export class App {
     if (!scenario) { this.ui.toastError(`Unknown scenario ${id}`); return; }
     this.startGame(new Game({ scenario, flags: this.flags }));
     for (const hint of scenario.hints || []) this.game.message(hint, 'info');
+    farmSeasonNotice(this.game, true); // Insane: missions start in winter, when nothing grows
   }
 
   /** Start a sandbox game with the given settings. */
@@ -209,6 +217,7 @@ export class App {
     });
     this.startGame(new Game({ scenario, flags: this.flags }));
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
+    farmSeasonNotice(this.game, true); // Insane: the city is founded in winter, when nothing grows
   }
 
   /** Restart the current map from scratch. */
@@ -217,6 +226,7 @@ export class App {
     const scenario = this.game.scenario;
     this.ui.closeModal();
     this.startGame(new Game({ scenario, flags: { ...this.flags, seed: this.game.seed } }));
+    farmSeasonNotice(this.game, true);
   }
 
   /** Make `game` the active game and hook up its events. */
@@ -303,14 +313,47 @@ export class App {
     this.music.attach(ctx);
     // Some key presses (Escape...) do not count as a real interaction, so keep
     // listening until the browser has actually let the sound start.
-    const done = () => {
-      if (ctx.state !== 'running' || this.audioUnlocked) return;
-      this.audioUnlocked = true;
-      window.removeEventListener('pointerdown', this.unlockHandlers, true);
-      window.removeEventListener('keydown', this.unlockHandlers, true);
-    };
-    if (ctx.state === 'running') done();
-    else ctx.resume().then(done).catch(() => {});
+    if (!this.audioWatch) {
+      this.audioWatch = true;
+      ctx.addEventListener('statechange', () => this.onAudioState(ctx));
+    }
+    if (ctx.state === 'running') this.onAudioState(ctx);
+    else ctx.resume().then(() => this.onAudioState(ctx)).catch(() => {});
+  }
+
+  /** The audio context runs: stop listening for gestures, drop the title gate. */
+  onAudioState(ctx) {
+    if (ctx.state !== 'running' || this.audioUnlocked) return;
+    this.audioUnlocked = true;
+    for (const t of UNLOCK_EVENTS) window.removeEventListener(t, this.unlockHandlers, true);
+    this.ui.hideAudioGate();
+  }
+
+  /**
+   * Try to start the sound without a gesture. Works where autoplay is allowed
+   * (browser setting, or an embedding page with allow="autoplay"); elsewhere
+   * the context stays suspended until the first click. Only when the music
+   * would be heard, and not in a hidden tab.
+   */
+  tryAutoplay() {
+    if (this.audioUnlocked || this.music.level() <= 0) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    // Firefox can say up front that autoplay is blocked: then skip the doomed
+    // context (and its console notice); the title gate asks for the click.
+    if (typeof navigator !== 'undefined' && navigator.getAutoplayPolicy?.('audiocontext') === 'disallowed') return;
+    this.unlockAudio();
+  }
+
+  /**
+   * Should the main menu wait behind the title gate? Only while the browser
+   * is holding back music the player would hear (not muted, music on, some
+   * volume) and Web Audio exists at all.
+   */
+  needsAudioGate() {
+    if (this.audioUnlocked || this.music.level() <= 0) return false;
+    const ctx = this.sfx.ctx;
+    if (ctx) return ctx.state !== 'running';
+    return typeof window !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext);
   }
 
   /**

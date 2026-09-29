@@ -23,6 +23,7 @@ import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER
 import { dockBerth, dockUsed } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
+import { farmDormant } from '../sim/production.js';
 
 /** Plain-English description of one missing house requirement. */
 export function describeNeed(m) {
@@ -54,6 +55,7 @@ export function buildingStatus(game, b) {
     case 'farm':
       if (b.fertility <= 0) return { level: 'bad', text: 'No meadow under this field: nothing grows.' };
       if (b.noStorage) return { level: 'warn', text: 'Harvest is piling up: no granary or warehouse with room is reachable.' };
+      if (farmDormant(game, b)) return { level: 'warn', text: 'Winter: nothing grows until spring (Martius). Stored harvest still goes out.' };
       break;
     case 'raw':
       if (b.resourceOk === false) return { level: 'bad', text: 'The natural resource nearby is gone.' };
@@ -254,14 +256,16 @@ export class InfoPanel {
         if (b.herd !== undefined) {
           parts.push(sec('Horse ranch',
             kv('Breeding mares', `${b.herd} / ${HERD_MAX}`), bar(b.herd, HERD_MAX),
-            b.herd < HERD_MAX ? kv('Next mare', b.efficiency > 0 && b.fertility > 0 ? `in about ${Math.ceil((HERD_GROWTH_DAYS - (b.herdDays || 0)) / b.efficiency)} days` : 'not while the ranch is idle') : null,
+            b.herd < HERD_MAX ? kv('Next mare', !(b.efficiency > 0 && b.fertility > 0) ? 'not while the ranch is idle' : farmDormant(g, b) ? 'after the winter' : `in about ${Math.ceil((HERD_GROWTH_DAYS - (b.herdDays || 0)) / b.efficiency)} days`) : null,
             kv('Pasture (meadow)', pct(b.fertility)),
             kv('Next foal', pct(b.progress / 100)), bar(b.progress, 100),
             kv('Horses waiting', formatAmount('horses', b.stock.horses)),
             h('div', { class: 'muted' }, 'A bigger herd foals faster: a new ranch is 4x slower than a mature one. Horses go to a Barracks that needs them, otherwise to a warehouse.')));
           break;
         }
-        parts.push(sec('Farm', kv('Crop', GOODS[def.produces].name), kv('Fertility', pct(b.fertility)), kv('Growth', pct(b.progress / 100)), bar(b.progress, 100), kv('Stored', `${fmt(b.stock[def.produces])} units`)));
+        parts.push(sec('Farm', kv('Crop', GOODS[def.produces].name), kv('Fertility', pct(b.fertility)),
+          kv('Growth', farmDormant(g, b) ? `${pct(b.progress / 100)} (resting for the winter)` : pct(b.progress / 100)), bar(b.progress, 100),
+          kv('Stored', `${fmt(b.stock[def.produces])} units`)));
         break;
       case 'raw':
         parts.push(sec('Production', kv('Produces', GOODS[def.produces].name), kv('Progress', pct(b.progress / 100)), bar(b.progress, 100), kv('Stored', `${fmt(b.stock[def.produces])} units`)));
@@ -402,6 +406,8 @@ export class InfoPanel {
     if (t === 3) notes.push('Rocks cannot be cleared. Mines and quarries must touch them.');
     if (t === 4) notes.push('Water: reservoirs next to it fill up; clay pits need it nearby.');
     if (map.fixedRoad[i]) notes.push('The Imperial road connects the city to the rest of the Empire.');
+    if (x === map.entry.x && y === map.entry.y) notes.push('Map entrance (green pennants): settlers and trade caravans arrive here.');
+    if (x === map.exit.x && y === map.exit.y) notes.push('Map exit (red pennants): people leaving the city, and trade caravans heading home, go this way.');
     if (map.rubble[i]) notes.push('Rubble from a disaster. Clear it before building.');
     if (g.fires.has(i)) notes.push('Burning! Prefects are on their way.');
     const wall = map.wall[i];

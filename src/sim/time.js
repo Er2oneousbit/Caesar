@@ -14,6 +14,16 @@ import { CONFIG } from '../config.js';
 export const MONTH_NAMES = ['Ianuarius', 'Februarius', 'Martius', 'Aprilis', 'Maius', 'Iunius', 'Iulius', 'Augustus', 'September', 'October', 'November', 'December'];
 export const MONTH_SHORT = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** The four seasons, by calendar: Dec-Feb winter, Mar-May spring, Jun-Aug summer, Sep-Nov autumn. */
+export const SEASONS = Object.freeze(['winter', 'spring', 'summer', 'autumn']);
+/** Season names shown to the player. */
+export const SEASON_NAMES = Object.freeze({ winter: 'Winter', spring: 'Spring', summer: 'Summer', autumn: 'Fall' });
+
+/** Season of a month (0 = Ianuarius): Dec-Feb winter, Mar-May spring, Jun-Aug summer, Sep-Nov autumn. */
+export function seasonOf(month) {
+  return SEASONS[Math.floor((((month + 1) % 12) + 12) % 12 / 3)];
+}
+
 export function formatYear(year) {
   return year < 0 ? `${-year} BC` : `${year} AD`;
 }
@@ -59,6 +69,9 @@ export class GameTime {
 
   /** "Martius 280 BC" */
   label() { return `${MONTH_NAMES[this.month]} ${formatYear(this.year)}`; }
+
+  /** Season of the current month ('winter', 'spring', 'summer', 'autumn'). */
+  season() { return seasonOf(this.month); }
 
   /** "Mar 280 BC" */
   shortLabel() { return `${MONTH_SHORT[this.month]} ${formatYear(this.year)}`; }

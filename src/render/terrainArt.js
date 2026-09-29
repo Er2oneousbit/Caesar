@@ -10,7 +10,9 @@
  *
  * Seasons: grass, meadow, forest-floor and tree colors come from a palette
  * (weather.js seasonPalette), so the renderer asks for the current month's
- * look. Water, rock and roads do not change with the seasons.
+ * look. Lying snow (pal.snow, 0..1) whitens the ground (SNOW_HOLD: sand and
+ * rock keep less), caps the trees and the tops of the rocks. Water, roads,
+ * plazas and bridges stay as they are: cleared roads read well in the snow.
  *
  * Edge blending: where two kinds of ground meet, blendSpec() draws a wavy
  * fringe of the "stronger" neighbour onto the weaker tile (forest floor >
@@ -21,7 +23,7 @@
 
 import { HALF_W, HALF_H, CONFIG } from '../config.js';
 import { Terrain } from '../world/map.js';
-import { P, poly, quad, shade, mix, tree, bareTree, cypress, hash01 } from './draw.js';
+import { P, poly, quad, shade, mix, tree, bareTree, cypress, hash01, SNOW, SNOW_SHADE } from './draw.js';
 import { seasonPalette } from './weather.js';
 
 const TW = CONFIG.TILE_W;
@@ -49,15 +51,56 @@ export const BLEND_RANK = Object.freeze({
   [Terrain.TREES]: 5,
 });
 
-/** Base ground color of a terrain type in a season. */
+/** How much of the snow each ground keeps (warm beach sand and bare rock less). */
+const SNOW_HOLD = Object.freeze({
+  [Terrain.GRASS]: 1,
+  [Terrain.MEADOW]: 1,
+  [Terrain.TREES]: 0.9,
+  [Terrain.SAND]: 0.7,
+  [Terrain.ROCK]: 0.6,
+});
+
+/** Snow on a ground type in this palette, 0..1. */
+function snowOn(type, pal) {
+  return pal.snow ? pal.snow * (SNOW_HOLD[type] || 0) : 0;
+}
+
+/** Base ground color of a terrain type in a season (whitened by lying snow). */
 export function groundColor(type, pal = seasonPalette(null)) {
+  let c;
   switch (type) {
-    case Terrain.GRASS: return pal.grass;
-    case Terrain.MEADOW: return pal.meadow;
-    case Terrain.TREES: return pal.forest;
-    case Terrain.SAND: return pal.sand;
-    default: return TERRAIN_COLORS[type];
+    case Terrain.GRASS: c = pal.grass; break;
+    case Terrain.MEADOW: c = pal.meadow; break;
+    case Terrain.TREES: c = pal.forest; break;
+    case Terrain.SAND: c = pal.sand; break;
+    default: c = TERRAIN_COLORS[type];
   }
+  const sn = snowOn(type, pal);
+  return sn ? mix(c, SNOW, sn) : c;
+}
+
+/**
+ * Texture of lying snow: soft brighter drifts and blue-grey hollows. Drawn
+ * on top of the ground's own texture, so thin snow still shows grass.
+ */
+function snowTexture(ctx, seed, sn) {
+  ctx.globalAlpha = 0.35 + sn * 0.5;
+  ctx.fillStyle = SNOW;
+  ctx.beginPath();
+  for (let k = 0; k < 3; k++) {
+    const [x, y] = P(0.2 + hash01(seed, k, 101) * 0.6, 0.2 + hash01(seed, k, 102) * 0.6);
+    const rx = 4 + hash01(seed, k, 103) * 6;
+    ctx.moveTo(x + rx, y);
+    ctx.ellipse(x, y, rx, rx * 0.4, 0, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  ctx.globalAlpha = 0.3 + sn * 0.3;
+  ctx.fillStyle = SNOW_SHADE;
+  for (let k = 0; k < 7; k++) {
+    const [x, y] = P(0.1 + hash01(seed, k, 104) * 0.8, 0.1 + hash01(seed, k, 105) * 0.8);
+    ctx.fillRect(x - 1.6, y - 0.4, 3.2, 0.9);
+  }
+  ctx.globalAlpha = 1;
 }
 
 /** Diamond slightly larger than the tile to hide seams between tiles. */
@@ -118,7 +161,10 @@ export function groundTileSpec(type, variant, pal = seasonPalette(null)) {
     ay: 1,
     draw(ctx) {
       const base = groundColor(type, pal);
-      const tint = ((variant & 3) - 1.5) * 0.025;
+      const sn = snowOn(type, pal);
+      // Per-variant shading breaks up large fields; under snow it is softer,
+      // or the near-white tiles would show a diamond quilt.
+      const tint = ((variant & 3) - 1.5) * 0.025 * (1 - 0.6 * sn);
       if (type === Terrain.WATER) {
         tileDiamond(ctx, base);
         return;
@@ -132,7 +178,7 @@ export function groundTileSpec(type, variant, pal = seasonPalette(null)) {
         // a few grass tufts
         ctx.strokeStyle = shade(base, -0.22);
         ctx.lineWidth = 0.7;
-        for (let k = 0; k < 5; k++) {
+        for (let k = 0; k < 5 - Math.round(sn * 3); k++) {
           const [x, y] = P(hash01(seed, k, 5) * 0.8 + 0.1, hash01(seed, k, 6) * 0.8 + 0.1);
           ctx.beginPath();
           ctx.moveTo(x - 1.5, y);
@@ -144,12 +190,12 @@ export function groundTileSpec(type, variant, pal = seasonPalette(null)) {
         if (variant === 3 || variant === 7) pebbles(ctx, seed, 2, '#a39a88');
         if (type === Terrain.TREES) {
           // forest floor: fallen leaves in the season's colors
-          for (let k = 0; k < 9; k++) {
+          for (let k = 0; k < Math.round(9 * (1 - sn)); k++) {
             const [x, y] = P(hash01(seed, k, 71) * 0.8 + 0.1, hash01(seed, k, 72) * 0.8 + 0.1);
             ctx.fillStyle = pal.leaves[k % pal.leaves.length];
             ctx.fillRect(x - 0.9, y - 0.5, 1.8, 1);
           }
-        } else if (pal.flowers > 1.2) {
+        } else if (pal.flowers > 1.2 && !sn) {
           // spring: a few wild flowers in the grass too
           for (let k = 0; k < 3; k++) {
             const [x, y] = P(hash01(seed, k, 73) * 0.8 + 0.1, hash01(seed, k, 74) * 0.8 + 0.1);
@@ -160,7 +206,7 @@ export function groundTileSpec(type, variant, pal = seasonPalette(null)) {
       } else if (type === Terrain.MEADOW) {
         speckle(ctx, seed, 22, [shade(base, -0.12), shade(base, 0.1)]);
         // little flowers (lots in spring, hardly any in winter)
-        const n = Math.round(7 * pal.flowers);
+        const n = sn ? 0 : Math.round(7 * pal.flowers);
         const colors = ['#f4e27a', '#f7f2e4', '#d9a3c7', '#9fb4e8', '#e9876b'];
         for (let k = 0; k < n; k++) {
           const [x, y] = P(hash01(seed, k, 7) * 0.8 + 0.1, hash01(seed, k, 8) * 0.8 + 0.1);
@@ -196,6 +242,7 @@ export function groundTileSpec(type, variant, pal = seasonPalette(null)) {
         ctx.stroke();
         pebbles(ctx, seed, 3, '#a39a88');
       }
+      if (sn) snowTexture(ctx, seed, sn);
     },
   };
 }
@@ -247,14 +294,15 @@ export function blendSpec(type, edges, corners, variant, pal = seasonPalette(nul
       shapes(0.3);
       ctx.clip();
       speckle(ctx, seed, 26, [shade(base, -0.14), shade(base, 0.12), shade(base, -0.06)]);
-      if (type === Terrain.MEADOW) {
+      const sn = snowOn(type, pal);
+      if (type === Terrain.MEADOW && !sn) {
         for (let k = 0; k < Math.round(5 * pal.flowers); k++) {
           const [x, y] = P(hash01(seed, k, 7), hash01(seed, k, 8));
           ctx.fillStyle = k % 2 ? '#f4e27a' : '#f7f2e4';
           ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
         }
       } else if (type === Terrain.TREES) {
-        for (let k = 0; k < 8; k++) {
+        for (let k = 0; k < Math.round(8 * (1 - sn)); k++) {
           const [x, y] = P(hash01(seed, k, 71), hash01(seed, k, 72));
           ctx.fillStyle = pal.leaves[k % pal.leaves.length];
           ctx.fillRect(x - 0.9, y - 0.5, 1.8, 1);
@@ -522,16 +570,16 @@ export function treesSpec(variant, sway = 0, pal = seasonPalette(null)) {
         // Neighbouring trees on a tile do not move in perfect lockstep.
         const s = sway * (0.8 + hash01(variant, k, 33) * 0.4);
         const leaves = pal.leaves[(variant + k) % pal.leaves.length];
-        if (hash01(variant, k, 32) < 0.28) cypress(ctx, u, v, size, '#2f5a2a', s); // evergreen
-        else if (hash01(variant, k, 34) < pal.bare) bareTree(ctx, u, v, size, variant + k, s, leaves);
-        else tree(ctx, u, v, size, leaves, '#6b4a2a', variant + k, s, hash01(variant, k, 35) < pal.blossom ? 1 : 0);
+        if (hash01(variant, k, 32) < 0.28) cypress(ctx, u, v, size, '#2f5a2a', s, pal.snow); // evergreen
+        else if (hash01(variant, k, 34) < pal.bare) bareTree(ctx, u, v, size, variant + k, s, leaves, pal.snow);
+        else tree(ctx, u, v, size, leaves, '#6b4a2a', variant + k, s, !pal.snow && hash01(variant, k, 35) < pal.blossom ? 1 : 0, pal.snow); // no blossom under snow
       });
     },
   };
 }
 
 /** Boulders on a rock tile. */
-export function rocksSpec(variant) {
+export function rocksSpec(variant, snow = 0) {
   return {
     w: TW,
     h: TH + 20,
@@ -550,7 +598,7 @@ export function rocksSpec(variant) {
         ctx.ellipse(x + 2, y + 1, s * 1.1, s * 0.45, 0, 0, Math.PI * 2);
         ctx.fill();
         poly(ctx, [[x - s, y], [x - s * 0.7, y - h * 0.8], [x + s * 0.1, y - h], [x + s, y - h * 0.5], [x + s * 0.8, y + 1]], '#8d8577', '#5d564b', 0.8);
-        poly(ctx, [[x - s * 0.7, y - h * 0.8], [x + s * 0.1, y - h], [x + s * 0.2, y - h * 0.4], [x - s * 0.5, y - h * 0.3]], '#b0a898');
+        poly(ctx, [[x - s * 0.7, y - h * 0.8], [x + s * 0.1, y - h], [x + s * 0.2, y - h * 0.4], [x - s * 0.5, y - h * 0.3]], snow ? mix('#b0a898', SNOW, 0.5 + snow * 0.5) : '#b0a898');
       }
     },
   };

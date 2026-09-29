@@ -57,6 +57,21 @@ export function mainMenu(app) {
       h('div', { class: 'footer-note' }, `v${CONFIG.VERSION} · ${FOOTER}`)));
 }
 
+/**
+ * Title gate shown over the main menu until the first click, tap or key
+ * press (the gesture browsers require before any sound, which starts the
+ * menu music). The whole screen is the target; the button is there for
+ * keyboard and screen-reader users.
+ */
+export function titleGate(app) {
+  return h('div', { id: 'title-gate', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'title-gate-h', 'aria-describedby': 'title-gate-hint' },
+    h('div', { class: 'gate-card' },
+      h('h1', { id: 'title-gate-h' }, CONFIG.GAME_TITLE),
+      h('div', { class: 'tagline' }, CONFIG.GAME_TAGLINE),
+      h('button', { class: 'btn primary gate-begin', type: 'button' }, '\u266A  Begin'),
+      h('div', { id: 'title-gate-hint', class: 'gate-hint' }, 'Click, tap or press a key to begin. The music starts with it.')));
+}
+
 // ---------------------------------------------------------------------------
 // Campaign
 // ---------------------------------------------------------------------------
@@ -242,8 +257,8 @@ export function settingsMenu(app) {
     check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months and when you leave the page`, 'Uses the "Autosave" slot in this browser\'s local storage.'),
     check('ambient', 'Ambient effects: drifting cloud shadows and birds', 'Purely decorative. Swaying trees and other small animations also turn off when your system asks for reduced motion.'),
     check('dayNight', 'Day and night', 'The sun sets every few minutes of game time and the city lights its lamps. Tool previews stay bright.'),
-    check('seasons', 'Seasons', 'Grass and trees change color through the year: spring blossoms, autumn leaves, bare winter trees.'),
-    check('weather', 'Weather: clouds, rain, snow and thunderstorms', 'Visual only, it never affects the city. Rain, snow and lightning are not drawn when your system asks for reduced motion.'),
+    check('seasons', 'Seasons', 'Grass and trees change color through the year: spring blossoms, autumn leaves, bare winter trees. Switched off, the map and the weather stay in summer (no snow); the calendar season still shows next to the date.'),
+    check('weather', 'Weather: clouds, rain, snow and thunderstorms', 'Visual only, it never affects the city. Snow settles on the ground, trees and roofs (with Seasons on) and melts after. Falling rain and snow and lightning are not drawn when your system asks for reduced motion; snow on the ground still shows.'),
     check('showFps', 'Show performance counters (debug HUD)'),
     h('div', { class: 'field' }, h('label', {}, 'Theme'),
       h('select', { onchange: (e) => { s.theme = e.target.value; app.applySettings(); } },

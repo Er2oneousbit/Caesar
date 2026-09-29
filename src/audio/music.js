@@ -63,8 +63,9 @@ export class Music {
   }
 
   /**
-   * Hook the music into the (shared) audio context. Called on the first
-   * click or key press, because browsers only allow sound after one.
+   * Hook the music into the (shared) audio context. Called at boot where the
+   * browser allows autoplay, otherwise on the title gate's click, tap or key
+   * press (browsers only allow sound after one).
    */
   attach(ac) {
     if (this.ac || !ac) return;
@@ -191,7 +192,7 @@ export class Music {
 
   /** Status line for the console. */
   describe() {
-    if (!this.ac) return 'Music starts after your first click or key press.';
+    if (!this.ac) return 'Music starts on the title screen: at once where the browser allows it, otherwise with the first click, tap or key press.';
     const state = this.level() <= 0 ? 'off' : this.ac.state !== 'running' ? `waiting (${this.ac.state})` : 'on';
     return `Music ${state}, volume ${Math.round(this.volume * 100)}%, mood ${this.mood}${this.forced ? ' (forced)' : ''}. ${this.nowPlaying ? `Playing ${this.nowPlaying}.` : 'Between pieces.'}`;
   }

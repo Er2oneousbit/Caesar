@@ -15,7 +15,7 @@ import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
-import { WEATHER } from '../render/weather.js';
+import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
 import { MOODS } from '../audio/composer.js';
 import { log } from '../core/debug.js';
@@ -40,6 +40,7 @@ export const CONSOLE_HELP = [
   ['stats', 'Print city statistics'],
   ['goto <x> <y>', 'Center the view on a tile'],
   ['weather <kind>', 'Change the weather now: clear | cloudy | rain | storm | snow'],
+  ['snow <0-3>', 'Set the snow lying on the ground (0 none .. 3 deep); it melts again by itself'],
   ['sky <0-1>|off', 'Freeze the time of day (0.3 noon, 0.67 sunset, 0.8 night) or let it run'],
   ['music [on|off|next]', 'Music status, switch it, or skip to a new piece'],
   ['music mood <m>|auto', 'Force a mood: menu, day, night, danger, festival (auto = follow the game)'],
@@ -246,8 +247,25 @@ export class DebugConsole {
         const kind = (args[0] || '').toLowerCase();
         if (!WEATHER[kind]) return `Weather now: ${app.renderer.weather.kind}. Options: ${Object.keys(WEATHER).join(', ')}`;
         if (!app.renderer.weatherOn) return 'Weather is switched off in Settings.';
-        app.renderer.weather.force(kind);
+        const season = app.renderer.pal.season; // the season the weather follows
+        const fits = seasonalKind(kind, season);
+        app.renderer.weather.force(fits);
+        if (fits !== kind) {
+          return app.renderer.seasonsOn
+            ? `Weather: ${WEATHER[fits].label} (${WEATHER[kind].label.toLowerCase()} is not possible in ${SEASON_NAMES[season].toLowerCase()}).`
+            : `Weather: ${WEATHER[fits].label} (Seasons are off in Settings, so the weather stays summer's: no snow).`;
+        }
         return `Weather: ${WEATHER[kind].label} (it builds up over a few seconds of game time).`;
+      }
+      case 'snow': {
+        const r = app.renderer;
+        const w = r.weather;
+        const lvl = Number(args[0]);
+        if (args[0] === undefined || !Number.isInteger(lvl) || lvl < 0 || lvl > SNOW_LEVELS) return `Snow cover now: level ${w.coverLevel} (${Math.round(w.cover * 100)}%). Usage: snow <0-${SNOW_LEVELS}>`;
+        if (!r.weatherOn || !r.seasonsOn) return 'Snow cover needs both Weather and Seasons switched on in Settings.';
+        w.cover = [0, 0.28, 0.62, 0.95][lvl]; // inside each level's band
+        w.coverLevel = lvl;
+        return lvl ? `Snow cover: level ${lvl}. It melts again unless it keeps snowing (slowly in winter, fast in spring).` : 'Snow cover cleared.';
       }
       case 'sky': {
         const r = app.renderer;

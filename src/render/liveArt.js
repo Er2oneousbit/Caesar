@@ -8,6 +8,8 @@
  *   drawShoppers()   people browsing along the front of a stocked market
  *   drawCrowd()      spectators in a theater or arena while a show is on
  *   drawAltarFlame() the small fire on a temple's altar
+ *   drawMapGate()    the gateway over the Imperial road at the map entrance
+ *                    (green pennants) and exit (red pennants)
  *
  * Like walkerArt.js, these work in device pixels: (ox, oy) is a building's
  * footprint top corner on screen and k the pixel scale (zoom * dpr). Local
@@ -17,7 +19,7 @@
  */
 
 import { HALF_W, HALF_H } from '../config.js';
-import { hash01, shade } from './draw.js';
+import { hash01, shade, SNOW } from './draw.js';
 
 /** Tunic colors for crowds and shoppers. */
 const CLOTHES = ['#b8573a', '#5d7fa3', '#d9a13a', '#7a9c5a', '#e8dcc0', '#8a5a8a', '#c9c2b0', '#a8322b'];
@@ -204,4 +206,89 @@ export function drawAltarFlame(ctx, sx, sy, k, t, seed) {
     ctx.closePath();
     ctx.fill();
   }
+}
+
+/** Height of a map gate's pillars (art px, before scaling). */
+export const GATE_H = 34;
+
+/**
+ * The gateway over the Imperial road where it meets the map edge: two stone
+ * pillars on either side of the road, a timber lintel with a colored plaque
+ * between them and a pennant on each pillar (green at the entrance, where
+ * settlers and caravans arrive; red at the exit, where people leave). Big
+ * enough to spot at a glance: it is how the player finds the two ends.
+ *
+ * Drawn in two parts so people on the road pass between the pillars:
+ * `part` 'back' is the pillar further from the viewer (drawn before the
+ * walkers on the tile), 'front' the lintel and the nearer pillar (after).
+ * (sx, sy) is the road tile's center on screen, (px, py) the offset from it
+ * to one pillar (device px), `snow` 0..1 caps the stone with snow.
+ */
+export function drawMapGate(ctx, sx, sy, k, px, py, color, t, seed, part, snow = 0) {
+  // The back pillar is the one higher on screen.
+  const a = py <= 0 ? { x: sx + px, y: sy + py } : { x: sx - px, y: sy - py };
+  const b = py <= 0 ? { x: sx - px, y: sy - py } : { x: sx + px, y: sy + py };
+  const H = GATE_H * k;
+  const pillar = (p, n) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(p.x + 2 * k, p.y, 5 * k, 2.2 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#d6cbb0'; // plinth
+    ctx.fillRect(p.x - 3.4 * k, p.y - 3 * k, 6.8 * k, 3 * k);
+    ctx.fillStyle = '#cfc4a8'; // shaft
+    ctx.fillRect(p.x - 2.6 * k, p.y - H, 5.2 * k, H - 3 * k);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(p.x + 0.6 * k, p.y - H, 2 * k, H); // shaded side
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let r = 1; r < 4; r++) ctx.fillRect(p.x - 2.6 * k, p.y - H + r * (H / 4), 5.2 * k, 0.6 * k); // stone courses
+    ctx.fillStyle = '#e8e0c8';
+    ctx.fillRect(p.x - 3.6 * k, p.y - H - 2.4 * k, 7.2 * k, 2.6 * k); // cap
+    if (snow > 0) {
+      ctx.fillStyle = SNOW;
+      ctx.fillRect(p.x - 3.6 * k, p.y - H - (2.4 + snow * 1.6) * k, 7.2 * k, (0.8 + snow * 1.6) * k);
+    }
+    // pennant pole and cloth
+    ctx.fillStyle = '#5e3b20';
+    ctx.fillRect(p.x - 0.6 * k, p.y - H - 14 * k, 1.2 * k, 12 * k);
+    ctx.fillStyle = '#d9b44a';
+    ctx.fillRect(p.x - 1 * k, p.y - H - 15 * k, 2 * k, 1.4 * k); // gilded finial
+    drawFlag(ctx, p.x, p.y - H - 13.5 * k, k, { w: 12, ch: 7, color, swallow: true }, t, seed + n * 1.7);
+  };
+  if (part === 'back') {
+    pillar(a, 0);
+    return;
+  }
+  // Lintel between the pillar tops, with the colored plaque in the middle.
+  const ly = 3 * k;
+  ctx.strokeStyle = '#5a3c22';
+  ctx.lineWidth = 3.6 * k;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y - H + ly);
+  ctx.lineTo(b.x, b.y - H + ly);
+  ctx.stroke();
+  ctx.strokeStyle = '#7d5634';
+  ctx.lineWidth = 1.4 * k;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y - H + ly - 0.9 * k);
+  ctx.lineTo(b.x, b.y - H + ly - 0.9 * k);
+  ctx.stroke();
+  if (snow > 0) {
+    ctx.strokeStyle = SNOW;
+    ctx.lineWidth = (0.8 + snow * 1.2) * k;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y - H + ly - 2 * k);
+    ctx.lineTo(b.x, b.y - H + ly - 2 * k);
+    ctx.stroke();
+  }
+  // Plaque: the gate's color with a pale band, hanging under the lintel.
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2 - H + ly + 1.5 * k;
+  ctx.fillStyle = '#3b2716';
+  ctx.fillRect(mx - 5 * k, my - 0.5 * k, 10 * k, 7 * k);
+  ctx.fillStyle = color;
+  ctx.fillRect(mx - 4.3 * k, my, 8.6 * k, 6 * k);
+  ctx.fillStyle = 'rgba(255,245,214,0.9)';
+  ctx.fillRect(mx - 3 * k, my + 2.5 * k, 6 * k, 1 * k);
+  pillar(b, 1);
 }

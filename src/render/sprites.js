@@ -18,6 +18,13 @@
  * level of art at once takes a while, so new sprites get a time budget per
  * frame (`beginFrame`): past it, the same art from the other kept zoom level
  * is borrowed (drawn scaled) and the sharp one is made on a later frame.
+ *
+ * A change of look (a new month, snow settling) is prepared, then swapped:
+ * get() with a `fallback` key keeps returning the OLD art while the new
+ * sprites are drawn within the budget in the background, counting what is
+ * still missing in `pending`. Once a frame ends with nothing pending, the
+ * renderer drops the old look and the next frame shows the new one whole
+ * (no patchwork of old and new tiles, no one-frame hitch).
  * ----------------------------------------------------------------------------
  */
 
@@ -33,6 +40,7 @@ export class SpriteCache {
     this.budgetMs = Infinity; // time allowed for drawing new sprites this frame
     this.spentMs = 0;
     this.borrowed = 0; // sprites borrowed from another zoom level this frame
+    this.pending = 0; // new-look sprites still missing this frame (their old look was drawn)
   }
 
   /** Start a frame: pick the scale and reset the new-sprite time budget. */
@@ -41,6 +49,7 @@ export class SpriteCache {
     this.budgetMs = budgetMs;
     this.spentMs = 0;
     this.borrowed = 0;
+    this.pending = 0;
   }
 
   setScale(s) {
@@ -98,8 +107,18 @@ export class SpriteCache {
    * @param {() => {w:number,h:number,ax:number,ay:number,draw:(ctx:CanvasRenderingContext2D)=>void}} specFn
    * @returns {{canvas:HTMLCanvasElement, ax:number, ay:number, w:number, h:number, s:number}}
    */
-  get(key, specFn) {
+  get(key, specFn, fallback = null) {
     let spr = this.current.get(key);
+    if (fallback !== null) {
+      // A look change in progress: draw the old look wherever it exists and
+      // only prepare the new sprite, within the budget (see the header).
+      const old = this.current.get(fallback) || this.borrow(fallback);
+      if (old) {
+        if (!spr && this.spentMs <= this.budgetMs) spr = this.make(key, specFn);
+        if (!spr) this.pending++;
+        return old;
+      }
+    }
     if (spr) return spr;
     if (this.spentMs > this.budgetMs) {
       const alt = this.borrow(key);
@@ -108,6 +127,11 @@ export class SpriteCache {
         return alt;
       }
     }
+    return this.make(key, specFn);
+  }
+
+  /** Render a sprite now and cache it (the time counts toward the budget). */
+  make(key, specFn) {
     const t0 = now();
     const spec = specFn();
     const s = this.scale;
@@ -127,7 +151,7 @@ export class SpriteCache {
       ctx.fillStyle = '#ff00ff';
       ctx.fillRect(0, 0, cw, ch);
     }
-    spr = { canvas, ax: Math.round(spec.ax * s), ay: Math.round(spec.ay * s), w: cw, h: ch, s };
+    const spr = { canvas, ax: Math.round(spec.ax * s), ay: Math.round(spec.ay * s), w: cw, h: ch, s };
     this.current.set(key, spr);
     this.created++;
     this.spentMs += now() - t0;

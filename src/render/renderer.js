@@ -46,12 +46,13 @@ import { Terrain, Road, WaterBits } from '../world/map.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { wallHpOf, TOWER_RANGE } from '../sim/military.js';
+import { farmDormant } from '../sim/production.js';
 import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK } from './terrainArt.js';
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor } from './buildingArt.js';
-import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame } from './liveArt.js';
+import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H } from './liveArt.js';
 import { drawWalker } from './walkerArt.js';
 import { Effects, drawFlames, drawSpray, drawGlint } from './effects.js';
 import { Ambient } from './ambient.js';
@@ -68,6 +69,32 @@ const K_EXTRA = 4;
 const K_UNIT = 5;
 const K_PROJ = 6;
 const K_FLAG = 7;
+const K_GATE = 8; // the gateway at the map entrance / exit
+
+/**
+ * Where a map gate's pillars stand: the world offset (px) from the road tile's
+ * center to one pillar, across the road (the other pillar mirrors it). The
+ * road runs from the edge tile to its road neighbour, or toward the middle.
+ */
+export function mapGateOffset(map, end) {
+  let dx = 0;
+  let dy = 0;
+  for (const [nx, ny] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    if (map.hasRoad(end.x + nx, end.y + ny)) { dx = nx; dy = ny; break; }
+  }
+  if (!dx && !dy) { // no road beside it (should not happen): face the middle of the map
+    if (Math.abs(map.w / 2 - end.x) > Math.abs(map.h / 2 - end.y)) dx = Math.sign(map.w / 2 - end.x) || 1;
+    else dy = Math.sign(map.h / 2 - end.y) || 1;
+  }
+  const a = -dy; // across the road, in tiles
+  const b = dx;
+  const r = 0.46; // pillars stand inside the tile, just off the road
+  return { ox: (a - b) * HALF_W * r, oy: (a + b) * HALF_H * r };
+}
+
+/** Pennant colors of the map gates: where people arrive, and where they leave. */
+const ENTRY_COLOR = '#3f9a3a';
+const EXIT_COLOR = '#b8322b';
 
 /**
  * Water buildings that supply an area: every tile within `r` of the footprint
@@ -163,6 +190,7 @@ export class Renderer {
     this.appear = new Map(); // building id -> time it was placed (rise-in animation)
     this.puffBudget = 0; // dust puffs allowed this frame (a demo city appears all at once)
     this.spriteBudgetMs = 8; // ms per frame for drawing new sprites before borrowing another zoom level's
+    this.lookBudgetMs = 4; // the same while a new month or snow level is prepared (the old look shows meanwhile)
     // The world around the city (Settings).
     this.dayNightOn = true;
     this.seasonsOn = true;
@@ -171,11 +199,16 @@ export class Renderer {
     this.weather = new Weather();
     this.sky = NOON; // light of the last frame (see lighting.js skyAt)
     this.pal = seasonPalette(null); // season palette of the last frame
+    this.palPrev = null; // last palette's key while the new look is prepared (its sprites are still drawn)
+    this.snowKey = ''; // snow suffix of building and rock sprite keys ('' = no snow)
+    this.snowPrev = null; // last snow suffix while the new one is prepared
+    this.lookHard = false; // next look change switches at once (set by attach)
     this.fixedTime = null; // set 0..1 to freeze the time of day (screenshots, console)
     this.lastTicks = 0; // sim ticks seen last frame (weather runs on game time)
     this.blendCodes = null; // per tile: packed edge-blend code, -1 = not computed yet
     this.blendRev = -1;
     this.gates = []; // wall gate tiles in view this frame (they get torches at night)
+    this.mapGates = []; // map entrance/exit gateways in view this frame (torches too)
   }
 
   /** Point the renderer at a (new) game. */
@@ -190,6 +223,11 @@ export class Renderer {
     this.appear.clear();
     this.blendCodes = null;
     this.lastTicks = game.time.totalTicks;
+    this.weather.reset(); // a new or loaded game opens with clear skies (and no snow cover)
+    // A new or loaded game switches look at once: preparing it behind the
+    // last game's look would only delay the first picture of the new map.
+    this.finishLookChange();
+    this.lookHard = true;
     this.unsub.push(game.events.on('buildingAdded', (b) => {
       if (!this.motionOn) return;
       this.appear.set(b.id, this.time);
@@ -263,13 +301,15 @@ export class Renderer {
     ctx.fillRect(0, 0, cam.viewW, cam.viewH);
     if (!game) return;
     const k = cam.scale;
+    const env = this.updateEnvironment(dt);
+    const pal = env.pal;
     // Sprites are drawn for the zoom LEVEL; while the zoom eases they are scaled a little.
-    this.sprites.beginFrame(cam.spriteScale, this.spriteBudgetMs);
+    const changing = this.palPrev !== null || this.snowPrev !== null;
+    this.sprites.beginFrame(cam.spriteScale, changing ? Math.min(this.spriteBudgetMs, this.lookBudgetMs) : this.spriteBudgetMs);
     const { map } = game;
     const ov = this.overlay;
     const overlayOn = ov.key !== 'none';
-    const env = this.updateEnvironment(dt);
-    const pal = env.pal;
+    const pp = this.palPrev; // last look, still drawn while the new one is prepared
 
     // --- visible tile range -------------------------------------------------
     const vr = cam.viewRect();
@@ -325,8 +365,8 @@ export class Renderer {
             // Where a different kind of ground borders this tile, the sprite
             // has a soft edge painted in (one draw either way; see groundBlendSpec).
             const code = bid ? 0 : this.blendAt(i, x, y);
-            if (code > 0) drawSpr(this.sprites.get(`g${terr}.${gv}.${code}~${pal.key}`, () => groundBlendSpec(terr, gv, code, pal)), wx, wy);
-            else drawSpr(this.sprites.get(`g${terr}.${gv}~${pal.key}`, () => groundTileSpec(terr, gv, pal)), wx, wy);
+            if (code > 0) drawSpr(this.sprites.get(`g${terr}.${gv}.${code}~${pal.key}`, () => groundBlendSpec(terr, gv, code, pal), pp === null ? null : `g${terr}.${gv}.${code}~${pp}`), wx, wy);
+            else drawSpr(this.sprites.get(`g${terr}.${gv}~${pal.key}`, () => groundTileSpec(terr, gv, pal), pp === null ? null : `g${terr}.${gv}~${pp}`), wx, wy);
           }
           const road = map.road[i];
           if (road === Road.ROAD) {
@@ -359,9 +399,9 @@ export class Renderer {
           // Wind: 5 cached sway frames; the phase rolls across the map in gusts.
           const tv = map.variant[i] & 7;
           const sway = motion ? Math.round(Math.sin(this.time * 1.7 - (x * 0.45 + y * 0.25)) * 2) : 0;
-          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${tv}.${sway}~${pal.key}`, () => treesSpec(tv, sway, pal)), wx, wy, full: true });
+          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${tv}.${sway}~${pal.key}`, () => treesSpec(tv, sway, pal), pp === null ? null : `t${tv}.${sway}~${pp}`), wx, wy, full: true });
         } else if (terr === Terrain.ROCK) {
-          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`k${variant}`, () => rocksSpec(variant)), wx, wy, full: true });
+          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`k${variant}${this.snowKey}`, () => rocksSpec(variant, pal.snow), this.snowPrev === null ? null : `k${variant}${this.snowPrev}`), wx, wy, full: true });
         }
         if (map.wall[i]) {
           const gate = map.wall[i] === 2;
@@ -428,6 +468,19 @@ export class Renderer {
       const wy = (b.rally.x + b.rally.y) * HALF_H;
       if (inView(wx, wy)) items.push({ d: b.rally.x + b.rally.y + 0.002, kind: K_FLAG, wx, wy, color: UNIT_TYPES[b.def.unit]?.color || '#a8322b' });
     }
+    // Map entrance and exit: a gateway over the Imperial road at the map edge.
+    // Two items, so walkers on the tile pass between the pillars.
+    this.mapGates = [];
+    for (const [end, color, seed] of [[map.entry, ENTRY_COLOR, 1.3], [map.exit, EXIT_COLOR, 4.1]]) {
+      const wx = (end.x - end.y) * HALF_W;
+      const wy = (end.x + end.y + 1) * HALF_H; // tile center
+      if (!inView(wx, wy) && !inView(wx, wy - GATE_H * 2)) continue; // base or top on screen
+      const { ox, oy } = mapGateOffset(map, end);
+      this.mapGates.push({ wx, wy, ox, oy });
+      const d = end.x + end.y + 1;
+      items.push({ d: d - 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'back' });
+      items.push({ d: d + 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'front' });
+    }
     const selFort = this.selectedId && game.buildings.get(this.selectedId)?.def.kind === 'fort' ? this.selectedId : 0;
 
     // --- pass 2: sorted objects --------------------------------------------
@@ -460,6 +513,9 @@ export class Renderer {
           break;
         case K_FLAG:
           drawRallyFlag(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, it.color, this.time);
+          break;
+        case K_GATE:
+          drawMapGate(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, it.ox * k, it.oy * k, it.color, motion ? this.time : 0, it.seed, it.part, pal.snow);
           break;
         default:
           break;
@@ -522,6 +578,10 @@ export class Renderer {
     this.stats.tiles = tiles;
     this.stats.objects = items.length;
     this.stats.borrowed = this.sprites.borrowed;
+    this.stats.pending = this.sprites.pending;
+    // Every sprite of the new look is ready: drop the old look, so the next
+    // frame shows the new one whole.
+    if (this.sprites.pending === 0) this.finishLookChange();
     this.stats.ms = performance.now() - t0;
   }
 
@@ -535,25 +595,44 @@ export class Renderer {
     // Weather runs on game time: frozen while paused, faster at high speed.
     const ran = Math.max(0, Math.min(40, ticks - this.lastTicks)) / CONFIG.TICKS_PER_SECOND;
     this.lastTicks = ticks;
-    // Season: a new month brings new ground/tree colors; drop last month's sprites.
-    const pal = seasonPalette(this.seasonsOn ? game.time.month : null);
-    if (pal.key !== this.pal.key) {
-      const old = `~${this.pal.key}`;
-      this.sprites.invalidateWhere((key) => key.endsWith(old));
-      this.pal = pal;
-    }
+    const month = this.seasonsOn ? game.time.month : null;
     let sky = NOON;
     if (this.fixedTime !== null) sky = skyAt(this.fixedTime);
     else if (this.dayNightOn) sky = skyAt(dayTime(ticks));
     this.sky = sky;
     const w = this.weather;
     if (this.weatherOn) {
-      w.update(ran, pal.season);
-    } else if (w.kind !== 'clear' || w.overcast > 0 || w.drops.length || w.flakes.length) {
+      w.update(ran, seasonPalette(month).season);
+    } else if (w.kind !== 'clear' || w.overcast > 0 || w.drops.length || w.flakes.length || w.cover > 0) {
       w.force('clear', true);
       w.drops.length = 0;
       w.flakes.length = 0;
       w.flash = 0;
+      w.clearCover();
+    }
+    // Season and snow cover: a new month or a new snow level brings new
+    // ground/tree art (and snow on roofs). The old sprites stand in until the
+    // new ones are drawn (a few frames at most), then they are dropped.
+    const snowLevel = this.weatherOn && this.seasonsOn ? w.coverLevel : 0;
+    const pal = seasonPalette(month, snowLevel);
+    const hard = this.lookHard; // first frame of a new game: no preparing
+    this.lookHard = false;
+    if (pal.key !== this.pal.key) {
+      if (this.palPrev !== null && this.palPrev !== pal.key) this.dropSuffix(`~${this.palPrev}`);
+      if (hard) {
+        this.dropSuffix(`~${this.pal.key}`);
+        this.palPrev = null;
+      } else this.palPrev = this.pal.key;
+      this.pal = pal;
+    }
+    const snowKey = snowLevel ? `~n${snowLevel}` : '';
+    if (snowKey !== this.snowKey) {
+      if (this.snowPrev && this.snowPrev !== snowKey) this.dropSuffix(this.snowPrev);
+      if (hard) {
+        if (this.snowKey) this.dropSuffix(this.snowKey); // '' = the snowless art, kept
+        this.snowPrev = null;
+      } else this.snowPrev = this.snowKey;
+      this.snowKey = snowKey;
     }
     const on = this.weatherOn;
     const wt = on ? w.tint() : [255, 255, 255];
@@ -570,6 +649,23 @@ export class Renderer {
       snow: on ? w.snow : 0,
       pal,
     };
+  }
+
+  /** Forget sprites whose key ends with a suffix (an old season look or snow level). */
+  dropSuffix(suffix) {
+    this.sprites.invalidateWhere((key) => key.endsWith(suffix));
+  }
+
+  /** The new look is fully drawn: drop the sprites of the old one. */
+  finishLookChange() {
+    if (this.palPrev !== null) {
+      this.dropSuffix(`~${this.palPrev}`);
+      this.palPrev = null;
+    }
+    if (this.snowPrev !== null) {
+      if (this.snowPrev) this.dropSuffix(this.snowPrev); // '' = the snowless art, kept
+      this.snowPrev = null;
+    }
   }
 
   /**
@@ -615,7 +711,7 @@ export class Renderer {
       for (const b of visibleBuildings) {
         if (!isLit(b, lamps)) continue;
         const variant = this.artVariant(b);
-        const state = artState(b);
+        const state = artState(b, farmDormant(game, b));
         const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}`, b.type, b.size, variant, state);
         const ox = ((b.x - b.y) * HALF_W - cam.x) * k;
         const oy = ((b.x + b.y) * HALF_H - cam.y) * k;
@@ -656,6 +752,14 @@ export class Renderer {
         L.pool(sx, sy, tile * 2.2, 0.6 * lamps * f, true);
         L.glow(sx - 12 * k, sy - 20 * k, 6 * k * f, 0.9 * lamps * f, true);
         L.glow(sx + 12 * k, sy - 20 * k, 6 * k * f, 0.9 * lamps * f, true);
+      }
+      // A torch on each pillar of the map entrance and exit gateways.
+      for (const mg of this.mapGates) {
+        const sx = (mg.wx - cam.x) * k;
+        const sy = (mg.wy - cam.y) * k;
+        const f = flick(mg.wx * 0.1);
+        L.pool(sx, sy, tile * 2.2, 0.55 * lamps * f, true);
+        for (const side of [1, -1]) L.glow(sx + side * mg.ox * k, sy + (side * mg.oy - GATE_H - 2) * k, 5.5 * k * f, 0.9 * lamps * f, true);
       }
       // Lanterns and torches on the move.
       for (const it of items) {
@@ -755,11 +859,12 @@ export class Renderer {
       }
       return;
     }
-    const state = artState(b);
+    const state = artState(b, farmDormant(this.game, b));
     const variant = this.artVariant(b);
     const key = `b:${b.type}:${b.size}:${variant}:${state}`;
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
-    const spr = this.sprites.get(key, () => buildingSpec(b.type, b.size, variant, state, true));
+    const snow = this.pal.snow;
+    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow), this.snowPrev === null ? null : key + this.snowPrev);
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).
     let alpha;
@@ -1110,7 +1215,8 @@ export class Renderer {
       const wy = (it.x + it.y) * HALF_H;
       if (def && plan.kind === 'building' && it.ok) {
         // Same sprite (and cache key) as a placed building of variant 0: live flags.
-        const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:0`, () => buildingSpec(plan.tool, it.size, 0, 0, true));
+        const snow = this.pal.snow;
+        const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:0${this.snowKey}`, () => buildingSpec(plan.tool, it.size, 0, 0, true, snow));
         this.fillDiamond(wx, wy, color, it.size);
         this.ctx.globalAlpha = 0.72;
         this.blit(spr, wx, wy);

@@ -157,6 +157,8 @@ button, input, select { font: inherit; color: inherit; }
   font-variant-numeric: tabular-nums;
 }
 .hud-stat .lbl { color: var(--hud-soft); font-size: 12px; }
+/* The season word only where the top bar has room; the glyph and the tooltip carry it elsewhere. */
+@media (max-width: 1280px) { .hud-stat .season { display: none; } }
 .hud-stat.neg { color: #ff8f83; }
 .hud-title { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; color: var(--gold); white-space: nowrap; }
 .hud-spacer { flex: 1; min-width: 4px; }
@@ -435,6 +437,45 @@ input[type="range"] { width: 100%; accent-color: var(--bronze); }
 .menu-card .tagline { font-style: italic; color: var(--ink-soft); margin: 2px 0 14px; }
 .menu-card .btn { display: block; width: 100%; margin: 6px 0; padding: 9px; font-size: 15px; }
 .footer-note { margin-top: 12px; font-size: 12px; color: var(--ink-soft); }
+/* Title gate: over the main menu until the first gesture starts the music. */
+#title-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 36; /* above #main-menu (35), below modals (40), console and crash screen */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  cursor: pointer;
+  background: transparent; /* #main-menu underneath already darkens the edges */
+  animation: gate-in 0.4s ease-out 0.15s both; /* no flash where autoplay starts at once */
+  -webkit-tap-highlight-color: transparent;
+}
+#title-gate.leaving { animation: gate-out 0.25s ease-in forwards; } /* still catches the rest of the gesture */
+/* The menu card waits behind the gate, then fades in. */
+#main-menu .menu-card { transition: opacity 0.3s ease-out; }
+#main-menu.gated .menu-card { opacity: 0; }
+#title-gate .gate-card {
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 3px solid var(--bronze);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 26px 30px 20px;
+  width: min(380px, 100%);
+  text-align: center;
+}
+#title-gate h1 { font-family: var(--font-title); font-size: 52px; margin: 0; color: var(--imperial); letter-spacing: 0.08em; }
+#title-gate .tagline { font-style: italic; color: var(--ink-soft); margin: 2px 0 18px; }
+#title-gate .gate-begin { display: block; width: 100%; padding: 12px; font-size: 17px; animation: gate-pulse 2.4s ease-in-out 0.6s infinite; }
+#title-gate .gate-hint { margin-top: 12px; font-size: 13px; color: var(--ink-soft); }
+@keyframes gate-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gate-out { to { opacity: 0; } }
+@keyframes gate-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--gold) 45%, transparent); } }
+@media (prefers-reduced-motion: reduce) {
+  #title-gate, #main-menu .menu-card { animation: none; transition: none; }
+  #title-gate.leaving { animation: none; opacity: 0; }
+  #title-gate .gate-begin { animation: none; }
+}
 
 /* ---------- debug ------------------------------------------------------------ */
 #debug-hud {

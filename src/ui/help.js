@@ -54,7 +54,7 @@ function content(tab) {
       return [
         h('p', {}, 'You are the governor of a new Roman colony. Build homes, keep people fed, safe and happy, and meet the mission goals.'),
         h('ol', {},
-          h('li', {}, h('b', {}, 'Roads first. '), 'Everything travels by road: settlers, workers, goods and services. Your city must connect to the Imperial road at the map edge (green marker on the minimap).'),
+          h('li', {}, h('b', {}, 'Roads first. '), 'Everything travels by road: settlers, workers, goods and services. Your city must connect to the Imperial road at the map edge. A gateway with green pennants marks the map entrance, where settlers and caravans arrive; red pennants mark the exit, where people leave (also green and red on the minimap).'),
           h('li', {}, h('b', {}, 'Housing plots. '), 'Drag the Housing tool (H) beside a road. Settlers walk in and pitch tents.'),
           h('li', {}, h('b', {}, 'Water. '), 'A Well within 2 tiles lets tents become lean-tos. Later, fountains fed by a reservoir unlock better homes.'),
           h('li', {}, h('b', {}, 'Safety. '), 'A Prefecture (fire) and an Engineer\'s Post (collapse) must send walkers past every building, or they will burn or fall down.'),
@@ -66,7 +66,7 @@ function content(tab) {
         h('h4', {}, 'Workers'),
         h('p', {}, `About ${Math.round(CONFIG.WORKFORCE_RATIO * 100)}% of ordinary citizens work. A building can only hire if people live within ${CONFIG.LABOR_RANGE} tiles of it along the roads. If there are more jobs than workers, set priorities in the Labor advisor.`),
         h('h4', {}, 'Day, night, seasons, weather and music'),
-        h('p', {}, 'The sun sets every few minutes of game time and the city lights its lamps; the grass and trees follow the seasons; rain, storms and winter snow come and go. The music follows along: calm while you build, quieter at night, merry after a festival, and war drums when raiders come. None of it changes how your city works. Switch any of it off in Settings (game menu, Esc); M turns the music on and off.'),
+        h('p', {}, 'The sun sets every few minutes of game time and the city lights its lamps; the grass and trees follow the seasons (shown next to the date); spring brings rain, summer the odd thunderstorm, fall some showers and winter snow, which settles on the ground, trees and roofs and melts again in spring. The music follows along: calm while you build, quieter at night, merry after a festival, and war drums when raiders come. None of it changes how your city works, except on Insane: there nothing grows on the farms in winter (December to Februarius), so fill the granaries in the fall. Switch any of it off in Settings (game menu, Esc); M turns the music on and off.'),
       ];
     case 'controls':
       return h('table', { class: 'tbl' }, KEY_HELP.map(([k, v]) => h('tr', {}, h('td', {}, h('b', {}, k)), h('td', {}, v))),
@@ -83,7 +83,7 @@ function content(tab) {
       return [
         h('h4', {}, 'Food'),
         chain('Farm (on meadow)', 'Granary', 'Market buyer', 'Market vendor', 'Homes'),
-        h('p', { class: 'muted' }, 'Farms need meadow (yellow-green land). Fertility = share of meadow under the field.'),
+        h('p', { class: 'muted' }, 'Farms need meadow (yellow-green land). Fertility = share of meadow under the field. On Insane nothing grows in winter (December to Februarius): stock up the granaries before it comes.'),
         h('h4', {}, 'Goods'),
         chain('Clay Pit (near water)', 'Potter', 'Warehouse', 'Market', 'Homes (Pottery)'),
         chain('Timber Yard (near forest)', 'Carpenter', 'Warehouse', 'Market', 'Homes (Furniture)'),

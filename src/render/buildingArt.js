@@ -23,7 +23,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
-import { P, poly, quad, ground, box, gableRoof, hipRoof, column, colonnade, windows, door, shade, tree, cypress, hash01, horse } from './draw.js';
+import { P, poly, quad, ground, box, gableRoof, hipRoof, column, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
 
 const TH = CONFIG.TILE_H;
 
@@ -102,7 +102,7 @@ function heightFor(key, size) {
  * @param {number} variant 0..3
  * @param {*} state      extra art state (tier, stage, filled...)
  */
-export function buildingSpec(key, S, variant = 0, state = 0, live = false) {
+export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow = 0) {
   const extra = heightFor(key, S);
   return {
     w: S * CONFIG.TILE_W,
@@ -112,10 +112,12 @@ export function buildingSpec(key, S, variant = 0, state = 0, live = false) {
     draw(ctx) {
       const fn = ART[key] || (key.startsWith('temple_') ? templeArt : key.startsWith('farm_') ? farmArt : key.endsWith('_ws') ? workshopArt : genericArt);
       liveFlags = live;
+      setRoofSnow(snow);
       try {
         fn(ctx, S, variant, state, key);
       } finally {
         liveFlags = false;
+        setRoofSnow(0);
       }
     },
   };
@@ -304,6 +306,12 @@ function smallHouse(ctx, variant, tier) {
       box(ctx, 0.2, 0.22, 0.58, 0.5, 0, 9, alt ? '#7d5431' : COL.wood);
       // mono-pitch plank roof
       poly(ctx, [P(0.16, 0.18, 12), P(0.82, 0.18, 12), P(0.82, 0.76, 8), P(0.16, 0.76, 8)], alt ? '#8a6a44' : '#9b7446', '#5a3c22', 0.6);
+      const sn = roofSnowAmount();
+      if (sn > 0) {
+        // Snow on the planks, from the high edge down (deeper snow reaches further).
+        const f = Math.min(1, 0.2 + 0.95 * sn);
+        poly(ctx, [P(0.16, 0.18, 12), P(0.82, 0.18, 12), P(0.82, 0.18 + 0.58 * f, 12 - 4 * f), P(0.16, 0.18 + 0.58 * f, 12 - 4 * f)], SNOW);
+      }
       door(ctx, 'left', 0.2, 0.22, 0.78, 0.72, 0, 0.35, '#3d2a1a', 0.14, 6);
       if (alt) {
         fence(ctx, 0.35, 0.3, '#8a6a44');
@@ -992,9 +1000,28 @@ const CROP = {
   farm_pig: { young: '#8a7a55', ripe: '#8a7a55', kind: 'pigs' },
 };
 
+/** Winter tones for a resting farm: the crop stands (as high as it grew) but dry and dull. */
+const WINTER_STRAW = '#a39a6c';
+const WINTER_OLIVE = '#6f7358';
+
 function farmArt(ctx, S, variant, stage, key) {
-  const crop = CROP[key] || CROP.farm_wheat;
+  // Stages 5..9: the same growth stage, resting for an Insane winter. The crop
+  // keeps its height (progress is frozen, not lost) but turns dry and dull:
+  // no fruit, bare orchard trees and vines, most pigs in the sty.
+  const resting = stage >= 5;
+  if (resting) stage -= 5;
+  const base = CROP[key] || CROP.farm_wheat;
+  const crop = resting
+    ? { ...base, young: mix(base.young, WINTER_STRAW, 0.7), ripe: mix(base.ripe, WINTER_STRAW, 0.7), fruit: null }
+    : base;
   quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, crop.kind === 'pigs' ? '#9a8a5c' : COL.soil);
+  const sn = roofSnowAmount();
+  if (sn > 0) {
+    // Snow lying on the field (the rows and plants still show through).
+    ctx.globalAlpha = 0.35 + 0.55 * sn;
+    quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, SNOW);
+    ctx.globalAlpha = 1;
+  }
   const t = stage / 4; // 0..1 growth
   if (crop.kind === 'rows' || crop.kind === 'heads') {
     for (let r = 0; r < 9; r++) {
@@ -1013,7 +1040,7 @@ function farmArt(ctx, S, variant, stage, key) {
         ctx.fillStyle = col;
         if (crop.kind === 'rows') ctx.fillRect(x - 1, y - h, 2, h);
         else { ctx.beginPath(); ctx.arc(x, y - 1.5, 1 + t * 1.8, 0, Math.PI * 2); ctx.fill(); }
-        if (crop.kind === 'heads' && stage >= 3 && k % 3 === 0) { ctx.fillStyle = crop.fruit; ctx.fillRect(x - 0.8, y - 3, 1.6, 1.6); }
+        if (crop.fruit && crop.kind === 'heads' && stage >= 3 && k % 3 === 0) { ctx.fillStyle = crop.fruit; ctx.fillRect(x - 0.8, y - 3, 1.6, 1.6); }
       }
     }
   } else if (crop.kind === 'trees') {
@@ -1021,8 +1048,10 @@ function farmArt(ctx, S, variant, stage, key) {
       for (let k = 0; k < 3; k++) {
         const u = 1.2 + k * 0.62;
         const v = 0.45 + r * 0.95;
-        tree(ctx, u, v, 0.35 + t * 0.35, stage >= 4 ? crop.ripe : crop.young, '#6b4a2a', r * 3 + k);
-        if (stage >= 3) {
+        const size = 0.35 + t * 0.35;
+        if (resting && key !== 'farm_olive') bareTree(ctx, u, v, size, r * 3 + k, 0, WINTER_STRAW); // fruit trees drop their leaves
+        else tree(ctx, u, v, size, resting ? WINTER_OLIVE : stage >= 4 ? crop.ripe : crop.young, '#6b4a2a', r * 3 + k); // olives stay green
+        if (crop.fruit && stage >= 3) {
           const [x, y] = P(u, v);
           ctx.fillStyle = crop.fruit;
           for (let f = 0; f < 3; f++) ctx.fillRect(x - 3 + f * 3, y - 6 - (f % 2) * 3 - t * 4, 1.5, 1.5);
@@ -1037,7 +1066,7 @@ function farmArt(ctx, S, variant, stage, key) {
       ctx.strokeStyle = COL.woodDark;
       ctx.lineWidth = 0.8;
       ctx.beginPath(); ctx.moveTo(p[0], p[1] - 5); ctx.lineTo(q[0], q[1] - 5); ctx.stroke();
-      if (stage === 0) continue;
+      if (stage === 0 || resting) continue; // bare canes in winter
       ctx.strokeStyle = crop.young;
       ctx.lineWidth = 1 + t * 2.4;
       ctx.beginPath(); ctx.moveTo(p[0], p[1] - 4); ctx.lineTo(q[0], q[1] - 4); ctx.stroke();
@@ -1055,7 +1084,7 @@ function farmArt(ctx, S, variant, stage, key) {
     ctx.lineWidth = 1;
     const c = [P(1.0, 0.15, 4), P(S - 0.12, 0.15, 4), P(S - 0.12, S - 0.12, 4), P(1.0, S - 0.12, 4)];
     ctx.beginPath(); c.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.stroke();
-    const n = 2 + stage * 2;
+    const n = resting ? 2 : 2 + stage * 2; // winter: most pigs stay in the sty
     for (let k = 0; k < n; k++) {
       const [x, y] = P(1.3 + hash01(variant, k, 61) * (S - 1.6), 0.4 + hash01(variant, k, 62) * (S - 0.8));
       ctx.fillStyle = '#e8a7a0';
@@ -1616,13 +1645,18 @@ const ART = {
   dock: dockArt,
 };
 
-/** Art state that changes the building's look (part of the sprite key). */
-export function artState(b) {
+/**
+ * Art state that changes the building's look (part of the sprite key).
+ * `resting`: a farm resting for the winter (Insane) draws its crop at the
+ * height it reached, in dry winter tones, with bare fruit trees and vines
+ * and fewer pigs (state 5..9 = growth stage + 5).
+ */
+export function artState(b, resting = false) {
   const kind = b.def.kind;
   if (b.house) return b.house.tier;
   if (b.herd !== undefined) return b.herd; // horse ranch: one sprite per herd size
   if (kind === 'dock') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
-  if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20));
+  if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20)) + (resting ? 5 : 0);
   if (kind === 'reservoir' || kind === 'fountain') return b.hasWater ? 1 : 0;
   return 0;
 }

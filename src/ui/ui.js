@@ -14,9 +14,12 @@ import { Messages } from './messages.js';
 import { Advisors } from './advisors.js';
 import { DebugConsole } from './console.js';
 import { helpModal } from './help.js';
-import { mainMenu, pauseMenu } from './menus.js';
+import { mainMenu, pauseMenu, titleGate } from './menus.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { TERRAIN_NAMES } from '../world/map.js';
+
+/** How long the leaving title gate still catches input (about a double-click). */
+const GATE_GUARD_MS = 500;
 
 export class UI {
   /** @param {import('../app.js').App} app */
@@ -41,11 +44,86 @@ export class UI {
 
   // ------------------------------------------------------------ main menu
   showMainMenu() {
+    this.hideAudioGate();
     mount(this.menuRoot, mainMenu(this.app));
     this.setGameChrome(false);
+    if (this.app.needsAudioGate()) this.showAudioGate();
   }
 
-  hideMainMenu() { mount(this.menuRoot); }
+  hideMainMenu() {
+    this.hideAudioGate();
+    mount(this.menuRoot);
+  }
+
+  get audioGateOpen() { return !!this.gate; }
+
+  /**
+   * Title gate over the main menu: "click, tap or press any key to begin".
+   * Browsers hold sound back until the player interacts, so this first
+   * gesture is the one that starts the menu music. It swallows that gesture,
+   * so no menu button underneath is pressed by it.
+   */
+  showAudioGate() {
+    if (this.gate) return;
+    const menu = this.menuRoot.querySelector('#main-menu');
+    if (menu) { menu.inert = true; menu.classList.add('gated'); } // not seen, clickable, focusable or read out
+    const begin = (e) => {
+      if (e.type === 'keydown') {
+        if (e.repeat || e.isComposing) { e.preventDefault(); e.stopPropagation(); return; }
+        // Leave Tab, modifiers, Escape and browser keys alone (Escape is not a
+        // user activation, so it could not start the music anyway).
+        if (e.ctrlKey || e.metaKey || e.altKey || /^(Tab|Escape|Shift|Control|Alt|AltGraph|Meta|CapsLock|NumLock|ScrollLock|Fn|OS|F\d+)$/.test(e.key)) return;
+        e.preventDefault();
+      }
+      e.stopPropagation(); // the gesture is the gate's: no game shortcut, no menu button
+      this.app.unlockAudio(); // inside the gesture, so the browser lets the sound start
+      this.hideAudioGate(e.type === 'keydown');
+    };
+    const el = titleGate(this.app);
+    el.addEventListener('click', begin);
+    this.gate = { el, menu, begin };
+    window.addEventListener('keydown', begin, true);
+    this.menuRoot.appendChild(el);
+    // Never pull focus out of an embedding page (artifact viewer) or another window.
+    setTimeout(() => { if (document.hasFocus()) el.querySelector('.gate-begin')?.focus({ preventScroll: true }); }, 0);
+  }
+
+  /**
+   * Remove the title gate (the audio started, or the player moved on). It
+   * fades for a moment but keeps catching clicks until it is gone, so the
+   * rest of a tap (the click that follows touchend) cannot land on a menu
+   * button that appears under the finger.
+   */
+  hideAudioGate(byKey = false) {
+    const g = this.gate;
+    if (!g) return;
+    this.gate = null;
+    const focusMenu = byKey && g.el.contains(document.activeElement); // keyboard players land on the menu
+    window.removeEventListener('keydown', g.begin, true);
+    // Guard the rest of the gesture: auto-repeats of the held key and the
+    // second click of a double-click / double tap must not press a menu button.
+    const until = performance.now() + GATE_GUARD_MS;
+    const guard = (e) => {
+      if (performance.now() > until && e.type === 'click') return;
+      if ((e.type === 'keydown' && e.repeat) || (e.type === 'click' && e.detail >= 2)) { e.preventDefault(); e.stopPropagation(); }
+    };
+    const end = () => {
+      window.removeEventListener('keydown', guard, true);
+      window.removeEventListener('click', guard, true);
+      window.removeEventListener('keyup', end, true);
+      if (focusMenu && g.menu && g.menu.isConnected) g.menu.querySelector('.btn')?.focus({ preventScroll: true });
+    };
+    window.addEventListener('keydown', guard, true);
+    window.addEventListener('click', guard, true);
+    if (focusMenu) window.addEventListener('keyup', end, true); // keyboard: focus the menu once the key is released
+    else setTimeout(end, GATE_GUARD_MS);
+    g.el.classList.add('leaving');
+    if (g.menu) g.menu.classList.remove('gated'); // the menu card fades in
+    setTimeout(() => {
+      g.el.remove();
+      if (g.menu) g.menu.inert = false;
+    }, 250);
+  }
 
   get mainMenuOpen() { return this.menuRoot.childElementCount > 0; }
 

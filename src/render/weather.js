@@ -5,8 +5,10 @@
  * so it may use Math.random() freely (tests can pass their own random).
  *
  * SEASONS follow the game calendar (month 0 = Ianuarius). seasonPalette()
- * blends four mid-season looks month by month, so each month shifts the
- * colors a little instead of the map changing all at once:
+ * blends four looks along MONTH_LOOK: December to Februarius are full winter
+ * (snow only ever falls on winter scenery), and the shoulder months (Martius,
+ * Maius, Augustus, September, November) blend, so the map shifts in steps
+ * instead of changing all at once:
  *   winter  grey-green grass, many trees bare, hardly any flowers
  *   spring  fresh green, meadows full of flowers, blossoming trees
  *   summer  the classic look
@@ -17,21 +19,28 @@
  * WEATHER is a small state machine (clear, cloudy, rain, storm, snow) that
  * picks what comes next with odds that depend on the season, and eases the
  * current levels toward the new state so a shower builds up and fades out.
+ * Season rules (the seasons themselves are calendar data in sim/time.js):
+ *   spring  the rainy season (nearly three times summer's rain)
+ *   summer  mostly clear; its rain comes as the odd thunderstorm
+ *   fall    some showers (the internal key is 'autumn')
+ *   winter  snow and only snow: no rain, no thunder; no snow in other seasons
+ * A new season draws new weather at once, spells last 20-45 s, and a new or
+ * loaded game opens with a short clear spell (reset()).
+ * SNOW COVER: snow settles while it falls (`cover` 0..1, full after about six
+ * days of snowfall) and melts after, slowly in winter, fast in spring. It is
+ * quantized to `coverLevel` 0..3, which seasonPalette() folds into the sprite
+ * keys, so white ground, trees and roofs cost no extra draws per frame.
  * The renderer uses `overcast` to dim the scene (and hide sun shadows),
  * draws rain/snow in screen space with draw(), and adds lightning `flash`.
  * ----------------------------------------------------------------------------
  */
 
 import { mix } from './draw.js';
+import { SEASONS, SEASON_NAMES, seasonOf } from '../sim/time.js';
 
-export const SEASONS = Object.freeze(['winter', 'spring', 'summer', 'autumn']);
+export { SEASONS, SEASON_NAMES, seasonOf };
 
-/** Season name for a month (Dec-Feb winter, Mar-May spring, ...). */
-export function seasonOf(month) {
-  return SEASONS[Math.floor((((month + 1) % 12) + 12) % 12 / 3)];
-}
-
-/** Mid-season looks (Ian, Apr, Iul, Oct); months in between blend. */
+/** The four looks (winter, spring, summer, autumn); MONTH_LOOK places each month among them. */
 const LOOKS = [
   { // winter
     grass: '#7b935d', meadow: '#9fa16d', forest: '#667f4c', sand: '#d2c092',
@@ -52,24 +61,44 @@ const LOOKS = [
   },
 ];
 
+/**
+ * Where each month sits among the looks: 0 winter, 1 spring, 2 summer,
+ * 3 autumn (3.5 = half way from autumn back to winter). Every month that
+ * seasonOf() calls winter is pure winter, so snow always falls on winter
+ * scenery; the blending happens in the shoulder months. Months with the
+ * same look share one palette (and one set of sprites).
+ */
+export const MONTH_LOOK = Object.freeze([0, 0, 0.5, 1, 1.5, 2, 2, 2.35, 2.7, 3, 3.5, 0]);
+
+/** Snow cover levels drawn (0 = none .. SNOW_LEVELS = deep) and how white each makes the ground. */
+export const SNOW_LEVELS = 3;
+const SNOW_AMOUNT = [0, 0.4, 0.7, 0.9];
+
 const paletteCache = new Map();
 
 /**
  * Ground and tree colors for a month (0..11). `key` is short and stable, for
  * sprite cache keys. Pass month = null for the plain summer look (seasons off).
+ * `snow` is the snow cover level 0..SNOW_LEVELS (ignored with seasons off);
+ * it becomes `pal.snow` (0..1, how white the ground is) and part of the key.
  */
-export function seasonPalette(month) {
-  const m = month === null || month === undefined ? 6 : ((Math.round(month) % 12) + 12) % 12;
-  const key = month === null || month === undefined ? 's' : String(m);
-  let p = paletteCache.get(key);
+export function seasonPalette(month, snow = 0) {
+  const off = month === null || month === undefined;
+  const m = off ? 6 : ((Math.round(month) % 12) + 12) % 12;
+  const pos = off ? 2 : MONTH_LOOK[m];
+  const lvl = off ? 0 : Math.max(0, Math.min(SNOW_LEVELS, Math.round(snow) || 0));
+  const key = (off ? 's' : `p${Math.round(pos * 20)}`) + (lvl ? `n${lvl}` : '');
+  const season = seasonOf(m);
+  const ck = `${key}|${season}`;
+  let p = paletteCache.get(ck);
   if (p) return p;
-  const i = Math.floor(m / 3); // look before this month
-  const f = (m - i * 3) / 3; // how far toward the next look
+  const i = Math.floor(pos) % 4; // look before this month
+  const f = pos - Math.floor(pos); // how far toward the next look
   const a = LOOKS[i];
   const b = LOOKS[(i + 1) % 4];
   p = Object.freeze({
     key,
-    season: seasonOf(m),
+    season,
     grass: mix(a.grass, b.grass, f),
     meadow: mix(a.meadow, b.meadow, f),
     forest: mix(a.forest, b.forest, f),
@@ -78,8 +107,10 @@ export function seasonPalette(month) {
     bare: a.bare + (b.bare - a.bare) * f,
     blossom: a.blossom + (b.blossom - a.blossom) * f,
     flowers: a.flowers + (b.flowers - a.flowers) * f,
+    snowLevel: lvl,
+    snow: SNOW_AMOUNT[lvl],
   });
-  paletteCache.set(key, p);
+  paletteCache.set(ck, p);
   return p;
 }
 
@@ -96,36 +127,96 @@ export const WEATHER = Object.freeze({
   snow: { overcast: 0.65, rain: 0, snow: 0.85, storm: false, label: 'Snow' },
 });
 
-/** Odds of what comes next, by season (weights). */
-const ODDS = {
-  winter: { clear: 3, cloudy: 3, rain: 2, snow: 2 },
-  spring: { clear: 5, cloudy: 2.5, rain: 2, storm: 0.5 },
-  summer: { clear: 7, cloudy: 1.5, rain: 0.5, storm: 1 },
-  autumn: { clear: 4, cloudy: 3, rain: 2.5, storm: 0.5 },
-};
+/**
+ * Odds of what comes next, by season (weights). Spring is the rainy season,
+ * summer is mostly clear with the odd thunderstorm, autumn is cool with some
+ * rain, and in winter every shower falls as snow.
+ */
+export const ODDS = Object.freeze({
+  winter: { clear: 3, cloudy: 3, snow: 4 },
+  spring: { clear: 3.5, cloudy: 2.5, rain: 3.5, storm: 0.5 },
+  summer: { clear: 8, cloudy: 1.5, rain: 0.3, storm: 0.7 },
+  autumn: { clear: 4.5, cloudy: 3, rain: 2, storm: 0.5 },
+});
 
-/** Seconds (of running game time at any speed) a weather spell lasts. */
-const SPELL = [35, 110];
+/**
+ * The kind of weather a season allows: in winter rain and thunderstorms fall
+ * as snow, and snow only falls in winter (it melts into rain in spring).
+ */
+export function seasonalKind(kind, season) {
+  if (season === 'winter') return kind === 'rain' || kind === 'storm' ? 'snow' : kind;
+  return kind === 'snow' ? 'rain' : kind;
+}
+
+/**
+ * Seconds (of running game time at any speed) a weather spell lasts. A season
+ * is 80 s (3 months of 16 days of 20 ticks at 12 ticks/s): two or three spells.
+ */
+const SPELL = [20, 45];
+/** Weather forced from the console holds this long (seconds), unless the season turns. */
+const FORCE_HOLD = 60;
+/** A new or loaded game opens with clear skies for this long (seconds). */
+const OPENING = [12, 25];
 /** How fast levels move toward the target (per second). */
 const EASE = 0.25;
+/**
+ * Snow cover, per second of game time (a game day is 1.67 s): it settles
+ * while it snows (full after about 6 days of steady snow) and melts slowly
+ * in winter, fast once spring comes, faster still in the rain.
+ */
+const COVER = Object.freeze({ build: 0.18, meltWinter: 0.03, meltWarm: 0.15, meltRain: 0.12, stillSnowing: 0.3 });
+/** Cover at which each snow level starts (levels 1..3), and the hysteresis on the way down. */
+export const SNOW_STEPS = Object.freeze([0.12, 0.45, 0.8]);
+const STEP_HYST = 0.04;
+
+/**
+ * Quantize snow cover to a drawn level. Going down needs the cover a little
+ * below the step, so a level never flickers back and forth.
+ */
+export function coverLevelOf(cover, prev = 0) {
+  let lvl = 0;
+  while (lvl < SNOW_STEPS.length && cover >= SNOW_STEPS[lvl]) lvl++;
+  if (lvl < prev && cover >= SNOW_STEPS[prev - 1] - STEP_HYST) return prev;
+  return lvl;
+}
 
 export class Weather {
   /** @param {() => number} [random] */
   constructor(random = Math.random) {
     this.random = random;
+    this.onThunder = null; // callback(delaySeconds) when lightning strikes
+    this.drops = []; // rain streaks (screen px)
+    this.flakes = []; // snowflakes (screen px)
+    this.reset();
+  }
+
+  /**
+   * Clear skies for a new or loaded game (Renderer.attach): a short clear
+   * opening, then the game's own season decides. Forgets the last game's
+   * season, so a game that starts in another season than the menu city does
+   * not draw its first weather at once.
+   */
+  reset() {
     this.kind = 'clear';
-    this.timer = SPELL[0] + random() * (SPELL[1] - SPELL[0]);
+    this.timer = OPENING[0] + this.random() * (OPENING[1] - OPENING[0]);
     this.overcast = 0;
     this.rain = 0;
     this.snow = 0;
     this.flash = 0; // lightning brightness 0..1
     this.boltTimer = 6;
     this.secondBolt = -1;
-    this.onThunder = null; // callback(delaySeconds) when lightning strikes
-    this.drops = []; // rain streaks (screen px)
-    this.flakes = []; // snowflakes (screen px)
+    this.drops.length = 0;
+    this.flakes.length = 0;
     this.splashes = [];
     this.fillNow = false; // next draw: fill the sky at once instead of building up
+    this.season = null; // season of the last update (a new season draws new weather)
+    this.clearCover(); // a new city starts without snow on the ground
+  }
+
+  /** Drop all snow cover at once (weather switched off, a new game). */
+  clearCover() {
+    this.cover = 0; // snow lying on the ground 0..1 (render only, not saved)
+    this.coverLevel = 0; // cover quantized for the art: 0..SNOW_LEVELS
   }
 
   /** Pick the next weather for a season. */
@@ -145,7 +236,7 @@ export class Weather {
   force(kind, instant = false) {
     if (!WEATHER[kind]) return false;
     this.kind = kind;
-    this.timer = SPELL[1];
+    this.timer = FORCE_HOLD;
     if (instant) {
       const w = WEATHER[kind];
       this.overcast = w.overcast;
@@ -162,32 +253,39 @@ export class Weather {
    * @param {string} season  current season name
    */
   update(dt, season) {
+    // The season rules hold on every frame, paused or not (a Seasons toggle
+    // or a console command while paused must not leave rain in winter).
+    // A new season brings new weather at once (a spell is about as long as a
+    // season, so otherwise one season's weather would run on into the next).
+    if (season !== this.season) {
+      if (this.season !== null) this.timer = 0;
+      this.season = season;
+    }
+    // Winter turns rain and storms into snow; snow melts into rain when winter
+    // ends (this also fits weather forced from the console to the season).
+    this.kind = seasonalKind(this.kind, season);
+    // Only snow in winter and never snow outside it: when the season turns,
+    // the other kind stops at once, so rain and snow never fall together.
+    if (season === 'winter') this.rain = 0;
+    else this.snow = 0;
     if (dt <= 0) return;
     this.timer -= dt;
     if (this.timer <= 0) {
       this.timer = SPELL[0] + this.random() * (SPELL[1] - SPELL[0]);
-      let next = this.pick(season);
-      if (next === 'snow' && season !== 'winter') next = 'rain';
-      this.kind = next;
+      this.kind = seasonalKind(this.pick(season), season);
     }
-    // Snow melts into rain when winter ends.
-    if (this.kind === 'snow' && season !== 'winter') this.kind = 'rain';
     const w = WEATHER[this.kind];
     const step = Math.min(1, dt * EASE);
     this.overcast += (w.overcast - this.overcast) * step;
-    // One kind of precipitation at a time: when rain follows snow (or snow
-    // follows rain), the old one tapers off 3x faster and the new one only
-    // starts once it has stopped, so rain never falls through the snow.
-    let rainTarget = w.rain;
-    let snowTarget = w.snow;
-    let rainStep = step;
-    let snowStep = step;
-    if (rainTarget > 0 && this.snow > 0) { rainTarget = 0; snowStep = Math.min(1, dt * EASE * 3); }
-    if (snowTarget > 0 && this.rain > 0) { snowTarget = 0; rainStep = Math.min(1, dt * EASE * 3); }
-    this.rain += (rainTarget - this.rain) * rainStep;
-    this.snow += (snowTarget - this.snow) * snowStep;
-    if (this.rain < 0.005 && rainTarget === 0) this.rain = 0;
-    if (this.snow < 0.005 && snowTarget === 0) this.snow = 0;
+    this.rain += (w.rain - this.rain) * step;
+    this.snow += (w.snow - this.snow) * step;
+    if (this.rain < 0.005 && w.rain === 0) this.rain = 0;
+    if (this.snow < 0.005 && w.snow === 0) this.snow = 0;
+    // Snow cover builds while it snows and melts after.
+    // (It starts to melt as soon as the snowfall thins out.)
+    const melt = this.snow > COVER.stillSnowing ? 0 : (season === 'winter' ? COVER.meltWinter : COVER.meltWarm) + COVER.meltRain * this.rain;
+    this.cover = Math.max(0, Math.min(1, this.cover + dt * (COVER.build * this.snow - melt)));
+    this.coverLevel = coverLevelOf(this.cover, this.coverLevel);
     // Lightning: a flash (sometimes two) every few seconds in a storm.
     this.flash = Math.max(0, this.flash - dt * 4);
     if (this.secondBolt >= 0) {

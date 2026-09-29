@@ -60,7 +60,11 @@ export class Input {
     this.pointers = new Map(); // id -> {x, y}
     this.pinch = null;
     this.keys = new Set();
-    this.mouse = { x: -1, y: -1, over: false };
+    // `game` is the game the pointer last really moved in (null behind menus).
+    // Edge scrolling waits for it: when a menu closes (or the page loads) under
+    // a still cursor the browser sends pointerenter but no pointermove, and an
+    // unknown position must never count as "at the screen edge".
+    this.mouse = { x: -1, y: -1, over: false, game: null };
     this.hover = null;
     this.planKey = '';
     this.wheelAcc = 0; // wheel delta not yet turned into a zoom step
@@ -74,7 +78,7 @@ export class Input {
     window.addEventListener('pointermove', (e) => this.onMove(e));
     window.addEventListener('pointerup', (e) => this.onUp(e));
     window.addEventListener('pointercancel', (e) => this.onUp(e, true));
-    c.addEventListener('pointerenter', () => { this.mouse.over = true; });
+    c.addEventListener('pointerenter', (e) => { this.mouse.over = true; this.trackMouse(e); });
     c.addEventListener('pointerleave', () => { this.mouse.over = false; this.hover = null; this.app.renderer.hoverTile = null; if (!this.drag) this.refreshPlan(); });
     c.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -136,13 +140,20 @@ export class Input {
     }
   }
 
-  onMove(e) {
-    if (!this.game) return;
+  /** Remember where the pointer is (canvas CSS px), menus up or not. */
+  trackMouse(e) {
     const p = this.localPos(e);
-    const prev = this.pointers.get(e.pointerId);
-    if (prev) this.pointers.set(e.pointerId, p);
     this.mouse.x = p.x;
     this.mouse.y = p.y;
+    return p;
+  }
+
+  onMove(e) {
+    const p = this.trackMouse(e);
+    this.mouse.game = this.game; // a real move (null behind menus: no old game kept alive)
+    if (!this.game) return;
+    const prev = this.pointers.get(e.pointerId);
+    if (prev) this.pointers.set(e.pointerId, p);
     const cam = this.app.renderer.camera;
 
     if (this.pinch && this.pointers.size >= 2) {
@@ -342,7 +353,8 @@ export class Input {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx -= speed;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) dy += speed;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) dy -= speed;
-    if (this.app.settings.edgeScroll && this.mouse.over && !this.pan && !this.press) {
+    // Edge scrolling only after a real pointer move on this map (see this.mouse).
+    if (this.app.settings.edgeScroll && this.mouse.over && this.mouse.game === this.game && !this.pan && !this.press) {
       const r = this.canvas.getBoundingClientRect();
       const m = CONFIG.EDGE_SCROLL_PX;
       if (this.mouse.x < m) dx += speed;

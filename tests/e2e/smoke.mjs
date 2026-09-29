@@ -63,6 +63,47 @@ try {
   await page.goto(url);
   await page.waitForSelector('.menu-card', { timeout: 15000 });
   check('main menu shows', await page.isVisible('text=Campaign'));
+  // 1a. Browsers hold sound back until the first gesture: the menu waits
+  //     behind the title gate, and clicking it starts the menu music (and
+  //     does not press the menu button underneath).
+  const gated = await page.evaluate(() => ({ gate: !!document.getElementById('title-gate'), inert: !!document.getElementById('main-menu').inert, playing: window.colonia.music.playing }));
+  check('title gate covers the menu until the first click', gated.gate && gated.inert && !gated.playing, JSON.stringify(gated));
+  if (shots) await page.screenshot({ path: path.join(shots, 'smoke-gate.png') });
+  await page.click('#title-gate');
+  await page.waitForFunction(() => window.colonia.music.barsPlayed > 0, null, { timeout: 5000 }).catch(() => {});
+  const menuMusic = await page.evaluate(() => { const m = window.colonia.music; return { playing: m.playing, mood: m.mood, bars: m.barsPlayed, gate: !!document.querySelector('#title-gate:not(.leaving)'), modal: !!document.querySelector('.modal') }; });
+  check('clicking the title gate starts the menu music', menuMusic.playing && menuMusic.mood === 'menu' && menuMusic.bars > 0 && !menuMusic.gate && !menuMusic.modal, JSON.stringify(menuMusic));
+  // The menu really shows afterwards (isVisible ignores opacity and inert).
+  await page.waitForTimeout(450);
+  const shown = await page.evaluate(() => ({ opacity: getComputedStyle(document.querySelector('#main-menu .menu-card')).opacity, inert: !!document.getElementById('main-menu').inert }));
+  check('the menu card fades in and takes input after the gate', shown.opacity === '1' && !shown.inert, JSON.stringify(shown));
+  // 1b. The rest of the gesture never presses a menu button: the second click
+  //     of a double-click on the gate, or a held Enter key (auto-repeat).
+  {
+    const p2 = await ctx.newPage();
+    await p2.goto(url);
+    await p2.waitForSelector('#title-gate', { timeout: 15000 });
+    const at = await p2.evaluate(() => { const r = [...document.querySelectorAll('#main-menu .btn')].find((b) => /Sandbox/.test(b.textContent)).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await p2.mouse.move(at.x, at.y);
+    await p2.mouse.down(); await p2.mouse.up();
+    await p2.waitForTimeout(300);
+    await p2.mouse.down({ clickCount: 2 }); await p2.mouse.up({ clickCount: 2 });
+    await p2.waitForTimeout(400);
+    check('double-click on the title gate presses no menu button', !(await p2.$('.modal')));
+    await p2.goto(url);
+    await p2.waitForSelector('#title-gate', { timeout: 15000 });
+    await p2.keyboard.down('Enter');
+    await p2.waitForTimeout(500);
+    for (let i = 0; i < 4; i++) { await p2.keyboard.down('Enter'); await p2.waitForTimeout(40); } // auto-repeats
+    await p2.keyboard.up('Enter');
+    await p2.waitForTimeout(400);
+    const held = !(await p2.$('.modal'));
+    await p2.keyboard.press('Enter');
+    await p2.waitForTimeout(300);
+    const opened = await p2.evaluate(() => { const m = document.querySelector('.modal'); return m ? m.textContent.slice(0, 40) : ''; });
+    check('holding Enter on the title gate presses no menu button, then Enter opens the first one', held && /Campaign/.test(opened), JSON.stringify({ held, opened }));
+    await p2.close();
+  }
   if (shots) await page.screenshot({ path: path.join(shots, 'smoke-menu.png') });
 
   // 2. Start a sandbox from the menu UI (after a look at the Uber size and Insane difficulty)
@@ -77,13 +118,42 @@ try {
   const insaneNote = await page.isVisible('text=For veterans.');
   await page.selectOption('select.difficulty-select', 'normal');
   check('sandbox menu offers Insane and describes each level', insaneNote && await page.isVisible('text=The game as designed.'));
+  // Watch the first frames of the new game: its look (a winter month) must
+  // replace the menu city's summer look at once, not piece by piece.
+  await page.evaluate(() => {
+    const r = window.colonia.renderer;
+    const orig = r.render;
+    window.__look = [];
+    r.render = function (a, d) {
+      orig.call(this, a, d);
+      if (window.colonia.game && window.__look.length < 3) window.__look.push({ prev: this.palPrev, pending: this.stats.pending, key: this.pal.key });
+    };
+    window.__unhookRender = () => { r.render = orig; };
+  });
   await page.click('text=Found the city');
   await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   check('sandbox starts from the menu', true);
+  await page.waitForFunction(() => window.__look.length >= 3, null, { timeout: 5000 }).catch(() => {});
+  const look = await page.evaluate(() => { window.__unhookRender(); return window.__look; });
+  check('a new game shows its own season from the first frame (no old-look patchwork)', look.length > 0 && look.every((f) => f.prev === null && !f.pending), JSON.stringify(look));
+  // A fresh map holds still until the player does something: the cursor rests
+  // where the button was (no pointer move, no key), so nothing may scroll.
+  const camAt = () => page.evaluate(() => { const cam = window.colonia.renderer.camera; const c = cam.center(); return { x: c.x, y: c.y, moving: cam.moving }; });
+  const cam0 = await camAt();
   // The clicks above count as the player's first interaction: music may start.
   await page.waitForTimeout(800);
+  const cam1 = await camAt();
+  const drift = Math.hypot(cam1.x - cam0.x, cam1.y - cam0.y);
+  check('fresh map: the view holds still without input', drift < 1 && !cam1.moving, `moved ${Math.round(drift)} world px`);
+  // Edge scrolling still works once the mouse really moves to the edge.
+  const edgeY = await page.evaluate(() => { const r = window.colonia.canvas.getBoundingClientRect(); return r.top + r.height / 2; });
+  await page.mouse.move(3, edgeY);
+  await page.waitForTimeout(300);
+  const cam2 = await camAt();
+  await page.mouse.move(400, edgeY);
+  check('edge scrolling works after a real mouse move', cam2.x < cam1.x - 50, `dx ${Math.round(cam2.x - cam1.x)}`);
   const music = await page.evaluate(() => { const m = window.colonia.music; return { playing: m.playing, mood: m.mood, bars: m.barsPlayed, now: m.nowPlaying }; });
-  check('music starts after the first click, in the day mood', music.playing && music.mood === 'day' && music.bars > 0, JSON.stringify(music));
+  check('music plays in the day mood once the city is founded', music.playing && music.mood === 'day' && music.bars > 0, JSON.stringify(music));
 
   // 3. Build with real input: road drag + housing drag near the map entrance
   const info = await page.evaluate(() => {
@@ -267,7 +337,78 @@ try {
   const lights = await page.evaluate(() => window.colonia.renderer.stats.lights);
   check('at night homes and torches light up', lights > 0, `${lights} lights`);
   await page.evaluate(() => { window.colonia.renderer.fixedTime = null; window.colonia.ui.console.run('weather rain'); });
-  check('console can change the weather', await page.evaluate(() => window.colonia.renderer.weather.kind === 'rain'));
+  check('console can change the weather', await page.evaluate(() => window.colonia.renderer.weather.kind === (window.colonia.renderer.pal.season === 'winter' ? 'snow' : 'rain')));
+  // Seasons: the date chip names the season, and in winter rain falls as snow.
+  const winter = await page.evaluate(() => {
+    const app = window.colonia;
+    const month = app.game.time.month;
+    app.game.time.month = 0; // Ianuarius
+    app.renderer.render(0, 0.016); // the renderer picks up the season
+    app.ui.hud.update();
+    const chip = document.querySelector('#hud-top .hud-stat.date');
+    const out = { text: chip.textContent, title: chip.title, reply: app.ui.console.run('weather rain'), kind: app.renderer.weather.kind };
+    app.renderer.render(0, 0.016);
+    app.ui.hud.update();
+    out.after = chip.title; // the tooltip names the (fitted) weather
+    app.game.time.month = month;
+    return out;
+  });
+  check('the top bar shows the season; winter only snows', winter.text.includes('Winter') && winter.title.includes('winter') && winter.kind === 'snow' && /not possible in winter/.test(winter.reply) && /snow/.test(winter.after), JSON.stringify(winter));
+  // Snow settles: the ground, trees and roofs turn white (baked into the
+  // sprites, so the new look is prepared, then swapped in whole).
+  const snowy = await page.evaluate(() => {
+    const app = window.colonia;
+    const r = app.renderer;
+    const month = app.game.time.month;
+    app.game.time.month = 0;
+    const home = [...app.game.buildings.values()].find((b) => b.def.kind === 'house');
+    if (home) r.camera.centerOnTile(home.x, home.y); // some roofs in view
+    app.ui.console.run('weather snow');
+    const reply = app.ui.console.run('snow 3');
+    let frames = 0;
+    do { r.render(0, 0.016); frames++; } while ((r.palPrev !== null || r.snowPrev !== null) && frames < 60);
+    const keys = [...r.sprites.current.keys()];
+    const out = { reply, key: r.pal.key, frames, pending: r.stats.pending, snowSprites: keys.filter((k) => /~(p\d+)?n3$/.test(k)).length, buildings: keys.filter((k) => k.startsWith('b:') && k.endsWith('~n3')).length };
+    app.game.time.month = month;
+    return out;
+  });
+  check('snow cover whitens ground, trees and roofs; the new look swaps in within 30 frames', /n3$/.test(snowy.key) && snowy.frames <= 30 && snowy.pending === 0 && snowy.snowSprites > 0 && snowy.buildings > 0, JSON.stringify(snowy));
+  // Reduced motion: no falling flakes, but the snow on the ground still shows.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const still = await page.evaluate(() => {
+    const app = window.colonia;
+    const r = app.renderer;
+    const month = app.game.time.month;
+    app.game.time.month = 0;
+    app.applySettings();
+    r.weather.flakes.length = 0;
+    r.weather.force('snow', true);
+    for (let i = 0; i < 5; i++) r.render(0, 0.016);
+    const out = { motion: r.motionOn, flakes: r.weather.flakes.length, key: r.pal.key };
+    app.game.time.month = month;
+    return out;
+  });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => window.colonia.applySettings());
+  check('reduced motion: no falling snow, snow on the ground still shows', !still.motion && still.flakes === 0 && /n3$/.test(still.key), JSON.stringify(still));
+  // Weather off: the snow is gone, and so are its sprites.
+  const bare = await page.evaluate(() => {
+    const app = window.colonia;
+    const r = app.renderer;
+    const month = app.game.time.month;
+    app.game.time.month = 0;
+    app.settings.weather = false;
+    app.applySettings();
+    let frames = 0;
+    do { r.render(0, 0.016); frames++; } while ((r.palPrev !== null || r.snowPrev !== null) && frames < 60);
+    const left = [...r.sprites.byScale.values()].flatMap((m) => [...m.keys()]).filter((k) => /~(p\d+)?n\d$/.test(k)).length;
+    const out = { key: r.pal.key, cover: r.weather.cover, left, frames };
+    app.settings.weather = true;
+    app.applySettings();
+    app.game.time.month = month;
+    return out;
+  });
+  check('weather off clears the snow and its sprites', bare.key === 'p0' && bare.cover === 0 && bare.left === 0, JSON.stringify(bare));
   await page.evaluate(() => window.colonia.renderer.weather.force('clear', true));
   await page.evaluate(() => window.colonia.ui.info.close()); // (Escape would close this first)
   await page.keyboard.press('Escape'); // pause menu
@@ -335,13 +476,33 @@ try {
   const shownFunds = Number((/Starting funds: ([\d,]+) Dn/.exec(fundsText) || [])[1]?.replace(/,/g, ''));
   await page.click('.modal button:has-text("Begin")');
   await page.waitForFunction(() => window.colonia.game && window.colonia.game.scenario.id === 'c1', null, { timeout: 15000 });
-  const camp = await page.evaluate(() => { const g = window.colonia.game; return { key: g.difficultyKey, treasury: Math.round(g.city.treasury), pref: window.colonia.settings.difficulty }; });
+  {
+    const m0 = await page.evaluate(() => ({ ...window.colonia.input.mouse, game: undefined }));
+    const c0 = await camAt();
+    await page.waitForTimeout(500);
+    const c1 = await camAt();
+    const d = Math.hypot(c1.x - c0.x, c1.y - c0.y);
+    check('campaign start: the view holds still without input', d < 1 && !c1.moving, `moved ${Math.round(d)} world px, input.mouse at start ${JSON.stringify(m0)}`);
+  }
+  const camp = await page.evaluate(() => { const g = window.colonia.game; return { key: g.difficultyKey, treasury: Math.round(g.city.treasury), pref: window.colonia.settings.difficulty, winter: g.messages.some((m) => /nothing grows on the farms/.test(m.text)) }; });
+  check('Insane mission start warns that nothing grows on the farms in winter', camp.winter);
   check('campaign briefing starts a mission on Insane with scaled funds', camp.key === 'insane' && camp.treasury === 2400 && shownFunds === 2400 && camp.pref === 'insane', JSON.stringify({ ...camp, shownFunds }));
   await page.keyboard.press('Escape');
   await page.click('.modal button:has-text("Mission briefing")');
   const inGame = await page.isVisible('.modal :text("Difficulty: Insane")') && await page.isVisible('.modal button:has-text("Close")') && !(await page.isVisible('.modal select.difficulty-select'));
   check('in-game briefing shows the difficulty being played', inGame);
   await page.click('.modal button:has-text("Close")');
+
+  // 6c. Where autoplay is allowed the menu music starts with no gate at all.
+  {
+    const b2 = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+    const p2 = await b2.newPage();
+    await p2.goto(url);
+    await p2.waitForFunction(() => window.colonia && window.colonia.music.barsPlayed > 0, null, { timeout: 8000 }).catch(() => {});
+    const auto = await p2.evaluate(() => ({ playing: window.colonia.music.playing, mood: window.colonia.music.mood, gate: !!document.getElementById('title-gate') }));
+    check('autoplay allowed: menu music starts at once, no gate', auto.playing && auto.mood === 'menu' && !auto.gate, JSON.stringify(auto));
+    await b2.close();
+  }
 
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -357,6 +518,17 @@ try {
   check('phone: build menu docked at the bottom', layout.sbTop > 400, `top ${Math.round(layout.sbTop)}`);
   if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone.png') });
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
+  // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing
+  //     may query the page before the tap: Playwright's evaluate() counts as a
+  //     user gesture and would hide a missing touch unlock.
+  const tapPage = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await tapPage.goto(url);
+  await tapPage.waitForTimeout(2500);
+  await tapPage.touchscreen.tap(195, 422);
+  await tapPage.waitForTimeout(800);
+  const tapped = await tapPage.evaluate(() => ({ ctx: window.colonia.sfx.ctx && window.colonia.sfx.ctx.state, playing: window.colonia.music.playing, mood: window.colonia.music.mood, gate: !!document.querySelector('#title-gate:not(.leaving)'), modal: !!document.querySelector('.modal') }));
+  check('phone: one tap on the title gate starts the menu music', tapped.playing && tapped.mood === 'menu' && !tapped.gate && !tapped.modal, JSON.stringify(tapped));
+  await tapPage.close();
 
   check('no page errors overall', errors.length === 0, errors.join(' | '));
 } finally {

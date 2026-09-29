@@ -17,6 +17,32 @@
 
 import { HALF_W, HALF_H } from '../config.js';
 
+/** Lit snow and the blue-grey of snow in shade. */
+export const SNOW = '#eef2f5';
+export const SNOW_SHADE = '#c6d1db';
+
+/**
+ * Snow on roofs (0..1) for everything drawn until it is reset: buildingArt
+ * sets it while it draws a building sprite, so every gable and hip roof
+ * gets a white cap without each building's art knowing about snow.
+ */
+let roofSnow = 0;
+export function setRoofSnow(s) { roofSnow = s || 0; }
+/** Snow on the building being drawn (0 outside buildingArt): flat roofs, lawns and fields read it. */
+export function roofSnowAmount() { return roofSnow; }
+
+/** Point part way from p to q. */
+const lerp2 = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+
+/**
+ * White cap on a roof slope: the band from the ridge edge (r0-r1) down
+ * toward the eave edge (e0-e1); deeper snow reaches further down.
+ */
+function slopeSnow(ctx, r0, r1, e1, e0, color) {
+  const f = Math.min(1, 0.2 + roofSnow * 0.95);
+  poly(ctx, [r0, r1, lerp2(r1, e1, f), lerp2(r0, e0, f)], color);
+}
+
 /** Local iso point. */
 export function P(u, v, z = 0) {
   return [(u - v) * HALF_W, (u + v) * HALF_H - z];
@@ -164,6 +190,11 @@ export function gableRoof(ctx, u0, v0, du, dv, z, rh, color, axis = 'u', overhan
     poly(ctx, [P(c, b, z), P(c, d, z), P(c, vm, z + rh)], shade(color, -0.25), st, 0.6);
     tileLines(ctx, a, vm, c, d, z, rh, 'u', shade(color, -0.18));
     ridge(ctx, P(a, vm, z + rh), P(c, vm, z + rh), color);
+    if (roofSnow > 0) {
+      // (The back slope only when it faces the viewer; steeper, it hides behind the ridge.)
+      if (rh < 32 * (vm - b)) slopeSnow(ctx, P(a, vm, z + rh), P(c, vm, z + rh), P(c, b, z), P(a, b, z), SNOW);
+      slopeSnow(ctx, P(a, vm, z + rh), P(c, vm, z + rh), P(c, d, z), P(a, d, z), '#e2e9ef');
+    }
   } else {
     const um = (a + c) / 2;
     poly(ctx, [P(a, b, z), P(um, b, z + rh), P(um, d, z + rh), P(a, d, z)], shade(color, 0.12), st, 0.6);
@@ -172,6 +203,10 @@ export function gableRoof(ctx, u0, v0, du, dv, z, rh, color, axis = 'u', overhan
     tileLines(ctx, um, b, c, d, z, rh, 'v', shade(color, -0.35));
     tileLines(ctx, a, b, um, d, z, rh, 'v-', shade(color, -0.12));
     ridge(ctx, P(um, b, z + rh), P(um, d, z + rh), color);
+    if (roofSnow > 0) {
+      if (rh < 32 * (um - a)) slopeSnow(ctx, P(um, b, z + rh), P(um, d, z + rh), P(a, d, z), P(a, b, z), SNOW);
+      slopeSnow(ctx, P(um, b, z + rh), P(um, d, z + rh), P(c, d, z), P(c, b, z), SNOW_SHADE);
+    }
   }
 }
 
@@ -257,6 +292,14 @@ export function hipRoof(ctx, u0, v0, du, dv, z, rh, color, overhang = 0.06) {
     ctx.lineTo(q[0], q[1]);
   }
   ctx.stroke();
+  if (roofSnow > 0) {
+    if (rh < 32 * inset) {
+      slopeSnow(ctx, top1, top2, P(c, b, z), P(a, b, z), SNOW);
+      slopeSnow(ctx, top1, top1, P(a, d, z), P(a, b, z), SNOW);
+    }
+    slopeSnow(ctx, top2, top2, P(c, d, z), P(c, b, z), SNOW_SHADE);
+    slopeSnow(ctx, top1, top2, P(c, d, z), P(a, d, z), '#e2e9ef');
+  }
 }
 
 /** A column (cylinder-ish) standing at local (u, v). */
@@ -392,9 +435,10 @@ export function shadowEllipse(ctx, u, v, rx, ry, alpha = 0.25) {
  * A round bush/tree crown made of overlapping circles.
  * `sway` (px, about -2..2) leans the crown in the wind: higher leaves move
  * more, the base of the trunk stays put. `blossom` 1 dots the crown with
- * spring flowers.
+ * spring flowers. `snow` (0..1) caps each clump with snow; it defaults to
+ * the snow of the building being drawn (garden trees), 0 elsewhere.
  */
-export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', seed = 0, sway = 0, blossom = 0) {
+export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', seed = 0, sway = 0, blossom = 0, snow = roofSnow) {
   const [x, y] = P(u, v, 0);
   const s = size;
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -428,6 +472,22 @@ export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', 
   ctx.beginPath();
   ctx.arc(x - 2 * s + sway * 0.95, y - 17 * s, 2.2 * s, 0, Math.PI * 2);
   ctx.fill();
+  if (snow > 0) {
+    // Snow lying on top of each clump of leaves.
+    ctx.fillStyle = SNOW;
+    ctx.beginPath();
+    for (let k = 0; k < blobs.length; k++) {
+      const [bx, by, br] = blobs[k];
+      const jitter = ((seed * 31 + k * 17) % 5) - 2;
+      const lean = sway * (-by / 18);
+      const cx = x + (bx + jitter * 0.4) * s + lean;
+      const cy = y + (by - br * (0.62 - snow * 0.22)) * s;
+      const rx = br * (0.45 + snow * 0.4) * s;
+      ctx.moveTo(cx + rx, cy);
+      ctx.ellipse(cx, cy, rx, rx * (0.35 + snow * 0.25), 0, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
   if (blossom) {
     ctx.fillStyle = seed % 2 ? '#f6dbe4' : '#fbf6ee';
     for (let k = 0; k < 9; k++) {
@@ -442,8 +502,9 @@ export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', 
 /**
  * A leafless (winter) or thinning tree: trunk, a few forked branches and a
  * scatter of the last leaves in `leaves` color. Same footprint as tree().
+ * With `snow` the branches carry snow instead of leaves.
  */
-export function bareTree(ctx, u, v, size = 1, seed = 0, sway = 0, leaves = '#7b7452') {
+export function bareTree(ctx, u, v, size = 1, seed = 0, sway = 0, leaves = '#7b7452', snow = roofSnow) {
   const [x, y] = P(u, v, 0);
   const s = size;
   ctx.fillStyle = 'rgba(0,0,0,0.16)';
@@ -484,6 +545,29 @@ export function bareTree(ctx, u, v, size = 1, seed = 0, sway = 0, leaves = '#7b7
   ctx.lineTo(x + sway * 0.9, y - 22 * s);
   ctx.stroke();
   tips.push([x + sway * 0.9, y - 22 * s]);
+  if (snow > 0) {
+    // Snow along the upper side of each branch, and clumps at the tips.
+    ctx.strokeStyle = SNOW;
+    ctx.lineWidth = (0.5 + snow * 0.7) * s;
+    ctx.beginPath();
+    for (let k = 0; k < 5; k++) {
+      const side = k % 2 ? 1 : -1;
+      const h = 8 + k * 2.2;
+      const len = 4 + hash01(seed, k, 5) * 4;
+      const bx = x + sway * (h / 22);
+      ctx.moveTo(bx, y - h * s - 0.7 * s);
+      ctx.lineTo(bx + side * len * s + sway * 0.6, y - (h + len * 0.8) * s - 0.7 * s);
+    }
+    ctx.stroke();
+    ctx.fillStyle = SNOW;
+    ctx.beginPath();
+    for (const [tx, ty] of tips) {
+      ctx.moveTo(tx + 1.4 * s, ty);
+      ctx.ellipse(tx, ty, (1 + snow) * s, (0.7 + snow * 0.5) * s, 0, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    return;
+  }
   ctx.fillStyle = leaves;
   for (const [tx, ty] of tips) {
     if (hash01(seed, Math.round(tx * 7), 6) < 0.45) continue;
@@ -493,8 +577,8 @@ export function bareTree(ctx, u, v, size = 1, seed = 0, sway = 0, leaves = '#7b7
   }
 }
 
-/** Tall narrow cypress tree; `sway` bends its tip (px). */
-export function cypress(ctx, u, v, size = 1, color = '#2f5a2a', sway = 0) {
+/** Tall narrow cypress tree; `sway` bends its tip (px), `snow` streaks its lit side. */
+export function cypress(ctx, u, v, size = 1, color = '#2f5a2a', sway = 0, snow = roofSnow) {
   const [x, y] = P(u, v, 0);
   const s = size;
   const t = sway * 1.2; // the tall tip moves further than a round crown
@@ -516,6 +600,21 @@ export function cypress(ctx, u, v, size = 1, color = '#2f5a2a', sway = 0) {
   ctx.lineTo(x, y - 2 * s);
   ctx.closePath();
   ctx.fill();
+  if (snow > 0) {
+    // Snow caught on the lit side of the tall crown.
+    ctx.fillStyle = SNOW;
+    ctx.beginPath();
+    const n = 2 + Math.round(snow * 3);
+    for (let k = 0; k < n; k++) {
+      const h = 21 - k * (17 / n);
+      const w = 1.6 + (21 - h) * 0.08;
+      const cx = x - 0.8 * s + t * (h / 24);
+      const cy = y - h * s;
+      ctx.moveTo(cx + w * s, cy);
+      ctx.ellipse(cx, cy, w * s, (0.7 + snow * 0.4) * s, -0.35, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
 }
 
 /** Deterministic pseudo-random in [0,1) from integers (for stable art details). */

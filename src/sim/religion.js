@@ -13,6 +13,7 @@ import { CONFIG } from '../config.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { transact } from './economy.js';
 import { igniteBuilding } from './risk.js';
+import { farmDormant } from './production.js';
 
 export function newGodState() {
   const s = {};
@@ -65,7 +66,9 @@ function bless(game, god) {
       c.ratings.favor = Math.min(100, c.ratings.favor + 10);
       break;
     case 'ceres':
-      for (const b of game.buildings.values()) if (b.def.kind === 'farm') b.progress = 99.9;
+      // Nearly ripe: harvested on the farm's next working day. A field resting
+      // for an Insane winter grows nothing that day, so it gets the full 100.
+      for (const b of game.buildings.values()) if (b.def.kind === 'farm') b.progress = farmDormant(game, b) ? Math.max(b.progress, 100) : 99.9;
       break;
     case 'neptune': {
       const bonus = Math.round(200 + c.population * 0.2);

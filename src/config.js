@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.5.2',
+  VERSION: '0.6.0',
   SAVE_VERSION: 3, // v2 added the military, v3 packed map layers and paths; older saves still load
   STORAGE_PREFIX: 'colonia.',
 

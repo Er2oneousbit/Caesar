@@ -26,7 +26,7 @@ Everything is made from scratch: the art is drawn procedurally in code, the soun
 
 ## How the game works (60-second version)
 
-1. **Roads first.** Walkers only move on roads. Your city must connect to the Imperial road (green dot on the minimap = entrance, red = exit).
+1. **Roads first.** Walkers only move on roads. Your city must connect to the Imperial road. A stone gateway with green pennants marks the map entrance (settlers and caravans arrive there), one with red pennants the exit (green and red dots on the minimap too).
 2. **Housing plots** (H) beside roads attract settlers who pitch tents.
 3. **Water:** a Well lets tents become lean-tos. Later, a Reservoir by a river pipes water to Fountains for better homes.
 4. **Safety:** Prefectures (fire) and Engineer's Posts (collapse) must send walkers past every building.
@@ -42,7 +42,7 @@ Full in-game manual: press **F1**.
 
 Seven original missions from a riverside village (*Novum Castrum*, 250 people) to a great capital (*Urbs Magna*, 6000 people with high ratings). Each unlocks more buildings; raids start in mission 4 and grow fiercer. Plus a **Sandbox** with 5 landscapes (river, coast, lakes, plains, desert), 4 map sizes up to **Uber** (256×256, sixteen times Small: room for a whole province), seeds and raid frequency (peaceful, occasional, frequent).
 
-**Difficulty** (Easy, Normal, Hard, **Insane**) is picked in the Sandbox setup and in every mission briefing, and the campaign list shows the hardest level you've beaten each mission on. Insane is for veterans: 40% of the money, grumpier citizens, more fires, slower farms and workshops, bigger and tougher raids that come sooner, and an Emperor who wants 50% more, more often, with less time. The full table is in [docs/GAMEPLAY.md](docs/GAMEPLAY.md#difficulty).
+**Difficulty** (Easy, Normal, Hard, **Insane**) is picked in the Sandbox setup and in every mission briefing, and the campaign list shows the hardest level you've beaten each mission on. Insane is for veterans: 40% of the money, grumpier citizens, more fires, slower farms and workshops, farms that rest all winter, bigger and tougher raids that come sooner, and an Emperor who wants 50% more, more often, with less time. The full table is in [docs/GAMEPLAY.md](docs/GAMEPLAY.md#difficulty).
 
 ### Saving
 
@@ -53,11 +53,11 @@ Games are saved in your browser's **localStorage**: an autosave slot (every 3 mo
 The city lives through the day and the year, all drawn in code:
 
 * **Day and night.** The sun sets every few minutes of game time; at dusk windows light up one by one, temples and forts light their torches, walkers carry lanterns and fires glow in the dark. (Tool previews and selections always stay bright.)
-* **Seasons.** Grass and trees follow the calendar: spring blossoms and meadow flowers, summer green, orange and red autumn leaves, bare winter trees. Cypresses stay green all year.
-* **Weather.** Clouds, rain, thunderstorms (with thunder) and, in winter, snow. Purely visual: it never affects the city.
+* **Seasons.** Winter, spring, summer and fall follow the calendar (the top bar shows the season): spring blossoms and meadow flowers, summer green, orange and red fall leaves, bare winter trees. Cypresses stay green all year. When it snows, the snow settles on the ground, trees and roofs and melts again in spring.
+* **Weather.** Rainy springs, sunny summers with the odd thunderstorm, showery falls, and snow in winter (and only in winter: no winter rain). Purely visual: it never affects the city (the Insane farm winter follows the calendar, not the weather).
 * **Animation.** Flags and banners flutter, shoppers browse stocked markets, crowds fill theaters and arenas during shows, smiths throw sparks, altar fires flicker, forests sway, fountains spray, clouds and birds drift over.
 * **Smooth camera.** Zoom eases toward the cursor, a fast drag flings the map, and jumping to a message or the entrance glides there.
-* **Music.** An original soundtrack composed live as you play, in the old modes (dorian, phrygian, mixolydian...), played by synthesized lyre, reed pipes, pan flute, frame drums and horns. It follows the city: calm melodies while you build, quiet pan flute at night, merry tunes after a festival, war drums and horn calls when raiders attack. It never repeats. Press **M** to switch it off, or set its volume in *Settings*.
+* **Music.** An original soundtrack composed live as you play, in the old modes (dorian, phrygian, mixolydian...), played by synthesized lyre, reed pipes, pan flute, frame drums and horns. It starts on the title screen and follows the city: calm melodies while you build, quiet pan flute at night, merry tunes after a festival, war drums and horn calls when raiders attack. It never repeats. Press **M** to switch it off, or set its volume in *Settings*.
 
 Each of these can be switched off in *Settings*; the system's *reduce motion* preference stops the decorative motion (no falling rain or lightning flashes).
 
@@ -104,7 +104,7 @@ Append to the address, for example `dist/colonia.html?debug=1&seed=42&skipmenu=1
 | `raids=off\|occasional\|frequent` | Override raids for new games |
 | `mute=1` | Sound off |
 
-**Debug console** (`` ` ``): `help`, `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army` (forts, supplies, raid schedule), `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `weather storm` (clear, cloudy, rain, storm, snow), `sky 0.8` (freeze the time of day: 0.3 noon, 0.67 sunset, 0.8 night; `sky off` lets it run), `music` (status; `music next`, `music mood danger`, `music mood auto`, `music check`, `music wav day 60` downloads a WAV), `loglevel debug`.
+**Debug console** (`` ` ``): `help`, `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army` (forts, supplies, raid schedule), `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `weather storm` (clear, cloudy, rain, storm, snow), `snow 3` (snow lying on the ground, 0-3), `sky 0.8` (freeze the time of day: 0.3 noon, 0.67 sunset, 0.8 night; `sky off` lets it run), `music` (status; `music next`, `music mood danger`, `music mood auto`, `music check`, `music wav day 60` downloads a WAV), `loglevel debug`.
 
 In browser dev tools, `window.colonia` is the running app (`colonia.game` is the simulation).
 
@@ -168,7 +168,7 @@ Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit, 
 | "This is the developer version" page | You opened `index.html` from disk. Use `dist/colonia.html` or `npm run dev`. |
 | Titles use a plain serif font | The Cinzel web font could not load (offline). Purely cosmetic. |
 | Saves disappeared | Saves live in the browser's local storage for that exact file/URL (a different browser, a private window or clearing site data means no saves). Use *Save game > Export to file* or *Copy save data* for backups. |
-| No music | Browsers only allow sound after your first click or key press. Check *Settings* (Music, Music volume, Mute all sounds) and press M. |
+| No music | Browsers only allow sound after a click, tap or key press, so the title screen says *Click, tap or press a key to begin*: the menu music starts with that. Where the browser allows autoplay there is no title screen and the music starts at once. Otherwise check *Settings* (Music, Music volume, Mute all sounds) and press M. |
 | Night is too dark, or rain distracts | *Settings*: switch off *Day and night* or *Weather* (each is purely visual). |
 | Zooming out feels slow on an old computer | Switch off *Ambient effects* and *Weather* in *Settings*; the far zoom levels draw thousands of tiles. |
 | "Could not save: storage is full" | Delete old slots in *Load game* (each save shows its size), or export them to files first. |

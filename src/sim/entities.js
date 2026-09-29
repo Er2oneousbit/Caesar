@@ -177,11 +177,17 @@ export function perimeterTiles(map, x, y, size) {
 
 /**
  * Find the road tile a building uses. Houses accept a road within 2 tiles;
- * everything else needs a road touching its footprint.
+ * everything else needs a road touching its footprint. A road on the network
+ * that reaches the map entry (the city's own, where settlers, workers and
+ * carts come from) always wins over one that does not: a stub of road laid
+ * against a building must not cut it off from its workers. Only when no such
+ * road is in reach is another road used.
  */
 export function computeAccessRoad(game, b) {
   const { map } = game;
   b.accessRoad = -1;
+  const main = map.roadNet[map.idx(map.entry.x, map.entry.y)]; // 0 until networks are computed
+  const off = (i) => (main && map.roadNet[i] !== main ? 10 : 0); // any main-network road in reach is nearer
   if (b.house) {
     let best = -1;
     let bestD = 99;
@@ -192,7 +198,7 @@ export function computeAccessRoad(game, b) {
         if (!map.road[i]) continue;
         const dx = tx < b.x ? b.x - tx : tx >= b.x + b.size ? tx - (b.x + b.size - 1) : 0;
         const dy = ty < b.y ? b.y - ty : ty >= b.y + b.size ? ty - (b.y + b.size - 1) : 0;
-        const d = Math.max(dx, dy) + (dx && dy ? 0.5 : 0); // prefer orthogonal roads
+        const d = Math.max(dx, dy) + (dx && dy ? 0.5 : 0) + off(i); // prefer orthogonal roads
         if (d < bestD) { bestD = d; best = i; }
       }
     }
@@ -200,7 +206,9 @@ export function computeAccessRoad(game, b) {
     return best;
   }
   for (const i of perimeterTiles(map, b.x, b.y, b.size)) {
-    if (map.road[i]) { b.accessRoad = i; break; }
+    if (!map.road[i]) continue;
+    if (!off(i)) { b.accessRoad = i; break; } // on the city's network: done
+    if (b.accessRoad < 0) b.accessRoad = i; // else remember the first road, as a fallback
   }
   return b.accessRoad;
 }

@@ -374,3 +374,52 @@ test('campaign scenarios all build a valid game', () => {
     g.runDays(4);
   }
 });
+
+test('roads: a stray stub of road against a building does not cut it off from the city', () => {
+  const game = newGame({ seed: 'stub-road' });
+  const { map } = game;
+  const main = () => map.roadNet[map.idx(map.entry.x, map.entry.y)];
+  // A main-road tile with two free tiles "above" it, and nothing else around the upper one.
+  const free = (x, y) => map.inBounds(x, y) && map.isFree(x, y) && map.terrain[map.idx(x, y)] !== Terrain.TREES && map.terrain[map.idx(x, y)] !== Terrain.WATER;
+  let spot = null;
+  for (let i = 0; i < map.size && !spot; i++) {
+    if (!map.road[i] || map.roadNet[i] !== main()) continue;
+    const x = map.xOf(i);
+    const y = map.yOf(i);
+    if (!free(x, y - 1) || !free(x, y - 2)) continue;
+    if (map.hasRoad(x - 1, y - 2) || map.hasRoad(x + 1, y - 2) || map.hasRoad(x, y - 3) || map.hasRoad(x - 1, y - 1) || map.hasRoad(x + 1, y - 1)) continue;
+    spot = { x, y };
+  }
+  assert.ok(spot, 'a test spot beside the Imperial road');
+  // A prefecture on the main road, then a one-tile road stub against its other side.
+  assert.ok(build(game, 'prefecture', spot.x, spot.y - 1).ok);
+  const pref = [...game.buildings.values()].pop();
+  assert.equal(map.roadNet[pref.accessRoad], main(), 'uses the main road');
+  assert.ok(build(game, 'road', spot.x, spot.y - 2).ok);
+  assert.notEqual(map.roadNet[map.idx(spot.x, spot.y - 2)], main(), 'the stub is its own little network');
+  // The stub is scanned first (the side facing up), but the main road wins.
+  assert.equal(pref.accessRoad, map.idx(spot.x, spot.y), 'still on the main road');
+});
+
+test('roads: a house picks a road that reaches the entrance over a nearer isolated street', () => {
+  const game = newGame({ seed: 'stub-road' });
+  const { map } = game;
+  const main = map.roadNet[map.idx(map.entry.x, map.entry.y)];
+  const free = (x, y) => map.inBounds(x, y) && map.isFree(x, y) && map.terrain[map.idx(x, y)] !== Terrain.TREES && map.terrain[map.idx(x, y)] !== Terrain.WATER;
+  let spot = null;
+  for (let i = 0; i < map.size && !spot; i++) {
+    if (!map.road[i] || map.roadNet[i] !== main) continue;
+    const x = map.xOf(i);
+    const y = map.yOf(i);
+    // house two tiles above the main road, an isolated road tile right above the house
+    if (![1, 2, 3].every((k) => free(x, y - k))) continue;
+    if ([[x - 1, y - 3], [x + 1, y - 3], [x, y - 4], [x - 1, y - 2], [x + 1, y - 2], [x - 1, y - 1], [x + 1, y - 1]].some(([a, b]) => map.hasRoad(a, b))) continue;
+    spot = { x, y };
+  }
+  assert.ok(spot);
+  assert.ok(build(game, 'road', spot.x, spot.y - 3).ok);
+  assert.ok(build(game, 'house', spot.x, spot.y - 2).ok);
+  const home = [...game.buildings.values()].pop();
+  assert.ok(home.house);
+  assert.equal(map.roadNet[home.accessRoad], main, 'the road two tiles away that reaches the entrance, not the stub next door');
+});

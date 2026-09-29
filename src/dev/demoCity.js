@@ -419,8 +419,8 @@ function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
  * Add a garrison to the demo city: barracks, one fort of each kind, a horse
  * ranch, a fletcher, two watchtowers and a wall with a gate across the
  * Imperial road. Everything is placed on roads that reach the map entry.
- * With { stock: true } the barracks gets equipment up front and military
- * labor goes first, so soldiers appear quickly (screenshots, tests).
+ * With { stock: true } the barracks gets equipment up front, so soldiers
+ * appear quickly (screenshots, tests, the --garrison simulation).
  * @returns {{ok:boolean, barracks?:object, forts:object[], ranch?:object, wall:number}}
  */
 export function buildDemoGarrison(game, center, opts = {}) {
@@ -436,13 +436,13 @@ export function buildDemoGarrison(game, center, opts = {}) {
   const towers = [placeNear(game, 'tower', 2, center, 10, 30), placeNear(game, 'tower', 2, center, 14, 34)].filter(Boolean);
   const wall = demoWall(game, center);
   if (opts.stock && barracks) {
+    // Equipment up front, so recruits come quickly. Labor priorities stay
+    // as they are: putting the army first starved the prefects, engineers
+    // and farms of small cities, which burned down or went hungry (on Hard
+    // and Insane most demo garrison cities fell to 0).
     barracks.stock.weapons = 400;
     barracks.stock.arrows = 400;
     barracks.stock.horses = 400;
-    // ...and first call on workers, as a governor raising an army would set it:
-    // a small city short of hands otherwise leaves the barracks half empty.
-    const pri = game.city.laborPriority;
-    if (!pri.includes('military')) pri.unshift('military');
   }
   return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall };
 }

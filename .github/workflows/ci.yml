@@ -1,12 +1,16 @@
 # Continuous integration: unit tests, a reproducible build check and the
-# browser smoke test, on every push to the default branch and every PR.
+# browser smoke test, on every push (any branch) and every pull request.
 name: CI
 
 on:
   push:
-    branches: [main, master]
   pull_request:
   workflow_dispatch:
+
+# A newer push to the same branch/PR cancels the older, still-running check.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

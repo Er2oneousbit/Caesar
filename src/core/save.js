@@ -220,6 +220,15 @@ export function deleteSlot(slot) {
   try { localStorage.removeItem(slotKey(slot)); } catch { /* ignore */ }
 }
 
+/**
+ * Can this page hand the player a downloaded file? Artifact/embed builds set
+ * window.__COLONIA_EMBED__ because their hosts block downloads; those builds
+ * rely on "Copy save data" instead.
+ */
+export function canDownloadFiles() {
+  return !(typeof window !== 'undefined' && window.__COLONIA_EMBED__);
+}
+
 /** Offer the save as a downloadable .json file. */
 export function exportToFile(game, extra) {
   const data = serializeGame(game, extra);

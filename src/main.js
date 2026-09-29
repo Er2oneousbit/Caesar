@@ -17,7 +17,7 @@
 import { CONFIG } from './config.js';
 import { parseFlags, log } from './core/debug.js';
 import { App } from './app.js';
-import { serializeGame } from './core/save.js';
+import { serializeGame, canDownloadFiles } from './core/save.js';
 
 let app = null;
 let crashShown = false;
@@ -63,6 +63,8 @@ function showCrash(err) {
       </div>
     </div>`;
   el.querySelector('pre').textContent = report;
+  if (!canDownloadFiles()) el.querySelector('[data-a="save"]').remove(); // host blocks downloads
+  if (!app || !app.game) el.querySelectorAll('[data-a="save"],[data-a="copysave"]').forEach((b) => b.remove());
   el.addEventListener('click', async (e) => {
     const a = e.target && e.target.dataset ? e.target.dataset.a : null;
     if (a === 'copy') {

@@ -14,7 +14,7 @@ import { CONFIG } from '../config.js';
 import { SCENARIOS } from '../data/scenarios.js';
 import { MAP_SIZES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../core/game.js';
-import { listSlots, deleteSlot } from '../core/save.js';
+import { listSlots, deleteSlot, canDownloadFiles } from '../core/save.js';
 import { goalStatus } from '../sim/ratings.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
@@ -163,7 +163,7 @@ export function saveMenu(app) {
   const rows = SAVE_SLOTS.filter((s) => s !== 'auto').map((slot) => slotRow(app, slot, byName[slot]?.meta,
     h('button', { class: 'btn small primary', onclick: () => { const doSave = () => { app.saveSlot(slot); app.ui.closeModal(); }; if (!byName[slot]) doSave(); else app.ui.confirm(`Overwrite ${SLOT_NAMES[slot]}?`, doSave, { yes: 'Overwrite' }); } }, 'Save here')));
   return modal('Save game', [rows, h('div', { class: 'muted' }, 'Saves live in this browser. Export to a file (or copy the save data) to keep a backup or move it to another computer.')], [
-    h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export to file'),
+    canDownloadFiles() ? h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export to file') : null,
     h('button', { class: 'btn', onclick: () => app.copySave() }, '📋 Copy save data'),
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
   ], 'narrow', () => app.ui.closeModal());

@@ -13,6 +13,7 @@
   Query params: scenario=c1  months=6  zoom=2  overlay=none  level=2  w=1280 h=800
                 military=1 (garrison + raid)  raiders=12  recruitDays=70  focus=x,y
                 trade=1 (dock + sea routes; waits for a docked ship)  shipState=toDock
+                select=well (click the nearest well)  place=fountain (placement preview)
 -->
 <canvas id="c"></canvas>
 <script type="module">
@@ -22,6 +23,7 @@
   import { Renderer } from '../../src/render/renderer.js';
   import { launchInvasion } from '../../src/sim/military.js';
   import { buildDemoHarbor } from '../../src/dev/demoCity.js';
+  import { planAction } from '../../src/sim/construction.js';
 
   const q = new URLSearchParams(location.search);
   const scen = q.get('scenario') === 'sandbox' ? sandboxScenario({ size: 64, type: q.get('maptype') || 'river', seed: q.get('seed') || 'demo' }) : (SCENARIOS.find((s) => s.id === (q.get('scenario') || 'c1')) || SCENARIOS[0]);
@@ -72,11 +74,39 @@
   r.camera.zoomIndex = Number(q.get('zoom') ?? 2);
   r.resize(W, H, 1);
   if (q.get('focus')) { const [fx, fy] = q.get('focus').split(',').map(Number); focus = { x: fx, y: fy }; }
+  // select=<kind>: click the building of that kind nearest the view center.
+  let selected = null;
+  if (q.get('select') && focus) {
+    let best = null;
+    for (const b of game.buildings.values()) {
+      if (b.def.kind !== q.get('select')) continue;
+      const d = Math.hypot(b.x - focus.x, b.y - focus.y);
+      if (!best || d < best.d) best = { b, d };
+    }
+    if (best) { selected = best.b; focus = { x: best.b.x, y: best.b.y }; }
+  }
+  // place=<tool>: preview placing that building on the nearest valid tile.
+  let placing = null;
+  if (q.get('place') && focus) {
+    const tool = q.get('place');
+    let best = null;
+    for (let y = 1; y < game.map.h - 1; y++) {
+      for (let x = 1; x < game.map.w - 1; x++) {
+        const d = Math.hypot(x - focus.x - 3, y - focus.y);
+        if (best && d >= best.d) continue;
+        const plan = planAction(game, tool, x, y, x, y);
+        if (plan.count) best = { x, y, d, plan };
+      }
+    }
+    if (best) { placing = best.plan; focus = { x: best.x, y: best.y }; }
+  }
   if (focus) r.camera.centerOnTile(focus.x, focus.y);
   r.setOverlay(q.get('overlay') || 'none');
+  if (selected) r.selectedId = selected.id;
+  if (placing) { r.plan = placing; r.tool = placing.tool; }
   r.render(0, 0.016);
   r.render(0.5, 0.016);
-  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, focus, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
+  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, focus, coverage: r.stats.coverage, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
   window.__done = true;
 </script>
 </body>

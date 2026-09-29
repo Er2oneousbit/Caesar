@@ -160,6 +160,40 @@ try {
   check('city grows', saved.pop > 50, `pop ${saved.pop}`);
   await page.evaluate(() => window.colonia.togglePause());
 
+  // 5a. Water radius: clicking a well shows its area (dark blue); placing one
+  //     shows the new area in dark blue over existing coverage in pale blue.
+  const well = await page.evaluate(() => {
+    const g = window.colonia.game;
+    const w = [...g.buildings.values()].find((b) => b.def.kind === 'well');
+    if (!w) return null;
+    window.colonia.renderer.camera.centerOnTile(w.x, w.y);
+    return { x: w.x, y: w.y };
+  });
+  check('demo city has a well', !!well);
+  if (well) {
+    await page.waitForTimeout(100);
+    const wp = await toScreen(well.x, well.y);
+    await page.mouse.click(wp.x, wp.y);
+    await page.waitForTimeout(150);
+    const cov = await page.evaluate(() => window.colonia.renderer.stats.coverage);
+    check('clicking a well shows its 5x5 supply area', !!cov && cov.strong === 25, JSON.stringify(cov));
+    await page.evaluate(() => window.colonia.ui.selectTool('well'));
+    const free = await page.evaluate(({ x, y }) => {
+      const m = window.colonia.game.map;
+      for (let r = 1; r < 6; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r]]) if (m.isFree(x + dx, y + dy)) return { x: x + dx, y: y + dy };
+      return null;
+    }, well);
+    if (free) {
+      const fp = await toScreen(free.x, free.y);
+      await page.mouse.move(fp.x, fp.y);
+      await page.waitForTimeout(150);
+      const pc = await page.evaluate(() => window.colonia.renderer.stats.coverage);
+      check('placing a well: new area dark, existing coverage pale', !!pc && pc.strong === 25 && pc.pale > 0, JSON.stringify(pc));
+    }
+    await page.keyboard.press('Escape'); // cancel the tool (a second Esc would open the pause menu)
+    await page.evaluate(() => window.colonia.ui.info.close());
+  }
+
   // 5b. Military: garrison, fort panel + deploy by clicking the map, raid alert, advisor
   const gar = await page.evaluate(() => {
     const app = window.colonia;

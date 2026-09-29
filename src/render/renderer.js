@@ -16,6 +16,8 @@
  * big buildings with a simple depth sort.
  *
  *   3. Tool previews (ghost building, green/red tiles), hover and selection.
+ *      Water buildings show their supply area: the one being placed or the
+ *      one clicked in dark blue, existing coverage of that kind in pale blue.
  *   4. Particles (dust, smoke).
  * ----------------------------------------------------------------------------
  */
@@ -43,6 +45,20 @@ const K_UNIT = 5;
 const K_PROJ = 6;
 const K_FLAG = 7;
 
+/**
+ * Water buildings that supply an area: every tile within `r` of the footprint
+ * (a square, exactly what sim/water.js marks), and the water-layer bit that
+ * shows where buildings of that kind supply water right now.
+ */
+const WATER_AREA = Object.freeze({
+  well: { r: CONFIG.WELL_RADIUS, bit: WaterBits.WELL },
+  fountain: { r: CONFIG.FOUNTAIN_RADIUS, bit: WaterBits.FOUNTAIN },
+  reservoir: { r: CONFIG.RESERVOIR_RADIUS, bit: WaterBits.PIPED },
+});
+/** Radius colors: the building being placed or selected (dark) vs. existing coverage (pale). */
+const RADIUS_STRONG = Object.freeze({ fill: 'rgba(28,96,214,0.36)', edge: 'rgba(16,64,170,0.95)' });
+const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(120,186,250,0.8)' });
+
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
   constructor(canvas) {
@@ -60,7 +76,8 @@ export class Renderer {
     this.deployFort = 0; // fort id while the player picks a deployment tile
     this.time = 0;
     this.frame = 0;
-    this.stats = { tiles: 0, objects: 0, ms: 0 };
+    this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null };
+    this.viewTiles = null; // visible tile range of the last frame {tx0, tx1, ty0, ty1}
     this.stripCache = new WeakMap();
     this.unsub = [];
   }
@@ -151,6 +168,8 @@ export class Renderer {
     const ty0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.y))));
     const ty1 = Math.min(map.h - 1, Math.ceil(Math.max(...corners.map((c) => c.y))));
     const groundBottom = vr.y + vr.h + 4;
+    this.viewTiles = { tx0, tx1, ty0, ty1 };
+    this.stats.coverage = null;
     const waterFrame = Math.floor(this.time * 2.5) % 4;
 
     const items = [];
@@ -321,6 +340,9 @@ export class Renderer {
     if (this.selectedId) {
       const b = game.buildings.get(this.selectedId);
       if (b) {
+        // A clicked well/fountain/reservoir shows the area it supplies.
+        const water = WATER_AREA[b.def.kind];
+        if (water) this.drawCoverage(this.squareTiles(b.x, b.y, b.size, water.r));
         this.outlineFootprint(b.x, b.y, b.size, 'rgba(255,230,120,0.95)', 2);
         if (b.rally) this.drawRallyLine(b);
         if (b.def.kind === 'tower') this.drawRange(b.x, b.y, b.size, TOWER_RANGE, 'rgba(255,120,60,0.12)');
@@ -429,6 +451,73 @@ export class Renderer {
     ctx.lineTo(z[0], z[1]);
     ctx.stroke();
     ctx.restore();
+  }
+
+  /** Tile indices within `r` of a footprint (the square sim/water.js covers). */
+  squareTiles(x0, y0, S, r, out = new Set()) {
+    const map = this.game.map;
+    for (let y = Math.max(0, y0 - r); y <= Math.min(map.h - 1, y0 + S - 1 + r); y++) {
+      for (let x = Math.max(0, x0 - r); x <= Math.min(map.w - 1, x0 + S - 1 + r); x++) out.add(map.idx(x, y));
+    }
+    return out;
+  }
+
+  /**
+   * Paint water coverage: visible tiles where `isPale(i)` is true in pale
+   * blue (what existing buildings already supply) and the `strong` tiles in
+   * dark blue on top (the building being placed or the one selected). Each
+   * tile is filled once, so overlapping radii do not stack into darker
+   * blotches, and each area gets a crisp outline.
+   * @param {Set<number>} strong  tile indices
+   * @param {(i:number)=>boolean} [isPale]
+   */
+  drawCoverage(strong, isPale = null) {
+    const { ctx, camera: cam, game } = this;
+    const map = game.map;
+    const k = cam.scale;
+    const pt = (x, y) => [((x - y) * HALF_W - cam.x) * k, ((x + y) * HALF_H - cam.y) * k];
+    // Sides of tile (x, y): [neighbor, from corner, to corner] (N, E, S, W).
+    const sides = (x, y) => [
+      [map.inBounds(x, y - 1) ? map.idx(x, y - 1) : -1, pt(x, y), pt(x + 1, y)],
+      [map.inBounds(x + 1, y) ? map.idx(x + 1, y) : -1, pt(x + 1, y), pt(x + 1, y + 1)],
+      [map.inBounds(x, y + 1) ? map.idx(x, y + 1) : -1, pt(x, y + 1), pt(x + 1, y + 1)],
+      [map.inBounds(x - 1, y) ? map.idx(x - 1, y) : -1, pt(x, y), pt(x, y + 1)],
+    ];
+    const paleEdges = [];
+    const strongEdges = [];
+    let paleCount = 0;
+    const v = this.viewTiles;
+    if (isPale && v) {
+      const inside = (j) => j >= 0 && (strong.has(j) || isPale(j));
+      for (let y = v.ty0; y <= v.ty1; y++) {
+        for (let x = v.tx0; x <= v.tx1; x++) {
+          const i = map.idx(x, y);
+          if (strong.has(i) || !isPale(i)) continue;
+          paleCount++;
+          this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, RADIUS_PALE.fill);
+          for (const [j, a, b] of sides(x, y)) if (!inside(j)) paleEdges.push(a, b);
+        }
+      }
+    }
+    for (const i of strong) {
+      const x = map.xOf(i);
+      const y = map.yOf(i);
+      this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, RADIUS_STRONG.fill);
+      for (const [j, a, b] of sides(x, y)) if (!strong.has(j)) strongEdges.push(a, b);
+    }
+    for (const [edges, color, width] of [[paleEdges, RADIUS_PALE.edge, 1], [strongEdges, RADIUS_STRONG.edge, 1.6]]) {
+      if (!edges.length) continue;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width * cam.dpr;
+      ctx.beginPath();
+      for (let e = 0; e < edges.length; e += 2) {
+        ctx.moveTo(edges[e][0], edges[e][1]);
+        ctx.lineTo(edges[e + 1][0], edges[e + 1][1]);
+      }
+      ctx.stroke();
+    }
+    // Exposed for the browser smoke test (and the curious): tiles painted this frame.
+    this.stats.coverage = { strong: strong.size, pale: paleCount };
   }
 
   /** Tint every tile within `r` (Chebyshev) of a footprint. */
@@ -541,9 +630,19 @@ export class Renderer {
     }
     const map = game.map;
     const def = BUILDINGS[plan.tool];
-    // Coverage radius hint for area-of-effect buildings.
-    const radius = { well: CONFIG.WELL_RADIUS, fountain: CONFIG.FOUNTAIN_RADIUS, reservoir: CONFIG.RESERVOIR_RADIUS, hospital: CONFIG.HOSPITAL_RADIUS, tower: TOWER_RANGE }[plan.tool];
-    if (radius && plan.items.length === 1) {
+    const water = def ? WATER_AREA[def.kind] : null;
+    // Other area-of-effect buildings keep a simple single-color hint.
+    const radius = { hospital: CONFIG.HOSPITAL_RADIUS, tower: TOWER_RANGE }[plan.tool];
+    if (water) {
+      // Water buildings: the new one(s) in dark blue over the pale area the
+      // existing ones of this kind already supply. While hovering a single
+      // spot the radius shows even where it cannot be built; in a drag only
+      // the valid spots count.
+      const strong = new Set();
+      const single = plan.items.length === 1;
+      for (const it of plan.items) if (single || it.ok) this.squareTiles(it.x, it.y, it.size, water.r, strong);
+      this.drawCoverage(strong, (i) => (map.water[i] & water.bit) !== 0);
+    } else if (radius && plan.items.length === 1) {
       const it = plan.items[0];
       const S = it.size;
       for (let y = it.y - radius; y < it.y + S + radius; y++) {

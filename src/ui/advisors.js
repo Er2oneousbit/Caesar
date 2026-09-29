@@ -355,7 +355,7 @@ export class Advisors {
         h('td', { class: 'r num' }, pct(f.efficiency)),
         h('td', {}, f.rally ? `Holding ${Math.floor(f.rally.x)},${Math.floor(f.rally.y)}` : 'At the fort'),
         h('td', { class: 'r' },
-          h('button', { class: 'btn small', onclick: () => { this.app.ui.closeModal(); this.app.renderer.camera.centerOnTile(f.x + 1, f.y + 1); this.app.ui.info.showBuilding(f.id); } }, 'Show'),
+          h('button', { class: 'btn small', onclick: () => { this.app.ui.closeModal(); this.app.renderer.camera.glideToTile(f.x + 1, f.y + 1); this.app.ui.info.showBuilding(f.id); } }, 'Show'),
           h('button', { class: 'btn small primary', disabled: n === 0, onclick: () => { this.app.ui.closeModal(); this.app.startDeploy(f.id); } }, 'Deploy'),
           h('button', { class: 'btn small', disabled: !f.rally, onclick: () => { recallFort(g, f.id); this.render(); } }, 'Recall')));
     });
@@ -441,7 +441,7 @@ export class Advisors {
     if (!g.messages.length) return h('div', { class: 'muted' }, 'No messages yet.');
     return h('div', {}, g.messages.map((m) => h('div', {
       class: `toast ${m.level}`, style: { animation: 'none', marginBottom: '5px' },
-      onclick: () => { if (m.x !== undefined) { this.app.renderer.camera.centerOnTile(m.x, m.y); this.app.ui.closeModal(); } },
+      onclick: () => { if (m.x !== undefined) { this.app.renderer.camera.glideToTile(m.x, m.y); this.app.ui.closeModal(); } },
     }, h('span', { class: 'date' }, m.date), m.text)));
   }
 }

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colonia art sheet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; background: #6f9644; font: 12px/1.3 system-ui, sans-serif; color: #1d1a14; }
+  h2 { margin: 14px 12px 4px; font-size: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px; }
+  figure { margin: 0; background: rgba(255,255,255,0.18); border-radius: 6px; padding: 4px; text-align: center; }
+  figcaption { font-size: 11px; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<!--
+  Art sheet: every home tier in all 8 looks, plus buildings with live details,
+  drawn straight from the procedural art (no game running). Handy for artists
+  reviewing changes, and as a side-by-side reference when making replacement
+  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (subset)
+  Served by: npm run serve, then open /tests/e2e/artsheet.html
+-->
+<div id="sheet"></div>
+<script type="module">
+  import { buildingSpec } from '../../src/render/buildingArt.js';
+  import { HOUSE_TIERS } from '../../src/data/housing.js';
+
+  const q = new URLSearchParams(location.search);
+  const scale = Number(q.get('scale') || 2);
+  const only = q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const sheet = document.getElementById('sheet');
+
+  /** Draw one sprite spec into a new canvas at `scale`. */
+  function render(spec) {
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(spec.w * scale);
+    c.height = Math.ceil(spec.h * scale);
+    const ctx = c.getContext('2d');
+    ctx.setTransform(scale, 0, 0, scale, spec.ax * scale, spec.ay * scale);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    spec.draw(ctx);
+    return c;
+  }
+
+  function section(title, cells) {
+    const h = document.createElement('h2');
+    h.textContent = title;
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const [label, spec] of cells) {
+      const fig = document.createElement('figure');
+      fig.appendChild(render(spec));
+      const cap = document.createElement('figcaption');
+      cap.textContent = label;
+      fig.appendChild(cap);
+      row.appendChild(fig);
+    }
+    sheet.append(h, row);
+  }
+
+  for (let tier = 1; tier < HOUSE_TIERS.length; tier++) {
+    if (only && !only.includes(tier)) continue;
+    const S = HOUSE_TIERS[tier].size;
+    const cells = [];
+    for (let v = 0; v < 8; v++) cells.push([`look ${v}`, buildingSpec('house', S, v, tier)]);
+    section(`Tier ${tier}: ${HOUSE_TIERS[tier].name} (${S}x${S})`, cells);
+  }
+  if (!only) {
+    section('Buildings with flags (still pictures get painted cloth)', ['prefecture', 'forum', 'senate', 'barracks', 'fort_legion', 'colosseum'].map((t) => {
+      const S = { prefecture: 1, forum: 2, senate: 4, barracks: 3, fort_legion: 3, colosseum: 5 }[t];
+      return [t, buildingSpec(t, S, 0, 0)];
+    }));
+  }
+  window.__done = true;
+</script>
+</body>
+</html>

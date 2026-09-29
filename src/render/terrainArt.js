@@ -5,14 +5,24 @@
  * bridges, rubble) and small terrain objects (trees, rocks, aqueducts).
  * All original drawings made from simple shapes.
  *
- * Tile sprites: 64x32 diamond, anchor at the top corner. Each terrain type
- * has 4 variants so large fields do not look tiled.
+ * Tile sprites: 64x32 diamond, anchor at the top corner. Each land type
+ * has 8 variants so large fields do not look tiled.
+ *
+ * Seasons: grass, meadow, forest-floor and tree colors come from a palette
+ * (weather.js seasonPalette), so the renderer asks for the current month's
+ * look. Water, rock and roads do not change with the seasons.
+ *
+ * Edge blending: where two kinds of ground meet, blendSpec() draws a wavy
+ * fringe of the "stronger" neighbour onto the weaker tile (forest floor >
+ * grass > meadow > sand > rock), so the map shows soft, natural edges instead
+ * of hard diamond steps. BLEND_RANK says who spreads onto whom.
  * ----------------------------------------------------------------------------
  */
 
 import { HALF_W, HALF_H, CONFIG } from '../config.js';
 import { Terrain } from '../world/map.js';
-import { P, poly, quad, shade, mix, tree, cypress, hash01 } from './draw.js';
+import { P, poly, quad, shade, mix, tree, bareTree, cypress, hash01 } from './draw.js';
+import { seasonPalette } from './weather.js';
 
 const TW = CONFIG.TILE_W;
 const TH = CONFIG.TILE_H;
@@ -25,6 +35,30 @@ export const TERRAIN_COLORS = {
   [Terrain.WATER]: '#3a77a8',
   [Terrain.SAND]: '#d8c38e',
 };
+
+/**
+ * Which ground spreads onto which at a boundary: a tile gets a fringe from a
+ * neighbour with a HIGHER rank. Water (and anything unlisted) never blends;
+ * shorelines have their own art.
+ */
+export const BLEND_RANK = Object.freeze({
+  [Terrain.ROCK]: 1,
+  [Terrain.SAND]: 2,
+  [Terrain.MEADOW]: 3,
+  [Terrain.GRASS]: 4,
+  [Terrain.TREES]: 5,
+});
+
+/** Base ground color of a terrain type in a season. */
+export function groundColor(type, pal = seasonPalette(null)) {
+  switch (type) {
+    case Terrain.GRASS: return pal.grass;
+    case Terrain.MEADOW: return pal.meadow;
+    case Terrain.TREES: return pal.forest;
+    case Terrain.SAND: return pal.sand;
+    default: return TERRAIN_COLORS[type];
+  }
+}
 
 /** Diamond slightly larger than the tile to hide seams between tiles. */
 function tileDiamond(ctx, color) {
@@ -43,16 +77,48 @@ function speckle(ctx, seed, count, colors, size = 1.4) {
   }
 }
 
-/** Spec for a plain ground tile. */
-export function groundTileSpec(type, variant) {
+/** Small pebbles with a lit top (ground detail). */
+function pebbles(ctx, seed, count, color) {
+  for (let k = 0; k < count; k++) {
+    const [x, y] = P(0.15 + hash01(seed, k, 51) * 0.7, 0.15 + hash01(seed, k, 52) * 0.7);
+    const r = 0.8 + hash01(seed, k, 53) * 1.1;
+    ctx.fillStyle = shade(color, -0.25);
+    ctx.beginPath(); ctx.ellipse(x + 0.4, y + 0.3, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = shade(color, 0.3);
+    ctx.fillRect(x - r * 0.4, y - r * 0.4, r * 0.6, r * 0.3);
+  }
+}
+
+/** A soft darker or lighter patch on the ground (worn earth, clover, damp). */
+function patch(ctx, seed, color, alpha) {
+  const [x, y] = P(0.3 + hash01(seed, 61) * 0.4, 0.3 + hash01(seed, 62) * 0.4);
+  const rx = 6 + hash01(seed, 63) * 7;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, rx * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + rx * 0.5, y + 1.5, rx * 0.6, rx * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Spec for a plain ground tile.
+ * @param {number} type     Terrain
+ * @param {number} variant  0..7
+ * @param {object} [pal]    season palette (weather.js); summer when omitted
+ */
+export function groundTileSpec(type, variant, pal = seasonPalette(null)) {
   return {
     w: TW + 4,
     h: TH + 3,
     ax: HALF_W + 2,
     ay: 1,
     draw(ctx) {
-      const base = TERRAIN_COLORS[type];
-      const tint = (variant - 1.5) * 0.025;
+      const base = groundColor(type, pal);
+      const tint = ((variant & 3) - 1.5) * 0.025;
       if (type === Terrain.WATER) {
         tileDiamond(ctx, base);
         return;
@@ -60,6 +126,8 @@ export function groundTileSpec(type, variant) {
       tileDiamond(ctx, shade(base, tint));
       const seed = type * 97 + variant * 13;
       if (type === Terrain.GRASS || type === Terrain.TREES) {
+        if (variant === 5) patch(ctx, seed, shade(base, -0.18), 0.35); // worn patch
+        if (variant === 6) patch(ctx, seed, shade(base, 0.14), 0.4); // clover
         speckle(ctx, seed, 26, [shade(base, -0.14), shade(base, 0.12), shade(base, -0.06)]);
         // a few grass tufts
         ctx.strokeStyle = shade(base, -0.22);
@@ -73,21 +141,171 @@ export function groundTileSpec(type, variant) {
           ctx.lineTo(x + 0.6, y - 2.2);
           ctx.stroke();
         }
+        if (variant === 3 || variant === 7) pebbles(ctx, seed, 2, '#a39a88');
+        if (type === Terrain.TREES) {
+          // forest floor: fallen leaves in the season's colors
+          for (let k = 0; k < 9; k++) {
+            const [x, y] = P(hash01(seed, k, 71) * 0.8 + 0.1, hash01(seed, k, 72) * 0.8 + 0.1);
+            ctx.fillStyle = pal.leaves[k % pal.leaves.length];
+            ctx.fillRect(x - 0.9, y - 0.5, 1.8, 1);
+          }
+        } else if (pal.flowers > 1.2) {
+          // spring: a few wild flowers in the grass too
+          for (let k = 0; k < 3; k++) {
+            const [x, y] = P(hash01(seed, k, 73) * 0.8 + 0.1, hash01(seed, k, 74) * 0.8 + 0.1);
+            ctx.fillStyle = k % 2 ? '#f7f2e4' : '#f4e27a';
+            ctx.fillRect(x - 0.7, y - 0.7, 1.4, 1.4);
+          }
+        }
       } else if (type === Terrain.MEADOW) {
         speckle(ctx, seed, 22, [shade(base, -0.12), shade(base, 0.1)]);
-        // little flowers
-        for (let k = 0; k < 7; k++) {
+        // little flowers (lots in spring, hardly any in winter)
+        const n = Math.round(7 * pal.flowers);
+        const colors = ['#f4e27a', '#f7f2e4', '#d9a3c7', '#9fb4e8', '#e9876b'];
+        for (let k = 0; k < n; k++) {
           const [x, y] = P(hash01(seed, k, 7) * 0.8 + 0.1, hash01(seed, k, 8) * 0.8 + 0.1);
-          ctx.fillStyle = k % 3 === 0 ? '#f4e27a' : k % 3 === 1 ? '#f7f2e4' : '#d9a3c7';
+          ctx.fillStyle = colors[(k + variant) % (pal.flowers > 1.2 ? 5 : 3)];
           ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
         }
       } else if (type === Terrain.SAND) {
         speckle(ctx, seed, 28, [shade(base, -0.1), shade(base, 0.08), shade(base, -0.18)], 1.1);
+        if (variant & 1) {
+          // wind ripples
+          ctx.strokeStyle = shade(base, -0.12);
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          for (let k = 0; k < 3; k++) {
+            const [x, y] = P(0.25 + k * 0.2, 0.3 + hash01(seed, k, 81) * 0.4);
+            ctx.moveTo(x - 6, y);
+            ctx.quadraticCurveTo(x, y - 1.6, x + 6, y);
+          }
+          ctx.stroke();
+        }
+        if (variant === 2 || variant === 6) pebbles(ctx, seed, 2, '#bfb39b');
       } else if (type === Terrain.ROCK) {
         speckle(ctx, seed, 30, [shade(base, -0.15), shade(base, 0.1)]);
+        // cracks
+        ctx.strokeStyle = shade(base, -0.3);
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        const [x, y] = P(0.3 + hash01(seed, 91) * 0.4, 0.3 + hash01(seed, 92) * 0.4);
+        ctx.moveTo(x - 7, y + 1);
+        ctx.lineTo(x - 2, y - 1);
+        ctx.lineTo(x + 3, y + 0.5);
+        ctx.lineTo(x + 7, y - 1.5);
+        ctx.stroke();
+        pebbles(ctx, seed, 3, '#a39a88');
       }
     },
   };
+}
+
+/**
+ * A ground tile with its edge blend already painted on: one sprite, one draw.
+ * (Drawing the blend as a second sprite per tile added enough draw calls to
+ * push busy views past the point where the browser flushes the canvas
+ * mid-frame, which doubled the frame time when zoomed out.)
+ * @param {number} code packed blend code: (type << 8) | (edges << 4) | corners
+ */
+export function groundBlendSpec(type, variant, code, pal = seasonPalette(null)) {
+  const g = groundTileSpec(type, variant, pal);
+  const b = blendSpec(code >> 8, (code >> 4) & 15, code & 15, variant & 3, pal);
+  return { ...g, draw(ctx) { g.draw(ctx); b.draw(ctx); } };
+}
+
+/**
+ * Soft edge where a stronger ground type `type` borders this tile.
+ * edges bits (neighbour of that type on this side): 1=N 2=E 4=S 8=W.
+ * corners bits (only a diagonal neighbour): 1=NE 2=SE 4=SW 8=NW.
+ * A wavy fringe runs along each edge; the waves always meet the tile corners
+ * at the same depth, so fringes on neighbouring tiles join up seamlessly.
+ */
+export function blendSpec(type, edges, corners, variant, pal = seasonPalette(null)) {
+  return {
+    w: TW + 4,
+    h: TH + 3,
+    ax: HALF_W + 2,
+    ay: 1,
+    draw(ctx) {
+      const base = groundColor(type, pal);
+      const seed = type * 131 + variant * 17 + edges * 3;
+      const shapes = (depth) => {
+        ctx.beginPath();
+        for (let side = 0; side < 4; side++) if (edges & (1 << side)) fringePath(ctx, side, depth, seed + side * 7);
+        for (let c = 0; c < 4; c++) if (corners & (1 << c)) cornerPath(ctx, c, depth * 0.8);
+      };
+      // a soft outer band, then the solid fringe
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.4;
+      shapes(0.34);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      shapes(0.2);
+      ctx.fill();
+      // the neighbour's texture inside the fringe
+      ctx.save();
+      shapes(0.3);
+      ctx.clip();
+      speckle(ctx, seed, 26, [shade(base, -0.14), shade(base, 0.12), shade(base, -0.06)]);
+      if (type === Terrain.MEADOW) {
+        for (let k = 0; k < Math.round(5 * pal.flowers); k++) {
+          const [x, y] = P(hash01(seed, k, 7), hash01(seed, k, 8));
+          ctx.fillStyle = k % 2 ? '#f4e27a' : '#f7f2e4';
+          ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
+        }
+      } else if (type === Terrain.TREES) {
+        for (let k = 0; k < 8; k++) {
+          const [x, y] = P(hash01(seed, k, 71), hash01(seed, k, 72));
+          ctx.fillStyle = pal.leaves[k % pal.leaves.length];
+          ctx.fillRect(x - 0.9, y - 0.5, 1.8, 1);
+        }
+      }
+      ctx.restore();
+    },
+  };
+}
+
+/** Add the fringe polygon along one side (0=N 1=E 2=S 3=W) to the current path. */
+function fringePath(ctx, side, depth, seed) {
+  const N = 10;
+  const amp = 0.3 + hash01(seed, 1) * 0.35;
+  const freq = 1 + Math.floor(hash01(seed, 2) * 2);
+  const ph = hash01(seed, 3) * Math.PI * 2;
+  // Depth along the edge: 0.8*depth at both ends, wavier in the middle.
+  const d = (s) => depth * (0.8 + amp * Math.sin(Math.PI * s) * (0.6 + 0.4 * Math.sin(s * Math.PI * 2 * freq + ph)));
+  const at = (s, dd) => {
+    switch (side) {
+      case 0: return P(s, dd); // N edge v=0, inward +v
+      case 1: return P(1 - dd, s); // E edge u=1, inward -u
+      case 2: return P(s, 1 - dd); // S edge v=1, inward -v
+      default: return P(dd, s); // W edge u=0, inward +u
+    }
+  };
+  const a = at(0, 0);
+  ctx.moveTo(a[0], a[1]);
+  const b = at(1, 0);
+  ctx.lineTo(b[0], b[1]);
+  for (let k = N; k >= 0; k--) {
+    const p = at(k / N, d(k / N));
+    ctx.lineTo(p[0], p[1]);
+  }
+  ctx.closePath();
+}
+
+/** Add a rounded blob in one corner (0=NE 1=SE 2=SW 3=NW) to the current path. */
+function cornerPath(ctx, c, r) {
+  // corner point, then the two edge directions away from it (in u, v)
+  const C = [[1, 0], [1, 1], [0, 1], [0, 0]][c];
+  const A = [[-1, 0], [-1, 0], [1, 0], [1, 0]][c];
+  const B = [[0, 1], [0, -1], [0, -1], [0, 1]][c];
+  const p0 = P(C[0], C[1]);
+  const p1 = P(C[0] + A[0] * r, C[1] + A[1] * r);
+  const q = P(C[0] + (A[0] + B[0]) * r * 0.85, C[1] + (A[1] + B[1]) * r * 0.85);
+  const p2 = P(C[0] + B[0] * r, C[1] + B[1] * r);
+  ctx.moveTo(p0[0], p0[1]);
+  ctx.lineTo(p1[0], p1[1]);
+  ctx.quadraticCurveTo(q[0], q[1], p2[0], p2[1]);
+  ctx.closePath();
 }
 
 /** Water tile with animated ripples; frame 0..3 */
@@ -285,7 +503,7 @@ export function rubbleSpec(variant) {
  * cycles through these cached frames with a phase that rolls across the map,
  * so forests ripple in gusts without redrawing any art per frame.
  */
-export function treesSpec(variant, sway = 0) {
+export function treesSpec(variant, sway = 0, pal = seasonPalette(null)) {
   return {
     w: TW + 8,
     h: TH + 34,
@@ -298,14 +516,15 @@ export function treesSpec(variant, sway = 0) {
         [0.7, 0.55],
         [0.3, 0.72],
       ];
-      const greens = ['#3e7a34', '#4b8a3a', '#356b2e', '#58914a'];
       const drawList = spots.slice(0, n).sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
       drawList.forEach(([u, v], k) => {
         const size = 0.75 + hash01(variant, k, 31) * 0.4;
         // Neighbouring trees on a tile do not move in perfect lockstep.
         const s = sway * (0.8 + hash01(variant, k, 33) * 0.4);
-        if (hash01(variant, k, 32) < 0.28) cypress(ctx, u, v, size, '#2f5a2a', s);
-        else tree(ctx, u, v, size, greens[(variant + k) % greens.length], '#6b4a2a', variant + k, s);
+        const leaves = pal.leaves[(variant + k) % pal.leaves.length];
+        if (hash01(variant, k, 32) < 0.28) cypress(ctx, u, v, size, '#2f5a2a', s); // evergreen
+        else if (hash01(variant, k, 34) < pal.bare) bareTree(ctx, u, v, size, variant + k, s, leaves);
+        else tree(ctx, u, v, size, leaves, '#6b4a2a', variant + k, s, hash01(variant, k, 35) < pal.blossom ? 1 : 0);
       });
     },
   };

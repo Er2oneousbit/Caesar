@@ -14,6 +14,10 @@
                 military=1 (garrison + raid)  raiders=12  recruitDays=70  focus=x,y
                 trade=1 (dock + sea routes; waits for a docked ship)  shipState=toDock
                 select=well (click the nearest well)  place=fountain (placement preview)
+                time=0.8 (time of day 0..1: 0.3 noon, 0.67 sunset, 0.8 night)
+                month=9 (season: 0 Ianuarius .. 11 December)  weather=rain|storm|snow|cloudy
+                look=market (center on the nearest building of that type or kind)
+                busy=1 (stock markets and book shows, to see shoppers and crowds)
 -->
 <canvas id="c"></canvas>
 <script type="module">
@@ -85,6 +89,23 @@
     }
     if (best) { selected = best.b; focus = { x: best.b.x, y: best.b.y }; }
   }
+  // busy=1: stock every market and book shows at every venue (to see shoppers and crowds).
+  if (q.get('busy')) {
+    for (const b of game.buildings.values()) {
+      if (b.def.kind === 'market' && b.stock) for (const key in b.stock) b.stock[key] = 200;
+      if (b.shows) for (const key in b.shows) b.shows[key] = 20;
+    }
+  }
+  // look=<type or kind>: center on the nearest such building (no selection outline).
+  if (q.get('look') && focus) {
+    let best = null;
+    for (const b of game.buildings.values()) {
+      if (b.type !== q.get('look') && b.def.kind !== q.get('look')) continue;
+      const d = Math.hypot(b.x - focus.x, b.y - focus.y);
+      if (!best || d < best.d) best = { b, d };
+    }
+    if (best) focus = { x: best.b.x + Math.floor(best.b.size / 2), y: best.b.y + Math.floor(best.b.size / 2) };
+  }
   // place=<tool>: preview placing that building on the nearest valid tile.
   let placing = null;
   if (q.get('place') && focus) {
@@ -110,6 +131,12 @@
     c.y = (focus.x + focus.y) * 16 - 40;
   }
   if (placing) { r.plan = placing; r.tool = placing.tool; }
+  // The world around the city: fixed time of day, season and weather.
+  if (q.get('month') !== null) game.time.month = Number(q.get('month'));
+  r.fixedTime = q.get('time') !== null ? Number(q.get('time')) : 0.3;
+  if (q.get('weather')) r.weather.force(q.get('weather'), true);
+  else r.weather.force('clear', true);
+  r.weather.update = () => {}; // keep it as set for the picture
   r.render(0, 0.016);
   r.render(0.5, 0.016);
   window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, focus, coverage: r.stats.coverage, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };

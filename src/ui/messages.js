@@ -24,7 +24,7 @@ export class Messages {
       class: `toast ${m.level || 'info'}`,
       title: m.x !== undefined ? 'Click to go there' : '',
       onclick: () => {
-        if (m.x !== undefined) this.app.renderer.camera.centerOnTile(m.x, m.y);
+        if (m.x !== undefined) this.app.renderer.camera.glideToTile(m.x, m.y);
         toast.remove();
       },
     }, h('span', { class: 'date' }, m.date || ''), m.text);

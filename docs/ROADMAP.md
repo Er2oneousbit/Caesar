@@ -2,6 +2,17 @@
 
 What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order.
 
+## Done (v0.3)
+
+* **Day and night**: sky tint by time of day, lit windows (positions recorded from the art), torches, lanterns on walkers, glowing fires; a setting
+* **Seasons**: monthly ground and tree palettes (spring blossoms, autumn leaves, bare winter trees); a setting
+* **Weather**: clear, cloudy, rain, thunderstorms with thunder, winter snow; a setting; reduced-motion safe
+* **Animation**: fluttering flags and banners, shoppers at stocked markets, crowds during shows, forge sparks, altar fires
+* **Smooth camera**: eased zoom toward the cursor, drag fling, glides to messages and landmarks, trackpad-friendly wheel
+* **Terrain**: 8 ground variants with small details, soft blended edges between grass, meadow, forest floor, sand and rock
+* **Art detail**: wall texture and contact shadows, tiled roofs with ridges and eave shadows, 8 looks per home (shutters, flower boxes, chimneys, jars, fences, washing lines)
+* Art sheet page for reviewing every home look (`tests/e2e/artsheet.html`); 54 headless tests, 36-check browser smoke test
+
 ## Done (v0.2)
 
 * **Military**: barracks, legion/archer/cavalry forts, watchtowers, walls and gates; raids with warnings, scaling warbands, siege, retreat and plunder; deploy/recall orders; Military advisor and raid alert
@@ -51,9 +62,10 @@ What exists, what the classic game had that Colonia does not (yet), and ideas. R
 
 * Background music (procedural, like the sound effects).
 * Charts in the advisors (population, treasury and mood history are already recorded in `city.history`).
-* More building animation: waving banners, turning mill wheels, crowds at venues and markets.
-* Day/night cycle with lit windows (optional), smooth animated zoom, blended terrain edges.
+* More building animation: turning mill wheels, laundry flapping, working farmers and fishermen.
+* Optional sprite packs: load PNG art (hand-drawn or AI-assisted) over the procedural sprites, keyed like the sprite cache, with the procedural art as the fallback. The art sheet (`tests/e2e/artsheet.html`) is the reference for sizes and anchors.
+* Snow settling on roofs and fields during long winter snowfalls.
 * Keyboard remapping and a colorblind-friendly overlay palette.
-* Performance: cache static terrain into chunk canvases for very zoomed-out views of 128x128 maps.
+* Performance: cache static terrain into chunk canvases for very zoomed-out views of large maps (fewer draw calls; see ARCHITECTURE.md, *Draw calls*).
 
 Made with ❤️ from your friendly hacker - er2oneousbit

@@ -4,9 +4,14 @@
  * Procedural art for every building and house tier, built from the simple
  * primitives in draw.js (boxes, roofs, columns, windows). All original.
  *
- * buildingSpec(key, size, variant, state) returns a sprite spec for
+ * buildingSpec(key, size, variant, state, live) returns a sprite spec for
  * sprites.js. `state` carries art-relevant status: house tier, farm growth
  * stage, reservoir filled, etc. It is part of the cache key.
+ *
+ * Flags: FLAG_SPECS lists every flag and banner. In the game view (`live`)
+ * the sprite keeps only the poles and the renderer draws the cloth every
+ * frame so it flutters (liveArt.js); icons and other still pictures get a
+ * painted cloth.
  *
  * Painter's order inside each drawing: back (small u+v) first, front last.
  * ----------------------------------------------------------------------------
@@ -97,7 +102,7 @@ function heightFor(key, size) {
  * @param {number} variant 0..3
  * @param {*} state      extra art state (tier, stage, filled...)
  */
-export function buildingSpec(key, S, variant = 0, state = 0) {
+export function buildingSpec(key, S, variant = 0, state = 0, live = false) {
   const extra = heightFor(key, S);
   return {
     w: S * CONFIG.TILE_W,
@@ -106,16 +111,133 @@ export function buildingSpec(key, S, variant = 0, state = 0) {
     ay: extra,
     draw(ctx) {
       const fn = ART[key] || (key.startsWith('temple_') ? templeArt : key.startsWith('farm_') ? farmArt : key.endsWith('_ws') ? workshopArt : genericArt);
-      fn(ctx, S, variant, state, key);
+      liveFlags = live;
+      try {
+        fn(ctx, S, variant, state, key);
+      } finally {
+        liveFlags = false;
+      }
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Flags and banners
+// ---------------------------------------------------------------------------
+
+/** True while drawing a sprite for the game view: flags get poles only. */
+let liveFlags = false;
+
+/**
+ * Every flag, by building type. Pole foot at footprint (u, v, z) - or at
+ * local pixels (x, y) - pole height h, cloth width w and height ch, color,
+ * swallowtail or plain. Functions receive the footprint size S.
+ */
+const FLAG_SPECS = {
+  prefecture: () => [{ u: 0.86, v: 0.3, z: 16, h: 12, w: 6, ch: 5, color: '#c0392b' }],
+  forum: () => [{ u: 1.35, v: 1.3, z: 4, h: 12, w: 5.5, ch: 4, color: '#a8322b' }],
+  senate: (S) => [
+    { u: 0.4, v: S - 0.4, z: 36, h: 14, w: 6.5, ch: 4.5, color: '#6b3fa0' },
+    { u: S - 0.4, v: 0.4, z: 36, h: 14, w: 6.5, ch: 4.5, color: '#6b3fa0' },
+  ],
+  colosseum: (S) => [-40, 0, 40].map((dx) => ({ x: dx, y: (S * TH) / 2 - 48, h: 12, w: 6.5, ch: 4, color: '#a8322b' })),
+  barracks: (S) => [{ u: S - 0.35, v: 0.3, z: 26, h: 14, w: 9.5, ch: 5.2, color: '#a8322b', swallow: true }],
+  fort: (S, key) => [{ u: S * 0.5, v: S * 0.5, z: 0, h: 26, w: 9.5, ch: 5.2, color: UNIT_TYPES[BUILDINGS[key]?.unit]?.color || '#a8322b', swallow: true }],
+};
+
+const flagCache = new Map();
+
+/**
+ * Flags of a building type: pole TOP in local px, cloth size and style.
+ * @returns {Array<{x:number,y:number,h:number,w:number,ch:number,color:string,swallow:boolean}>}
+ */
+export function flagsFor(key, S) {
+  const ck = `${key}:${S}`;
+  let list = flagCache.get(ck);
+  if (list) return list;
+  const fn = FLAG_SPECS[key] || (key.startsWith('fort_') ? FLAG_SPECS.fort : null);
+  list = (fn ? fn(S, key) : []).map((f) => {
+    const [x, y] = f.u !== undefined ? P(f.u, f.v, f.z) : [f.x, f.y];
+    return { x, y: y - f.h, h: f.h, w: f.w, ch: f.ch, color: f.color, swallow: !!f.swallow };
+  });
+  flagCache.set(ck, list);
+  return list;
+}
+
+/** Outline of a flag's cloth hanging still from the pole top (x, y). */
+function clothPath(ctx, x, y, f) {
+  ctx.beginPath();
+  ctx.moveTo(x + 0.6, y);
+  ctx.lineTo(x + f.w, y);
+  if (f.swallow) ctx.lineTo(x + f.w * 0.8, y + f.ch / 2);
+  ctx.lineTo(x + f.w, y + f.ch);
+  ctx.lineTo(x + 0.6, y + f.ch);
+  ctx.closePath();
+}
+
+/** Draw a building's flag poles (and, for still pictures, their cloth). */
+function flagPoles(ctx, key, S) {
+  for (const f of flagsFor(key, S)) {
+    ctx.fillStyle = COL.woodDark;
+    ctx.fillRect(f.x - 0.6, f.y, 1.2, f.h);
+    if (f.swallow) {
+      ctx.fillStyle = COL.gold;
+      ctx.fillRect(f.x - 1.3, f.y - 2.4, 2.6, 2.4); // eagle-ish finial
+    }
+    if (!liveFlags) {
+      ctx.fillStyle = f.color;
+      clothPath(ctx, f.x, f.y, f);
+      ctx.fill();
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Houses
 // ---------------------------------------------------------------------------
 
+/**
+ * House looks. Homes get 8 variants (the renderer passes id % 8): the low two
+ * bits pick colors from these palettes, the third bit (`alt`) swaps in
+ * extra details such as shutters, flower boxes, chimneys, jars and fences.
+ */
 const WALLS = [COL.cream, COL.white, '#e6d2b0', '#efe0c9'];
+const WALLS_ALT = ['#ead3bd', '#dccdb4', '#f1e6cf', '#e0c9a2'];
+const ROOFS = [COL.terra, COL.terraDark, '#c26a3e', '#a45b44'];
+const DOORS = ['#4a3222', '#5a2a1f', '#2f4a5a', '#3d5a3a'];
+const SHUTTERS = ['#4f7a52', '#4d6f8f', '#8a5a33', '#7a4f6a'];
+
+/** Wall color for a home variant (0..7). */
+const houseWall = (variant) => ((variant >> 2) & 1 ? WALLS_ALT : WALLS)[variant % 4];
+
+/** A clay storage jar (amphora) standing at (u, v). */
+function jar(ctx, u, v, color = '#b8683f') {
+  const [x, y] = P(u, v);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x - 1, y - 0.5, 3.5, 1);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(x, y - 3, 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x - 0.9, y - 7, 1.8, 1.6);
+  ctx.fillStyle = shade(color, 0.25);
+  ctx.fillRect(x - 1.2, y - 4.5, 0.8, 2);
+}
+
+/** A little wooden fence along the front edges of a plot (from u0/v0 to 1). */
+function fence(ctx, u0, v0, color = COL.wood) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.7;
+  const a = P(u0, 0.95, 3);
+  const b = P(0.95, 0.95, 3);
+  const c = P(0.95, v0, 3);
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.stroke();
+  ctx.fillStyle = shade(color, -0.2);
+  for (let k = 0; k <= 4; k++) {
+    const [px, py] = P(u0 + ((0.95 - u0) * k) / 4, 0.95);
+    ctx.fillRect(px - 0.4, py - 3.6, 0.8, 3.6);
+    const [qx, qy] = P(0.95, v0 + ((0.95 - v0) * k) / 4);
+    ctx.fillRect(qx - 0.4, qy - 3.6, 0.8, 3.6);
+  }
+}
 
 function houseArt(ctx, S, variant, tier) {
   const native = tier === 0 ? 1 : HOUSE_TIERS[tier].size;
@@ -128,7 +250,7 @@ function houseArt(ctx, S, variant, tier) {
         const [x, y] = P(i, j);
         ctx.save();
         ctx.translate(x, y);
-        smallHouse(ctx, (variant + i * 2 + j) % 4, tier);
+        smallHouse(ctx, (variant + i * 3 + j * 5) % 8, tier);
         ctx.restore();
       }
     }
@@ -140,7 +262,9 @@ function houseArt(ctx, S, variant, tier) {
 }
 
 function smallHouse(ctx, variant, tier) {
-  const wall = WALLS[variant % 4];
+  const wall = houseWall(variant);
+  const alt = (variant >> 2) & 1; // second look: extra details
+  const pal = variant % 4;
   switch (tier) {
     case 0: {
       quad(ctx, 0.12, 0.12, 0.88, 0.88, 0, '#b8a071');
@@ -162,7 +286,7 @@ function smallHouse(ctx, variant, tier) {
     }
     case 1: {
       quad(ctx, 0.1, 0.1, 0.9, 0.9, 0, '#a7925f');
-      const cloth = ['#e9dcc0', '#d9c7a3', '#efe6d2', '#cdb894'][variant];
+      const cloth = ['#e9dcc0', '#d9c7a3', '#efe6d2', '#cdb894'][variant % 4];
       gableRoof(ctx, 0.18, 0.22, 0.58, 0.46, 0, 13, cloth, 'u', 0);
       // entrance flap
       poly(ctx, [P(0.76, 0.35), P(0.76, 0.55), P(0.76, 0.45, 9)], '#4b3a28');
@@ -177,49 +301,66 @@ function smallHouse(ctx, variant, tier) {
     }
     case 2: {
       quad(ctx, 0.1, 0.1, 0.9, 0.9, 0, '#a08a5c');
-      box(ctx, 0.2, 0.22, 0.58, 0.5, 0, 9, COL.wood);
+      box(ctx, 0.2, 0.22, 0.58, 0.5, 0, 9, alt ? '#7d5431' : COL.wood);
       // mono-pitch plank roof
-      poly(ctx, [P(0.16, 0.18, 12), P(0.82, 0.18, 12), P(0.82, 0.76, 8), P(0.16, 0.76, 8)], '#9b7446', '#5a3c22', 0.6);
+      poly(ctx, [P(0.16, 0.18, 12), P(0.82, 0.18, 12), P(0.82, 0.76, 8), P(0.16, 0.76, 8)], alt ? '#8a6a44' : '#9b7446', '#5a3c22', 0.6);
       door(ctx, 'left', 0.2, 0.22, 0.78, 0.72, 0, 0.35, '#3d2a1a', 0.14, 6);
-      // wood pile
-      const [wx, wy] = P(0.82, 0.84);
-      ctx.fillStyle = '#6e4a2a';
-      ctx.fillRect(wx - 3, wy - 3, 6, 3);
+      if (alt) {
+        fence(ctx, 0.35, 0.3, '#8a6a44');
+      } else {
+        // wood pile
+        const [wx, wy] = P(0.82, 0.84);
+        ctx.fillStyle = '#6e4a2a';
+        ctx.fillRect(wx - 3, wy - 3, 6, 3);
+        ctx.fillStyle = '#8a6040';
+        ctx.fillRect(wx - 3, wy - 3, 6, 0.8);
+      }
       return;
     }
     case 3: {
       quad(ctx, 0.08, 0.08, 0.92, 0.92, 0, '#a59067');
-      box(ctx, 0.18, 0.2, 0.64, 0.6, 0, 10, COL.mud);
-      hipRoof(ctx, 0.18, 0.2, 0.64, 0.6, 10, 9, COL.thatch);
-      door(ctx, 'left', 0.18, 0.2, 0.82, 0.8, 0, 0.5, '#4a3222', 0.14, 6);
+      box(ctx, 0.18, 0.2, 0.64, 0.6, 0, 10, alt ? '#bfa276' : COL.mud);
+      hipRoof(ctx, 0.18, 0.2, 0.64, 0.6, 10, 9, alt ? '#b8954c' : COL.thatch);
+      door(ctx, 'left', 0.18, 0.2, 0.82, 0.8, 0, 0.5, DOORS[pal], 0.14, 6);
+      if (alt) {
+        // a small vegetable patch
+        quad(ctx, 0.62, 0.84, 0.9, 0.95, 0, '#6d5638');
+        for (let k = 0; k < 3; k++) { const [x, y] = P(0.66 + k * 0.1, 0.9); ctx.fillStyle = '#5f9a48'; ctx.fillRect(x - 1, y - 1.6, 2, 1.6); }
+      } else {
+        jar(ctx, 0.84, 0.62);
+      }
       return;
     }
     case 4: {
       quad(ctx, 0.06, 0.06, 0.94, 0.94, 0, '#b3a27a');
       box(ctx, 0.16, 0.16, 0.68, 0.66, 0, 12, wall);
-      gableRoof(ctx, 0.16, 0.16, 0.68, 0.66, 12, 9, variant % 2 ? COL.terra : COL.terraDark, variant % 2 ? 'u' : 'v');
-      door(ctx, 'left', 0.16, 0.16, 0.84, 0.82, 0, 0.3);
-      windows(ctx, 'right', 0.16, 0.16, 0.84, 0.82, 0, 1, 2, '#4a3a2a', { z: 5, h: 3.5 });
+      gableRoof(ctx, 0.16, 0.16, 0.68, 0.66, 12, 9, ROOFS[pal], variant % 2 ? 'u' : 'v');
+      if (alt) box(ctx, 0.62, 0.3, 0.1, 0.1, 16, 8, COL.stoneDark); // chimney, rising out of the roof
+      door(ctx, 'left', 0.16, 0.16, 0.84, 0.82, 0, 0.3, DOORS[pal]);
+      windows(ctx, 'right', 0.16, 0.16, 0.84, 0.82, 0, 1, 2, '#4a3a2a', { z: 5, h: 3.5, shutters: alt ? SHUTTERS[pal] : null });
+      if (!alt) jar(ctx, 0.9, 0.55, '#c7643e');
       return;
     }
     case 5: {
       quad(ctx, 0.05, 0.05, 0.95, 0.95, 0, COL.paving);
       box(ctx, 0.12, 0.12, 0.76, 0.74, 0, 21, wall);
-      hipRoof(ctx, 0.12, 0.12, 0.76, 0.74, 21, 9, COL.terra);
-      windows(ctx, 'left', 0.12, 0.12, 0.88, 0.86, 0, 2, 3, '#4a3a2a', { z: 5, h: 4, gap: 9 });
-      windows(ctx, 'right', 0.12, 0.12, 0.88, 0.86, 0, 2, 2, '#4a3a2a', { z: 5, h: 4, gap: 9 });
+      hipRoof(ctx, 0.12, 0.12, 0.76, 0.74, 21, 9, ROOFS[alt ? (pal + 2) % 4 : 0]);
+      windows(ctx, 'left', 0.12, 0.12, 0.88, 0.86, 0, 2, 3, '#4a3a2a', { z: 5, h: 4, gap: 9, flowers: alt === 1 });
+      windows(ctx, 'right', 0.12, 0.12, 0.88, 0.86, 0, 2, 2, '#4a3a2a', { z: 5, h: 4, gap: 9, shutters: alt ? null : SHUTTERS[pal] });
       return;
     }
     default: {
       // Domus: L-shaped house around a tiny courtyard
       quad(ctx, 0.04, 0.04, 0.96, 0.96, 0, COL.paving);
       box(ctx, 0.08, 0.08, 0.84, 0.36, 0, 17, wall);
-      gableRoof(ctx, 0.08, 0.08, 0.84, 0.36, 17, 8, COL.terra, 'u');
-      tree(ctx, 0.32, 0.72, 0.55, '#4f8a3c', '#6b4a2a', variant);
+      gableRoof(ctx, 0.08, 0.08, 0.84, 0.36, 17, 8, ROOFS[pal], 'u');
+      if (alt) cypress(ctx, 0.3, 0.72, 0.6);
+      else tree(ctx, 0.32, 0.72, 0.55, '#4f8a3c', '#6b4a2a', variant);
       box(ctx, 0.58, 0.44, 0.34, 0.48, 0, 14, shade(wall, -0.04));
-      gableRoof(ctx, 0.58, 0.44, 0.34, 0.48, 14, 7, COL.terraDark, 'v');
-      windows(ctx, 'right', 0.58, 0.44, 0.92, 0.92, 0, 1, 2, '#4a3a2a', { z: 5, h: 4 });
-      door(ctx, 'left', 0.58, 0.44, 0.92, 0.92, 0, 0.5);
+      gableRoof(ctx, 0.58, 0.44, 0.34, 0.48, 14, 7, ROOFS[(pal + 1) % 4], 'v');
+      windows(ctx, 'right', 0.58, 0.44, 0.92, 0.92, 0, 1, 2, '#4a3a2a', { z: 5, h: 4, shutters: alt ? SHUTTERS[pal] : null, flowers: !alt });
+      door(ctx, 'left', 0.58, 0.44, 0.92, 0.92, 0, 0.5, DOORS[pal]);
+      if (alt) jar(ctx, 0.5, 0.9, '#b8683f');
     }
   }
 }
@@ -236,8 +377,26 @@ function insulaArt(ctx, S, variant, tier) {
   // roof: shallow tiled hip roof
   hipRoof(ctx, a, a, b - a, b - a, h, 7, COL.terra, 0.05);
   const cols = Math.round(S * 3);
-  windows(ctx, 'left', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10 });
-  windows(ctx, 'right', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10 });
+  const alt = (variant >> 2) & 1;
+  windows(ctx, 'left', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10, shutters: alt ? SHUTTERS[variant % 4] : null });
+  windows(ctx, 'right', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10, flowers: alt === 0 && tier >= 8 });
+  if (alt) {
+    // washing hung out on a line across the right face
+    const z = 10 * (floors - 1) + 9;
+    const p = P(b + 0.08, a + 0.15, z);
+    const q = P(b + 0.08, b - 0.15, z);
+    ctx.strokeStyle = '#6b5a48';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+    const cloth = ['#f2eee6', '#b8573a', '#5d7fa3', '#e8d7a0'];
+    for (let k = 0; k < 4; k++) {
+      const t = 0.18 + k * 0.2;
+      const x = p[0] + (q[0] - p[0]) * t;
+      const y = p[1] + (q[1] - p[1]) * t;
+      ctx.fillStyle = cloth[(k + variant) % 4];
+      ctx.fillRect(x - 1.2, y, 2.4, 2.6 + (k % 2));
+    }
+  }
   // ground floor shops with awnings
   const awn = ['#b8573a', '#5d7fa3', '#a38b3d', '#7a9c5a'];
   for (let k = 0; k < cols; k++) {
@@ -270,8 +429,9 @@ function insulaArt(ctx, S, variant, tier) {
 }
 
 function villaArt(ctx, S, variant, tier) {
-  const wall = tier === 12 ? COL.marble : WALLS[variant % 4];
-  const roof = tier === 12 ? '#a8513a' : COL.terra;
+  const wall = tier === 12 ? COL.marble : houseWall(variant);
+  const roof = tier === 12 ? '#a8513a' : ROOFS[variant % 2 ? 2 : 0];
+  const alt = (variant >> 2) & 1;
   quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#7fa956');
   // garden paths
   quad(ctx, S * 0.52, S * 0.52, S * 0.6, S - 0.1, 0, COL.paving);
@@ -288,8 +448,20 @@ function villaArt(ctx, S, variant, tier) {
   quad(ctx, S * 0.62 - pool / 2 + 0.06, S * 0.5 - pool / 2 + 0.26, S * 0.62 + pool / 2 - 0.06, S * 0.5 + pool / 2 + 0.14, 0.5, COL.water);
   // peristyle columns along the courtyard edge
   colonnade(ctx, 1.05, 1.02, S - 0.15, 1.02, tier >= 11 ? 6 : 4, 0, 14, COL.marble, 1.6);
-  cypress(ctx, S - 0.3, S - 0.35, 0.8);
-  tree(ctx, 1.25, S - 0.3, 0.7, '#4f8a3c', '#6b4a2a', variant);
+  if (alt) {
+    // clipped hedges along the front and a statue in the garden
+    box(ctx, 1.05, S - 0.2, S - 1.2, 0.12, 0, 4, '#4f7a3a', { top: '#5f8f46' });
+    const [sx, sy] = P(S - 0.5, S - 0.55);
+    ctx.fillStyle = COL.stone;
+    ctx.fillRect(sx - 2.5, sy - 3, 5, 3);
+    ctx.fillStyle = '#ece6d8';
+    ctx.fillRect(sx - 1.2, sy - 10, 2.4, 7);
+    ctx.beginPath(); ctx.arc(sx, sy - 11, 1.6, 0, Math.PI * 2); ctx.fill();
+    cypress(ctx, 1.2, S - 0.35, 0.75);
+  } else {
+    cypress(ctx, S - 0.3, S - 0.35, 0.8);
+    tree(ctx, 1.25, S - 0.3, 0.7, '#4f8a3c', '#6b4a2a', variant);
+  }
   if (tier === 12) {
     // dome + golden accents on the main wing
     const [x, y] = P(S * 0.5, 0.55, wingH + 8);
@@ -624,16 +796,9 @@ function arenaArt(ctx, S, levels, rxF, ryF) {
 }
 
 function amphitheaterArt(ctx, S) { arenaArt(ctx, S, 2, 0.9, 0.9); }
-function colosseumArt(ctx, S) {
+function colosseumArt(ctx, S, variant, state, key) {
   arenaArt(ctx, S, 3, 0.92, 0.92);
-  const [cx, cy] = P(S / 2, S / 2);
-  // flags on top
-  for (const dx of [-40, 0, 40]) {
-    ctx.fillStyle = COL.woodDark;
-    ctx.fillRect(cx + dx, cy - 60, 1, 12);
-    ctx.fillStyle = '#a8322b';
-    ctx.fillRect(cx + dx + 1, cy - 60, 6, 4);
-  }
+  flagPoles(ctx, key, S); // flags on top
 }
 
 function actorTroupeArt(ctx, S) {
@@ -706,12 +871,9 @@ function forumArt(ctx, S) {
   gableRoof(ctx, 0.1, 0.1, S - 0.2, 0.45, 18, 7, COL.terra, 'u');
   colonnade(ctx, 0.2, 0.62, S - 0.2, 0.62, 5, 0, 15, COL.marble, 1.4);
   colonnade(ctx, 0.3, 0.8, 0.3, S - 0.2, 4, 0, 15, COL.marble, 1.4);
-  // speaker's platform
+  // speaker's platform with a flag
   box(ctx, 1.1, 1.1, 0.5, 0.4, 0, 4, COL.stone);
-  const [x, y] = P(1.35, 1.3, 4);
-  ctx.fillStyle = '#a8322b';
-  ctx.fillRect(x - 0.5, y - 12, 1, 12);
-  ctx.fillRect(x + 0.5, y - 12, 5, 4);
+  flagPoles(ctx, 'forum', S);
 }
 
 function senateArt(ctx, S) {
@@ -732,6 +894,7 @@ function senateArt(ctx, S) {
   ctx.fillRect(x - 1.5, y - 20, 3, 6);
   // steps
   box(ctx, 0.9, S - 0.3, S - 1.8, 0.22, 0, 3, shade(COL.stone, 0.15));
+  flagPoles(ctx, 'senate', S); // imperial purple on the roof corners
 }
 
 function gardenArt(ctx, S, variant) {
@@ -808,11 +971,7 @@ function prefectureArt(ctx) {
   gableRoof(ctx, 0.14, 0.14, 0.72, 0.62, 16, 8, '#a8322b', 'u');
   door(ctx, 'left', 0.14, 0.14, 0.86, 0.76, 0, 0.5, '#5a2a1f', 0.2, 8);
   // red banner + water barrel
-  const [x, y] = P(0.86, 0.3, 16);
-  ctx.fillStyle = COL.woodDark;
-  ctx.fillRect(x, y - 12, 1, 12);
-  ctx.fillStyle = '#c0392b';
-  ctx.fillRect(x + 1, y - 12, 6, 5);
+  flagPoles(ctx, 'prefecture', 1);
   const [bx, by] = P(0.3, 0.9);
   ctx.fillStyle = COL.wood;
   ctx.fillRect(bx - 3, by - 6, 6, 6);
@@ -1159,24 +1318,6 @@ function genericArt(ctx, S) {
 // Military
 // ---------------------------------------------------------------------------
 
-/** Pole with a swallowtail banner; (u, v, z) is the foot of the pole. */
-function banner(ctx, u, v, z, color, h = 18) {
-  const [x, y] = P(u, v, z);
-  ctx.fillStyle = COL.woodDark;
-  ctx.fillRect(x - 0.6, y - h, 1.2, h);
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x + 0.6, y - h);
-  ctx.lineTo(x + 9.5, y - h);
-  ctx.lineTo(x + 7.6, y - h + 2.6);
-  ctx.lineTo(x + 9.5, y - h + 5.2);
-  ctx.lineTo(x + 0.6, y - h + 5.2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = COL.gold;
-  ctx.fillRect(x - 1.3, y - h - 2.4, 2.6, 2.4); // eagle-ish finial
-}
-
 /** Small ground tent (a gable roof sitting on the earth). */
 function tent(ctx, u, v, color = '#e3d7bb') {
   gableRoof(ctx, u, v, 0.42, 0.34, 0, 8, color, 'u', 0);
@@ -1210,7 +1351,7 @@ function barracksArt(ctx, S) {
   ctx.beginPath();
   for (let k = 0; k < 4; k++) { ctx.moveTo(rx - 4.5 + k * 3, ry); ctx.lineTo(rx - 4.5 + k * 3, ry - 15); }
   ctx.stroke();
-  banner(ctx, S - 0.35, 0.3, 26, '#a8322b', 14);
+  flagPoles(ctx, 'barracks', S);
 }
 
 /**
@@ -1261,7 +1402,7 @@ function fortArt(ctx, S, variant, state, key) {
       tent(ctx, 1.94, 1.3);
     }
   }
-  banner(ctx, S * 0.5, S * 0.5, 0, color, 26);
+  flagPoles(ctx, key, S); // the fort's standard in its soldiers' color
   // front walls: right face (+u), then the front-left face (+v) with the gate
   box(ctx, S - 0.1 - T, TW, T, S - 2 * TW, 0, H, wall);
   const g0 = S / 2 - 0.32;

@@ -64,6 +64,8 @@ function content(tab) {
         h('p', {}, 'Most services are delivered by walkers who wander the streets. A home only counts as having a temple, market or prefect if the right walker passed within 2 tiles recently. Short loops of road around your blocks work better than long dead ends.'),
         h('h4', {}, 'Workers'),
         h('p', {}, `About ${Math.round(CONFIG.WORKFORCE_RATIO * 100)}% of ordinary citizens work. A building can only hire if people live within ${CONFIG.LABOR_RANGE} tiles of it along the roads. If there are more jobs than workers, set priorities in the Labor advisor.`),
+        h('h4', {}, 'Day, night, seasons and weather'),
+        h('p', {}, 'The sun sets every few minutes of game time and the city lights its lamps; the grass and trees follow the seasons; rain, storms and winter snow come and go. All of it is only for the eyes: it never changes how your city works. Switch any of it off in Settings (game menu, Esc).'),
       ];
     case 'controls':
       return h('table', { class: 'tbl' }, KEY_HELP.map(([k, v]) => h('tr', {}, h('td', {}, h('b', {}, k)), h('td', {}, v))),

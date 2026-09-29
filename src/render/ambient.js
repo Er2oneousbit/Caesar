@@ -9,7 +9,9 @@
  *
  * Nothing here touches the simulation, so it uses Math.random() freely.
  * The renderer skips this layer when ambient effects are switched off
- * (Settings) or the player's system asks for reduced motion.
+ * (Settings) or the player's system asks for reduced motion. It also sets
+ * `shade` (cloud shadows need sunshine: none at night or under overcast)
+ * and `birdsOk` (no new flocks at night or in rain and snow).
  * ----------------------------------------------------------------------------
  */
 
@@ -23,6 +25,8 @@ export class Ambient {
     this.flocks = [];
     this.nextFlock = 6 + Math.random() * 10; // seconds until the first flock
     this.bounds = null;
+    this.shade = 1; // 0..1 strength of cloud shadows
+    this.birdsOk = true; // may new flocks start?
   }
 
   /** Scatter clouds over a map of w x h tiles (call when a game is attached). */
@@ -61,7 +65,7 @@ export class Ambient {
     this.nextFlock -= dt;
     if (this.nextFlock <= 0) {
       this.nextFlock = 25 + Math.random() * 35;
-      this.spawnFlock();
+      if (this.birdsOk) this.spawnFlock();
     }
     for (const f of this.flocks) {
       f.x += f.vx * dt;
@@ -95,7 +99,7 @@ export class Ambient {
     this.lastView = view;
     const k = cam.scale;
     // Cloud shadows
-    for (const c of this.clouds) {
+    if (this.shade > 0.03) for (const c of this.clouds) {
       for (const p of c.puffs) {
         const wx = c.x + p.dx;
         const wy = c.y + p.dy;
@@ -104,7 +108,7 @@ export class Ambient {
         const sy = (wy - cam.y) * k;
         const r = p.r * k;
         const g = ctx.createRadialGradient(sx, sy, r * 0.15, sx, sy, r);
-        g.addColorStop(0, `rgba(18,28,48,${c.alpha})`);
+        g.addColorStop(0, `rgba(18,28,48,${(c.alpha * this.shade).toFixed(3)})`);
         g.addColorStop(1, 'rgba(18,28,48,0)');
         ctx.fillStyle = g;
         ctx.beginPath();

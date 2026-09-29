@@ -8,10 +8,13 @@
  *   left drag           pan the map (no tool) / drag roads, housing, clearing
  *   right click         cancel the current tool (or close the info panel)
  *   middle/right drag   pan the map
- *   wheel               zoom toward the cursor
+ *   wheel               zoom toward the cursor (trackpad scrolls add up
+ *                       to one zoom level per WHEEL_STEP pixels)
  * Touch:
  *   tap = click, one-finger drag = pan (or tool drag), pinch = zoom,
  *   two-finger drag = pan
+ * Letting go of a fast drag flings the map: it keeps sliding and slows down
+ * (camera.fling). Grabbing the map again stops it.
  * Keyboard shortcuts are listed in KEY_HELP (shown in the in-game Help).
  * ----------------------------------------------------------------------------
  */
@@ -21,8 +24,8 @@ import { dragMode, planAction } from '../sim/construction.js';
 
 export const KEY_HELP = [
   ['W A S D / Arrow keys', 'Scroll the map'],
-  ['Mouse wheel, + / -', 'Zoom in / out'],
-  ['Left drag (no tool)', 'Scroll the map'],
+  ['Mouse wheel, + / -', 'Zoom in / out (eases toward the cursor)'],
+  ['Left drag (no tool)', 'Scroll the map; let go while moving to fling it'],
   ['Right click', 'Cancel tool / close panel'],
   ['Space or P', 'Pause / resume'],
   ['1 2 3 4', 'Game speed 1x, 2x, 3x, 5x'],
@@ -31,7 +34,7 @@ export const KEY_HELP = [
   ['X or Delete', 'Clear land tool'],
   ['Ctrl+Z or U', 'Undo last construction'],
   ['O / Shift+O', 'Next overlay / turn overlays off'],
-  ['Home', 'Jump to the map entrance'],
+  ['Home', 'Glide to the map entrance'],
   ['F1', 'Help'],
   ['F2', 'Advisors'],
   ['F3', 'Toggle debug HUD'],
@@ -41,6 +44,8 @@ export const KEY_HELP = [
 ];
 
 const CLICK_SLOP = 6; // px of movement before a press becomes a drag
+const WHEEL_STEP = 40; // wheel delta (px) per zoom level; a mouse notch is ~100, trackpads send small steps
+const FLING_WINDOW_MS = 90; // the pointer must still be moving this recently when released to fling
 
 export class Input {
   /** @param {import('../app.js').App} app */
@@ -57,6 +62,8 @@ export class Input {
     this.mouse = { x: -1, y: -1, over: false };
     this.hover = null;
     this.planKey = '';
+    this.wheelAcc = 0; // wheel delta not yet turned into a zoom step
+    this.flick = { vx: 0, vy: 0, t: 0 }; // drag velocity (CSS px/s) for the fling on release
     this.bind();
   }
 
@@ -103,6 +110,8 @@ export class Input {
     this.canvas.setPointerCapture?.(e.pointerId);
     const p = this.localPos(e);
     this.pointers.set(e.pointerId, p);
+    this.app.renderer.camera.stopMotion(); // grabbing the map stops a fling or glide
+    this.flick = { vx: 0, vy: 0, t: e.timeStamp || performance.now() };
     if (this.pointers.size === 2) {
       // Start a pinch: abandon any press/drag.
       const [a, b] = [...this.pointers.values()];
@@ -149,7 +158,7 @@ export class Input {
       const dx = p.x - this.pan.sx;
       const dy = p.y - this.pan.sy;
       if (Math.abs(dx) + Math.abs(dy) > 2) this.pan.moved = true;
-      cam.panScreen(dx, dy);
+      this.dragPan(dx, dy, e);
       this.pan.sx = p.x;
       this.pan.sy = p.y;
       this.canvas.style.cursor = 'grabbing';
@@ -158,7 +167,7 @@ export class Input {
     if (this.press && this.press.id === e.pointerId) {
       if (!this.press.moved && Math.hypot(p.x - this.press.sx, p.y - this.press.sy) > CLICK_SLOP) this.press.moved = true;
       if (this.press.moved && !this.tool) {
-        cam.panScreen(p.x - this.press.lx, p.y - this.press.ly);
+        this.dragPan(p.x - this.press.lx, p.y - this.press.ly, e);
         this.canvas.style.cursor = 'grabbing';
       }
       this.press.lx = p.x;
@@ -184,6 +193,7 @@ export class Input {
       const wasClick = !this.pan.moved;
       const button = this.pan.button;
       this.pan = null;
+      if (!wasClick && !cancelled) this.release(e);
       this.canvas.style.cursor = this.tool ? 'cell' : 'crosshair';
       if (wasClick && button === 2 && !cancelled) this.app.rightClick();
       return;
@@ -214,6 +224,8 @@ export class Input {
       if (!press.moved) {
         const t = this.tileAt(p);
         this.app.clickTile(t.x, t.y);
+      } else {
+        this.release(e);
       }
     }
   }
@@ -222,7 +234,34 @@ export class Input {
     e.preventDefault();
     if (!this.game) return;
     const p = this.localPos(e);
-    this.app.renderer.camera.zoomStep(e.deltaY < 0 ? 1 : -1, p.x, p.y);
+    // deltaMode 1 = lines (Firefox mouse wheels), 2 = pages; 0 = pixels.
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const d = e.deltaY * unit;
+    if (Math.sign(d) !== Math.sign(this.wheelAcc)) this.wheelAcc = 0; // direction changed
+    this.wheelAcc += d;
+    // A mouse notch zooms one level at once; small trackpad deltas add up.
+    const step = Math.abs(d) >= WHEEL_STEP ? Math.sign(d) : Math.abs(this.wheelAcc) >= WHEEL_STEP ? Math.sign(this.wheelAcc) : 0;
+    if (!step) return;
+    this.wheelAcc = 0;
+    this.app.renderer.camera.zoomStep(-step, p.x, p.y);
+  }
+
+  /** Pan the camera by a drag delta and remember how fast the drag is going. */
+  dragPan(dx, dy, e) {
+    this.app.renderer.camera.panScreen(dx, dy);
+    const t = e.timeStamp || performance.now();
+    const dt = Math.max(4, t - this.flick.t) / 1000;
+    const a = 0.4; // smoothing: recent motion counts most
+    this.flick.vx = this.flick.vx * (1 - a) + (dx / dt) * a;
+    this.flick.vy = this.flick.vy * (1 - a) + (dy / dt) * a;
+    this.flick.t = t;
+  }
+
+  /** End of a drag: fling the map if the pointer was still moving. */
+  release(e) {
+    const t = e.timeStamp || performance.now();
+    if (t - this.flick.t <= FLING_WINDOW_MS) this.app.renderer.camera.fling(this.flick.vx, this.flick.vy);
+    this.flick = { vx: 0, vy: 0, t };
   }
 
   /** Recompute the construction preview for the current hover/drag. */
@@ -285,7 +324,7 @@ export class Input {
       case 'O': a.setOverlay('none'); break;
       case '+': case '=': this.app.renderer.camera.zoomStep(1); break;
       case '-': case '_': this.app.renderer.camera.zoomStep(-1); break;
-      case 'Home': a.centerOnEntry(); break;
+      case 'Home': a.centerOnEntry(true); break;
       default: break;
     }
   }

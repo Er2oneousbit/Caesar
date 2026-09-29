@@ -33,7 +33,7 @@ import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort } from './sim/military.js';
 
-const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true };
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true };
 
 /** Does the player's system ask for less motion (accessibility setting)? */
 function prefersReducedMotion() {
@@ -72,6 +72,8 @@ export class App {
     this.canvas = h('canvas', { id: 'view' });
     root.appendChild(this.canvas);
     this.renderer = new Renderer(this.canvas);
+    // Thunder rolls in a moment after the lightning (only in a game, not behind the main menu).
+    this.renderer.weather.onThunder = (delay) => setTimeout(() => { if (this.game) this.sfx.play('thunder'); }, delay * 1000);
     this.ui = new UI(this, root);
     this.input = new Input(this);
     this.game = null;
@@ -131,8 +133,13 @@ export class App {
     // Decorative motion: clouds/birds follow the setting; swaying trees, glints
     // and build animations also stop when the system asks for reduced motion.
     const reduced = prefersReducedMotion();
-    this.renderer.ambientOn = s.ambient !== false && !reduced;
-    this.renderer.motionOn = !reduced;
+    const r = this.renderer;
+    r.ambientOn = s.ambient !== false && !reduced;
+    r.motionOn = !reduced;
+    // The world around the city (all visual only).
+    r.dayNightOn = s.dayNight !== false;
+    r.seasonsOn = s.seasons !== false;
+    r.weatherOn = s.weather !== false;
     // Only touch the theme attribute if the player picked a theme; 'auto'
     // leaves whatever the page host (or the OS) decided.
     const root = document.documentElement;
@@ -399,7 +406,7 @@ export class App {
     let sx = 0;
     let sy = 0;
     for (const u of g.units.values()) if (u.side === 'enemy') { sx += u.x; sy += u.y; n++; }
-    if (n) this.renderer.camera.centerOnTile(Math.floor(sx / n), Math.floor(sy / n));
+    if (n) this.renderer.camera.glideToTile(Math.floor(sx / n), Math.floor(sy / n));
     else this.ui.openAdvisors('military');
   }
 
@@ -457,14 +464,16 @@ export class App {
     this.ui.messages.push({ text: `Overlay: ${next.name}`, level: 'info', date: '' });
   }
 
-  centerOnEntry() {
+  /** Look at the map entrance (glide = travel there instead of jumping). */
+  centerOnEntry(glide = false) {
     const g = this.game;
     if (!g) return;
     const e = g.map.entry;
     // Aim a little inside the map from the entrance.
     const cx = Math.round(e.x + (g.map.w / 2 - e.x) * 0.25);
     const cy = Math.round(e.y + (g.map.h / 2 - e.y) * 0.25);
-    this.renderer.camera.centerOnTile(cx, cy);
+    if (glide) this.renderer.camera.glideToTile(cx, cy);
+    else this.renderer.camera.centerOnTile(cx, cy);
   }
 
   toggleDebugHud() { this.debugHud = !this.debugHud; }

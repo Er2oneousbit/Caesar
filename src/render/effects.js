@@ -2,8 +2,8 @@
  * effects.js
  * ----------------------------------------------------------------------------
  * Visual-only effects: flames on burning ruins, smoke from busy workshops,
- * dust clouds when something collapses. Uses Math.random() freely because
- * nothing here affects the simulation.
+ * dust clouds when something collapses, sparks flying from a smithy's forge.
+ * Uses Math.random() freely because nothing here affects the simulation.
  * ----------------------------------------------------------------------------
  */
 
@@ -45,6 +45,23 @@ export class Effects {
     });
   }
 
+  /** A burst of forge sparks (hot metal being hammered). */
+  sparks(wx, wy, n = 6) {
+    for (let k = 0; k < n; k++) {
+      this.particles.push({
+        x: wx,
+        y: wy,
+        vx: (Math.random() - 0.5) * 70,
+        vy: -30 - Math.random() * 45,
+        life: 0,
+        max: 0.3 + Math.random() * 0.35,
+        size: 0.9 + Math.random() * 0.5,
+        color: '255,200,90',
+        spark: true,
+      });
+    }
+  }
+
   /** Advance particles by dt seconds. */
   update(dt) {
     const out = [];
@@ -53,8 +70,12 @@ export class Effects {
       if (p.life >= p.max) continue;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vx *= 0.98;
-      p.size += dt * 3;
+      if (p.spark) {
+        p.vy += 200 * dt; // sparks fall back down
+      } else {
+        p.vx *= 0.98;
+        p.size += dt * 3;
+      }
       out.push(p);
     }
     this.particles = out.length > 600 ? out.slice(-600) : out;
@@ -64,9 +85,15 @@ export class Effects {
   draw(ctx, cam) {
     const k = cam.scale;
     for (const p of this.particles) {
-      const a = 0.5 * (1 - p.life / p.max);
       const sx = (p.x - cam.x) * k;
       const sy = (p.y - cam.y) * k;
+      if (p.spark) {
+        const s = 1 - p.life / p.max;
+        ctx.fillStyle = `rgba(255,${Math.round(150 + 100 * s)},${Math.round(60 * s)},${s.toFixed(3)})`;
+        ctx.fillRect(sx - p.size * k * 0.5, sy - p.size * k * 0.5, p.size * k, p.size * k);
+        continue;
+      }
+      const a = 0.5 * (1 - p.life / p.max);
       ctx.fillStyle = `rgba(${p.color},${a.toFixed(3)})`;
       ctx.beginPath();
       ctx.arc(sx, sy, p.size * k, 0, Math.PI * 2);

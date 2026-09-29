@@ -9,10 +9,19 @@
  *   ax, ay  where the anchor (footprint top corner) sits inside that box
  *   draw    function(ctx) drawing with the origin AT the anchor
  *
- * Caches are kept for the current and previous scale so zooming back and
- * forth is instant, while memory stays bounded.
+ * Each cached sprite remembers the scale `s` it was drawn at, so the renderer
+ * can draw it at a slightly different scale while a zoom animates
+ * (factor = display scale / s).
+ *
+ * Caches are kept for the current and one previous scale so zooming back and
+ * forth is instant, while memory stays bounded. Drawing a whole new zoom
+ * level of art at once takes a while, so new sprites get a time budget per
+ * frame (`beginFrame`): past it, the same art from the other kept zoom level
+ * is borrowed (drawn scaled) and the sharp one is made on a later frame.
  * ----------------------------------------------------------------------------
  */
+
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export class SpriteCache {
   constructor() {
@@ -21,6 +30,17 @@ export class SpriteCache {
     this.current = new Map();
     this.byScale.set(1, this.current);
     this.created = 0;
+    this.budgetMs = Infinity; // time allowed for drawing new sprites this frame
+    this.spentMs = 0;
+    this.borrowed = 0; // sprites borrowed from another zoom level this frame
+  }
+
+  /** Start a frame: pick the scale and reset the new-sprite time budget. */
+  beginFrame(scale, budgetMs = Infinity) {
+    this.setScale(scale);
+    this.budgetMs = budgetMs;
+    this.spentMs = 0;
+    this.borrowed = 0;
   }
 
   setScale(s) {
@@ -28,11 +48,15 @@ export class SpriteCache {
     this.scale = s;
     if (!this.byScale.has(s)) this.byScale.set(s, new Map());
     this.current = this.byScale.get(s);
-    // Keep at most 2 scales worth of sprites.
-    if (this.byScale.size > 2) {
-      for (const k of this.byScale.keys()) {
-        if (k !== s && this.byScale.size > 2) this.byScale.delete(k);
+    // Keep at most 2 scales worth of sprites. Drop the emptier one (a level
+    // zoomed through quickly) so the fuller one stays around to borrow from.
+    while (this.byScale.size > 2) {
+      let victim = null;
+      for (const [k, m] of this.byScale) {
+        if (m === this.current) continue;
+        if (victim === null || m.size < this.byScale.get(victim).size) victim = k;
       }
+      this.byScale.delete(victim);
     }
   }
 
@@ -50,15 +74,41 @@ export class SpriteCache {
     }
   }
 
+  /** Remove sprites whose key matches a test (e.g. last season's ground). */
+  invalidateWhere(test) {
+    for (const m of this.byScale.values()) {
+      for (const k of [...m.keys()]) if (test(k)) m.delete(k);
+    }
+  }
+
+  /** The same art from the other kept zoom level, or null. */
+  borrow(key) {
+    let best = null;
+    for (const m of this.byScale.values()) {
+      if (m === this.current) continue;
+      const spr = m.get(key);
+      if (spr && (!best || spr.s > best.s)) best = spr; // prefer the sharper copy
+    }
+    return best;
+  }
+
   /**
    * Get (or render) a sprite.
    * @param {string} key unique id for this art at any scale
    * @param {() => {w:number,h:number,ax:number,ay:number,draw:(ctx:CanvasRenderingContext2D)=>void}} specFn
-   * @returns {{canvas:HTMLCanvasElement, ax:number, ay:number, w:number, h:number}}
+   * @returns {{canvas:HTMLCanvasElement, ax:number, ay:number, w:number, h:number, s:number}}
    */
   get(key, specFn) {
     let spr = this.current.get(key);
     if (spr) return spr;
+    if (this.spentMs > this.budgetMs) {
+      const alt = this.borrow(key);
+      if (alt) {
+        this.borrowed++;
+        return alt;
+      }
+    }
+    const t0 = now();
     const spec = specFn();
     const s = this.scale;
     const cw = Math.max(1, Math.round(spec.w * s));
@@ -77,9 +127,10 @@ export class SpriteCache {
       ctx.fillStyle = '#ff00ff';
       ctx.fillRect(0, 0, cw, ch);
     }
-    spr = { canvas, ax: Math.round(spec.ax * s), ay: Math.round(spec.ay * s), w: cw, h: ch };
+    spr = { canvas, ax: Math.round(spec.ax * s), ay: Math.round(spec.ay * s), w: cw, h: ch, s };
     this.current.set(key, spr);
     this.created++;
+    this.spentMs += now() - t0;
     return spr;
   }
 }

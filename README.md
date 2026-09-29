@@ -46,12 +46,25 @@ Seven original missions from a riverside village (*Novum Castrum*, 250 people) t
 
 Games are saved in your browser's **localStorage**: an autosave slot (every 3 months and whenever you leave or hide the page), a quicksave (F5 / F9) and 5 manual slots. The Save/Load menus show how much space the saves use. Saves belong to that browser and site only, so use *Export to file* or *Copy save data* for backups or to move a city to another computer.
 
+### A living world
+
+The city lives through the day and the year, all drawn in code:
+
+* **Day and night.** The sun sets every few minutes of game time; at dusk windows light up one by one, temples and forts light their torches, walkers carry lanterns and fires glow in the dark. (Tool previews and selections always stay bright.)
+* **Seasons.** Grass and trees follow the calendar: spring blossoms and meadow flowers, summer green, orange and red autumn leaves, bare winter trees. Cypresses stay green all year.
+* **Weather.** Clouds, rain, thunderstorms (with thunder) and, in winter, snow. Purely visual: it never affects the city.
+* **Animation.** Flags and banners flutter, shoppers browse stocked markets, crowds fill theaters and arenas during shows, smiths throw sparks, altar fires flicker, forests sway, fountains spray, clouds and birds drift over.
+* **Smooth camera.** Zoom eases toward the cursor, a fast drag flings the map, and jumping to a message or the entrance glides there.
+
+Each of these can be switched off in *Settings*; the system's *reduce motion* preference stops the decorative motion (no falling rain or lightning flashes).
+
 ### Controls
 
 | Input | Action |
 |---|---|
 | W A S D / arrows, left-drag, middle-drag | Scroll |
-| Mouse wheel, `+` / `-` | Zoom |
+| Mouse wheel, `+` / `-` | Zoom (eases toward the cursor) |
+| Fast drag and let go | Fling the map; click to stop it |
 | Left click | Inspect / place |
 | Right click | Cancel tool / close panel |
 | Space or P | Pause |
@@ -86,7 +99,7 @@ Append to the address, for example `dist/colonia.html?debug=1&seed=42&skipmenu=1
 | `raids=off\|occasional\|frequent` | Override raids for new games |
 | `mute=1` | Sound off |
 
-**Debug console** (`` ` ``): `help`, `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army` (forts, supplies, raid schedule), `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `loglevel debug`.
+**Debug console** (`` ` ``): `help`, `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army` (forts, supplies, raid schedule), `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `weather storm` (clear, cloudy, rain, storm, snow), `sky 0.8` (freeze the time of day: 0.3 noon, 0.67 sunset, 0.8 night; `sky off` lets it run), `loglevel debug`.
 
 In browser dev tools, `window.colonia` is the running app (`colonia.game` is the simulation).
 
@@ -98,10 +111,10 @@ In browser dev tools, `window.colonia` is the running app (`colonia.game` is the
 npm install          # esbuild (only needed for building)
 npm run dev          # dev server with live source files
 npm test             # headless simulation tests (node:test, no browser)
-npm run build        # -> dist/colonia.html (single file, ~340 KB, reproducible)
+npm run build        # -> dist/colonia.html (single file, ~380 KB, reproducible)
 npm run test:e2e     # drives the built game in headless Chromium (needs Playwright)
 npm run sim -- --years 5 --type lakes    # headless balance simulation
-npm run screenshots  # render the demo city to tests/e2e/out/*.png
+npm run screenshots  # render the demo city to tests/e2e/out/*.png (day, night, seasons, weather...)
 npm run check        # test + build + e2e
 ```
 
@@ -123,14 +136,16 @@ src/
                         market, production, trade (caravans + ships), military,
                         religion, ratings, emperor...
   render/               isometric camera, sprite cache, procedural art (buildings,
-                        terrain, walkers, soldiers/walls), renderer
+                        terrain, walkers, soldiers/walls), renderer, day/night
+                        lighting, seasons + weather, live details (flags, crowds)
   ui/                   DOM widgets: HUD, sidebar, info panel, advisors, empire map,
                         menus, help
   input/                mouse / touch / keyboard
   audio/                synthesized sound effects
   dev/demoCity.js       builds a sample city through the public construction API
 scripts/                serve.mjs, build.mjs, simulate.mjs, run.ps1, run.sh
-tests/                  sim.test.mjs, e2e/smoke.mjs, e2e/screenshots.mjs
+tests/                  *.test.mjs (sim, military, trade, render), e2e/smoke.mjs,
+                        e2e/screenshots.mjs, e2e/render.html, e2e/artsheet.html
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md
 .github/                CI workflow, issue and pull request templates
 LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
@@ -145,6 +160,8 @@ Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit, 
 | "This is the developer version" page | You opened `index.html` from disk. Use `dist/colonia.html` or `npm run dev`. |
 | Titles use a plain serif font | The Cinzel web font could not load (offline). Purely cosmetic. |
 | Saves disappeared | Saves live in the browser's local storage for that exact file/URL (a different browser, a private window or clearing site data means no saves). Use *Save game > Export to file* or *Copy save data* for backups. |
+| Night is too dark, or rain distracts | *Settings*: switch off *Day and night* or *Weather* (each is purely visual). |
+| Zooming out feels slow on an old computer | Switch off *Ambient effects* and *Weather* in *Settings*; the far zoom levels draw thousands of tiles. |
 | "Could not save: storage is full" | Delete old slots in *Load game* (each save shows its size), or export them to files first. |
 | Ships never come | Sea routes need navigable water that reaches the map edge (river, coast or a big edge lake) and a staffed Dock on its bank. Desert and plains maps often have none: use land routes there. |
 | "Something broke in the city" screen | Click *Copy report* and file it with the seed and steps. *Download emergency save* keeps your city. |

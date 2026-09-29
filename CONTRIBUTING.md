@@ -27,6 +27,8 @@ npm run dev        # dev server at http://localhost:8080/ with live source files
 
 Handy URL flags while developing: `?debug=1&skipmenu=1&unlockall=1&seed=42`, `?scenario=c4`, `?raids=frequent`. The debug console (backtick key) has `demo`, `invade`, `army`, `days 120`, `money 5000` and more. See the in-game help (F1 → Debug).
 
+Working on art? With `npm run dev` running, open `/tests/e2e/artsheet.html` (every home in all 8 looks, flags) and `/tests/e2e/render.html?zoom=3&time=0.8` (the demo city; `time`, `month`, `weather`, `look`, `busy` and more are listed at the top of the file). The console's `sky 0.8` and `weather storm` help check night lights and weather in a running game.
+
 ### Everyday commands
 
 | Command | What it does |

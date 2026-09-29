@@ -179,3 +179,13 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 * **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over).
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.
+
+## The world around the city (visual only)
+
+None of this changes the simulation: the same seed plays out the same way with every setting on or off, and saves do not store it.
+
+* **Day and night** (*Settings*: Day and night). One day and night takes 5 minutes of game time at 1x (a minute at 5x) and stops while the game is paused. Daylight lasts a bit over half of it; sunset and dawn get warm colors. From dusk, homes light their windows one by one (about half their windows, more in bigger homes), temples, forts, towers, gates, docks and venues light torches, one walker in three carries a lantern, raiders carry torches, and fires light up their surroundings. Closed buildings (no staff) and farms, workshops and storehouses stay dark. Tool previews, radius overlays and selection outlines are drawn after the lighting, so they are always bright. Info overlays turn the tint off.
+* **Seasons** (*Settings*: Seasons). The month sets the colors: Ianuarius is mid-winter, Aprilis mid-spring, Iulius mid-summer, October mid-autumn, and the months between blend. Winter: grey-green grass and a third of the round trees bare. Spring: fresh green, meadows full of flowers, blossoms on some trees. Autumn: olive-gold grass and orange, gold and red leaves. Cypresses never change.
+* **Weather** (*Settings*: Weather). A spell of weather lasts 35 to 110 seconds of game time, then the next is drawn with odds by season (summer is mostly clear with the odd thunderstorm; autumn and winter bring more rain; snow falls only in winter and turns to rain when spring comes). Overcast dims the scene and hides sun shadows and cloud shade. Thunderstorms flash (at most every 5 seconds) and thunder rolls in a moment later; heavy storms make some homes light their lamps by day. Birds stay home at night and in rain or snow.
+* **Reduced motion.** When the system asks for reduced motion, decorative motion stops: no swaying trees, glints, falling rain or snow, lightning flashes, fling or zoom animation. Colors, lights and flags (held still) remain.
+* **Debug console:** `weather rain` (clear, cloudy, rain, storm, snow) changes the weather now; `sky 0.8` freezes the time of day (0.3 noon, 0.67 sunset, 0.8 night) and `sky off` lets it run again.

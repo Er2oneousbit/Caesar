@@ -15,6 +15,8 @@ import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
+import { WEATHER } from '../render/weather.js';
+import { dayTime } from '../render/lighting.js';
 import { log } from '../core/debug.js';
 
 export const CONSOLE_HELP = [
@@ -36,6 +38,8 @@ export const CONSOLE_HELP = [
   ['win', 'Trigger victory'],
   ['stats', 'Print city statistics'],
   ['goto <x> <y>', 'Center the view on a tile'],
+  ['weather <kind>', 'Change the weather now: clear | cloudy | rain | storm | snow'],
+  ['sky <0-1>|off', 'Freeze the time of day (0.3 noon, 0.67 sunset, 0.8 night) or let it run'],
   ['loglevel <lvl>', 'error | warn | info | debug'],
   ['clear', 'Clear the console'],
 ];
@@ -232,6 +236,24 @@ export class DebugConsole {
         if (!g.map.inBounds(x, y)) throw new Error('usage: goto <x> <y> (inside the map)');
         app.renderer.camera.centerOnTile(x, y);
         return `Centered on ${x},${y}`;
+      }
+      case 'weather': {
+        const kind = (args[0] || '').toLowerCase();
+        if (!WEATHER[kind]) return `Weather now: ${app.renderer.weather.kind}. Options: ${Object.keys(WEATHER).join(', ')}`;
+        if (!app.renderer.weatherOn) return 'Weather is switched off in Settings.';
+        app.renderer.weather.force(kind);
+        return `Weather: ${WEATHER[kind].label} (it builds up over a few seconds of game time).`;
+      }
+      case 'sky': {
+        const r = app.renderer;
+        if (args[0] === 'off' || args[0] === undefined) {
+          r.fixedTime = null;
+          return g ? `Time of day runs again (now ${dayTime(g.time.totalTicks).toFixed(2)}).` : 'Time of day runs again.';
+        }
+        const t = Number(args[0]);
+        if (!(t >= 0 && t <= 1)) throw new Error('usage: sky <0-1> | off');
+        r.fixedTime = t;
+        return `Time of day frozen at ${t} (sky off to release).`;
       }
       case 'loglevel':
         log.setLevel(args[0]);

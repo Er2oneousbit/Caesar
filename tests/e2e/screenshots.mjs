@@ -45,6 +45,14 @@ const shots = [
   ['military', 'scenario=c1&months=6&zoom=2&military=1&raiders=1&recruitDays=90'],
   ['battle', 'scenario=c1&months=6&zoom=3&military=1&raiders=10&recruitDays=110&extraTicks=60'],
   ['harbor', 'scenario=sandbox&maptype=coast&seed=beach&months=6&zoom=3&trade=1'],
+  // The world around the city: time of day, seasons, weather, live details.
+  ['sunset', 'scenario=c1&months=8&zoom=2&time=0.675&month=6'],
+  ['night', 'scenario=c1&months=8&zoom=3&time=0.8&month=6'],
+  ['autumn', 'scenario=c1&months=8&zoom=2&month=9'],
+  ['winter-snow', 'scenario=c1&months=8&zoom=2&month=0&weather=snow'],
+  ['spring-rain', 'scenario=c1&months=8&zoom=2&month=4&weather=rain'],
+  ['busy-market', 'scenario=c1&months=8&zoom=4&w=1000&h=700&look=market&busy=1'],
+  ['theater-show', 'scenario=c1&months=8&zoom=4&w=1000&h=700&look=theater&busy=1'],
 ];
 
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs'), '--port', String(port)], { stdio: 'pipe' });

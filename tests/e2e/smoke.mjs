@@ -233,6 +233,31 @@ try {
   await page.click('.tab:has-text("Trade")');
   check('trade advisor draws the empire map', await page.isVisible('canvas.empire-map'));
   await page.keyboard.press('Escape');
+
+  // 5c. The world around the city: smooth zoom, night lights, weather, settings.
+  await page.evaluate(() => { window.colonia.renderer.camera.zoomIndex = 2; });
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, -100);
+  await page.waitForTimeout(600);
+  const zoomed = await page.evaluate(() => { const c = window.colonia.renderer.camera; return { zoom: c.zoom, target: c.targetZoom, moving: c.moving }; });
+  check('mouse wheel eases to the next zoom level', zoomed.zoom === zoomed.target && zoomed.target > 1 && !zoomed.moving, JSON.stringify(zoomed));
+  await page.evaluate(() => { window.colonia.renderer.camera.zoomIndex = 2; window.colonia.renderer.fixedTime = 0.8; });
+  await page.waitForTimeout(250);
+  const lights = await page.evaluate(() => window.colonia.renderer.stats.lights);
+  check('at night homes and torches light up', lights > 0, `${lights} lights`);
+  await page.evaluate(() => { window.colonia.renderer.fixedTime = null; window.colonia.ui.console.run('weather rain'); });
+  check('console can change the weather', await page.evaluate(() => window.colonia.renderer.weather.kind === 'rain'));
+  await page.evaluate(() => window.colonia.renderer.weather.force('clear', true));
+  await page.evaluate(() => window.colonia.ui.info.close()); // (Escape would close this first)
+  await page.keyboard.press('Escape'); // pause menu
+  await page.click('.modal button:has-text("Settings")');
+  const worldToggles = await page.isVisible('text=Day and night') && await page.isVisible('text=Seasons') && await page.isVisible('text=Weather: clouds');
+  await page.click('label:has-text("Day and night") input');
+  const dayOff = await page.evaluate(() => window.colonia.renderer.dayNightOn === false && window.colonia.settings.dayNight === false);
+  await page.click('label:has-text("Day and night") input');
+  const dayOn = await page.evaluate(() => window.colonia.renderer.dayNightOn === true);
+  check('settings switch day/night, seasons and weather', worldToggles && dayOff && dayOn, JSON.stringify({ worldToggles, dayOff, dayOn }));
+  await page.click('.modal button:has-text("Done")'); // closes the menus: back to the game
   const savedNow = await page.evaluate(() => ({ b: window.colonia.game.buildings.size }));
   await page.keyboard.press('F5');
   // Leaving the page writes the autosave slot (localStorage).

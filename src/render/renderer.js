@@ -26,6 +26,18 @@
  * and throw embers, and (ambient.js) cloud shadows drift over the city while
  * birds fly past. `ambientOn` / `motionOn` switch the optional parts off
  * (Settings, or the system's reduced-motion preference).
+ *
+ * The world around the city (all optional, see Settings):
+ *   - day and night (lighting.js, `dayNightOn`): the scene is tinted by the
+ *     time of day, and after dusk windows, torches, lanterns and fires light
+ *     it up. Drawn after the particles, before tool previews, so previews
+ *     and selection outlines always stay easy to read.
+ *   - seasons (weather.js, `seasonsOn`): ground and tree colors follow the
+ *     month; last month's sprites are dropped as the month turns.
+ *   - weather (weather.js, `weatherOn`): overcast dims the scene and hides
+ *     sun shadows; rain, snow and lightning are drawn over the world.
+ * Where two kinds of ground meet, blend sprites soften the edge (the codes
+ * are cached per tile until the map changes).
  * ----------------------------------------------------------------------------
  */
 
@@ -37,11 +49,15 @@ import { wallHpOf, TOWER_RANGE } from '../sim/military.js';
 import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
-import { groundTileSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec } from './terrainArt.js';
-import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength } from './buildingArt.js';
+import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK } from './terrainArt.js';
+import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor } from './buildingArt.js';
+import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame } from './liveArt.js';
 import { drawWalker } from './walkerArt.js';
 import { Effects, drawFlames, drawSpray, drawGlint } from './effects.js';
 import { Ambient } from './ambient.js';
+import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.js';
+import { Weather, seasonPalette } from './weather.js';
+import { hash01 } from './draw.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
 const K_STRIP = 0;
@@ -66,6 +82,59 @@ const WATER_AREA = Object.freeze({
 /** Radius colors: the building being placed or selected (dark) vs. existing coverage (pale). */
 const RADIUS_STRONG = Object.freeze({ fill: 'rgba(28,96,214,0.36)', edge: 'rgba(16,64,170,0.95)' });
 const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(120,186,250,0.8)' });
+
+/** Does a market have anything on its stalls? */
+function hasStock(b) {
+  if (!b.stock) return false;
+  for (const key in b.stock) if (b.stock[key] > 0) return true;
+  return false;
+}
+
+/** Is a show on at this venue? (Same test as services.js: any booked performance.) */
+function showOn(b) {
+  const s = b.shows;
+  return !!s && (s.theater > 0 || s.amphitheater > 0 || s.colosseum > 0);
+}
+
+/** Neighbour offsets: edges N E S W, then corners NE SE SW NW. */
+const EDGE_NB = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+const CORNER_NB = [[1, -1], [1, 1], [-1, 1], [-1, -1]];
+
+/**
+ * Which stronger ground borders tile (x, y), and on which edges/corners.
+ * Only the strongest neighbouring type blends (two different ones at the
+ * same tile are rare). @returns packed code, 0 = none.
+ */
+export function blendCode(map, x, y) {
+  const own = BLEND_RANK[map.terrain[map.idx(x, y)]];
+  if (!own) return 0; // water (shorelines have their own art)
+  let best = -1;
+  let bestRank = own;
+  const look = (dx, dy) => {
+    const tx = x + dx;
+    const ty = y + dy;
+    if (!map.inBounds(tx, ty)) return -1;
+    return map.terrain[map.idx(tx, ty)];
+  };
+  for (const [dx, dy] of EDGE_NB.concat(CORNER_NB)) {
+    const t = look(dx, dy);
+    const r = BLEND_RANK[t] || 0;
+    if (r > bestRank) { best = t; bestRank = r; }
+  }
+  if (best < 0) return 0;
+  let edges = 0;
+  for (let s = 0; s < 4; s++) if (look(EDGE_NB[s][0], EDGE_NB[s][1]) === best) edges |= 1 << s;
+  let corners = 0;
+  for (let c = 0; c < 4; c++) {
+    // A corner only needs its own blob when neither edge next to it blends.
+    const e1 = 1 << c; // NE touches N(0)+E(1), SE: E(1)+S(2), SW: S(2)+W(3), NW: W(3)+N(0)
+    const e2 = 1 << ((c + 1) % 4);
+    if (edges & (e1 | e2)) continue;
+    if (look(CORNER_NB[c][0], CORNER_NB[c][1]) === best) corners |= 1 << c;
+  }
+  if (!edges && !corners) return 0;
+  return (best << 8) | (edges << 4) | corners;
+}
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -93,6 +162,20 @@ export class Renderer {
     this.motionOn = true; // swaying trees, glints, construction animation (off with reduced motion)
     this.appear = new Map(); // building id -> time it was placed (rise-in animation)
     this.puffBudget = 0; // dust puffs allowed this frame (a demo city appears all at once)
+    this.spriteBudgetMs = 8; // ms per frame for drawing new sprites before borrowing another zoom level's
+    // The world around the city (Settings).
+    this.dayNightOn = true;
+    this.seasonsOn = true;
+    this.weatherOn = true;
+    this.lights = new NightLights();
+    this.weather = new Weather();
+    this.sky = NOON; // light of the last frame (see lighting.js skyAt)
+    this.pal = seasonPalette(null); // season palette of the last frame
+    this.fixedTime = null; // set 0..1 to freeze the time of day (screenshots, console)
+    this.lastTicks = 0; // sim ticks seen last frame (weather runs on game time)
+    this.blendCodes = null; // per tile: packed edge-blend code, -1 = not computed yet
+    this.blendRev = -1;
+    this.gates = []; // wall gate tiles in view this frame (they get torches at night)
   }
 
   /** Point the renderer at a (new) game. */
@@ -105,6 +188,8 @@ export class Renderer {
     this.effects = new Effects();
     this.ambient.reset(game.map.w, game.map.h);
     this.appear.clear();
+    this.blendCodes = null;
+    this.lastTicks = game.time.totalTicks;
     this.unsub.push(game.events.on('buildingAdded', (b) => {
       if (!this.motionOn) return;
       this.appear.set(b.id, this.time);
@@ -171,15 +256,20 @@ export class Renderer {
     this.time += dt;
     this.frame++;
     const { ctx, camera: cam, game } = this;
+    cam.smooth = this.motionOn;
+    cam.update(dt);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#2a241c';
     ctx.fillRect(0, 0, cam.viewW, cam.viewH);
     if (!game) return;
     const k = cam.scale;
-    this.sprites.setScale(k);
+    // Sprites are drawn for the zoom LEVEL; while the zoom eases they are scaled a little.
+    this.sprites.beginFrame(cam.spriteScale, this.spriteBudgetMs);
     const { map } = game;
     const ov = this.overlay;
     const overlayOn = ov.key !== 'none';
+    const env = this.updateEnvironment(dt);
+    const pal = env.pal;
 
     // --- visible tile range -------------------------------------------------
     const vr = cam.viewRect();
@@ -196,8 +286,9 @@ export class Renderer {
     this.viewTiles = { tx0, tx1, ty0, ty1 };
     this.stats.coverage = null;
     this.puffBudget = 4;
+    this.gates.length = 0;
     const motion = this.motionOn;
-    const glints = motion && cam.zoom >= 1;
+    const glints = motion && cam.zoom >= 1 && env.sun > 0.5 && env.overcast < 0.5;
     const visibleBuildings = [];
     const waterFrame = Math.floor(this.time * 2.5) % 4;
 
@@ -205,13 +296,7 @@ export class Renderer {
     const seenBuildings = new Set();
     let tiles = 0;
 
-    const drawSpr = (spr, wx, wy, a = 1) => {
-      const dx = Math.round((wx - cam.x) * k) - spr.ax;
-      const dy = Math.round((wy - cam.y) * k) - spr.ay;
-      if (a !== 1) ctx.globalAlpha = a;
-      ctx.drawImage(spr.canvas, dx, dy);
-      if (a !== 1) ctx.globalAlpha = 1;
-    };
+    const drawSpr = (spr, wx, wy) => this.blit(spr, wx, wy);
 
     // --- pass 1: ground -----------------------------------------------------
     for (let y = ty0; y <= ty1; y++) {
@@ -236,7 +321,12 @@ export class Renderer {
               if (a > 0.82) drawGlint(ctx, (wx + ((h % 30) - 15) - cam.x) * k, (wy + HALF_H + (((h >> 3) % 12) - 6) - cam.y) * k, k, (a - 0.82) * 4.5);
             }
           } else {
-            drawSpr(this.sprites.get(`g${terr}.${variant}`, () => groundTileSpec(terr, variant)), wx, wy);
+            const gv = map.variant[i] & 7;
+            // Where a different kind of ground borders this tile, the sprite
+            // has a soft edge painted in (one draw either way; see groundBlendSpec).
+            const code = bid ? 0 : this.blendAt(i, x, y);
+            if (code > 0) drawSpr(this.sprites.get(`g${terr}.${gv}.${code}~${pal.key}`, () => groundBlendSpec(terr, gv, code, pal)), wx, wy);
+            else drawSpr(this.sprites.get(`g${terr}.${gv}~${pal.key}`, () => groundTileSpec(terr, gv, pal)), wx, wy);
           }
           const road = map.road[i];
           if (road === Road.ROAD) {
@@ -269,12 +359,13 @@ export class Renderer {
           // Wind: 5 cached sway frames; the phase rolls across the map in gusts.
           const tv = map.variant[i] & 7;
           const sway = motion ? Math.round(Math.sin(this.time * 1.7 - (x * 0.45 + y * 0.25)) * 2) : 0;
-          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${tv}.${sway}`, () => treesSpec(tv, sway)), wx, wy, full: true });
+          items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`t${tv}.${sway}~${pal.key}`, () => treesSpec(tv, sway, pal)), wx, wy, full: true });
         } else if (terr === Terrain.ROCK) {
           items.push({ d: depth - 0.01, kind: K_STRIP, spr: this.sprites.get(`k${variant}`, () => rocksSpec(variant)), wx, wy, full: true });
         }
         if (map.wall[i]) {
           const gate = map.wall[i] === 2;
+          if (gate) this.gates.push(i);
           let mask = this.wallMask(x, y);
           // A gate with no wall beside it spans across its road.
           if (gate && !mask) mask = map.hasRoad(x, y - 1) || map.hasRoad(x, y + 1) ? 10 : 5;
@@ -295,7 +386,9 @@ export class Renderer {
     }
 
     // --- building shadows (on the ground, under every object) --------------
-    if (!overlayOn) for (const b of visibleBuildings) this.drawBuildingShadow(b);
+    // Sun shadows fade at night and under a cloudy sky.
+    const shadowA = env.sun * (1 - env.overcast * 0.75);
+    if (!overlayOn && shadowA > 0.03) for (const b of visibleBuildings) this.drawBuildingShadow(b, shadowA);
 
     // --- walkers ------------------------------------------------------------
     for (const w of game.walkers.values()) {
@@ -338,21 +431,12 @@ export class Renderer {
     items.sort((a, b) => a.d - b.d || a.kind - b.kind);
     for (const it of items) {
       switch (it.kind) {
-        case K_STRIP: {
-          const spr = it.spr;
-          const dx = Math.round((it.wx - cam.x) * k) - spr.ax;
-          const dy = Math.round((it.wy - cam.y) * k) - spr.ay;
+        case K_STRIP:
           if (it.alpha) ctx.globalAlpha = it.alpha;
-          if (it.full) {
-            ctx.drawImage(spr.canvas, dx, dy);
-          } else {
-            const sx0 = Math.round((it.j * spr.w) / it.n);
-            const sx1 = Math.round(((it.j + 1) * spr.w) / it.n);
-            if (sx1 > sx0) ctx.drawImage(spr.canvas, sx0, 0, sx1 - sx0, spr.h, dx + sx0, dy, sx1 - sx0, spr.h);
-          }
+          if (it.full) this.blit(it.spr, it.wx, it.wy);
+          else this.blitStrip(it.spr, it.wx, it.wy, it.j, it.n);
           if (it.alpha) ctx.globalAlpha = 1;
           break;
-        }
         case K_WALKER:
           drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY);
           break;
@@ -379,10 +463,33 @@ export class Renderer {
       }
     }
 
+    // --- particles (dust, smoke), under the night and the weather ----------
+    this.effects.update(dt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.effects.draw(ctx, cam);
+
     // --- ambient: cloud shadows and birds over the city --------------------
     if (this.ambientOn) {
+      // Cloud shade needs sunshine; birds stay home at night and in the rain.
+      this.ambient.shade = shadowA;
+      this.ambient.birdsOk = env.sun > 0.4 && env.rain < 0.2 && env.snow < 0.2;
       this.ambient.update(dt);
       this.ambient.draw(ctx, cam, vr, this.time);
+    }
+
+    // --- night and cloud cover: tint the scene, then light it up -----------
+    const tint = env.tint;
+    if (!overlayOn && (tint[0] < 254 || tint[1] < 254 || tint[2] < 254)) {
+      this.lights.begin();
+      if (env.lamps > 0.01) this.collectLights(visibleBuildings, items, env);
+      this.lights.apply(ctx, cam.viewW, cam.viewH, env);
+    }
+    this.stats.lights = !overlayOn && env.lamps > 0.01 ? this.lights.nPools + this.lights.nGlows : 0;
+
+    // --- rain, snow, lightning ---------------------------------------------
+    // (Not with reduced motion: no falling particles and no lightning flashes.)
+    if (this.weatherOn && motion && (env.rain > 0.01 || env.snow > 0.01 || this.weather.flash > 0.01 || this.weather.drops.length || this.weather.flakes.length)) {
+      this.weather.draw(ctx, cam.viewW, cam.viewH, cam.dpr, dt, this.time);
     }
 
     // --- pass 3: previews, hover, selection --------------------------------
@@ -409,14 +516,219 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
 
-    // --- pass 4: particles -------------------------------------------------
-    this.effects.update(dt);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.effects.draw(ctx, cam);
-
     this.stats.tiles = tiles;
     this.stats.objects = items.length;
+    this.stats.borrowed = this.sprites.borrowed;
     this.stats.ms = performance.now() - t0;
+  }
+
+  /**
+   * Time of day, season and weather for this frame.
+   * @returns {{t:number, tint:number[], lamps:number, sun:number, overcast:number, rain:number, snow:number, pal:object}}
+   */
+  updateEnvironment(dt) {
+    const game = this.game;
+    const ticks = game.time.totalTicks;
+    // Weather runs on game time: frozen while paused, faster at high speed.
+    const ran = Math.max(0, Math.min(40, ticks - this.lastTicks)) / CONFIG.TICKS_PER_SECOND;
+    this.lastTicks = ticks;
+    // Season: a new month brings new ground/tree colors; drop last month's sprites.
+    const pal = seasonPalette(this.seasonsOn ? game.time.month : null);
+    if (pal.key !== this.pal.key) {
+      const old = `~${this.pal.key}`;
+      this.sprites.invalidateWhere((key) => key.endsWith(old));
+      this.pal = pal;
+    }
+    let sky = NOON;
+    if (this.fixedTime !== null) sky = skyAt(this.fixedTime);
+    else if (this.dayNightOn) sky = skyAt(dayTime(ticks));
+    this.sky = sky;
+    const w = this.weather;
+    if (this.weatherOn) {
+      w.update(ran, pal.season);
+    } else if (w.kind !== 'clear' || w.overcast > 0 || w.drops.length || w.flakes.length) {
+      w.force('clear', true);
+      w.drops.length = 0;
+      w.flakes.length = 0;
+      w.flash = 0;
+    }
+    const on = this.weatherOn;
+    const wt = on ? w.tint() : [255, 255, 255];
+    const tint = [0, 1, 2].map((c) => Math.round((sky.tint[c] * wt[c]) / 255));
+    // A dark thunderstorm makes some homes light their lamps even by day.
+    const stormLamps = on ? Math.max(0, w.overcast - 0.85) * 2 : 0;
+    return {
+      t: sky.t,
+      tint,
+      lamps: Math.max(sky.lamps, stormLamps),
+      sun: sky.sun,
+      overcast: on ? w.overcast : 0,
+      rain: on ? w.rain : 0,
+      snow: on ? w.snow : 0,
+      pal,
+    };
+  }
+
+  /**
+   * Edge-blend code of a land tile: (ground type << 8) | (edges << 4) | corners,
+   * or 0 when no stronger ground borders it (see terrainArt.js blendSpec).
+   * Cached per tile until the map changes.
+   */
+  blendAt(i, x, y) {
+    const map = this.game.map;
+    const n = map.w * map.h;
+    if (!this.blendCodes || this.blendCodes.length !== n || this.blendRev !== map.revision) {
+      if (!this.blendCodes || this.blendCodes.length !== n) this.blendCodes = new Int32Array(n);
+      this.blendCodes.fill(-1);
+      this.blendRev = map.revision;
+    }
+    let c = this.blendCodes[i];
+    if (c < 0) {
+      c = blendCode(map, x, y);
+      this.blendCodes[i] = c;
+    }
+    return c;
+  }
+
+  /** Art variant of a building (houses get more looks than other buildings). */
+  artVariant(b) {
+    return b.house ? b.id % 8 : b.variant;
+  }
+
+  /**
+   * Queue this frame's night lights: lit homes and public buildings (window
+   * glows, torches), wall gates, fires, and lanterns carried by walkers,
+   * soldiers, raiders and ships.
+   */
+  collectLights(visibleBuildings, items, env) {
+    const { camera: cam, game, lights: L } = this;
+    const k = cam.scale;
+    const lamps = env.lamps;
+    const tile = HALF_W * k; // half a tile's width in device px
+    const t = this.time;
+    const flick = (seed) => 0.84 + 0.09 * Math.sin(t * 9.1 + seed) + 0.07 * Math.sin(t * 23.7 + seed * 1.7);
+    const windowsToo = k >= 0.7; // window glows are lost when zoomed far out
+    if (lamps > 0.01) {
+      for (const b of visibleBuildings) {
+        if (!isLit(b, lamps)) continue;
+        const variant = this.artVariant(b);
+        const state = artState(b);
+        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}`, b.type, b.size, variant, state);
+        const ox = ((b.x - b.y) * HALF_W - cam.x) * k;
+        const oy = ((b.x + b.y) * HALF_H - cam.y) * k;
+        // Each building fades in over a little while after its turn comes.
+        const on = b.house ? 0.1 + hash01(b.id, 7) * 0.5 : 0.05 + hash01(b.id, 7) * 0.2;
+        const a = Math.min(1, (lamps - on) / 0.15);
+        if (a <= 0) continue;
+        const bright = b.house ? 0.16 + Math.min(12, b.house.tier) * 0.025 : 0.4;
+        L.pool(ox + info.cx * k, oy + info.cy * k, tile * (0.9 + b.size * 0.75), a * bright);
+        if (windowsToo) {
+          const share = b.house ? 0.55 : 0.8;
+          for (let n = 0; n < info.windows.length; n++) {
+            if (hash01(b.id, n, 11) > share) continue;
+            const [x, y, r] = info.windows[n];
+            L.glow(ox + x * k, oy + y * k, r * k * 2.4, a * 0.8);
+          }
+          for (let n = 0; n < info.doors.length; n++) {
+            if (hash01(b.id, n, 12) > 0.5) continue;
+            const [x, y, r] = info.doors[n];
+            L.glow(ox + x * k, oy + y * k, r * k * 2.8, a * 0.5);
+          }
+        }
+        for (let n = 0; n < info.torches.length; n++) {
+          const [x, y] = info.torches[n];
+          const f = flick(b.id * 3 + n);
+          L.pool(ox + x * k, oy + (y + 10) * k, tile * 2, a * 0.5 * f, true);
+          L.glow(ox + x * k, oy + y * k, 7 * k * f, a * 0.95 * f, true);
+        }
+      }
+      // Torches on both sides of each wall gate.
+      const map = game.map;
+      for (const i of this.gates) {
+        const x = map.xOf(i);
+        const y = map.yOf(i);
+        const sx = ((x - y) * HALF_W - cam.x) * k;
+        const sy = ((x + y + 1) * HALF_H - cam.y) * k;
+        const f = flick(i);
+        L.pool(sx, sy, tile * 2.2, 0.6 * lamps * f, true);
+        L.glow(sx - 12 * k, sy - 20 * k, 6 * k * f, 0.9 * lamps * f, true);
+        L.glow(sx + 12 * k, sy - 20 * k, 6 * k * f, 0.9 * lamps * f, true);
+      }
+      // Lanterns and torches on the move.
+      for (const it of items) {
+        if (it.kind === K_WALKER) {
+          const w = it.w;
+          const ship = w.type === 'ship';
+          if (!ship && w.id % 3) continue;
+          const sx = (it.wx - cam.x) * k;
+          const sy = (it.wy - cam.y) * k;
+          L.pool(sx, sy, tile * (ship ? 2.4 : 1.2), (ship ? 0.6 : 0.4) * lamps);
+          L.glow(sx + 3 * k, sy - (ship ? 22 : 11) * k, 3.5 * k, 0.8 * lamps);
+        } else if (it.kind === K_UNIT) {
+          const u = it.u;
+          if (u.side === 'enemy' ? u.id % 2 : u.id % 4) continue;
+          const sx = (it.wx - cam.x) * k;
+          const sy = (it.wy - cam.y) * k;
+          const f = flick(u.id);
+          L.pool(sx, sy, tile * 1.9, 0.5 * lamps * f, true);
+          L.glow(sx + 4 * k, sy - 16 * k, 5 * k * f, 0.9 * lamps * f, true);
+        }
+      }
+    }
+    // Fires light up the night whatever the lamps are doing.
+    if (game.fires.size) {
+      const map = game.map;
+      const vt = this.viewTiles;
+      for (const i of game.fires.keys()) {
+        const x = map.xOf(i);
+        const y = map.yOf(i);
+        if (vt && (x < vt.tx0 || x > vt.tx1 || y < vt.ty0 || y > vt.ty1)) continue;
+        const sx = ((x - y) * HALF_W - cam.x) * k;
+        const sy = ((x + y + 1) * HALF_H - cam.y) * k;
+        const f = flick(i * 7);
+        L.pool(sx, sy, tile * 4.5, 0.95 * f, true);
+        L.glow(sx, sy - 12 * k, 20 * k * f, 0.45 * f, true);
+      }
+    }
+  }
+
+  /**
+   * Draw a cached sprite with its anchor at world (wx, wy). A sprite made for
+   * another scale (a zoom still easing, or one borrowed from the previous
+   * zoom level) is stretched to fit.
+   */
+  blit(spr, wx, wy) {
+    const cam = this.camera;
+    const k = cam.scale;
+    if (spr.s === k) {
+      this.ctx.drawImage(spr.canvas, Math.round((wx - cam.x) * k) - spr.ax, Math.round((wy - cam.y) * k) - spr.ay);
+      return;
+    }
+    const f = k / spr.s;
+    this.ctx.drawImage(spr.canvas, (wx - cam.x) * k - spr.ax * f, (wy - cam.y) * k - spr.ay * f, spr.w * f, spr.h * f);
+  }
+
+  /** Draw strip j of n (a vertical slice) of a building sprite; see blit(). */
+  blitStrip(spr, wx, wy, j, n) {
+    const cam = this.camera;
+    const k = cam.scale;
+    const sx0 = Math.round((j * spr.w) / n);
+    const sx1 = Math.round(((j + 1) * spr.w) / n);
+    if (sx1 <= sx0) return;
+    if (spr.s === k) {
+      const dx = Math.round((wx - cam.x) * k) - spr.ax;
+      const dy = Math.round((wy - cam.y) * k) - spr.ay;
+      this.ctx.drawImage(spr.canvas, sx0, 0, sx1 - sx0, spr.h, dx + sx0, dy, sx1 - sx0, spr.h);
+      return;
+    }
+    // Stretched: snap each strip's edges to whole pixels so neighbouring
+    // strips meet exactly (no hairline seams through buildings).
+    const f = k / spr.s;
+    const X = (wx - cam.x) * k - spr.ax * f;
+    const Y = Math.round((wy - cam.y) * k - spr.ay * f);
+    const d0 = Math.round(X + sx0 * f);
+    const d1 = Math.round(X + sx1 * f);
+    if (d1 > d0) this.ctx.drawImage(spr.canvas, sx0, 0, sx1 - sx0, spr.h, d0, Y, d1 - d0, Math.round(spr.h * f));
   }
 
   /** Queue a building's strips (or its overlay stand-in). */
@@ -441,8 +753,10 @@ export class Renderer {
       return;
     }
     const state = artState(b);
-    const key = `b:${b.type}:${b.size}:${b.variant}:${state}`;
-    const spr = this.sprites.get(key, () => buildingSpec(b.type, b.size, b.variant, state));
+    const variant = this.artVariant(b);
+    const key = `b:${b.type}:${b.size}:${variant}:${state}`;
+    // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
+    const spr = this.sprites.get(key, () => buildingSpec(b.type, b.size, variant, state, true));
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).
     let alpha;
@@ -475,6 +789,21 @@ export class Renderer {
     }
     if (kind === 'fountain' && b.hasWater && b.efficiency > 0 && this.motionOn) {
       items.push({ d: front + 0.0006, kind: K_EXTRA, b, wx, wy, spray: true });
+    }
+    // Live details. Flag cloth always (the sprite only has the poles).
+    const flags = flagsFor(b.type, b.size);
+    if (flags.length) items.push({ d: front + 0.0007, kind: K_EXTRA, b, wx, wy: wy + rise, flags });
+    if (this.camera.zoom < 0.75 || rise) return; // the rest is too small to see when zoomed out
+    if (kind === 'market' && b.efficiency > 0 && hasStock(b)) {
+      items.push({ d: front + 0.0004, kind: K_EXTRA, b, wx, wy, live: 'market' });
+    } else if (kind === 'venue' && showOn(b)) {
+      items.push({ d: front + 0.0003, kind: K_EXTRA, b, wx, wy, live: 'crowd' });
+    } else if (b.type.startsWith('temple_')) {
+      items.push({ d: front + 0.0004, kind: K_EXTRA, b, wx, wy, live: 'altar' });
+    } else if (b.type === 'weapons_ws' && b.efficiency > 0 && b.progress > 0 && this.motionOn && Math.random() < 0.035) {
+      // The smith hammers: sparks fly out of the forge door (workshopArt door, left face).
+      const [dx, dy] = [(0.6 - 1.07) * HALF_W, (0.6 + 1.07) * HALF_H - 4];
+      this.effects.sparks(wx + dx, wy + dy, 4 + Math.floor(Math.random() * 4));
     }
   }
 
@@ -530,7 +859,7 @@ export class Renderer {
    * wraps the footprint's two front edges, so the building's own tiles are
    * never darkened (flat farms and plazas stay bright).
    */
-  drawBuildingShadow(b) {
+  drawBuildingShadow(b, strength = 1) {
     const L = shadowLength(b) * 1.25;
     if (L <= 0.03) return;
     const { ctx, camera: cam } = this;
@@ -540,7 +869,7 @@ export class Renderer {
     for (const [len, alpha] of [[L, 0.14], [L * 0.55, 0.12]]) {
       const dv = len * 0.4;
       const pts = [pt(S, 0), pt(S + len, dv), pt(S + len, S + dv), pt(len, S + dv), pt(0, S), pt(S, S)];
-      ctx.fillStyle = `rgba(16,22,10,${alpha})`;
+      ctx.fillStyle = `rgba(16,22,10,${(alpha * strength).toFixed(3)})`;
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let q = 1; q < pts.length; q++) ctx.lineTo(pts[q][0], pts[q][1]);
@@ -695,11 +1024,30 @@ export class Renderer {
     ctx.fill();
   }
 
-  /** Flat overlay footprints, dynamic stock displays and fountain spray. */
+  /** Flat overlay footprints, stock displays, fountain spray and other live details. */
   drawExtra(it) {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
     const b = it.b;
+    const t = this.motionOn ? this.time : 0; // reduced motion: everything holds still
+    if (it.flags) {
+      const ox = (it.wx - cam.x) * k;
+      const oy = (it.wy - cam.y) * k;
+      it.flags.forEach((f, n) => drawFlag(ctx, ox + f.x * k, oy + f.y * k, k, f, t, b.id * 1.3 + n * 2.1));
+      return;
+    }
+    if (it.live) {
+      const ox = (it.wx - cam.x) * k;
+      const oy = (it.wy - cam.y) * k;
+      if (it.live === 'market') drawShoppers(ctx, ox, oy, k, b.size, t, b.id);
+      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5);
+      else if (it.live === 'altar') {
+        // templeArt's altar fire sits at P(0.25, S - 0.08), about 5 px up.
+        const S = b.size;
+        drawAltarFlame(ctx, ox + (0.25 - (S - 0.08)) * HALF_W * k, oy + ((0.25 + S - 0.08) * HALF_H - 5) * k, k, t, b.id);
+      }
+      return;
+    }
     if (it.spray) {
       // Spout top of fountainArt: local P(0.5, 0.5, 4) raised 10 px.
       drawSpray(ctx, (it.wx - cam.x) * k, (it.wy + HALF_H * 1 - 14 - cam.y) * k, k, this.time, b.id);
@@ -758,11 +1106,11 @@ export class Renderer {
       const wx = (it.x - it.y) * HALF_W;
       const wy = (it.x + it.y) * HALF_H;
       if (def && plan.kind === 'building' && it.ok) {
-        const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:${plan.tool === 'house' ? 0 : 0}`, () => buildingSpec(plan.tool, it.size, 0, 0));
+        // Same sprite (and cache key) as a placed building of variant 0: live flags.
+        const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:0`, () => buildingSpec(plan.tool, it.size, 0, 0, true));
         this.fillDiamond(wx, wy, color, it.size);
-        const k = this.camera.scale;
         this.ctx.globalAlpha = 0.72;
-        this.ctx.drawImage(spr.canvas, Math.round((wx - this.camera.x) * k) - spr.ax, Math.round((wy - this.camera.y) * k) - spr.ay);
+        this.blit(spr, wx, wy);
         this.ctx.globalAlpha = 1;
       } else {
         this.fillDiamond(wx, wy, color, it.size);

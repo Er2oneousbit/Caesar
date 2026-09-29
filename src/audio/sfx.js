@@ -44,7 +44,7 @@ export class Sfx {
   play(name) {
     if (this.muted || this.volume <= 0) return;
     const now = performance.now();
-    const minGap = { fire: 1500, collapse: 800, build: 60, click: 40, horn: 2500, clash: 160, arrow: 140 }[name] ?? 250;
+    const minGap = { fire: 1500, collapse: 800, build: 60, click: 40, horn: 2500, clash: 160, arrow: 140, thunder: 3000 }[name] ?? 250;
     if (now - (this.lastPlayed.get(name) || 0) < minGap) return;
     this.lastPlayed.set(name, now);
     const ctx = this._ensure();
@@ -71,6 +71,8 @@ export class Sfx {
         case 'clash': this.tone(1400 + Math.random() * 500, t, 0.06, 'square', 0.05, 900); this.noise(t, 0.05, 0.08, 5000); break; // blades
         case 'arrow': this.noise(t, 0.09, 0.05, 7000); break; // whoosh
         case 'recruit': [0, 0.12].forEach((d) => this.tone(196, t + d, 0.08, 'triangle', 0.12, 150)); break; // drum beats
+        // --- weather ---
+        case 'thunder': this.noise(t, 0.35, 0.1, 900); this.noise(t + 0.05, 2.6, 0.22, 120); break; // crack, then a long low rumble
         default: break;
       }
     } catch {

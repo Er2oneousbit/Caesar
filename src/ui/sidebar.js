@@ -43,14 +43,16 @@ export class Sidebar {
 
   bindMinimap(canvas) {
     let down = false;
-    const move = (e) => {
+    // A click travels to the spot; dragging on the minimap follows the pointer directly.
+    const move = (e, glide = false) => {
       const r = canvas.getBoundingClientRect();
       const px = ((e.clientX - r.left) / r.width) * canvas.width;
       const py = ((e.clientY - r.top) / r.height) * canvas.height;
       const w = this.minimap.toWorld(px, py);
-      this.app.renderer.camera.centerOnWorld(w.x, w.y);
+      if (glide) this.app.renderer.camera.glideToWorld(w.x, w.y);
+      else this.app.renderer.camera.centerOnWorld(w.x, w.y);
     };
-    canvas.addEventListener('pointerdown', (e) => { down = true; canvas.setPointerCapture(e.pointerId); move(e); });
+    canvas.addEventListener('pointerdown', (e) => { down = true; canvas.setPointerCapture(e.pointerId); move(e, true); });
     canvas.addEventListener('pointermove', (e) => { if (down) move(e); });
     canvas.addEventListener('pointerup', () => { down = false; });
   }

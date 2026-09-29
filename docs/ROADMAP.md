@@ -141,16 +141,19 @@ Fixes from a review of v0.6:
 
 ## Modernization: from the community engines
 
-What Augustus added to the original, adapted to Colonia:
+What Augustus (4.0) added to the original, checked against its manual and release notes, adapted to Colonia:
 
-* **Roadblocks**: roaming walkers stop, carts and settlers pass, so service coverage becomes a puzzle instead of a dice roll. With a switch per kind of walker (Augustus later added permissions for labor seekers and tax collectors).
-* **Market special orders**: choose which goods a market buys.
-* **Partial warehouse storage**: accept a good only up to a set amount.
-* **Supply posts**: soldiers in forts eat, fed from the granaries (an option; the original's rule is the default).
-* **Monuments**: Grand Temples (one per god), a Pantheon and a Lighthouse, built over years from goods deliveries with a work camp and an engineer's guild; plus a Caravanserai for land trade. A late-game goal and a place to spend surplus goods.
-* **Global labour pool**: buildings hire from the whole city instead of needing homes within reach (an option; the original's rule is the default).
+* **Roadblocks**: only roaming service walkers are stopped. Anything with a destination (carts, caravans, settlers, market buyers) passes, so service coverage becomes a puzzle instead of a dice roll. Each roadblock carries a permission per group of walkers: maintenance (engineers and prefects), priests, the market vendor, entertainers, education, medicine, tax collectors, labor seekers, missionaries and watchmen, plus everyone else. Gates, bridges, granaries and warehouses can carry the same permissions. Roadblocks default to denying everyone.
+* **Market special orders**: each market switches every good on or off (all on by default). The buyer only fetches goods that are on, and the vendor only hands out goods that are on and that the house's next level uses.
+* **Partial warehouse storage**: per good in each warehouse or granary, a state (not accepting, accepting up to a limit, getting from other storage, and later versions add maintaining a reserve) and a limit counted in loads.
+* **Supply posts**: fort soldiers eat. One post per map; its quartermaster fetches food from granaries, and shortages cut morale (an option; the original's rule is the default).
+* **Monuments**: Grand Temples (one per god, and how many a city may build is an option, 2 by default), a Pantheon and a Lighthouse. You pay to place the footprint, then a work camp hauls goods from warehouses and an architect's guild (called the engineer's guild in Augustus 2.0) sends architects who advance each stage. Finished monuments never burn or collapse and cost monthly upkeep. A late-game goal and a place to spend surplus goods.
+* **Caravanserai**: the land counterpart of the Lighthouse; when it is staffed and fed, disruptions to land trade last half as long, and a trade policy (seller, buyer or quantity) can be set.
+* **Global labour pool**: an option that removes the need for labor-seeking walkers to pass homes; every building with road access is fully staffed while enough citizens are unemployed, and category priorities still apply. The original's rule is the default.
 * **Building rotation** for gatehouses, warehouses, forts and hippodromes.
-* **Extended campaign**: keep governing a province after its goals are met.
+* **Extended campaign**: after victory, the player can accept the promotion again or extend the regency, indefinitely.
+* **Monthly levies**: some buildings (monuments) cost upkeep in denarii.
+* **Also in Augustus 4.0, candidates for later**: the **Cart Depot** (ox carts move goods between storage buildings on orders: source, destination, good, condition), the **Tavern** (wine, meat and fish give entertainment), the **Watchtower** (a cheaper tower that needs no weapons but needs a barracks), the **Highway** (a fast road that only destination walkers can use, with a cost per tile), and new materials (stone, sand, bricks, concrete, gold) with a **City Mint**.
 * Already in Colonia: zoom, much bigger maps (Uber) and a console.
 
 ## Modernization: Colonia's own

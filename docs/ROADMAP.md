@@ -1,6 +1,21 @@
 # Roadmap
 
-What exists, what the classic game had that Colonia does not (yet), and ideas. Roughly in priority order. New feature requests are added here first; bugs are fixed right away.
+What exists, what Caesar III had that Colonia does not (yet), and how to modernize it. New feature requests are added here first; bugs are fixed right away.
+
+## The plan: a remake, modernized
+
+Colonia is a remake and modernization of Caesar III. The original's rules, buildings and campaign shape are the core, rebuilt with original art, sound and text. On top come the quality-of-life changes players now expect, many of them first seen in the community engines: Julius (the original's exact game logic on modern systems) and Augustus (Julius plus gameplay improvements such as roadblocks, market special orders and monuments).
+
+## Next up (suggested order)
+
+1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors.
+3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+5. **Classic buildings still missing**: hippodrome, fishing wharves and shipyards, military academy, large temples, and the governor's residence with salary and rank.
+6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+
+Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
 ## Done (v0.6.2)
 
@@ -96,39 +111,83 @@ Fixes from a review of v0.6:
 * Touch controls and phone layout; synthesized sound effects
 * Tests: 16 headless sim tests, 18-check browser smoke test, balance simulator
 
-## Next up (suggested order)
-
-Picked for value per effort; each is described in the sections below.
-
-1. Roadblocks and walker click-to-inspect
-2. The "next level" overlay, and production and logistics stats
-3. Sim fuzzer and save corpus
-4. Disease and crime
-5. Replay and timelapse
-6. The wider world: the regional map, then the Emperor's legions, then distant battles
-
-## Missing compared to the classic formula
+## Caesar III parity: what the original had that Colonia does not (yet)
 
 1. **The Emperor's legions** marching on a governor whose favor collapses, which gives the favor rating real teeth; distant battles the Emperor asks you to send troops to.
 2. **Water industry**: fishing wharves (fish as a food) and shipyards.
-3. **Crime**: criminals from unhappy neighborhoods. Unemployment and low mood breed thieves who rob the treasury and markets, and rioters who burn buildings; prefects double as police, as in the original.
+3. **Crime**: criminals from unhappy neighborhoods. Unemployment and low mood breed thieves who rob the treasury and markets, and rioters who burn buildings; prefects double as police, as in the original. With a crime overlay.
 4. **Disease**: plague outbreaks in dense, unhealthy blocks that clinics, hospitals and baths prevent, so health buildings matter beyond housing needs. It can reuse the fire and collapse risk machinery.
-5. **Hippodrome** (chariot races) as a fourth entertainment venue.
-6. **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary).
+5. **Hippodrome** (chariot races) as a fourth entertainment venue, with a chariot maker to supply it.
+6. **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary), and the **rank ladder** from Citizen to Caesar.
 7. **Map rotation** (view the city from 4 angles).
 8. **Scenario/map editor**, which doubles as modding (missions saved as data files).
-9. **Events**: floods, earthquakes, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
+9. **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 10. **Warehouse/granary orders** ("get goods", "empty storage") and granary-to-granary transfers.
-11. **Walker click-to-inspect** (currently only buildings and tiles): who it is, where it came from, where it is going, what it carries.
-12. **Regional map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), whether clicking a warband pans the city view to its entry edge, and whether the geography is Italy-centred or the whole inland sea (the partners reach from Tarraco to Alexandria).
+11. **Walker click-to-inspect** (currently only buildings and tiles): who it is, where it came from, where it is going, what it carries, and what it thinks of the city (the original's walkers talked; ours get their own lines).
+12. **Empire map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. Like the original's empire map it covers the whole inland sea (the partners reach from Tarraco to Alexandria). To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), and whether clicking a warband pans the city view to its entry edge.
 13. **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
+14. **The original's five gods**: Ceres, Neptune, Mercury, Mars and Venus. Colonia has Jupiter and Vesta in place of Mercury (trade) and Venus (happiness).
+15. **The full 20-level housing ladder**, from small tents to luxury palaces (Colonia has 12 levels).
+16. **Health, Education and Entertainment advisors**, and a **Problems overlay**.
+17. **Triumphal arches**, awarded for battles won.
+18. **Military academy**: trains soldiers who fight better.
+19. **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
+20. **Wolves** on wild land that attack walkers until soldiers clear them.
+21. **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
+22. **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
+23. **Hall of Fame** for the best career scores.
+24. **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.
 
-## Beyond the original: tools for optimizers
+## Modernization: from the community engines
 
-* **Roadblocks**: roaming walkers cannot pass, carts and settlers can, so service coverage becomes a puzzle instead of a dice roll (Pharaoh's big quality-of-life addition; Caesar III never had them).
-* **"Next level" overlay**: color every home by the one thing blocking its next level (water, food variety, a temple, desirability...), with the reason in the tooltip.
+What Augustus added to the original, adapted to Colonia:
+
+* **Roadblocks**: roaming walkers stop, carts and settlers pass, so service coverage becomes a puzzle instead of a dice roll. With a switch per kind of walker (Augustus later added permissions for labor seekers and tax collectors).
+* **Market special orders**: choose which goods a market buys.
+* **Partial warehouse storage**: accept a good only up to a set amount.
+* **Supply posts**: soldiers in forts eat, fed from the granaries.
+* **Monuments**: Grand Temples (one per god), a Pantheon and a Lighthouse, built over years from goods deliveries with a work camp and an engineer's guild; plus a Caravanserai for land trade. A late-game goal and a place to spend surplus goods.
+* **Global labour pool**: buildings hire from the whole city instead of needing homes within reach.
+* **Building rotation** for gatehouses, warehouses, forts and hippodromes.
+* **Extended campaign**: keep governing a province after its goals are met.
+* Already in Colonia: zoom, much bigger maps (Uber) and a console.
+
+## Modernization: Colonia's own
+
+Seeing why:
+
+* **Reasons in the Problems overlay**: color every home by the one thing blocking its next level (water, food variety, a temple, desirability...), and every idle building by its reason, with the details in the tooltip.
 * **Production and logistics stats**: per good, how much was made and used each month; per building, why it is idle (no workers, no raw material, no storage, no road); a hint at the bottleneck. Charts in the advisors belong here (population, treasury and mood history are already recorded in `city.history`).
-* **Blueprints**: copy and paste housing blocks, and a ghost planner that places the pieces and builds each one once you can afford it.
+* **Production calculator**: turns a target into building counts (feeding 1,000 people takes about 3 full wheat farms).
+* **Walker traffic heat map**: where walkers actually go, which shows where roadblocks belong.
+* **Year in review** and a **city chronicle**: a yearly report card with charts, and an auto-written history of the city ("297 BC: the great fire of the east quarter took 14 homes").
+
+Playing smoother:
+
+* **Blueprints**: copy and paste housing blocks, and a ghost planner that builds each piece once you can afford it.
+* **Pinned stats**: pin any good or rating to the top bar.
+* **Cycle idle buildings**: jump between the idle buildings of one kind.
+* **Auto-pause on events**: fires, scouted raids, the Emperor's requests.
+* **Per-building labor priority**, on top of the category priorities.
+* **Custom difficulty**: sliders over the lever table (every lever already lives in one table).
+* **Interactive tutorial mission**.
+* **Photo mode**: hide the UI, pick the time of day, season and weather, save a screenshot.
+* **Accessibility**: UI scale and a screen-reader pass (reduced motion is already honored).
+* **Localization**: Italian first, and Latin for the purists.
+* **Challenge seeds and ironman**: a fixed map plus rules, with medals and par times; autosave-only games.
+* **Share-a-map link**: seed, landscape, size and difficulty in one link (the URL flags already exist).
+
+Platform:
+
+* **Sim in a Web Worker**: keeps big maps smooth at 8x, still deterministic.
+* **Installable offline app** for the standalone build.
+* **Downloads in the claude.ai viewer**: route save export through the viewer's downloads capability, so Export works there too.
+* **Scripting console**: a sandboxed build API for automating your own layouts.
+
+Security:
+
+* **Save import hardening**: treat imported saves as untrusted input (size caps, map-size bounds, rejecting `__proto__` keys, a fuzzed loader). Today the loader checks the structure and the version.
+* **Content Security Policy** for the single-file build.
 
 ## Built on the deterministic sim
 
@@ -139,18 +198,33 @@ The sim is deterministic (seeded RNG, never `Math.random`), so the same seed plu
 * **Save corpus in CI**: keep a save from every release and prove each one still loads.
 * **`npm run sweep`**: the balance table (4 landscapes x 3 seeds x 4 difficulties, with and without a garrison) as a real script instead of one-off scratch copies.
 
+## Beyond the original (optional, later)
+
+Ideas that would change the original's economy or rules; each would come as an option:
+
+* **Dynamic prices**: each partner's prices drift with what you sell to it.
+* **Partner contracts**: optional side jobs ("Carthago wants 800 wine by next year and pays 150%").
+* **Loans from Rome**, at interest.
+* **Deeper production chains**: salt pans, garum (fish and salt), a mill and bakery for bread, sheep to wool to cloth.
+* **Paved roads**: faster carts, higher cost.
+* **Sewers and latrines**, paired with disease.
+* **Edicts**: policies with trade-offs (a bread dole, a curfew, public games).
+* **Climate per landscape**: deserts never snow, northern maps get long winters.
+* **"Harsh seasons" mode**: weather affects the city (drought cuts harvests, snow slows carts).
+
 ## Polish ideas
 
 * More building animation: turning mill wheels, laundry flapping, working farmers and fishermen.
-* Optional sprite packs: load PNG art (hand-drawn or AI-assisted) over the procedural sprites, keyed like the sprite cache, with the procedural art as the fallback. The art sheet (`tests/e2e/artsheet.html`) is the reference for sizes and anchors.
+* Optional sprite packs: load PNG art (hand-drawn or AI-assisted) over the procedural sprites, keyed like the sprite cache, with the procedural art as the fallback (Augustus can load outside images too). The art sheet (`tests/e2e/artsheet.html`) is the reference for sizes and anchors.
 * Keyboard remapping and a colorblind-friendly overlay palette.
-* A synthesized city soundscape (market chatter, forge clanks, gulls at the docks) that changes as you zoom.
 * Performance: cache static terrain into chunk canvases for the most zoomed-out view. When the screen is full of tiles (the middle of a Large or Uber map) that view costs about 16 ms a frame in headless Chromium against 4 ms one zoom level in; chunks would cut its thousands of ground draw calls to a few dozen (see ARCHITECTURE.md, *Draw calls*).
 * Smaller saves for very big cities: buildings are about 0.8 KB each in a save (mostly the house record), so a 1,500-building capital needs about 1.5 MB per slot. Dropping default-valued fields, or compressing the whole save, would stretch the ~5 MB browser allowance further.
 
 ## Open questions
 
-* Stay close to classic Caesar, or "Caesar with modern quality of life"? Roadblocks and blueprints are not in the original.
+* Rules the mods changed (supply posts, a city-wide labour pool): the original's rule by default with the change as an option, or the other way round?
+* Pantheon: switch to the original's five gods (Mercury and Venus in place of Jupiter and Vesta)? Saves would map the old gods' moods over.
+* Housing: the original's 20 levels, or keep Colonia's 12 larger steps?
 * Crime, disease and events: on for every difficulty, or off on Easy and scaling up from there?
 
 Made with ❤️ from your friendly hacker - er2oneousbit

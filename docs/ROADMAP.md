@@ -8,13 +8,14 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); the three statues need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 6 needs no second pass.
-2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-5. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-6. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
-7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); an aqueduct crossing a road should be drawn as a bridge, the channel carried over the road on an arch; the three statues need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 7 needs no second pass.
+2. **A library of music tracks**: about 10 tracks of a few minutes each (today a piece is about 20 bars, under a minute, then a pause and a new random piece), each with an opening of its own (lead instrument, tempo, mode and theme) so they are told apart from the first bars, picked at random without repeating the last few. Still composed by our generator, each track from a fixed seed and a longer form (more sections, varied returns of the theme). To decide: which tracks play for night, festivals, raids and the menu (their own tracks, or the special moods keep their shorter pieces), and whether the music advisor or settings name the tracks.
+3. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+4. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+5. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+6. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+7. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
+8. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 

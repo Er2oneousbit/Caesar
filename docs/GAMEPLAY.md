@@ -34,6 +34,7 @@ Chosen in the Sandbox setup and in every campaign briefing (the menus remember y
 | Months between requests | | | | x0.7 (about 10-18) |
 | Months to deliver a request | 12 | 12 | 12 | 9 |
 | Bad days in a row before a home falls back a level | 6 | 3 | 3 | 3 |
+| Daily chance an unhappy home breeds trouble (crime) | x0.5 | x1 | x1.2 | x1.4 |
 
 Insane is for veterans: staff the Prefecture and Engineer's Post first (labor priorities), because an unpatrolled building now burns or collapses in about two months instead of three, and plan for roughly twice Normal's army. In winter nothing grows on any farm (crops, pigs, and the Horse Ranch's foals and herd): fields keep their progress and grow again from Martius, workers stay on, and carts still haul the harvest already in store. Games start in Ianuarius, so the first harvest waits for spring; a message warns in October, and the city lives on its granaries (or imports) from December to Februarius. Size farms for about a third more than the city eats (a full Insane wheat farm grows about 576 units a year instead of 768) and keep roughly 0.75 units per citizen in store when winter comes. Winter also costs the Horse Ranch about a quarter of the year's foals and mares, so start it early. The headless simulator shows how a level plays out: `npm run sim -- --difficulty insane --raids occasional --garrison`.
 
@@ -88,7 +89,7 @@ Most services are delivered by walkers. A walker serves every building within **
 
 | Service | Building | Notes |
 |---|---|---|
-| Fire safety | Prefecture (6 workers) | Prefects reset fire risk; they run to fires and douse everything within 4 tiles |
+| Fire safety, police | Prefecture (6 workers) | Prefects reset fire risk and give homes 32 days of police cover (half the crime); they run to fires and douse everything within 4 tiles, and catch protesters, thieves and rioters (see Crime) |
 | Collapse | Engineer's Post (5) | Engineers reset collapse risk |
 | Religion | Temples (2) | One per god: Jupiter, Ceres, Neptune, Mars, Vesta |
 | Food & goods | Market (5) | Up to two vendors on the streets; the buyer restocks from granaries/warehouses |
@@ -97,9 +98,9 @@ Most services are delivered by walkers. A walker serves every building within **
 | Entertainment | Theater 10 pts, Amphitheater 15 (20 with plays and gladiators booked), Colosseum 20 (30 with gladiators and beasts) | Each needs performers from a training building: Actor Troupe, Gladiator School, Menagerie |
 | Taxes | Forum (6), Senate (30) | Only visited homes pay tax |
 
-**Roadblocks** (Roads menu, 12 Dn) go on a road tile. Walkers roaming the streets turn back at one, so a building serves only the homes on its side; click a roadblock to let groups through (prefects and engineers, priests, market vendors, entertainers, teachers/librarians/scholars, barbers/physicians/bath attendants, tax collectors; none at first). Everyone heading somewhere passes: carts, market buyers, settlers, caravans, prefects running to a fire, and roamers walking home (who still serve homes along the way, as on any walk). Soldiers and raiders ignore roadblocks. Clearing one leaves its road.
+**Roadblocks** (Roads menu, 12 Dn) go on a road tile. Walkers roaming the streets turn back at one, so a building serves only the homes on its side; click a roadblock to let groups through (prefects and engineers, priests, market vendors, entertainers, teachers/librarians/scholars, barbers/physicians/bath attendants, tax collectors; none at first). Everyone heading somewhere passes: carts, market buyers, settlers, caravans, prefects running to a fire or chasing a criminal, and roamers walking home (who still serve homes along the way, as on any walk). Soldiers and raiders ignore roadblocks. Clearing one leaves its road.
 
-**Inspecting walkers.** Click a walker for its panel: who it is, where it comes from, what it is doing and carrying, and what it says. Citizens mention the city's most pressing trouble (raiders first, then hunger, fire, unemployment over 12%, taxes more than 2 points over the default, wages under the fair wage, debt, an angry god, a mood under 35) or talk about their work; a walker keeps the same line for 8 days. *Follow* keeps the view on it until you move the map.
+**Inspecting walkers.** Click a walker for its panel: who it is, where it comes from, what it is doing and carrying, and what it says. Citizens mention the city's most pressing trouble (raiders first, then hunger, fire, unemployment over 12%, taxes more than 2 points over the default, wages under the fair wage, debt, an angry god, a mood under 35) or talk about their work; protesters say what upsets their home most; a walker keeps the same line for 8 days. *Follow* keeps the view on it until you move the map.
 
 A home's **entertainment score** is the points of every venue whose entertainer passed by recently, plus a city-wide base of up to 20: for each kind of venue, the share of the population its working venues can seat (theater 400, amphitheater 900, colosseum 2,000 people), averaged over the three kinds and divided by 5. A growing city needs more venues, not just one of each.
 
@@ -194,7 +195,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 4). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 5: home mood and crime; version 4 saves still load, their homes starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
 
 ## City mood (sentiment)
 
@@ -213,6 +214,31 @@ Starts from 50 and is recalculated monthly (moving halfway toward the new value)
 | Difficulty | -8 on Insane |
 
 Mood 30+ brings settlers; below 25 people start leaving.
+
+## Home mood and crime
+
+Every household also has a **mood** of its own (0-100, the house panel's *Mood and order*), used for crime only: settlers and emigrants still follow the city's mood. Twice a month (the 1st and the 9th) each home moves at most 3 points toward a target:
+
+| Term | Effect |
+|---|---|
+| City mood | the starting point |
+| Hunger | -5, -10, then -15 for each update in a row that a home which eats went without at its meal and still has no food (tents forage) |
+| Food variety | +3 per kind of food beyond what its level needs, at most +6 |
+| Envy | tents, lean-tos and huts: -8 in a city with villas or palatia, -5 with insulae (level 11+) but no villas |
+| Desirability | its street's desirability / 5, from -5 to +5 |
+| Untaxed | +3 while no tax collector has registered it |
+
+A new household starts at the city's mood. The panel and the crime overlay name the home's worst trouble, or else the city's worst mood factor.
+
+**The daily roll.** Once the city has 300 people (never in the first two campaign missions), each day one unhappy home may breed trouble: the one with the lowest mood among homes below 50 that still can (a home at 50 or more settles down and can start again). The chance is 61% x (1 - city mood / 108) a day (61% at mood 0, 44% at 30, 27% at 60, 5% at 100), times the difficulty's crime lever, and halved when a prefect passed that home in the last 32 days. What happens is the worst the home can do:
+
+* **Protester** (mood under 50, once per unhappy spell): stands in the street by the home for about four days. Harmless: it costs no peace.
+* **Thief** (mood under 35, once): walks to the nearest staffed Forum or Senate (within 50 road tiles) and steals a quarter of this year's taxes there, at most 400 Dn and never more than the treasury holds (nothing under 5), shown as *Stolen by thieves* in the Finance ledger; with no Forum or Senate in reach he takes half the biggest stock of the nearest stocked market (at most 100). A prefect or soldier who catches him on the way saves it all.
+* **Riot** (mood 15 or less while the city's mood is under 30, with a road within 4 tiles): the rioters set their own home alight (its people become homeless), and a mob of 1 to 6 (by population: up to 150, 300, 800, 1,200, 2,000 people, more) marches across country on the most prized building within 40 tiles (the Senate, then villas and palatia, a colosseum, a hospital, venues, schools, baths, the Forum, a medicus, temples, workshops, the granary, markets, insulae...), or with none that close the nearest such building it can walk to, setting alight each building it passes (not warehouses, forts, towers, wells, fountains, reservoirs, statues or gardens, nor homes of level 6 or below) and resting by the flames about three days. Rioters leave after 16 days, or when nothing they can reach is left to burn. A riot costs 5 peace at once, but the anger is spent: every home's mood rises by 20.
+
+**Catching criminals.** A prefect (not one fighting a fire) or a soldier beside a criminal holds him until he gives up: about 15 ticks for a prefect, 6 for a soldier. Every 10 ticks a prefect on patrol also looks for a thief or rioter within 30 tiles that nobody chases yet and runs after him (across fields if need be); after the catch he goes home. One he cannot reach (across a river) he leaves alone for 8 days and keeps on his patrol. Fires come first: a prefect sent to a fire drops the chase.
+
+**The crime overlay** (top bar) raises a column over each occupied home by its mood, taller and redder for more crime (0: 10, 1-10: 8, 11-20: 6, 21-30: 4, 31-40: 2, 41-49: 1, 50+: none); a home that has already sent out a protester or thief stands at 8 or more. Prefectures, prefects and criminals stay in view; point at a home for its mood, its trouble and whether a prefect patrols it.
 
 ## Fire and collapse
 
@@ -234,14 +260,14 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 
 * **Culture:** religion, entertainment (full marks at an average score of 40), school, library, academy coverage (+ Senate). Moves at most 4 points a month.
 * **Prosperity:** average house level (full marks at an average of Insulae), patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
-* **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy.
+* **Peace:** +1 a month while mood is 45+ (but not in a month when a thief appeared), -2 while it is under 30; -5 for each riot; +8 for each raid repelled, -1 for each building raiders destroy.
 * **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over). The Emperor asks every 14-26 months (from 150 people) for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.
 
 ## The campaign
 
-Seven missions, each opening the next. The goals grow with the housing ladder: each mission's buildings let homes reach a certain level, and its culture and prosperity goals ask for a good share of what those buildings can give.
+Seven missions, each opening the next. The first two teach the basics and have no crime. The goals grow with the housing ladder: each mission's buildings let homes reach a certain level, and its culture and prosperity goals ask for a good share of what those buildings can give.
 
 | Mission | Map | Population | Culture | Prosperity | Peace | Favor | Homes up to | First raid |
 |---|---|---|---|---|---|---|---|---|

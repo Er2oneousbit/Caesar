@@ -385,7 +385,7 @@ try {
     // A walker in view, clicked on its body.
     await page.evaluate(() => { window.colonia.ui.info.close(); window.colonia.game.runDays(2); });
     await page.waitForTimeout(200);
-    const target = await page.evaluate(() => {
+    const findWalker = () => page.evaluate(() => {
       const r = window.colonia.renderer;
       const cam = r.camera;
       const rect = window.colonia.canvas.getBoundingClientRect();
@@ -399,7 +399,24 @@ try {
       }
       return null;
     });
-    check('walkers are on screen to click', !!target);
+    let target = await findWalker();
+    let how = 'one in view';
+    if (!target) {
+      // The menu picks a random map, and on about one in ten no walker is in
+      // view near the roadblock two days on (the check failed now and then
+      // for that reason alone). Bring one into view instead of hoping; a city
+      // with no walker on its roads still fails.
+      how = await page.evaluate(() => {
+        const g = window.colonia.game;
+        const w = [...g.walkers.values()].find((v) => g.map.road[g.map.idx(v.x, v.y)]);
+        if (!w) return `no walker on a road (${g.walkers.size} walkers, seed ${g.seed})`;
+        window.colonia.renderer.camera.centerOnTile(w.x, w.y);
+        return `none in view (seed ${g.seed}), centered on walker type ${w.type}`;
+      });
+      await page.waitForTimeout(200);
+      target = await findWalker();
+    }
+    check('walkers are on screen to click', !!target, how);
     if (target) {
       await page.mouse.click(target.x, target.y);
       await page.waitForTimeout(150);
@@ -440,6 +457,55 @@ try {
     const legend = await page.isVisible('#overlay-legend:has-text("Home needs: water")');
     check('Problems overlay: a legend, and pointing at a building says what is wrong', tip.shown && tip.text === flagged.text && legend, JSON.stringify({ tip, legend, want: flagged.text }));
   }
+  // 5a3b. The crime overlay, with a protester, a thief and a riot on the
+  //       streets (drawn by their own art); then the criminals are cleared so
+  //       they cannot upset the checks that follow.
+  await page.evaluate(() => {
+    const con = window.colonia.ui.console;
+    con.run('crime protest');
+    con.run('crime thief');
+    con.run('riot');
+  });
+  await page.selectOption('.hud-select', 'crime');
+  const crimeHome = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const ov = app.renderer.overlay;
+    const b = [...g.buildings.values()].find((x) => x.house && x.house.pop > 0 && x.size === 1 && ov.tip(g, x));
+    if (b) app.renderer.camera.centerOnTile(b.x, b.y);
+    const about = {};
+    for (const w of g.walkers.values()) if (w.kind === 'criminal') about[w.type] = (about[w.type] || 0) + 1;
+    return { key: ov.key, about, home: b ? { x: b.x, y: b.y, text: ov.tip(g, b) } : null };
+  });
+  await page.waitForTimeout(300);
+  let crimeTipShown = null;
+  if (crimeHome.home) {
+    const cp = await toScreen(crimeHome.home.x, crimeHome.home.y);
+    await page.mouse.move(cp.x, cp.y);
+    await page.waitForTimeout(250);
+    crimeTipShown = await page.evaluate(() => document.getElementById('tooltip').textContent);
+  }
+  const crimeLegend = await page.isVisible('#overlay-legend:has-text("Little crime")');
+  // The criminals appear by the unhappiest home, which on some random maps is
+  // out of view of the home above: look at the protester (it stands still)
+  // and count the criminals actually drawn there.
+  await page.evaluate(() => {
+    const app = window.colonia;
+    const p = [...app.game.walkers.values()].find((w) => w.type === 'protester');
+    if (p) app.renderer.camera.centerOnTile(p.x, p.y);
+  });
+  await page.waitForTimeout(300);
+  const crimeDrawn = await page.evaluate(() => {
+    const g = window.colonia.game;
+    return window.colonia.renderer.walkerSpots.filter((s) => g.walkers.get(s.id)?.kind === 'criminal').length;
+  });
+  check('the crime overlay opens: legend, a home\'s mood on hover, criminals drawn, no errors',
+    crimeHome.key === 'crime' && !!crimeHome.home && /Mood \d+/.test(crimeTipShown || '') && crimeLegend && crimeHome.about.protester >= 1 && crimeHome.about.thief >= 1 && crimeHome.about.rioter >= 1 && crimeDrawn > 0 && errors.length === 0,
+    JSON.stringify({ ...crimeHome, crimeTipShown, crimeLegend, crimeDrawn, errors }));
+  await page.evaluate(() => {
+    const g = window.colonia.game;
+    for (const w of [...g.walkers.values()]) if (w.kind === 'criminal') { w.dead = true; g.walkers.delete(w.id); }
+  });
   await page.selectOption('.hud-select', 'none');
   const legendGone = await page.isHidden('#overlay-legend');
   await page.keyboard.press('F2');

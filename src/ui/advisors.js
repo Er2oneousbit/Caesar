@@ -269,7 +269,7 @@ export class Advisors {
     const est = h('span', { class: 'num' }, `${fmt(estTax())} Dn / month`);
     const ly = c.finance.lastYear;
     const ty = c.finance.thisYear;
-    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Gifts & requests', military: 'Army pay', plunder: 'Lost to raiders' };
+    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Gifts & requests', military: 'Army pay', plunder: 'Lost to raiders', stolen: 'Stolen by thieves' };
     const income = ['taxes', 'exports', 'other'];
     return [
       h('div', { class: 'grid2' },
@@ -452,7 +452,7 @@ export class Advisors {
     return [
       row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. ${seatText} Build temples, schools, libraries and venues where people live.`),
       row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Senate. Changes slowly.'),
-      row('peace', 'Peace', `Grows each month the city is content (mood ${CONFIG.PEACE_MOOD}+). Falls with unrest, raids and the wrath of Mars.`),
+      row('peace', 'Peace', `Grows each month the city is content (mood ${CONFIG.PEACE_MOOD}+). No growth in a month when a thief is about (protesters cost nothing); falls with low mood, riots, raids and the wrath of Mars.`),
       row('favor', 'Favor', 'The Emperor likes paid tributes, fulfilled requests and gifts. Debt and missed requests anger him. At 0 you are recalled!'),
     ];
   }

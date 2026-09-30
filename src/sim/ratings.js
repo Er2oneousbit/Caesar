@@ -5,7 +5,8 @@
  *
  *   Culture     religion, entertainment and education coverage
  *   Prosperity  housing quality, patricians, profit, employment, wages
- *   Peace       grows while citizens are content, drops with unrest
+ *   Peace       grows while citizens are content and thieves stay away,
+ *               drops with unrest and riots (sim/crime.js)
  *   Favor       the Emperor's opinion (see emperor.js for most changes)
  *
  * Ratings drift toward their target a few points per month so one good or
@@ -80,8 +81,11 @@ export function updateRatings(game) {
   if (tiny) prosperity = Math.min(prosperity, 10);
   r.prosperity = approach(r.prosperity, prosperity, CONFIG.PROSPERITY_STEP);
 
-  // Peace: slowly builds while people are content.
-  if (c.sentiment >= CONFIG.PEACE_MOOD) r.peace = Math.min(100, r.peace + CONFIG.PEACE_PER_MONTH);
+  // Peace: slowly builds while people are content, but not in a month when
+  // a thief was about (sim/crime.js; protests cost nothing, a riot costs peace
+  // at once).
+  const crimeThisMonth = !!(c.crime && c.crime.month);
+  if (c.sentiment >= CONFIG.PEACE_MOOD && !crimeThisMonth) r.peace = Math.min(100, r.peace + CONFIG.PEACE_PER_MONTH);
   else if (c.sentiment < 30) r.peace = Math.max(0, r.peace - 2);
 
   // Favor: gently returns toward 50.

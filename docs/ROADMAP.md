@@ -8,13 +8,24 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy). Needs the analyst's spec first (the clean-room step in `claude.md`); the Problems overlay then gets crime and sickness too.
+1. **Disease**, then the **Health, Education and Entertainment advisors** (crime came in v0.10.0). Disease as local outbreaks on the fire machinery: each home gets a health score (its level, medicus, hospital, baths, barber, fountain water, food); crowded, unhealthy homes build disease risk that a physician's visit clears; an outbreak makes a home sick (deaths, no growth, it can spread next door) and a staffed medicus sends a physician to cure it, as prefectures send prefects to fires; hospitals nearby cut the deaths. City health (the homes' average score) goes on the Health advisor, with a health overlay; on at every difficulty, gentler on Easy. The Problems overlay then gets crime and sickness too, and the Overview a crime and a health line.
 2. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
 3. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
 4. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1, 2 and 3, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
 5. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.10.0)
+
+* **Crime** (parity item 3): every household has a mood of its own (the city's mood plus hunger, food variety, envy of the rich, its street's desirability, and whether the tax collector has found it), used for crime only; settlers still follow the city's mood. Once the city has 300 people, each day the unhappiest home that still can may send out a **protester** (harmless), a **thief** (walks to the Forum or Senate and steals a quarter of the year's taxes, at most 400 Dn and never more than the treasury holds; with no Forum in reach, half a market's biggest stock) or, in a very unhappy city, a **riot** (the rioters burn their own home and march on the most prized building nearby, setting fire to what they pass; afterwards every home's mood rises by 20). The chance follows the city's mood, times a new difficulty lever (x0.5 on Easy, x1.2 Hard, x1.4 Insane), and none in the first two campaign missions
+* **Prefects as police**: a prefect passing a home halves its chance of trouble for 32 days (a change from the original, where patrols did not prevent crime); prefects and soldiers catch the criminals they meet, and prefects on patrol chase thieves and rioters within 30 tiles. A prefect who catches a thief on the way saves the money
+* **Peace**: a month with a thief about brings no peace gain, a riot costs 5 at once; protests cost nothing
+* **Crime overlay** (a column over every unhappy home by its mood, taller for a home that already sent a criminal; point at one for its mood, its worst trouble and whether a prefect patrols it), a *Mood and order* section in the house panel, *Stolen by thieves* in the Finance ledger, citizens who talk about it, and protester, thief and rioter walkers of their own
+* Console: `crime`, `crime protest|thief|riot`, `riot`, `unrest <n>`; `npm run sim` reports protesters, thieves, thefts, riots and what rioters burned
+* The balance sim's demo city now builds every service it plans (on its default seed it had silently lost its Forum and second market, so it never collected tax); the balance baseline moved with it (see the commit)
+* Saves are version 5; version 4 saves load with fresh moods and no crime yet
+* 192 unit tests (+32), 79 browser checks (+1)
 
 ## Done (v0.9.1)
 
@@ -197,7 +208,7 @@ Fixes from a review of v0.6:
 
 1. **The Emperor's legions** marching on a governor whose favor collapses, which gives the favor rating real teeth; distant battles the Emperor asks you to send troops to.
 2. **Water industry**: fishing wharves (fish as a food) and shipyards.
-3. **Crime**: criminals from unhappy neighborhoods. Unemployment and low mood breed thieves who rob the treasury and markets, and rioters who burn buildings; prefects double as police, as in the original. With a crime overlay.
+3. **Crime**: done in v0.10.0 (protesters, thieves who rob the Forum or a market, riots; prefects as police; a crime overlay).
 4. **Disease**: plague outbreaks in dense, unhealthy blocks that clinics, hospitals and baths prevent, so health buildings matter beyond housing needs. It can reuse the fire and collapse risk machinery.
 5. **Hippodrome** (chariot races) as a fourth entertainment venue, with a chariot maker to supply it.
 6. **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary), and the **rank ladder** from Citizen to Caesar.

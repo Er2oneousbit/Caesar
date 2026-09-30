@@ -58,7 +58,7 @@ function content(tab) {
           h('li', {}, h('b', {}, 'Roads first. '), 'Everything travels by road: settlers, workers, goods and services. Your city must connect to the Imperial road at the map edge. A gateway with green pennants marks the map entrance, where settlers and caravans arrive; red pennants mark the exit, where people leave (also green and red on the minimap).'),
           h('li', {}, h('b', {}, 'Housing plots. '), 'Drag the Housing tool (H) beside a road. Settlers walk in and pitch tents.'),
           h('li', {}, h('b', {}, 'Water. '), 'A Well within 2 tiles lets tents become family tents. Later, fountains fed by a reservoir unlock better homes. With the Housing tool in hand, a faint blue shows where homes would get water (paler for wells, stronger for fountains); placing a fountain shows where the reservoirs pipe water.'),
-          h('li', {}, h('b', {}, 'Safety. '), 'A Prefecture (fire) and an Engineer\'s Post (collapse) must send walkers past every building, or they will burn or fall down.'),
+          h('li', {}, h('b', {}, 'Safety. '), 'A Prefecture (fire) and an Engineer\'s Post (collapse) must send walkers past every building, or they will burn or fall down. Prefects also keep order: see Crime under Services.'),
           h('li', {}, h('b', {}, 'Food. '), 'Wheat Farm on meadow → Granary → Market. The market vendor sells food door to door.'),
           h('li', {}, h('b', {}, 'Religion, culture, taxes. '), 'Temples, schools, theaters and a Forum (for taxes) let homes grow and money flow.'),
           h('li', {}, h('b', {}, 'Click things! '), 'Every building explains what it is doing. Homes list exactly what they need to reach the next level.')),
@@ -112,6 +112,13 @@ function content(tab) {
       };
       return [
         h('table', { class: 'tbl' }, ['well', 'fountain', 'reservoir', 'prefecture', 'engineer_post', 'market', 'granary', 'warehouse', 'dock', 'temple_ceres', 'school', 'library', 'academy', 'theater', 'actor_troupe', 'amphitheater', 'gladiator_school', 'colosseum', 'menagerie', 'barber', 'clinic', 'baths', 'hospital', 'forum', 'senate', 'garden', 'oracle'].map(row)),
+        h('h4', {}, 'Crime'),
+        h('p', {}, `Every household has a mood of its own: the city's mood, lower for a hungry home, a squalid street or the poor living among villas, a little higher for plenty of food or no tax collector at the door. Click a home to see it (Mood and order). Once the city has ${CONFIG.CRIME_MIN_POP} people, an unhappy home can breed trouble:`),
+        h('ul', {},
+          h('li', {}, h('b', {}, 'Protesters '), `(mood under ${CONFIG.CRIME_MOOD}) stand in the street for a few days. Harmless: they cost no peace.`),
+          h('li', {}, h('b', {}, 'Thieves '), `(under ${CONFIG.THIEF_MOOD}) sneak to the Forum or Senate and steal part of this year's taxes, at most ${CONFIG.THEFT_CAP} Dn and never more than the treasury holds, or empty half a market stall.`),
+          h('li', {}, h('b', {}, 'Riots '), `(${CONFIG.RIOT_MOOD} or less, while the city's mood is under ${CONFIG.RIOT_CITY_MOOD}): the rioters burn their own home and march on the finest building nearby, setting fire to what they pass. Peace falls by ${CONFIG.RIOT_PEACE}, but the anger is spent: every home's mood rises by ${CONFIG.RIOT_MOOD_BOOST}.`)),
+        h('p', {}, `The angrier the city, the likelier trouble is. A prefect passing a home halves the chance for ${CONFIG.POLICE_DAYS} days, and prefects and soldiers catch the criminals they meet; prefects on patrol chase thieves and rioters within ${CONFIG.HUNT_RANGE} tiles. The Crime overlay shows which homes are close to trouble and why. The first two campaign missions have no crime.`),
         h('h4', {}, 'Ratings'),
         h('p', {}, 'Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content. Favor is the Emperor\'s opinion: pay tribute, answer his requests, avoid debt.'),
       ];

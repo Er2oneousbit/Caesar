@@ -64,7 +64,7 @@ URL flags, appended to the address (for example `dist/colonia.html?debug=1&seed=
 | `raids=off\|occasional\|frequent` | Override raids for new games |
 | `mute=1` | Sound off |
 
-**Debug console** (backquote key; `help` lists everything): `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army`, `garrison`, `favor 80`, `mood 70`, `win`, `stats`, `goto 30 40`, `weather storm`, `snow 3`, `sky 0.8` (freeze the time of day; `sky off`), `music` (status; `music next`, `music tracks`, `music play prima lux`, `music mood danger`, `music mood auto`, `music check`, `music wav day 60`), `loglevel debug`.
+**Debug console** (backquote key; `help` lists everything): `money 5000`, `freebuild on`, `days 120`, `demo 2` (builds a sample city), `give pottery 800`, `fire`, `collapse`, `invade 12` (raid now), `army`, `garrison`, `favor 80`, `mood 70`, `crime` (a crime report: the year's counts, criminals about, the unhappiest homes), `crime protest` / `crime thief` / `crime riot` (the home under the cursor, or the unhappiest one, does it now), `riot`, `unrest 20` (set every home's mood; they drift back), `win`, `stats`, `goto 30 40`, `weather storm`, `snow 3`, `sky 0.8` (freeze the time of day; `sky off`), `music` (status; `music next`, `music tracks`, `music play prima lux`, `music mood danger`, `music mood auto`, `music check`, `music wav day 60`), `loglevel debug`.
 
 In the browser's dev tools, `window.colonia` is the running app (`colonia.game` is the simulation).
 
@@ -88,7 +88,7 @@ In the browser's dev tools, `window.colonia` is the running app (`colonia.game` 
 
 ## Tests
 
-- `tests/*.test.mjs` drive the real game through the same construction API the player uses (`planAction` / `applyPlan`), so they catch problems across systems: `sim` (core city, maps, fires), `housing` (the 20-level ladder), `campaign` (the missions' pace and goals), `walkers` (roadblocks, walker inspection), `production` (the goods book, the Problems overlay, the Production advisor), `military`, `trade`, `save`, `sandbox` (difficulty, raids), `render` (camera, sprites, seasons, weather, water hints), `input`, `music` (composer and track library). Every new mechanic and every bug fix gets a test; a fix's test fails on the old code.
+- `tests/*.test.mjs` drive the real game through the same construction API the player uses (`planAction` / `applyPlan`), so they catch problems across systems: `sim` (core city, maps, fires), `housing` (the 20-level ladder), `campaign` (the missions' pace and goals), `walkers` (roadblocks, walker inspection), `production` (the goods book, the Problems overlay, the Production advisor), `crime` (home mood, the crime roll, criminals and catching them, riots), `military`, `trade`, `save`, `sandbox` (difficulty, raids), `render` (camera, sprites, seasons, weather, water hints), `input`, `music` (composer and track library). Every new mechanic and every bug fix gets a test; a fix's test fails on the old code.
 - `tests/e2e/smoke.mjs` plays the built game in headless Chromium with real mouse and keyboard input. Add a check for any new screen or control players depend on.
 
 ## Where things live

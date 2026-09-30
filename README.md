@@ -21,6 +21,7 @@ Saved games stay in your browser. Use *Save game → Export to file* to keep a b
 
 * **The housing ladder of the original:** 20 levels, from a tent to an imperial palace. Homes grow from single tiles into 2x2 insulae and villas, 3x3 villas and 4x4 palaces as you bring them water, food, gods, schools, baths, entertainment and fine goods. Click any home to see exactly what it needs next.
 * **A campaign** of seven missions, from a riverside village to a great capital (about half an hour for the first, a few hours for the last), and a **sandbox** with five landscapes, four map sizes (up to *Uber*, 256x256) and your choice of raids.
+* **Crime:** unhappy homes send out protesters, thieves who rob the Forum or a market, and in a city at the end of its patience, rioters who burn their way toward its finest buildings. Prefects patrol as police and chase criminals down. The Crime overlay shows where trouble is brewing and why.
 * **Four difficulties**, Easy to Insane.
 * **Trade** by land and sea with nine partner cities, and an empire map.
 * **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates.
@@ -34,7 +35,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 1. **Roads first.** Walkers only move on roads, and your city must connect to the Imperial road. The gateway with green pennants is the map entrance, where settlers arrive.
 2. **Housing plots** (H) beside the roads attract settlers, who pitch tents.
 3. **Water:** a Well turns tents into family tents. Later, a Reservoir pipes water to Fountains for better homes. With the Housing tool in hand, a faint blue shows where homes would get water.
-4. **Safety:** Prefectures (against fire) and Engineer's Posts (against collapse) must send walkers past every building.
+4. **Safety:** Prefectures (against fire, and as police against thieves and rioters) and Engineer's Posts (against collapse) must send walkers past every building.
 5. **Food:** Wheat Farm on meadow → Granary → Market. Market vendors sell door to door.
 6. **Grow:** temples, schools, theaters, baths and a Forum (for taxes) let homes move up.
 7. **Click everything.** Every building says what it is doing and what it lacks.

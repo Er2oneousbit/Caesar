@@ -47,6 +47,7 @@ function applyEffect(game, effect, w, origin, b) {
   switch (effect) {
     case 'fire':
       b.fireRisk = 0;
+      if (h) h.police = CONFIG.POLICE_DAYS; // a prefect on the street: half the crime (sim/crime.js)
       break;
     case 'damage':
       b.damageRisk = 0;

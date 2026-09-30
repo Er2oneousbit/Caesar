@@ -17,6 +17,8 @@
  *                                 sea partners on maps with navigable water
  *                                 (river, coast, or a big lake at the map edge)
  *   requests: boolean             Emperor makes requests
+ *   crime, disease: false         none of it in this mission (the first two,
+ *                                 which teach the basics); missing = on
  *   difficulty                    key of data/difficulty.js (missing = normal;
  *                                 campaign missions get it from withDifficulty)
  *   hints: string[]               tips shown at start
@@ -87,7 +89,7 @@ export const SCENARIOS = Object.freeze([
     funds: 6000, startYear: -280,
     goals: { population: 1200, culture: 15, prosperity: 0, peace: 35, favor: 0 },
     paceYears: 1.25,
-    unlocks: BASIC, partners: [], requests: false,
+    unlocks: BASIC, partners: [], requests: false, crime: false, disease: false,
     hints: [
       'Build Housing Plots next to the Imperial Road (or any road connected to it). Settlers arrive from the map edge.',
       'Place a Well within 2 tiles of homes so tents can become Family Tents.',
@@ -105,7 +107,7 @@ export const SCENARIOS = Object.freeze([
     funds: 7000, startYear: -270,
     goals: { population: 2500, culture: 35, prosperity: 20, peace: 45, favor: 0 },
     paceYears: 2.25,
-    unlocks: TIER2, partners: [], requests: false,
+    unlocks: TIER2, partners: [], requests: false, crime: false, disease: false,
     hints: [
       'A Reservoir placed next to water fills up. Fountains inside its piped area (10 tiles) supply homes within 4 tiles.',
       'Aqueducts connect a full reservoir to other reservoirs farther inland.',

@@ -20,6 +20,7 @@ import { prefectArriveAtFire, afterWait } from './risk.js';
 import { performerArrive } from './entertainment.js';
 import { findDeliveryTarget, receiveGoods } from './storage.js';
 import { recruitArrive } from './military.js';
+import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
 /** Advance every walker by one tick. */
@@ -37,12 +38,18 @@ export function updateWalkers(game) {
 }
 
 function stepWalker(game, w) {
+  // Held in a struggle (a prefect catching a criminal, sim/crime.js): both stand still.
+  if (w.held > 0) {
+    w.held--;
+    return;
+  }
   if (w.waitTicks > 0) {
     w.waitTicks--;
     if (w.waitTicks === 0 && w.afterWait) {
       const what = w.afterWait;
       w.afterWait = null;
       if (what === 'shipLeave') shipLeave(game, w);
+      else if (w.kind === 'criminal') criminalAfterWait(game, w, what);
       else afterWait(game, w, what);
     }
     return;
@@ -68,6 +75,8 @@ function onArriveTile(game, w) {
   const { map } = game;
   if (w.kind === 'roamer') roamerVisit(game, w);
   if (w.dead) return;
+  // A rioter sets fire to what he passes, and stops there a while.
+  if (w.type === 'rioter' && rioterStep(game, w)) return;
 
   if (w.path) {
     w.pathIndex++;
@@ -79,6 +88,13 @@ function onArriveTile(game, w) {
       return;
     }
     const next = w.path[w.pathIndex + 1];
+    // Rioters and prefects chasing them cross open land: only a new building
+    // or wall in the way makes them plan again.
+    if (w.offRoad) {
+      if (!landPassable(game, next, w.type === 'rioter' ? w.target : 0)) offRoadReroute(game, w);
+      else setNextTile(game, w, next);
+      return;
+    }
     if (w.kind !== 'ship' && !map.road[next]) {
       reroute(game, w);
       return;
@@ -160,6 +176,15 @@ function onPathEnd(game, w) {
       break;
     case 'toDock':
       shipArrive(game, w);
+      break;
+    case 'steal':
+      thiefArrive(game, w);
+      break;
+    case 'riot':
+      rioterArrive(game, w);
+      break;
+    case 'hunt':
+      hunterArrive(game, w);
       break;
     default:
       killWalker(game, w);

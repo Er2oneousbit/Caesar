@@ -11,6 +11,9 @@
  *     'traveler' walks to a destination and disappears there.
  *                (immigrants, emigrants, performers, caravans)
  *     'ship'     sails over navigable water, not roads. (merchant ships)
+ *     'criminal' bred by an unhappy home (sim/crime.js): stands in the street,
+ *                sneaks to the Forum, or (rioters) crosses open land.
+ *                (protesters, thieves, rioters)
  *   effect:    what a roamer does to buildings within SERVICE_RADIUS
  *   group:     roamers: which roadblock permission lets them pass (ROADBLOCK_GROUPS)
  *   tunic/skin/item: drawing hints for render/walkerArt.js
@@ -42,6 +45,11 @@ export const WALKER_TYPES = Object.freeze({
   recruit: { name: 'Recruit', kind: 'traveler', tunic: '#a8322b', item: 'spear', desc: 'A freshly trained soldier marching to his fort.' },
   caravan: { name: 'Trade Caravan', kind: 'traveler', tunic: '#6b4a2a', item: 'mule', desc: 'Merchants from a distant city, travelling overland.' },
   ship: { name: 'Merchant Ship', kind: 'ship', tunic: '#6b4a2a', item: null, desc: 'A trading ship on a sea route. Sails from the map edge to a Dock and back.' },
+
+  // Unhappy homes breed these (sim/crime.js). Prefects and soldiers catch them.
+  protester: { name: 'Protester', kind: 'criminal', tunic: '#8a7a62', item: 'placard', desc: 'An unhappy citizen airing his grievances in the street. Harmless, but a sign of unrest.' },
+  thief: { name: 'Thief', kind: 'criminal', tunic: '#34323a', item: 'sack', roam: 12, desc: 'Sneaking to the Forum or a market to steal. A prefect who catches him first saves the goods.' },
+  rioter: { name: 'Rioter', kind: 'criminal', tunic: '#8e3b26', item: 'torch', desc: 'One of an angry mob setting the city alight. Prefects and soldiers can stop him.' },
 });
 
 /**

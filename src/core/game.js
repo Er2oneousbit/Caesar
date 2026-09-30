@@ -10,12 +10,15 @@
  *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
  *      (spreads work evenly across the day instead of spiking at midnight)
+ *      then criminals: prefects and soldiers catch them, prefects hunt
  *   4. on a new day:   labor, water, desirability, city stats, entertainment
  *                      base, wine sources, mid-month goods use, immigration,
- *                      fires, trade, raid progress
+ *                      fires, home moods (day 8), trade, raid progress
  *   5. on a new month: consumption, finances, army pay, raid warnings,
- *                      mood, religion, ratings, Emperor, farm season notice
- *   6. on a new year:  tribute, ledger rollover, trade quotas
+ *                      city mood, home moods, religion, ratings, Emperor,
+ *                      farm season notice
+ *   6. on a new year:  tribute, ledger rollover, trade quotas, crime counts
+ *   7. on a new day, after all that: the crime roll
  * ----------------------------------------------------------------------------
  */
 
@@ -47,6 +50,8 @@ import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
 import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
 import { closeGoodsMonth } from '../sim/goodsLedger.js';
+import { updateHomeMoods } from '../sim/mood.js';
+import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../sim/crime.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -100,6 +105,7 @@ export function newCityState(scenario, funds) {
     lastMonth: { wages: 0, taxes: 0 },
     history: [],
     stats: { fires: 0, collapses: 0, evolutions: 0, devolutions: 0, immigrated: 0, emigrated: 0, peakPopulation: 0, requestsMet: 0, requestsFailed: 0 },
+    crime: newCrimeState(), // this year's protesters, thieves, riots... (sim/crime.js)
     flags: {},
     victory: false,
     defeat: false,
@@ -155,6 +161,7 @@ export class Game {
     this.nextUnitId ??= 1;
     this.wallHp ??= new Map(); // tile index -> remaining hp of a damaged wall/gate
     this.military ??= newMilitaryState(scenario, this.time, flags);
+    this.city.crime ??= newCrimeState(); // saves from before crime (v4)
     this.projectiles = []; // arrows and sling stones in flight (not saved)
     this.enemyField = null; // raider flow field (derived, see military.js)
     this.events.on('buildingRemoved', ({ building }) => {
@@ -222,6 +229,7 @@ export class Game {
     const t = this.time.advance();
     updateWalkers(this);
     updateMilitary(this);
+    updateCriminals(this);
     const phase = this.time.tick;
     for (const b of this.buildings.values()) {
       if (b.phase === phase) this.updateBuilding(b);
@@ -229,6 +237,9 @@ export class Game {
     if (t.newDay) this.onDay();
     if (t.newMonth) this.onMonth();
     if (t.newYear) this.onYear();
+    // The crime roll comes last, so on the 1st of a month it sees the homes'
+    // fresh moods and counts toward the new month (peace) and year.
+    if (t.newDay) updateCrime(this);
   }
 
   /** Daily logic for one building (called on its phase tick). */
@@ -274,6 +285,7 @@ export class Game {
     updateImmigration(this);
     updateEmigration(this);
     updateFires(this);
+    if (this.time.day === CONFIG.MOOD_MIDMONTH_DAY) updateHomeMoods(this); // day 0's runs in onMonth
     updateTrade(this);
     militaryDaily(this);
     this.events.emit('day', this.time);
@@ -284,8 +296,10 @@ export class Game {
     monthlyEconomy(this);
     militaryMonthly(this);
     computeSentiment(this);
+    updateHomeMoods(this); // after the month's city mood, which every home starts from
     updateReligion(this);
     updateRatings(this);
+    this.city.crime.month = false; // the peace rating has read it
     updateEmperor(this);
     farmSeasonNotice(this); // Insane: the farms stop in winter
     const c = this.city;
@@ -303,6 +317,7 @@ export class Game {
   onYear() {
     yearlyEconomy(this);
     resetTradeYear(this);
+    crimeNewYear(this);
     this.events.emit('year', this.time);
   }
 

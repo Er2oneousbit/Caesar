@@ -53,8 +53,9 @@ export function updateRisk(game, b) {
 
 /**
  * Burn a building down: it becomes a burning ruin.
- * @param {'fire'|'lightning'|'raid'|'raidQuiet'} cause  raidQuiet = no message
- *        (raiders wrecking a whole street would otherwise flood the log)
+ * @param {'fire'|'lightning'|'raid'|'raidQuiet'|'riot'|'riotQuiet'} cause
+ *        raidQuiet, riotQuiet = no message (raiders or a mob wrecking a whole
+ *        street would otherwise flood the log)
  */
 export function igniteBuilding(game, b, cause = 'fire') {
   const tiles = footprintTiles(game.map, b.x, b.y, b.size);
@@ -66,11 +67,16 @@ export function igniteBuilding(game, b, cause = 'fire') {
     game.fires.set(i, CONFIG.FIRE_BURN_DAYS);
   }
   game.city.stats.fires++;
-  const text = {
+  const texts = {
     lightning: `Lightning struck ${aLabel}! It is burning.`,
     raid: `Raiders have set ${aLabel} on fire!`,
     raidQuiet: null,
-  }[cause] ?? `Fire! ${aLabel[0].toUpperCase()}${aLabel.slice(1)} has burned down.`;
+    riot: `Rioters have set ${aLabel} on fire!`,
+    riotQuiet: null,
+  };
+  // `in`, not `??`: the quiet causes are null on purpose (`??` turned them
+  // back into a "Fire!" message for every building raiders burned).
+  const text = cause in texts ? texts[cause] : `Fire! ${aLabel[0].toUpperCase()}${aLabel.slice(1)} has burned down.`;
   if (text) game.message(text, 'bad', b.x, b.y);
   game.events.emit('sound', { name: 'fire' });
   dispatchPrefect(game, tiles[0]);
@@ -182,6 +188,9 @@ export function dispatchPrefect(game, fireIdx) {
     if (found >= 0) {
       const w = byTile.get(found);
       const path = pf.buildPath(found).reverse(); // prefect -> fire
+      // Fires come first: a prefect chasing a criminal drops the hunt (sim/crime.js).
+      w.huntTarget = 0;
+      w.offRoad = false;
       w.state = 'toFire';
       w.fireTile = fireIdx;
       w.speed = CONFIG.WALKER_SPEED * CONFIG.PREFECT_RUN_SPEED;

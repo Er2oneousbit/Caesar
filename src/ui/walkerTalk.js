@@ -4,8 +4,9 @@
  * Who a walker is, what it is doing and what it has to say, for the info
  * panel when a walker is clicked. Citizens talk about what troubles the city
  * most (hunger, no work, taxes, raiders, fires, an angry god), or about
- * their work when nothing does; newcomers, emigrants and foreign traders have
- * lines of their own. Every line is written for Colonia.
+ * their work when nothing does; newcomers, emigrants, foreign traders and
+ * the city's criminals (protesters say what upsets their home) have lines of
+ * their own. Every line is written for Colonia.
  *
  * Read-only: nothing here changes the simulation. A walker keeps the same
  * line for a few days (the pick is seeded by its id and the date), so the
@@ -50,6 +51,7 @@ function workLines(game, w) {
   switch (w.type) {
     case 'prefect':
       if (w.state === 'toFire') return ['Out of the way! Fire!'];
+      if (w.state === 'hunt') return ['Stop, in the name of the law!', 'After him! Do not let him get away!'];
       if (w.state === 'extinguish') return ['More water! Keep it coming!'];
       return ['Keep your lamps trimmed and your hearths swept.', 'Quiet streets. Just how I like them.', 'One spark on a dry roof and the whole street goes up.'];
     case 'engineer': return ['These walls will not mend themselves.', 'A crack today is a collapse tomorrow.', 'Good stone, poor mortar. I see it everywhere.'];
@@ -115,6 +117,23 @@ function emigrantLine(game) {
   }[worst] || 'This city has nothing left for us.';
 }
 
+/** A protester's grievance: what upsets his home most (sim/mood.js). */
+function protesterLine(game, w) {
+  const home = game.buildings.get(w.home);
+  const why = home && home.house ? home.house.moodReason : null;
+  return {
+    hunger: 'Bread! We want bread!',
+    envy: 'They dine off silver in their villas while we sleep in the mud!',
+    squalor: 'Look at our street! Who would raise children here?',
+    taxes: 'No more taxes! We have nothing left to give!',
+    wages: 'Fair pay for honest work!',
+    unemployment: 'Give us work! We have hands and nothing to do with them!',
+    food: 'The granaries are empty and nobody cares!',
+    housing: 'Is this how Rome houses its citizens?',
+    gods: 'The gods have left us, and so has the governor!',
+  }[why] || pick(['We will be heard!', 'Enough is enough!'], w, game);
+}
+
 /** A stable pseudo-random pick: the same walker says the same thing for LINE_DAYS days. */
 function pick(lines, w, game, salt = 0) {
   const seed = (w.id * 2654435761 + Math.floor(game.time.totalDays / LINE_DAYS) * 40503 + salt * 97) >>> 0;
@@ -132,6 +151,9 @@ export function walkerSays(game, w) {
       return pick([`Good roads and fair prices. ${p ? p.name : 'Home'} will send us again.`, 'Mind the mules, they bite.'], w, game);
     }
     case 'ship': return pick(['A fair wind brought us in. A fair price will send us home.', 'Unload the cargo, and quickly!'], w, game);
+    case 'protester': return protesterLine(game, w);
+    case 'thief': return pick(['Nothing to see here, friend. Keep walking.', 'Who, me? Just taking the air.', 'A man has to eat.'], w, game);
+    case 'rioter': return pick(['Burn it! Burn it all!', 'They will listen to us now!', 'Down with the governor!'], w, game);
     default: break;
   }
   const work = workLines(game, w);
@@ -178,6 +200,10 @@ export function walkerDoing(game, w) {
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;
     case 'docked': return 'Trading at the dock';
+    case 'protest': return 'Protesting in the street';
+    case 'steal': return target ? `Sneaking toward ${the(target)}` : 'Up to no good';
+    case 'riot': return w.waitTicks > 0 ? 'Setting the street alight' : `Rioting${target ? `, heading for ${the(target)}` : ''}`;
+    case 'hunt': return w.type === 'prefect' ? 'Chasing a criminal' : 'Waiting';
     default: return 'Waiting';
   }
 }
@@ -193,6 +219,7 @@ export function walkerInfo(game, w) {
   if (w.partner && TRADE_PARTNERS[w.partner]) rows.push(['From', TRADE_PARTNERS[w.partner].name]);
   else if (origin) rows.push(['From', nameOf(origin)]);
   else if (w.type === 'immigrant') rows.push(['From', 'Beyond the map edge']);
+  else if (w.home && game.buildings.get(w.home)) rows.push(['From', nameOf(game.buildings.get(w.home))]); // criminals: their home
   rows.push(['Doing', walkerDoing(game, w)]);
   if (w.type === 'performer' && w.venue) rows.push(['Act', PERFORMER_NAMES[w.venue] || w.venue]);
   if (w.cargo && w.cargo.amount > 0) rows.push(['Carrying', amountText(w.cargo.good, w.cargo.amount)]);

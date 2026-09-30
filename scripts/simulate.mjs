@@ -121,8 +121,20 @@ console.log(`\nSimulated ${opts.years} years in ${Date.now() - t0} ms. Fires ${c
 console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math.floor(c.ratings.prosperity)} peace ${Math.floor(c.ratings.peace)} favor ${Math.floor(c.ratings.favor)}`);
 const ms = game.military.stats;
 console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome').length}`);
+const cr = c.crime.total;
+console.log(`Crime: protesters ${cr.protesters}, thieves ${cr.thieves} (${cr.caught} criminals caught), thefts ${cr.thefts}, stolen ${cr.stolen} Dn and ${cr.looted} goods, riots ${cr.riots}, burned by rioters ${cr.riotBurned}; lowest home mood ${lowestMood(game)}`);
 const req = c.stats;
 console.log(`Emperor: requests met ${req.requestsMet ?? '?'}, failed ${req.requestsFailed ?? '?'}; mood factors ${JSON.stringify(Object.fromEntries(Object.entries(c.sentimentFactors || {}).map(([k, v]) => [k, Math.round(v)])))}`);
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
-if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts }));
+if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total }));
+
+/** The unhappiest occupied home's mood (sim/mood.js), or '-' with nobody home. */
+function lowestMood(g) {
+  let low = null;
+  for (const b of g.buildings.values()) {
+    const m = b.house && b.house.pop > 0 ? b.house.mood : null;
+    if (m !== null && m !== undefined && (low === null || m < low)) low = m;
+  }
+  return low ?? '-';
+}

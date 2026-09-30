@@ -25,6 +25,11 @@
  *   4  the 20-level housing ladder (v0.7): house levels were renumbered and
  *      homes got new fields, so saves before version 4 are refused with a
  *      readable message (until 1.0, a release may break older saves).
+ *   5  home mood and crime: homes have a mood, hunger streak, criminal flag
+ *      and police timer; city.crime holds the year's counts; protesters,
+ *      thieves and rioters are walkers. Version 4 saves load: every new field
+ *      has a safe default (an occupied home starts at the city's mood, no
+ *      flags, no police cover, no criminals about), see upgradeV4().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -318,9 +323,28 @@ export function deserializeGame(data, flags = {}) {
   }
   game.nextUnitId = Math.max(game.nextUnitId, maxU + 1);
 
+  if (data.version < 5) upgradeV4(game);
+
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
   return game;
+}
+
+/**
+ * A version 4 save (before home mood and crime): give every home the new
+ * fields. An occupied home starts at the city's mood, as a new household
+ * does; city.crime was filled in by the Game constructor.
+ */
+function upgradeV4(game) {
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h) continue;
+    h.mood = h.pop > 0 ? game.city.sentiment : null;
+    h.moodReason = null;
+    h.hungerStreak = 0;
+    h.criminal = 0;
+    h.police = 0;
+  }
 }
 
 // ---------------------------------------------------------------------------

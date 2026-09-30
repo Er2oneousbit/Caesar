@@ -42,6 +42,12 @@ export function newHouseData(variant = 0) {
     clinic: 0,
     baths: 0,
     tax: 0,
+    police: 0, // days of police cover left from a prefect's visit (halves the crime chance)
+    // Home mood, for crime only (sim/mood.js): null while nobody lives here.
+    mood: null,
+    moodReason: null, // what upsets it most (a key of MOOD_REASONS), or null
+    hungerStreak: 0, // mood updates in a row with no food at all
+    criminal: 0, // 0, or 1 once it sent out a protester, 2 a thief (cleared at mood 50+)
     devolveDays: 0, // consecutive bad days (the home falls a level after game.difficulty.devolveDays)
     merged: false, // true = a 2x2 block of four single-tile homes (levels 1-10)
     bornDay: -1, // day a split or break-up created this home: first checked the day after

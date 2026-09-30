@@ -14,6 +14,7 @@ import { buildDemoCity, buildDemoGarrison, buildDemoHarbor } from '../dev/demoCi
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
+import { commitCrime, crimeChance, criminalsAbout, unhappiestHomes, crimeEnabled } from '../sim/crime.js';
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
 import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
@@ -32,6 +33,10 @@ export const CONSOLE_HELP = [
   ['collapse', 'Collapse a random building'],
   ['favor <n>', 'Set the Emperor\'s favor (0-100)'],
   ['mood <n>', 'Set city sentiment (0-100)'],
+  ['crime', 'Crime report: the year so far, criminals about, the unhappiest homes'],
+  ['crime <kind>', 'The home under the cursor (or the unhappiest) sends out a protester, a thief or a riot now'],
+  ['riot', 'Same as crime riot'],
+  ['unrest <n>', 'Set the mood of every home (0-100); they drift back toward their targets'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
@@ -181,6 +186,28 @@ export class DebugConsole {
         need();
         g.city.sentiment = Math.max(0, Math.min(100, Number(args[0]) || 50));
         return `Sentiment ${g.city.sentiment}`;
+      case 'crime':
+      case 'riot': {
+        need();
+        const kind = cmd.toLowerCase() === 'riot' ? 'riot' : { protest: 'protester', protester: 'protester', thief: 'thief', riot: 'riot' }[(args[0] || '').toLowerCase()];
+        if (!kind) {
+          if (args[0]) throw new Error('usage: crime [protest|thief|riot]');
+          return crimeReport(g);
+        }
+        const b = homeAtCursor(app, g) || unhappiestHome(g);
+        if (!b) return 'No one lives in the city yet.';
+        const w = commitCrime(g, b, kind);
+        app.renderer.camera.centerOnTile(b.x, b.y);
+        return w ? `A ${kind} from the home at ${b.x},${b.y}.` : `Nothing happened at ${b.x},${b.y}: no road close enough.`;
+      }
+      case 'unrest': {
+        need();
+        const n = Number(args[0]);
+        if (!(n >= 0 && n <= 100)) throw new Error('usage: unrest <0-100>');
+        let homes = 0;
+        for (const b of g.buildings.values()) if (b.house && b.house.pop > 0) { b.house.mood = Math.round(n); homes++; }
+        return `${homes} homes now at mood ${Math.round(n)}.`;
+      }
       case 'garrison':
       case 'harbor': {
         need();
@@ -322,6 +349,42 @@ export class DebugConsole {
         throw new Error(`Unknown command "${cmd}". Type help.`);
     }
   }
+}
+
+/** The occupied home under the mouse pointer, or null. */
+function homeAtCursor(app, g) {
+  const t = app.input && app.input.hover;
+  if (!t || !g.map.inBounds(t.x, t.y)) return null;
+  const b = g.buildings.get(g.map.buildingAt(t.x, t.y));
+  return b && b.house && b.house.pop > 0 ? b : null;
+}
+
+/** The occupied home with the lowest mood (the oldest on a tie), or null. */
+function unhappiestHome(g) {
+  let best = null;
+  for (const b of g.buildings.values()) {
+    const h = b.house;
+    if (!h || h.pop <= 0) continue;
+    const m = h.mood ?? g.city.sentiment;
+    if (!best || m < (best.house.mood ?? g.city.sentiment)) best = b;
+  }
+  return best;
+}
+
+/** The `crime` command's report. */
+function crimeReport(g) {
+  const c = g.city;
+  const y = c.crime.year;
+  const about = criminalsAbout(g);
+  const chance = crimeChance(c.sentiment) * (g.difficulty.crime ?? 1);
+  return [
+    crimeEnabled(g) ? `Crime is on (${g.difficulty.name}: x${g.difficulty.crime ?? 1}); none below ${CONFIG.CRIME_MIN_POP} people (now ${c.population}).` : 'There is no crime in this mission.',
+    `City mood ${c.sentiment}: a ${Math.round(chance * 100)}% daily chance of trouble (half that for homes a prefect patrols).`,
+    `This year: ${y.protesters} protesters, ${y.thieves} thieves, ${y.thefts} thefts (${y.stolen} Dn, ${y.looted} goods), ${y.riots} riots, ${y.riotBurned} buildings burned by rioters, ${y.caught} criminals caught.`,
+    `About now: ${about.protester} protesters, ${about.thief} thieves, ${about.rioter} rioters.`,
+    'Unhappiest homes:',
+    ...unhappiestHomes(g).map((l) => `  ${l}`),
+  ].join('\n');
 }
 
 /** Average position of the city's homes (where demo extras get built). */

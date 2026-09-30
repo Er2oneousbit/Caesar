@@ -22,6 +22,7 @@ import { spawnWalker, killWalker } from './entities.js';
 import { followPath, walkTo } from './movement.js';
 import { houseWantsGood } from './market.js';
 import { sendEmigrants } from './housing.js';
+import { newHousehold } from './mood.js';
 
 /** Daily: recompute population, workforce inputs and goods demand. */
 export function computeCityStats(game) {
@@ -172,6 +173,7 @@ export function settlerArrive(game, w) {
     }
     const free = houseCapacity(h.tier, b.size) - h.pop;
     const n = Math.max(0, Math.min(free, w.people));
+    if (h.pop <= 0 && n > 0) newHousehold(game, h); // an empty home: a fresh start (sim/mood.js)
     h.pop += n;
     if (h.tier === 0 && h.pop > 0) {
       h.tier = 1;

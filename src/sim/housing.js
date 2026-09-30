@@ -161,6 +161,7 @@ function decayAccess(h) {
   if (h.clinic > 0) h.clinic--;
   if (h.baths > 0) h.baths--;
   if (h.tax > 0) h.tax--;
+  if (h.police > 0) h.police--;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +360,7 @@ function absorbHouse(game, b, o, moved) {
   h.incoming += oh.incoming;
   addStock(h, oh, 1);
   takeBestAccess(h, oh);
+  mergeTemper(h, oh);
   b.fireRisk = Math.max(b.fireRisk, o.fireRisk);
   b.damageRisk = Math.max(b.damageRisk, o.damageRisk);
   moved.set(o.id, b.id);
@@ -373,12 +375,36 @@ function addStock(to, from, share) {
   for (const g of HOUSE_GOODS) to.goods[g] += from.goods[g] * share;
 }
 
+/**
+ * Families moving in together (sim/mood.js, sim/crime.js): the home keeps the
+ * worst criminal flag of the two, so joining a block never wipes out a home's
+ * record of trouble, and takes the other's mood if it had none of its own.
+ */
+function mergeTemper(h, oh) {
+  if (!(oh.pop > 0)) return; // an empty lot brings no one
+  h.criminal = Math.max(h.criminal || 0, oh.criminal || 0);
+  if (h.mood === null || h.mood === undefined) {
+    h.mood = oh.mood ?? null;
+    h.moodReason = oh.moodReason ?? null;
+    h.hungerStreak = oh.hungerStreak || 0;
+  }
+}
+
+/** A split-off piece is the same families: it keeps their mood, trouble and hunger. */
+function copyTemper(h, from) {
+  h.mood = from.mood ?? null;
+  h.moodReason = from.moodReason ?? null;
+  h.hungerStreak = from.hungerStreak || 0;
+  h.criminal = from.criminal || 0;
+}
+
 /** Keep the longer of each service visit timer (a block has what its parts had). */
 function takeBestAccess(h, oh) {
   for (const g of GOD_KEYS) h.religion[g] = Math.max(h.religion[g], oh.religion[g]);
   for (const v in h.ent) h.ent[v] = Math.max(h.ent[v], oh.ent[v] || 0);
   if (h.entBoth && oh.entBoth) for (const v in h.entBoth) h.entBoth[v] = Math.max(h.entBoth[v], oh.entBoth[v] || 0);
   for (const k of ['school', 'library', 'academy', 'barber', 'clinic', 'baths', 'tax']) h[k] = Math.max(h[k], oh[k]);
+  h.police = Math.max(h.police || 0, oh.police || 0); // `|| 0`: homes from v4 saves have no police timer
 }
 
 /**
@@ -520,6 +546,7 @@ function breakUp(game, grower, o, inside, moved) {
     for (let dx = 0; dx < o.size; dx++) pieces.push({ x: o.x + dx, y: o.y + dy, pop: each + (dx === 0 && dy === 0 ? rest : 0) });
   }
   const snapshot = { food: { ...oh.food }, goods: { ...oh.goods } };
+  if (oh.pop > 0) mergeTemper(grower.house, oh); // some of its families move in with the grower
   grower.house.incoming += oh.incoming;
   moved.set(o.id, grower.id);
   oh.pop = 0;
@@ -530,7 +557,7 @@ function breakUp(game, grower, o, inside, moved) {
       grower.house.pop += p.pop;
       addStock(grower.house, snapshot, 1 / n);
     } else {
-      newPiece(game, p.x, p.y, level, p.pop, snapshot, 1 / n, grower);
+      newPiece(game, p.x, p.y, level, p.pop, snapshot, 1 / n, grower, oh);
     }
   }
 }
@@ -540,9 +567,10 @@ function breakUp(game, grower, o, inside, moved) {
  * or the one that took over its neighbor). A piece with no road within reach
  * would be a home nobody can serve: it stays a vacant lot, its people look
  * for another home (setting out from the source's road) and its share of the
- * stock stays with the source.
+ * stock stays with the source. `families`: the house data its people come
+ * from (the source's own, unless it is a neighbor the source broke up).
  */
-function newPiece(game, x, y, level, pop, stock, share, source) {
+function newPiece(game, x, y, level, pop, stock, share, source, families = source.house) {
   const b = addBuilding(game, 'house', x, y, 1, { quiet: true });
   const h = b.house;
   if (b.accessRoad < 0) {
@@ -553,6 +581,7 @@ function newPiece(game, x, y, level, pop, stock, share, source) {
   h.tier = pop > 0 ? level : 0;
   h.pop = pop;
   h.bornDay = game.time.totalDays;
+  if (pop > 0) copyTemper(h, families);
   addStock(h, stock, share);
   evictOverflow(game, b);
   if (h.pop > 0) refreshStatus(game, b);
@@ -610,6 +639,11 @@ function makeVacant(game, b) {
   h.tier = 0;
   h.merged = false;
   h.devolveDays = 0;
+  // The next family starts afresh (sim/mood.js).
+  h.mood = null;
+  h.moodReason = null;
+  h.hungerStreak = 0;
+  h.criminal = 0;
   if (size > 1) {
     const { x, y } = b;
     setFootprint(game, b, x, y, 1);

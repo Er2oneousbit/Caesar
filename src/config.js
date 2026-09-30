@@ -17,8 +17,8 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.9.1',
-  SAVE_VERSION: 4, // v4: the 20-level housing ladder; saves before v4 cannot be loaded (see core/save.js)
+  VERSION: '0.10.0',
+  SAVE_VERSION: 5, // v5: home mood and crime (v4 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -101,6 +101,60 @@ export const CONFIG = {
   FIRE_HEAT_PER_DAY: 5, // fire risk a building beside a fire gains per day (once, however many burning tiles it touches)
   PREFECT_RUN_SPEED: 1.6, // prefects run (speed multiplier) when heading to a fire
   PREFECT_ALERT_RADIUS: 24, // prefects within this road distance respond to fires
+
+  // --- Home mood and crime (sim/mood.js, sim/crime.js) ----------------------
+  // Each home has a mood (0-100) for crime only: city mood (sentiment) still
+  // drives migration. Twice a month (days 0 and 8) a home's mood moves toward
+  // city mood plus its own local terms, by at most MOOD_STEP.
+  MOOD_MIDMONTH_DAY: 8, // the second update of the month (the first follows the month's city mood)
+  MOOD_STEP: 3, // most a home's mood moves per update (smoothing, so homes do not all run to 0 or 100)
+  MOOD_HUNGER: 5, // x the hunger streak (updates in a row with no food at all, at most MOOD_HUNGER_STREAK)
+  MOOD_HUNGER_STREAK: 3,
+  MOOD_FOOD_EXTRA: 3, // per kind of food beyond what the home's level needs...
+  MOOD_FOOD_EXTRA_MAX: 6, // ...at most this much
+  MOOD_ENVY_TIER: 4, // homes up to this level (tents, lean-tos, huts) envy rich neighbors:
+  MOOD_ENVY_VILLAS: -8, // ...in a city with villas or palatia
+  MOOD_ENVY_INSULAE: -5, // ...in a city with insulae (level 11+) but no villas
+  MOOD_ENVY_INSULA_TIER: 11,
+  MOOD_DES_DIV: 5, // local desirability / this, clamped to +-MOOD_DES_MAX
+  MOOD_DES_MAX: 5,
+  MOOD_UNTAXED: 3, // a home no tax collector has registered is a little happier
+  CRIME_MIN_POP: 300, // no crime in a smaller town
+  CRIME_MOOD: 50, // homes below this mood may produce a criminal; at or above, they settle down
+  // Homes sit within a few points of city mood (a target, not a running total
+  // as in the original, whose homes spread from 0 to 100), so these bands are
+  // set 5 higher than the original's 30 and 10: thieves come as a city nears
+  // the mood where settlers stop coming (30), riots only under real neglect
+  // (city mood around 15-20: in the demo city, taxes of 17% and more).
+  THIEF_MOOD: 35, // below this: a thief
+  RIOT_MOOD: 15, // at or below this, while city mood is under RIOT_CITY_MOOD: a riot
+  RIOT_CITY_MOOD: 30,
+  CRIME_CHANCE_MAX: 0.61, // daily chance of a crime at city mood 0...
+  CRIME_CHANCE_ZERO: 108, // ...falling in a straight line to 0 at this mood (x difficulty.crime)
+  POLICE_DAYS: 32, // a prefect's visit gives a home police cover this long: half the crime chance
+  CRIMINAL_ROAD_RADIUS: 2, // protesters and thieves appear on a road this close to their home
+  RIOT_ROAD_RADIUS: 4, // a riot needs a road this close
+  PROTEST_TICKS: [70, 76], // how long a protester stands in the street (3.5 to 3.8 days)
+  THIEF_RANGE: 50, // road tiles a thief will walk to a Forum, Senate or market
+  THEFT_SHARE: 0.25, // a thief at the Forum takes this share of this year's taxes...
+  THEFT_CAP: 400, // ...at most this much (Dn)...
+  THEFT_MIN: 5, // ...and nothing when that would be less than this (never more than the treasury holds)
+  MARKET_THEFT_MAX: 100, // a thief at a market takes half its biggest stock, at most this
+  RIOT_MOB: [[150, 1], [300, 2], [800, 3], [1200, 4], [2000, 5]], // [population up to, rioters]; more: RIOT_MOB_MAX
+  RIOT_MOB_MAX: 6,
+  RIOT_TARGET_RANGE: 40, // rioters go for the most prized building this close to their home
+  RIOT_MOOD_BOOST: 20, // every home's mood rises this much after a riot: the anger is spent
+  RIOT_PEACE: 5, // peace lost at once to a riot
+  RIOTER_START_TICKS: 20, // rioter i sets off after this + i x RIOTER_STAGGER_TICKS
+  RIOTER_STAGGER_TICKS: 4,
+  RIOTER_BURN_TICKS: 64, // a rioter stays about 3 days by each building it sets on fire
+  RIOTER_MAX_DAYS: 16, // then the mob loses heart: a rioter still at large after this goes home (checked every tick)
+  CRIMINAL_HP: 12, // how much struggle a criminal puts up before he is caught:
+  CATCH_PREFECT: 0.8, // ...a prefect takes about 15 ticks (per tick, next to him)
+  CATCH_SOLDIER: 2, // ...a soldier about 6
+  HUNT_RANGE: 30, // prefects chase thieves and rioters this close (tiles, either axis)
+  HUNT_EVERY: 10, // ticks between a roaming prefect's looks around
+  HUNT_RETRY_TICKS: 160, // a criminal a prefect found no way to reach is left alone by him this long (8 days)
 
   // --- Water ---------------------------------------------------------------
   WELL_RADIUS: 2,

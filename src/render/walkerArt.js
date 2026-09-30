@@ -4,7 +4,8 @@
  * Draws walkers (little citizens) directly each frame. They are tiny, so a
  * handful of shapes per figure is enough: shadow, legs, tunic, head, and an
  * item that tells the player what job they do (bucket = prefect, cart = cart
- * pusher, scroll = teacher...). Original simple figures.
+ * pusher, scroll = teacher...). Criminals: a protester shakes a placard, a
+ * hooded thief carries a sack, a rioter waves a torch. Original simple figures.
  * ----------------------------------------------------------------------------
  */
 
@@ -78,6 +79,14 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
   }
   ctx.stroke();
 
+  // a thief's loot sack over the shoulder, behind him
+  if (item === 'sack') {
+    ctx.fillStyle = '#6e5a3e';
+    ctx.beginPath();
+    ctx.ellipse(sx - face * 3.2 * k, sy - 10.5 * k, 2.6 * k, 3 * k, face * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // bundle on the back
   if (item === 'bundle' && !riding) {
     ctx.fillStyle = '#8a6a44';
@@ -98,12 +107,15 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(sx - 3 * k, sy - 8 * k, 6 * k, 1 * k); // belt
 
-  // arms
+  // arms (protesters and rioters raise theirs: a placard, a torch)
+  const raised = item === 'placard' || item === 'torch';
+  const wave = raised ? Math.sin(t * (item === 'torch' ? 7 : 4) + w.id) : 0; // visual only
   ctx.strokeStyle = skin;
   ctx.lineWidth = 1.1 * k;
   ctx.beginPath();
   ctx.moveTo(sx + face * 2.4 * k, sy - 11.5 * k);
-  ctx.lineTo(sx + face * (3.5 + (item === 'cart' ? 2 : 0)) * k, sy - (item === 'cart' ? 9 : 7.5 - phase) * k);
+  if (raised) ctx.lineTo(sx + face * (3.6 + wave * 0.5) * k, sy - (16 + wave) * k);
+  else ctx.lineTo(sx + face * (3.5 + (item === 'cart' ? 2 : 0)) * k, sy - (item === 'cart' ? 9 : 7.5 - phase) * k);
   ctx.stroke();
 
   // head + hair
@@ -111,18 +123,63 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
   ctx.beginPath();
   ctx.arc(sx, sy - 15 * k, 2.4 * k, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = HAIR[(w.id >> 2) % HAIR.length];
-  ctx.beginPath();
-  ctx.arc(sx, sy - 15.8 * k, 2.4 * k, Math.PI, 0);
-  ctx.fill();
+  if (item === 'sack') {
+    // a thief keeps his hood up
+    ctx.fillStyle = def.tunic;
+    ctx.beginPath();
+    ctx.arc(sx, sy - 15.4 * k, 2.8 * k, Math.PI * 0.95, Math.PI * 2.05);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = HAIR[(w.id >> 2) % HAIR.length];
+    ctx.beginPath();
+    ctx.arc(sx, sy - 15.8 * k, 2.4 * k, Math.PI, 0);
+    ctx.fill();
+  }
 
-  drawItem(ctx, w, item, sx, sy, k, face);
+  drawItem(ctx, w, item, sx, sy, k, face, wave, t);
 }
 
-function drawItem(ctx, w, item, sx, sy, k, face) {
+function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0) {
   const hx = sx + face * 4 * k;
   const hy = sy - 7 * k;
   switch (item) {
+    case 'placard': {
+      // a board on a pole, shaken at the street
+      const px = sx + face * (3.6 + wave * 0.5) * k;
+      const py = sy - (16 + wave) * k;
+      ctx.strokeStyle = '#6b4a2a';
+      ctx.lineWidth = 0.8 * k;
+      ctx.beginPath();
+      ctx.moveTo(px, py + 3 * k);
+      ctx.lineTo(px, py - 6 * k);
+      ctx.stroke();
+      ctx.fillStyle = '#e8dcc0';
+      ctx.fillRect(px - 3.2 * k, py - 10.5 * k, 6.4 * k, 4.6 * k);
+      ctx.fillStyle = '#9b2d20'; // a daubed slogan
+      ctx.fillRect(px - 2.2 * k, py - 9.2 * k, 4.4 * k, 0.7 * k);
+      ctx.fillRect(px - 2.2 * k, py - 7.7 * k, 3 * k, 0.7 * k);
+      break;
+    }
+    case 'torch': {
+      const px = sx + face * (3.6 + wave * 0.5) * k;
+      const py = sy - (16 + wave) * k;
+      ctx.strokeStyle = '#5a3a22';
+      ctx.lineWidth = 1 * k;
+      ctx.beginPath();
+      ctx.moveTo(px, py + 2 * k);
+      ctx.lineTo(px, py - 3 * k);
+      ctx.stroke();
+      const flick = 1 + 0.25 * Math.sin(t * 23 + w.id * 3);
+      ctx.fillStyle = 'rgba(255,170,40,0.95)';
+      ctx.beginPath();
+      ctx.ellipse(px, py - 4.6 * k, 1.6 * k, 2.4 * k * flick, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,160,0.95)';
+      ctx.beginPath();
+      ctx.ellipse(px, py - 4.2 * k, 0.8 * k, 1.3 * k * flick, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
     case 'bucket':
       ctx.fillStyle = '#7a5a3a';
       ctx.fillRect(hx - 1.5 * k, hy - 1 * k, 3 * k, 3 * k);

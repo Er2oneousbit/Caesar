@@ -27,6 +27,7 @@ import { dockBerth, dockUsed } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 import { farmDormant, daysToNextMare } from '../sim/production.js';
+import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -273,10 +274,27 @@ export class InfoPanel {
         kv('Desirability', hs.tier >= MAX_TIER ? `${hs.des} (falls at ${tier.down})` : `${hs.des} (${tier.up} to move up${hs.tier > 1 ? `, falls at ${tier.down}` : ''})`),
         kv('Taxes', hs.tax > 0 ? `Registered: ~${fmt(houseMonthlyTax(g, hs))} Dn/month` : 'Not registered (needs a Forum nearby)'),
       ));
+      parts.push(this.moodSection(g, hs));
     }
     parts.push(this.risks(b));
     parts.push(this.demolishButton(g, b));
     mount(this.el, parts);
+  }
+
+  /** A home's mood (sim/mood.js) and what it means for crime (sim/crime.js). */
+  moodSection(g, hs) {
+    const known = hs.mood !== null && hs.mood !== undefined;
+    const why = known && hs.mood < 50 ? moodReasonText(hs) : null;
+    const band = known && g.scenario.crime !== false ? crimeBand(hs) : null;
+    return h('div', { class: 'panel-sec' },
+      h('h5', {}, 'Mood and order'),
+      kv('Mood', known ? `${hs.mood} / 100, ${moodWord(hs.mood).toLowerCase()}` : 'New household (settling in)'),
+      known ? bar(hs.mood, 100) : null,
+      why ? h('div', { class: 'muted' }, why) : null,
+      band ? kv('Crime', band.words) : null,
+      criminalText(hs) ? h('div', { class: 'muted' }, criminalText(hs)) : null,
+      kv('Police', hs.police > 0 ? `Patrolled (${hs.police} days left)` : 'None lately'),
+      h('div', { class: 'muted' }, g.scenario.crime === false ? 'There is no crime in this province.' : 'A home below 50 may send a protester into the street; far below, a thief or a riot. A prefect passing by halves the chance.'));
   }
 
   renderBuilding(g, b) {

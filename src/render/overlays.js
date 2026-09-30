@@ -13,6 +13,7 @@
  *   column(b, game)  -> { v, color } or null: a column of its own color
  *                      (used instead of house/value)
  *   tip(game, b)     -> text for the tooltip over a building, or null
+ *                      (the crime overlay's words live in ui/crimeInfo.js)
  *   legend           -> [color, label] rows shown while the overlay is on
  *   walkers          -> walker types still drawn in this overlay
  * ----------------------------------------------------------------------------
@@ -23,6 +24,7 @@ import { GOD_KEYS } from '../data/gods.js';
 import { FOOD_TYPES } from '../data/goods.js';
 import { educationTier } from '../sim/housing.js';
 import { problemOf, PROBLEM_LEGEND } from '../ui/problems.js';
+import { crimeBand, crimeTip } from '../ui/crimeInfo.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
@@ -55,6 +57,23 @@ export const OVERLAYS = [
     show: is('prefecture'),
     value: (b) => Math.min(1, b.fireRisk / 100),
     walkers: ['prefect'],
+  },
+  {
+    // Homes by how much crime they breed (their mood, sim/mood.js); a home
+    // that already sent out a criminal stands tall whatever its mood.
+    key: 'crime', name: 'Crime', bad: true,
+    show: is('prefecture'),
+    column: (b) => {
+      const band = b.house ? crimeBand(b.house) : null;
+      return band && band.height > 0 ? { v: band.height / 10, color: columnColor(band.height / 10, true) } : null;
+    },
+    tip: crimeTip,
+    legend: [
+      [columnColor(1, true), 'Crime is rife (or trouble already made)'],
+      [columnColor(0.6, true), 'Much crime'],
+      [columnColor(0.2, true), 'Little crime'],
+    ],
+    walkers: ['prefect', 'protester', 'thief', 'rioter'],
   },
   {
     key: 'damage', name: 'Collapse risk', bad: true,

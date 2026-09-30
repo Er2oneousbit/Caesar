@@ -66,9 +66,11 @@ export function newHealthState() {
   return {
     value: CONFIG.HEALTH_START, // city health, the advisor's number
     target: CONFIG.HEALTH_START, // the residents' average health score last month
+    bigEnough: false, // the city had DISEASE_MIN_POP people at the day's count (refreshDiseaseGate)
     messageMonth: -1, // month of the last outbreak pop-up (at most one a month)
     quiet: 0, // outbreaks since then with no pop-up of their own...
-    quietDeaths: 0, // ...and their dead: summed up at the start of the next month
+    quietDeaths: 0, // ...and their dead: summed up in the next month
+    quietMonth: -1, // ...the month they happened in
     year: newHealthCounts(),
     lastYear: null,
     total: newHealthCounts(), // since the city was founded (the sim report)
@@ -93,9 +95,20 @@ export function diseaseEnabled(game) {
   return game.scenario.disease !== false;
 }
 
-/** Disease can break out now: enabled, and the city is big enough. */
+/**
+ * Disease can break out now: enabled, and the city was big enough at the
+ * day's count. Not city.population itself: homes tick before the day's count
+ * (onDay), so they would read yesterday's number, while a loaded game counts
+ * afresh; on the day a city crossed 200 a quick save then played out
+ * differently from the game it was saved from.
+ */
 export function diseaseActive(game) {
-  return diseaseEnabled(game) && game.city.population >= CONFIG.DISEASE_MIN_POP;
+  return diseaseEnabled(game) && game.city.health.bigEnough === true;
+}
+
+/** Daily, right after the day's count (game.js onDay): is the city big enough for disease? */
+export function refreshDiseaseGate(game) {
+  game.city.health.bigEnough = game.city.population >= CONFIG.DISEASE_MIN_POP;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,9 +256,11 @@ export function outbreak(game, b, cause = 'risk') {
 function announce(game, b, deaths, cause, sent) {
   const hc = game.city.health;
   const month = game.time.totalMonths;
+  reportQuiet(game);
   if (hc.messageMonth === month) {
     hc.quiet++;
     hc.quietDeaths += deaths;
+    hc.quietMonth = month;
     return;
   }
   hc.messageMonth = month;
@@ -260,13 +275,34 @@ function announce(game, b, deaths, cause, sent) {
   game.events.emit('sound', { name: 'wrath' }); // a low, grim note (the war horn is for riots and raids)
 }
 
+/**
+ * Sum up the outbreaks of an earlier month that had no pop-up of their own.
+ * Only an earlier month's: on the 1st, homes tick before the month's own
+ * report, and their outbreaks belong to the new month.
+ */
+function reportQuiet(game) {
+  const hc = game.city.health;
+  if (!(hc.quiet > 0) || hc.quietMonth >= game.time.totalMonths) return;
+  const n = hc.quiet;
+  const d = hc.quietDeaths;
+  game.message(`Disease struck ${n} more home${n > 1 ? 's' : ''} last month; ${d} ${d === 1 ? 'resident' : 'residents'} died.`, 'warn');
+  hc.quiet = 0;
+  hc.quietDeaths = 0;
+}
+
+/** A sick home is well again: no "sick" left among what holds it back. */
+function wellAgain(h) {
+  h.sick = 0;
+  if (h.blocked) h.blocked = h.blocked.filter((m) => m.key !== 'sick');
+}
+
 /** A physician's visit: the home's disease risk is gone, and a sick home is cured. */
 export function cureHome(game, b) {
   const h = b.house;
   if (!h) return;
   h.diseaseRisk = 0;
   if (h.sick > 0) {
-    h.sick = 0;
+    wellAgain(h);
     bump(game, 'cured');
   }
 }
@@ -304,7 +340,7 @@ export function updateSickHomes(game) {
     if (h.sick % 4 === 0) dispatchPhysician(game, b);
     h.sick--;
     if (h.sick <= 0) {
-      h.sick = 0;
+      wellAgain(h);
       bump(game, 'recovered');
     }
   }
@@ -324,9 +360,19 @@ export function updateSickHomes(game) {
 
 const onRounds = (w) => w.type === 'physician' && !w.dead && (w.state === 'roam' || w.state === 'return');
 
-/** Is a physician already on his way to this home? */
-function physicianComing(game, id) {
-  for (const w of game.walkers.values()) if (w.type === 'physician' && !w.dead && w.state === 'toSick' && w.target === id) return true;
+/**
+ * Is a physician already on his way to this home, or to one within
+ * PHYSICIAN_NEAR tiles of it (as a prefect running to a fire nearby)? A sick
+ * block, a spreading cluster or the pieces of a split villa once each called
+ * their own, and one Medicus had 13 out while its rounds stopped.
+ */
+function physicianComing(game, b) {
+  for (const w of game.walkers.values()) {
+    if (w.type !== 'physician' || w.dead || w.state !== 'toSick') continue;
+    if (w.target === b.id) return true;
+    const t = game.buildings.get(w.target);
+    if (t && Math.max(Math.abs(t.x - b.x), Math.abs(t.y - b.y)) <= CONFIG.PHYSICIAN_NEAR) return true;
+  }
   return false;
 }
 
@@ -345,7 +391,7 @@ export function dispatchPhysician(game, b) {
   const { map, pf } = game;
   const road = b.accessRoad;
   if (road < 0 || !map.road[road]) return false;
-  if (physicianComing(game, b.id)) return true;
+  if (physicianComing(game, b)) return true;
   const R = CONFIG.PHYSICIAN_ALERT_RADIUS;
   const byTile = new Map();
   for (const w of game.walkers.values()) if (onRounds(w)) byTile.set(map.idx(w.x, w.y), w);
@@ -400,19 +446,19 @@ export function physicianArrive(game, w) {
 
 /** After treating: the nearest other sick home within reach nobody is seeing to, else home. */
 export function physicianAfterWait(game, w) {
-  const { map, pf, buildings } = game;
+  const { map, pf } = game;
   const here = map.idx(w.x, w.y);
-  let target = null;
-  if (map.road[here] && game.homeByRoad) {
-    const found = pf.bfsRoad(here, (i) => {
-      for (const id of game.homeByRoad.get(i) || []) {
-        const b = buildings.get(id);
-        if (b && b.house.sick > 0 && b.house.pop > 0 && !physicianComing(game, id)) { target = b; return true; }
-      }
-      return false;
-    }, CONFIG.PHYSICIAN_ALERT_RADIUS);
-    if (found >= 0 && target) {
-      sendTo(game, w, target, pf.buildPath(found));
+  // The sick homes nobody is seeing to, by their road. Found from the homes
+  // themselves: the day's road index (game.homeByRoad) is a day old by now,
+  // and a loaded game builds it afresh, so it could send him elsewhere.
+  const byRoad = new Map();
+  for (const b of sickHomes(game)) {
+    if (b.accessRoad >= 0 && !byRoad.has(b.accessRoad) && !physicianComing(game, b)) byRoad.set(b.accessRoad, b);
+  }
+  if (map.road[here] && byRoad.size) {
+    const found = pf.bfsRoad(here, (i) => byRoad.has(i), CONFIG.PHYSICIAN_ALERT_RADIUS);
+    if (found >= 0) {
+      sendTo(game, w, byRoad.get(found), pf.buildPath(found));
       return;
     }
   }
@@ -429,14 +475,8 @@ export function physicianAfterWait(game, w) {
  */
 export function updateCityHealth(game) {
   const hc = game.city.health;
-  if (hc.quiet > 0) {
-    const n = hc.quiet;
-    const d = hc.quietDeaths;
-    game.message(`Disease struck ${n} more home${n > 1 ? 's' : ''} last month; ${d} ${d === 1 ? 'resident' : 'residents'} died.`, 'warn');
-    hc.quiet = 0;
-    hc.quietDeaths = 0;
-  }
-  if (game.city.population < CONFIG.DISEASE_MIN_POP) {
+  reportQuiet(game);
+  if (!hc.bigEnough) {
     hc.value = CONFIG.HEALTH_START;
     hc.target = CONFIG.HEALTH_START;
     return;

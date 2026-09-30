@@ -115,9 +115,17 @@ export const OVERLAYS = [
     walkers: ['teacher', 'librarian', 'scholar'],
   },
   {
+    key: 'health', name: 'Health',
+    show: is('barber', 'clinic', 'baths', 'hospital'),
+    house: (b) => ((b.house.barber > 0) + (b.house.clinic > 0) + (b.house.baths > 0)) / 3,
+    walkers: ['barber', 'physician', 'bather'],
+  },
+  {
     // Homes by disease risk (sim/disease.js), like the fire overlay; a sick
-    // home stands at full height in a color of its own.
-    key: 'health', name: 'Health', bad: true,
+    // home stands at full height in a color of its own. Its own overlay: it
+    // once replaced the Health one above, and with it the only view of which
+    // homes a barber, medicus and baths reach.
+    key: 'disease', name: 'Disease', bad: true,
     show: is('barber', 'clinic', 'baths', 'hospital'),
     column: (b) => {
       const col = b.house ? healthColumn(b) : null;

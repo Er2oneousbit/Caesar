@@ -196,6 +196,7 @@ export const CONFIG = {
   DISEASE_HEAT: 1, // disease risk a home beside a sick one gains per day, x difficulty.disease (once, however many sick homes it touches)
   DISEASE_SPREAD_CHANCE: 0.005, // chance a day that it falls sick at once, x difficulty.disease (halved within a hospital's reach)
   PHYSICIAN_ALERT_RADIUS: 24, // road tiles: a physician or a staffed medicus this close is sent to a sick home
+  PHYSICIAN_NEAR: 3, // no second physician is sent to a sick home this near one another is heading to
   PHYSICIAN_TREAT_TICKS: 20, // a physician stays a day with the sick, then looks for more
 
   // --- Water ---------------------------------------------------------------

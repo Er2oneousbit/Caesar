@@ -512,7 +512,7 @@ try {
     const g = window.colonia.game;
     for (const w of [...g.walkers.values()]) if (w.kind === 'criminal') { w.dead = true; g.walkers.delete(w.id); }
   });
-  // 5a3c. The Health overlay, with a home made sick from the console: its
+  // 5a3c. The Disease overlay, with a home made sick from the console: its
   //       column, its words on hover, the legend, no errors.
   const sickHome = await page.evaluate(() => {
     const app = window.colonia;
@@ -523,7 +523,7 @@ try {
     app.renderer.camera.centerOnTile(b.x, b.y);
     return { x: b.x, y: b.y, said, sick: b.house.sick };
   });
-  await page.selectOption('.hud-select', 'health');
+  await page.selectOption('.hud-select', 'disease');
   await page.waitForTimeout(300);
   let healthTipShown = null;
   if (sickHome) {
@@ -534,7 +534,7 @@ try {
   }
   const healthLegend = await page.isVisible('#overlay-legend:has-text("Sick home")');
   const healthReport = await page.evaluate(() => window.colonia.ui.console.run('health'));
-  check('the Health overlay opens: a sick home marked, its health on hover, the legend, no errors',
+  check('the Disease overlay opens: a sick home marked, its health on hover, the legend, no errors',
     !!sickHome && sickHome.sick > 0 && /Sick: \d+ days? left/.test(healthTipShown || '') && /Health \d+/.test(healthTipShown || '') && healthLegend && /City health \d+/.test(healthReport) && errors.length === 0,
     JSON.stringify({ sickHome, healthTipShown, healthLegend, healthReport: healthReport.slice(0, 200), errors }));
   await page.selectOption('.hud-select', 'none');

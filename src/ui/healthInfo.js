@@ -1,7 +1,7 @@
 /**
  * healthInfo.js
  * ----------------------------------------------------------------------------
- * Health and disease in words, for the house panel, the Health overlay
+ * Health and disease in words, for the house panel, the Disease overlay
  * (render/overlays.js) and the Problems overlay. Read-only: nothing here
  * changes the simulation.
  * ----------------------------------------------------------------------------
@@ -56,7 +56,7 @@ export function homeHealth(game, b) {
 }
 
 /**
- * The Health overlay's column: { v 0..1, sick } for an occupied home, by its
+ * The Disease overlay's column: { v 0..1, sick } for an occupied home, by its
  * disease risk (a sick home stands at full height), or null.
  */
 export function healthColumn(b) {
@@ -67,7 +67,7 @@ export function healthColumn(b) {
   return v >= 0.01 ? { v, sick: false } : null;
 }
 
-/** The Health overlay's tooltip for a building (occupied homes only). */
+/** The Disease overlay's tooltip for a building (occupied homes only). */
 export function healthTip(game, b) {
   const hh = homeHealth(game, b);
   if (!hh) return null;

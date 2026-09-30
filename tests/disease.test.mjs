@@ -33,7 +33,7 @@ import { updateWalkers } from '../src/sim/walkers.js';
 import { WaterBits } from '../src/world/map.js';
 import {
   healthScore, healthLacks, crowding, dailyRisk, outbreakDeaths, updateDiseaseRisk, outbreak,
-  updateSickHomes, updateCityHealth, houseHealth, diseaseEnabled, dispatchPhysician,
+  updateSickHomes, updateCityHealth, houseHealth, diseaseEnabled, dispatchPhysician, refreshDiseaseGate, cureHome,
 } from '../src/sim/disease.js';
 import { healthTip, healthColumn, riskWords } from '../src/ui/healthInfo.js';
 import { problemOf, PROBLEM_LEGEND, UNREST_COLOR } from '../src/ui/problems.js';
@@ -76,11 +76,17 @@ function stepWalkers(game, ticks, until = () => false) {
   }
 }
 
+/** Set the population as the day's count would, gate included (disease reads the gate: diseaseActive). */
+function setPop(game, n) {
+  game.city.population = n;
+  refreshDiseaseGate(game);
+}
+
 /** A game big enough for disease, with a street to build on. */
 function street(seed, opts = {}) {
   const game = newGame({ size: 128, type: 'plains', seed, ...opts });
   const r = road(game, 24);
-  game.city.population = 500;
+  setPop(game, 500);
   return { game, ...r };
 }
 
@@ -159,11 +165,11 @@ test('no disease below 200 people, nor in the first two missions; the lever by d
   let draws = 0;
   const next = game.rng.next.bind(game.rng);
   game.rng.next = () => { draws++; return next(); };
-  game.city.population = CONFIG.DISEASE_MIN_POP - 1;
+  setPop(game, CONFIG.DISEASE_MIN_POP - 1);
   updateDiseaseRisk(game, b);
   assert.equal(b.house.diseaseRisk, 0);
   assert.equal(draws, 0, 'a small town draws no random number');
-  game.city.population = CONFIG.DISEASE_MIN_POP;
+  setPop(game, CONFIG.DISEASE_MIN_POP);
   updateDiseaseRisk(game, b);
   assert.ok(b.house.diseaseRisk > 0);
   // The first two missions have none at all.
@@ -171,7 +177,7 @@ test('no disease below 200 people, nor in the first two missions; the lever by d
   const c1 = new Game({ scenario: SCENARIOS[0], flags: { money: 50000 } });
   const r = road(c1, 12);
   const h1 = home(c1, r.x0 + 2, r.y + 1, { pop: 10 });
-  c1.city.population = 5000;
+  setPop(c1, 5000);
   h1.house.diseaseRisk = 500;
   c1.rng.chance = () => true;
   updateDiseaseRisk(c1, h1);
@@ -308,14 +314,19 @@ test('a physician on his rounds nearby is called over before the medicus sends a
 });
 
 test('after treating, a physician goes on to the next sick home nobody is seeing to', () => {
-  const { game, x0, y } = medicusStreet('next');
-  const a = home(game, x0 + 2, y + 1, { pop: 15 });
-  const b = home(game, x0 + 8, y - 1, { pop: 15 });
+  const { game, x0, x1, y } = medicusStreet('next');
+  const a = home(game, x1 - 5, y + 1, { pop: 15 }); // near the medicus at the east end
+  const b = home(game, x0 + 1, y - 1, { pop: 15 }); // far west: not on the way to a
   b.house.sick = 20;
-  indexHomesByRoad(game);
   outbreak(game, a);
-  stepWalkers(game, 3000, () => a.house.sick === 0 && b.house.sick === 0);
-  assert.deepEqual([a.house.sick, b.house.sick], [0, 0]);
+  const doc = [...game.walkers.values()].find((w) => w.type === 'physician');
+  assert.equal(doc.target, a.id);
+  stepWalkers(game, 3000, () => doc.state === 'toSick' && doc.target === b.id);
+  assert.equal(a.house.sick, 0, 'a treated');
+  assert.ok(b.house.sick > 0, 'b not yet: it is off his way');
+  assert.deepEqual([doc.state, doc.target], ['toSick', b.id], 'from a he goes on to b');
+  stepWalkers(game, 3000, () => b.house.sick === 0);
+  assert.equal(b.house.sick, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -334,19 +345,24 @@ test('city health moves 2 a month toward the residents\' average score, and stay
   updateCityHealth(game);
   assert.equal(hc.target, want);
   assert.equal(hc.value, CONFIG.HEALTH_START + Math.sign(want - CONFIG.HEALTH_START) * CONFIG.HEALTH_STEP);
-  game.city.population = CONFIG.DISEASE_MIN_POP - 1;
+  setPop(game, CONFIG.DISEASE_MIN_POP - 1);
   updateCityHealth(game);
   assert.deepEqual([hc.value, hc.target], [CONFIG.HEALTH_START, CONFIG.HEALTH_START], 'too small to judge');
 });
 
-test('one outbreak pop-up a month; the rest are summed up at the start of the next', () => {
+test('one outbreak pop-up a month; the rest are summed up once the month has turned', () => {
   const { game, x0, y } = street('messages');
   const homes = [0, 3, 6].map((k) => home(game, x0 + 3 + k, y + 1, { pop: 10 }));
   for (const b of homes) outbreak(game, b);
   const said = game.messages.filter((m) => /^Disease has/.test(m.text));
   assert.equal(said.length, 1);
+  // Not within the month they happened in (on the 1st, homes tick before the
+  // month's report, and theirs belong to the new month)...
   updateCityHealth(game);
-  assert.match(game.messages[0].text, /^Disease struck 2 more homes last month; 4 residents died\./);
+  assert.equal(game.city.health.quiet, 2, 'not summed up in their own month');
+  // ...but once the month has turned.
+  game.runDays(CONFIG.DAYS_PER_MONTH);
+  assert.ok(game.messages.some((m) => /^Disease struck 2 more homes last month; 4 residents died\./.test(m.text)));
   assert.equal(game.city.health.quiet, 0);
 });
 
@@ -354,13 +370,18 @@ test('one outbreak pop-up a month; the rest are summed up at the start of the ne
 // What the player sees
 // ---------------------------------------------------------------------------
 
-test('Health overlay: columns by disease risk, sick homes in their own color, words in the tooltip', () => {
+test('Disease overlay: columns by disease risk, sick homes in their own color, words in the tooltip', () => {
   const { game, x0, y } = street('overlay');
   const b = home(game, x0 + 3, y + 1, { tier: 4, pop: 11 });
   b.house.food.wheat = 5;
   game.map.water[game.map.idx(b.x, b.y)] |= WaterBits.WELL;
   b.house.diseaseRisk = 45;
-  const ov = overlayByKey('health');
+  // The Health overlay still shows who a barber, medicus and baths reach.
+  const care = overlayByKey('health');
+  b.house.barber = 10;
+  assert.ok(Math.abs(care.house(b) - 1 / 3) < 1e-9, 'Health: barber, medicus, baths reach');
+  b.house.barber = 0;
+  const ov = overlayByKey('disease');
   assert.ok(Math.abs(ov.column(b, game).v - 0.45) < 1e-9);
   assert.equal(riskWords(45), 'Some risk of disease');
   assert.equal(healthTip(game, b), 'Health 14 (wretched): no medicus or hospital, no baths, no barber, well water only, not every kind of food. Some risk of disease.');
@@ -377,7 +398,7 @@ test('Health overlay: columns by disease risk, sick homes in their own color, wo
   assert.match(healthTip(c1, h1), /\(There is no disease in this province\.\)$/);
 });
 
-test('Problems overlay: sick homes, then homes in unrest, come before what a home lacks', () => {
+test('Problems overlay: sick homes, then homes falling back, then homes in unrest, before what a home lacks', () => {
   const { game, x0, y } = street('problems');
   const b = home(game, x0 + 3, y + 1, { tier: 4, pop: 11 });
   b.house.blocked = [{ key: 'water', have: 1, need: 2 }];
@@ -387,6 +408,11 @@ test('Problems overlay: sick homes, then homes in unrest, come before what a hom
   const unrest = problemOf(game, b);
   assert.equal(unrest.color, UNREST_COLOR);
   assert.equal(unrest.text, 'Hut, in unrest: mood 20 (resentful). Taxes are too high.');
+  // Falling back a level is more urgent than unrest: it has days to act.
+  b.house.devolving = true;
+  b.house.devolveDays = 1;
+  assert.match(problemOf(game, b).text, /^Hut, falling back to Lean-to in \d+ days?\. Needs: /);
+  b.house.devolving = false;
   b.house.mood = 45;
   b.house.criminal = 1;
   assert.match(problemOf(game, b).text, /sent a protester out/, 'a home that sent a criminal is in unrest whatever its mood');
@@ -467,6 +493,12 @@ test('save: version 5 (before disease) and version 4 saves load with nobody sick
   assert.equal(copy.city.health.total.outbreaks, 0);
   copy.runDays(20);
   assert.ok(Number.isFinite(copy.buildings.get(b.id)?.house.diseaseRisk ?? 0));
+  const cb = copy.buildings.get(b.id);
+  if (cb && cb.house.pop > 0) {
+    setPop(copy, 500);
+    updateDiseaseRisk(copy, cb);
+    assert.ok(cb.house.diseaseRisk > 0, 'and disease runs on it once the city is big enough');
+  }
   // Version 4 (before crime too) still upgrades through both steps.
   const v4 = JSON.parse(JSON.stringify(v5));
   v4.version = 4;
@@ -479,4 +511,66 @@ test('save: version 5 (before disease) and version 4 saves load with nobody sick
   old.runDays(20);
   v4.version = 3;
   assert.throws(() => deserializeGame(v4), /older version of Colonia/);
+});
+
+// ---------------------------------------------------------------------------
+// From the reviews
+// ---------------------------------------------------------------------------
+
+test('disease goes by the day\'s count of people, so a save made the day a city passes 200 plays out the same', () => {
+  // Homes tick before the day's count: reading city.population they saw
+  // yesterday's number, while a loaded game counts afresh, and the two drew
+  // different random numbers from then on.
+  const { game, x0, y } = street('gate');
+  const b = home(game, x0 + 3, y + 1, { pop: 10 });
+  setPop(game, CONFIG.DISEASE_MIN_POP - 1);
+  game.city.population = CONFIG.DISEASE_MIN_POP + 50; // settlers came in during the day
+  let draws = 0;
+  const next = game.rng.next.bind(game.rng);
+  game.rng.next = () => { draws++; return next(); };
+  updateDiseaseRisk(game, b);
+  assert.equal(draws, 0, 'not until the day\'s count says so');
+  const copy = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  assert.equal(copy.city.health.bigEnough, false, 'a loaded game agrees, whatever it counts on loading');
+  refreshDiseaseGate(game);
+  updateDiseaseRisk(game, b);
+  assert.ok(draws > 0 && b.house.diseaseRisk > 0, 'from the next count on');
+});
+
+test('one physician for a cluster: none is sent to a sick home near one another is heading to', () => {
+  const { game, x0, y } = medicusStreet('cluster');
+  const a = home(game, x0 + 2, y + 1, { pop: 15 });
+  const b = home(game, x0 + 3, y + 1, { pop: 15 });
+  const c = home(game, x0 + 2 + CONFIG.PHYSICIAN_NEAR + 3, y + 1, { pop: 15 });
+  outbreak(game, a);
+  outbreak(game, b);
+  const docs = () => [...game.walkers.values()].filter((w) => w.type === 'physician').length;
+  assert.equal(docs(), 1, 'the neighbour waits for the one already coming');
+  outbreak(game, c);
+  assert.equal(docs(), 2, 'a home further off gets its own');
+});
+
+test('a cured home is well at once: nothing about sickness is left among its needs', () => {
+  const { game, x0, y } = street('cured');
+  const b = home(game, x0 + 3, y + 1, { tier: 4, pop: 11 });
+  b.house.sick = 6;
+  b.house.blocked = [{ key: 'sick', have: 6, need: 0 }, { key: 'water', have: 1, need: 2 }];
+  cureHome(game, b);
+  assert.equal(b.house.sick, 0);
+  assert.deepEqual(b.house.blocked.map((m) => m.key), ['water']);
+  assert.doesNotMatch(problemOf(game, b).text, /sick|well again/i);
+});
+
+test('no spread in a town under 200 people', () => {
+  const { game, x0, y } = street('small-spread');
+  const a = home(game, x0 + 3, y + 1, { pop: 10 });
+  const b = home(game, x0 + 4, y + 1, { pop: 10 });
+  a.house.sick = 10;
+  setPop(game, CONFIG.DISEASE_MIN_POP - 1);
+  game.rng.chance = () => true;
+  updateSickHomes(game);
+  assert.deepEqual([b.house.diseaseRisk, b.house.sick], [0, 0]);
+  setPop(game, CONFIG.DISEASE_MIN_POP);
+  updateSickHomes(game);
+  assert.ok(b.house.sick > 0, 'and it spreads once the city is big enough');
 });

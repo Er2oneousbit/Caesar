@@ -120,23 +120,24 @@ export function problemOf(game, b) {
       if (b.noEntryRoute) return { v: 0.55, color: BAD, text: 'Empty lot: its road does not reach the map entrance.' };
       return null;
     }
-    // Sickness and unrest come before what the home lacks to move up.
+    // Most urgent first: sickness, then falling back a level (days to act),
+    // then unrest, then what the home lacks to move up.
     if (hs.sick > 0) return { v: 1, color: SICK_COLOR, text: `${HOUSE_TIERS[hs.tier].name}. ${sickText(hs)}` };
+    // A "sick" need is only true while the home is sick (a cure clears it).
+    const blocked = (hs.blocked || []).filter((n) => n.key !== 'sick');
+    const tier = HOUSE_TIERS[hs.tier];
+    const more = blocked.length > 1 ? ` (and ${blocked.length - 1} more need${blocked.length > 2 ? 's' : ''})` : '';
+    const colorOf = (n) => (NEED_KINDS[n.key] || NEED_KINDS.space)[0];
+    if (hs.devolving && blocked.length) {
+      const left = Math.max(1, game.difficulty.devolveDays - (hs.devolveDays || 0));
+      return { v: 1, color: colorOf(blocked[0]), text: `${tier.name}, falling back to ${HOUSE_TIERS[hs.tier - 1].name} in ${left} day${left > 1 ? 's' : ''}. Needs: ${describeNeed(blocked[0])}${more}` };
+    }
     const unrest = unrestOf(game, b);
     if (unrest) return unrest;
-    const blocked = hs.blocked || [];
-    if (!blocked.length || (hs.tier >= MAX_TIER && !hs.devolving)) return null;
+    if (!blocked.length || hs.tier >= MAX_TIER || hs.devolving) return null;
     // Growing: only if the next level can be reached here at all.
-    if (!hs.devolving && !blocked.every((n) => needReachable(game, n))) return null;
-    const m = blocked[0];
-    const color = (NEED_KINDS[m.key] || NEED_KINDS.space)[0];
-    const more = blocked.length > 1 ? ` (and ${blocked.length - 1} more need${blocked.length > 2 ? 's' : ''})` : '';
-    const tier = HOUSE_TIERS[hs.tier];
-    if (hs.devolving) {
-      const left = Math.max(1, game.difficulty.devolveDays - (hs.devolveDays || 0));
-      return { v: 1, color, text: `${tier.name}, falling back to ${HOUSE_TIERS[hs.tier - 1].name} in ${left} day${left > 1 ? 's' : ''}. Needs: ${describeNeed(m)}${more}` };
-    }
-    return { v: 0.55, color, text: `${tier.name}. To become a ${HOUSE_TIERS[hs.tier + 1].name}: ${describeNeed(m)}${more}` };
+    if (!blocked.every((n) => needReachable(game, n))) return null;
+    return { v: 0.55, color: colorOf(blocked[0]), text: `${tier.name}. To become a ${HOUSE_TIERS[hs.tier + 1].name}: ${describeNeed(blocked[0])}${more}` };
   }
   const s = buildingStatus(game, b);
   if (s.level === 'bad') return { v: 1, color: BAD, text: `${b.def.name}: ${s.text}` };

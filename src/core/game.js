@@ -56,7 +56,7 @@ import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
 import { closeGoodsMonth } from '../sim/goodsLedger.js';
 import { updateHomeMoods } from '../sim/mood.js';
 import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../sim/crime.js';
-import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear } from '../sim/disease.js';
+import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear, refreshDiseaseGate } from '../sim/disease.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -285,6 +285,7 @@ export class Game {
       this.dirty.des = false;
     }
     computeCityStats(this);
+    refreshDiseaseGate(this); // saved, so homes ticking before tomorrow's count agree after a load
     updateEntertainmentBase(this);
     updateWineSources(this);
     if (this.time.day === CONFIG.GOODS_MIDMONTH_DAY) {

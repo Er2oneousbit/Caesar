@@ -8,12 +8,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-5. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
-6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+1. **Water under the Housing tool**: while placing housing plots, tint the ground faintly where homes would get water, as the original did: a pale blue for well water, a stronger blue for fountain water, so the next plots go where water already reaches. Today the coverage only shows while placing or selecting a well, fountain or reservoir. It reads the sim's water layer, like those hints.
+2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+5. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+6. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
+7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 

@@ -22,7 +22,7 @@ import { ROADBLOCK_GROUPS, roadblockBit, WALKER_TYPES } from '../src/data/walker
 import { ROADBLOCK, Wall } from '../src/world/map.js';
 import { planAction, undoLast } from '../src/sim/construction.js';
 import { spawnWalker } from '../src/sim/entities.js';
-import { startRoaming, followPath, pickRoamTile } from '../src/sim/movement.js';
+import { startRoaming, followPath, pickRoamTile, streetValue } from '../src/sim/movement.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { walkerInfo, walkerSays, cityTrouble } from '../src/ui/walkerTalk.js';
@@ -243,22 +243,30 @@ test('a roamer at a junction prefers the street with buildings along it over an 
   assert.ok(east / trials > 0.7, `east ${east} of ${trials}`);
 });
 
-test('a roamer looks past the first tile: a way that runs on empty (the Imperial road to the map edge) loses out', () => {
-  // A road comes from the east to a corner: north runs 7 tiles to a dead end
-  // with a single home beside its first tile; south is lined with homes.
+test('a roamer weighs a way by where it leads: an empty road on to a dead end, a spur to a building, a roadblock', () => {
   const game = newGame({ size: 96, type: 'plains', seed: 'roam-street' });
+  const { map } = game;
   const spot = findFree(game, 11, 14);
   const cx = spot.x + 2;
   const cy = spot.y + 8;
-  assert.ok(build(game, 'road', cx, cy, cx + 8, cy).ok, 'the street in from the east');
-  assert.ok(build(game, 'road', cx, cy - 7, cx, cy + 3).ok, 'north (7 tiles) and south of the corner');
-  addBuilding(game, 'house', cx - 1, cy - 1, 1); // beside the first tile north, and near the corner
+  const N = 0; const E = 1; const S = 2;
+  assert.ok(build(game, 'road', cx, cy, cx + 8, cy).ok, 'a street in from the east');
+  assert.ok(build(game, 'road', cx, cy - 7, cx, cy + 3).ok, 'north (7 tiles, a dead end) and south of the corner');
+  addBuilding(game, 'house', cx - 1, cy - 1, 1); // beside the first tile north only
   for (let y = cy + 1; y <= cy + 3; y++) addBuilding(game, 'house', cx - 1, y, 1);
-  let south = 0;
-  const trials = 400;
-  for (let k = 0; k < trials; k++) {
-    const w = { x: cx, y: cy, lastDir: 3, memory: [], origin: 0 }; // heading west, at the corner
-    if (game.map.yOf(pickRoamTile(game, w)) > cy) south++;
-  }
-  assert.ok(south / trials > 0.6, `south ${south} of ${trials}`);
+  const w = { type: 'taxman' };
+  // North: 3 of its 7 tiles are in reach of that one home, and it ends in
+  // nothing (the Imperial road out to the map edge, in small).
+  assert.equal(streetValue(map, w, cx, cy - 1, N), 3 / 7);
+  assert.equal(streetValue(map, w, cx, cy + 1, S), 1, 'south: homes all along');
+  // A spur that runs empty to a building at its end counts in full: a clay
+  // pit down a long spur lost half its engineers' visits when it did not.
+  addBuilding(game, 'well', cx + 1, cy - 7, 1);
+  assert.equal(streetValue(map, w, cx, cy - 1, N), 1, 'the same road, now ending at a building');
+  // A roadblock that stops the walker ends the way before it: the homes
+  // beyond count for nothing to a tax collector held back there.
+  map.roadblock[map.idx(cx + 3, cy)] = 128; // nobody through
+  const e = streetValue(map, w, cx + 1, cy, E);
+  addBuilding(game, 'house', cx + 6, cy + 1, 1);
+  assert.equal(streetValue(map, w, cx + 1, cy, E), e, 'homes beyond the roadblock change nothing');
 });

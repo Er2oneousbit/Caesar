@@ -8,7 +8,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Disease** (done in v0.11.0), then the **Health, Education and Entertainment advisors** (crime came in v0.10.0). Disease as local outbreaks on the fire machinery: each home gets a health score (its level, medicus, hospital, baths, barber, fountain water, food); crowded, unhealthy homes build disease risk that a physician's visit clears; an outbreak makes a home sick (deaths, no growth, it can spread next door) and a staffed medicus sends a physician to cure it, as prefectures send prefects to fires; hospitals nearby cut the deaths. City health (the homes' average score) goes on the Health advisor, with a health overlay; on at every difficulty, gentler on Easy. The Problems overlay then gets crime and sickness too, and the Overview a crime and a health line.
+1. **Health, Education and Entertainment advisors** (disease came in v0.11.0, crime in v0.10.0): city health and coverage by building, the Overview's crime and health lines, as in the design brief.
 2. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
 3. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
 4. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1, 2 and 3, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
@@ -16,7 +16,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
-## Done (v0.11.0, in progress)
+## Done (v0.11.0)
 
 Fixes from playing mission 3 on Insane (the game said things that were not so, or said nothing):
 
@@ -29,6 +29,8 @@ Fixes from playing mission 3 on Insane (the game said things that were not so, o
 
 * **Disease** (parity item 4): every home has a health score (its level, a medicus, a hospital within reach, baths, a barber, fountain water, each kind of food; at most 40 with no food at all). Crowded, unhealthy homes build disease risk like fire risk, and a passing physician clears it; at 100 a home may fall sick: a fifth of its people die (a tenth near a hospital), and for 32 days it cannot move up or take in settlers and may pass it to the homes touching it (once a day each). A staffed Medicus sends a physician to cure it, as prefectures send prefects to fires. City health (the residents' average score) moves 2 a month, shown only. None below 200 people or in the first two missions; a new difficulty lever (x0.5 Easy, x1.3 Hard, x1.5 Insane). A Disease overlay (disease risk, sick homes marked), a *Health* section in the house panel, a pale cloth on a sick home's door post, sick homes and homes in unrest first on the Problems overlay, citizens who talk about it, console `health` and `sick`, and the sim report's outbreaks and deaths
 * Saves are version 6; version 5 and 4 saves load with nobody sick
+* Measured, 12 maps x 3 years against v0.10.1: population up on Easy, Normal and Hard (Hard 425 to 456), fires down on every difficulty (Normal 4.8 to 3.0), outbreaks per city 0.1 (Easy), 0.8, 1.0 and 4.6 (Insane); Insane's neglected demo city also meets more thieves (4.8 to 12.4) and a little less peace (31 to 28); the campaign's pace unchanged
+* 226 unit tests (+34), 80 browser checks (+1)
 
 ## Done (v0.10.1)
 
@@ -279,7 +281,7 @@ Seeing why:
 From playtesting (mission 3 on Insane, three attempts, all lost within about 15 months; the owner decides which to take):
 
 * **The new city's mood bonus ends as a 20-point cliff** at month 12; on Insane it lands just when the economy is weakest. A taper over several months would be kinder and easier to read.
-* **Early cash flow on Insane**: a worker's wage costs about what six Huts pay in tax, and 2,800 Dn leaves little room to reach the homes that pay. The first year is decided by cash flow more than by the player's layout.
+* **Early cash flow on Insane** (re-tested after v0.11.0's fixes: still lost, on money alone). With wages near 24 Dn a worker a year, a third of the people working and a Hut resident paying about 4 Dn a year, a city of low homes loses money on every job until its homes reach about Townhouse level; that holds on every difficulty, and the starting funds are the runway (7,000 Dn on Normal, 2,800 on Insane). In the re-test no key building burned or collapsed in 22 months and roadblocks plus a second Forum kept homes registered, but wages (228 Dn a month) outran taxes (140 to 162) and a 2,000 Dn loan only delayed the debt. Options: more starting money on Insane, cheaper wages there, or early income that does not need high homes. Note that `npm run sim` starts every city with 20,000 Dn, so the balance sim never meets this: a mode with the campaign's funds would.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
 

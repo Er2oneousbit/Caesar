@@ -280,6 +280,18 @@ export class GameMap {
    * Is any tile within `radius` (Chebyshev) of the footprint of the given terrain type?
    * Used for "must be near water/trees/rocks" placement rules.
    */
+  /** How many tiles of `type` lie within `radius` of a footprint (outside it). */
+  countNearTerrain(x, y, size, type, radius = 1) {
+    let n = 0;
+    for (let ty = y - radius; ty < y + size + radius; ty++) {
+      for (let tx = x - radius; tx < x + size + radius; tx++) {
+        if (tx >= x && tx < x + size && ty >= y && ty < y + size) continue;
+        if (this.inBounds(tx, ty) && this.terrain[this.idx(tx, ty)] === type) n++;
+      }
+    }
+    return n;
+  }
+
   isNearTerrain(x, y, size, type, radius = 1) {
     for (let ty = y - radius; ty < y + size + radius; ty++) {
       for (let tx = x - radius; tx < x + size + radius; tx++) {

@@ -96,7 +96,7 @@ export function checkBuilding(game, type, x, y) {
       if (!map.isNearTerrain(x, y, S, Terrain.WATER, 2)) return fail('Must be within 2 tiles of water', cost);
       break;
     case 'nearTrees':
-      if (!map.isNearTerrain(x, y, S, Terrain.TREES, 2)) return fail('Must be within 2 tiles of forest', cost);
+      if (map.countNearTerrain(x, y, S, Terrain.TREES, 2) < CONFIG.WOODS_MIN_TILES) return fail(`Must be within 2 tiles of woods (${CONFIG.WOODS_MIN_TILES}+ tiles of forest; lone trees are not enough)`, cost);
       break;
     case 'nearRock':
       if (!map.isNearTerrain(x, y, S, Terrain.ROCK, 1)) return fail('Must be right next to rocks', cost);

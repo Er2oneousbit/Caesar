@@ -86,7 +86,8 @@ export function dispatchCart(game, b, good, amount) {
 export function resourceAvailable(game, b) {
   const p = b.def.placement;
   const { map } = game;
-  if (p === 'nearTrees') return map.isNearTerrain(b.x, b.y, b.size, Terrain.TREES, 2);
+  // Woods, not the odd lone tree (the same rule as placing it).
+  if (p === 'nearTrees') return map.countNearTerrain(b.x, b.y, b.size, Terrain.TREES, 2) >= CONFIG.WOODS_MIN_TILES;
   if (p === 'nearRock') return map.isNearTerrain(b.x, b.y, b.size, Terrain.ROCK, 1);
   if (p === 'nearWater') return map.isNearTerrain(b.x, b.y, b.size, Terrain.WATER, 2);
   return true;

@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.7.3',
+  VERSION: '0.7.4',
   SAVE_VERSION: 4, // v4: the 20-level housing ladder; saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -63,6 +63,7 @@ export const CONFIG = {
   MARKET_FOOD_CAP: 800, // per food type
   MARKET_GOODS_CAP: 300, // per manufactured good
   MARKET_BUYER_LOAD: 400, // units of the main item a market buyer carries back
+  WOODS_MIN_TILES: 4, // forest tiles a timber yard needs within 2 tiles: woods, not the odd lone tree
 
   // --- Housing -------------------------------------------------------------
   // Homes move up at once and fall back after game.difficulty.devolveDays bad

@@ -118,7 +118,7 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 | Chain | Placement rule |
 |---|---|
 | Clay Pit → Potter → Pottery | clay pit within 2 tiles of water |
-| Timber Yard → Carpenter → Furniture | within 2 tiles of forest |
+| Timber Yard → Carpenter → Furniture | within 2 tiles of woods: at least 4 tiles of forest (lone trees are not enough) |
 | Olive Grove → Oil Press → Oil | grove on meadow |
 | Vineyard → Winery → Wine | vineyard on meadow |
 | Iron Mine → Weaponsmith → Weapons | mine touching rocks (export good; legionaries need 50 each) |

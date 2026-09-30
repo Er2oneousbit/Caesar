@@ -8,7 +8,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); an aqueduct crossing a road should be drawn as a bridge, the channel carried over the road on an arch; the three statues need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 8 needs no second pass.
+1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); an aqueduct crossing a road should be drawn as a bridge, the channel carried over the road on an arch; the three statues and the iron mine need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 8 needs no second pass.
 2. **A library of music tracks**: about 10 tracks of a few minutes each (today a piece is about 20 bars, under a minute, then a pause and a new random piece), each with an opening of its own (lead instrument, tempo, mode and theme) so they are told apart from the first bars, picked at random without repeating the last few. Still composed by our generator, each track from a fixed seed and a longer form (more sections, varied returns of the theme). Day, night and the menu draw from the library; festivals and raids keep music of their own (it has to come in quickly when they start), but made just as long, a few minutes rather than under one. To decide: whether settings name the tracks.
 3. **A longer, deeper campaign**: the campaign is short and its first cities are done quickly (7 missions, from 250 people to 6,000 with ratings of 40 to 60), where the original's campaign runs to about eleven promotions and its later cities take hours. More missions, with the choice between a peaceful and a military province at points along the way (parity item 13), goals that grow into the 20-level ladder (populations into the tens of thousands, ratings up to the 70s and 80s, the later ones needing villa and palace districts) on bigger maps, and harder later provinces (raids, the Emperor's demands). Pace targets: about half an hour to an hour for the first missions, several hours for the last ones at normal speed; the headless sim can check how long the goals take to reach. In two steps: first stretch the 7 missions there are (goals and maps for the new ladder, the pace targets), then add the new missions and branches once disease, crime, the Emperor's legions and the five gods exist (items 5, 7 and 8), so the new provinces are not built twice.
 4. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
@@ -19,6 +19,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 9. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.7.4)
+
+* **A timber yard needs woods**: at least 4 tiles of forest within 2 tiles, to be placed (the preview turns red and says so) and to keep working. A single lone tree used to count as forest, so a third of the spots it accepted were out in open country, and such a yard ran at full speed
+* 135 unit tests (+1)
 
 ## Done (v0.7.3)
 

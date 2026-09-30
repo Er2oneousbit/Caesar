@@ -325,7 +325,7 @@ export const BUILDINGS = Object.freeze({
   timber_yard: B({
     name: 'Timber Yard', category: 'industry', kind: 'raw', produces: 'timber', cost: 40, size: 2, workers: 8, labor: 'industry',
     des: [-4, 1, 1, 3], fire: 2, damage: 1, placement: 'nearTrees', productionDays: 22,
-    desc: 'Fells trees for timber. Must be within 2 tiles of forest.',
+    desc: 'Fells trees for timber. Must be within 2 tiles of woods: at least 4 tiles of forest (lone trees are not enough).',
   }),
   iron_mine: B({
     name: 'Iron Mine', category: 'industry', kind: 'raw', produces: 'iron', cost: 50, size: 2, workers: 10, labor: 'industry',

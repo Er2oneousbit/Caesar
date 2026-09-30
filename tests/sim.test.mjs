@@ -22,7 +22,7 @@ import { Terrain, WaterBits, Road } from '../src/world/map.js';
 import { PathFinder } from '../src/world/pathfinding.js';
 import { SCENARIOS, sandboxScenario } from '../src/data/scenarios.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
-import { planAction, applyPlan, undoLast, canUndo } from '../src/sim/construction.js';
+import { planAction, applyPlan, undoLast, canUndo, checkBuilding } from '../src/sim/construction.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { checkTier, growHouse } from '../src/sim/housing.js';
 import { updateLabor } from '../src/sim/labor.js';
@@ -31,6 +31,7 @@ import { monthlyEconomy, houseMonthlyTax } from '../src/sim/economy.js';
 import { openRoute, setTradeMode, tradeAt } from '../src/sim/trade.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { updateFires, igniteBuilding } from '../src/sim/risk.js';
+import { resourceAvailable } from '../src/sim/production.js';
 
 log.setLevel('error');
 
@@ -519,4 +520,26 @@ test('one fire in an unguarded housing block takes a handful of homes, not the b
   }
   // Before the fix a single fire took the whole 48-tile band.
   assert.ok(total / seeds < 20, `mean tiles burned ${total / seeds} of 48`);
+});
+
+test('a timber yard needs woods, not a lone tree: to be placed, and to keep working', () => {
+  const game = newGame();
+  const spot = findFree(game, 8, 8);
+  const { map } = game;
+  const x = spot.x + 3;
+  const y = spot.y + 3;
+  const trees = [[x - 1, y], [x - 1, y + 1], [x, y - 1], [x + 1, y - 1]];
+  const plant = (n) => { for (const [tx, ty] of trees) map.terrain[map.idx(tx, ty)] = Terrain.GRASS; for (const [tx, ty] of trees.slice(0, n)) map.terrain[map.idx(tx, ty)] = Terrain.TREES; };
+  plant(1);
+  const lone = checkBuilding(game, 'timber_yard', x, y);
+  assert.ok(!lone.ok, 'a lone tree is not woods');
+  assert.match(lone.reason, /woods/);
+  plant(CONFIG.WOODS_MIN_TILES - 1);
+  assert.ok(!checkBuilding(game, 'timber_yard', x, y).ok);
+  plant(CONFIG.WOODS_MIN_TILES);
+  assert.ok(checkBuilding(game, 'timber_yard', x, y).ok, 'woods');
+  const yard = addBuilding(game, 'timber_yard', x, y);
+  assert.ok(resourceAvailable(game, yard));
+  map.terrain[map.idx(x - 1, y)] = Terrain.GRASS; // the woods are cut back to 3 trees
+  assert.ok(!resourceAvailable(game, yard), 'stops when the woods are gone');
 });

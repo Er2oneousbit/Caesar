@@ -176,11 +176,26 @@ export function buildDemoCity(game, opts = {}) {
       ['market', 5, 9, 2], ['temple_neptune', 12, 0, 2], ['temple_vesta', 1, 0, 2], ['clinic', 16, 3, 1],
     );
   }
-  for (const [type, a, b, size] of services) {
-    // top-left in world coords depends on orientation: take the min corner of the footprint.
+  // top-left in world coords depends on orientation: take the min corner of the footprint.
+  const placeLocal = (type, a, b, size) => {
     const p = at(a, b);
     const q = at(a + size - 1, b + size - 1);
-    place(game, type, Math.min(p.x, q.x), Math.min(p.y, q.y), size);
+    return place(game, type, Math.min(p.x, q.x), Math.min(p.y, q.y), size);
+  };
+  // The site may be up to a fifth trees or rock, so a planned slot can be
+  // blocked. Every service first gets its own slot; the ones that failed then
+  // take the nearest free slot in a housing band (after all the planned ones,
+  // so a moved service never takes another's slot). Skipping them silently
+  // once left the balance sim's city without a Forum, so it never taxed.
+  const failed = services.filter(([type, a, b, size]) => !placeLocal(type, a, b, size));
+  for (const [type, a0, b0, size] of failed) {
+    const slots = [];
+    for (let b = 0; b + size <= D; b++) {
+      if ([2, 5, 8].some((s) => s >= b && s < b + size)) continue; // not across a street
+      for (let a = 1; a + size <= W - 1; a++) slots.push({ a, b, d: Math.abs(a - a0) + Math.abs(b - b0) });
+    }
+    slots.sort((s, t) => s.d - t.d);
+    slots.find((s) => placeLocal(type, s.a, s.b, size));
   }
   // Houses everywhere else inside the rectangle.
   for (let b = 0; b < D; b++) {

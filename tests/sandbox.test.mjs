@@ -384,3 +384,18 @@ test('raids leave time to build: no first raid inside 3 years on Normal, sandbox
   const game = newGame({ invasions: 'occasional' });
   assert.equal(game.military.nextRaidMonth, 60);
 });
+
+test('demo city: every planned service is built, even where the site has trees or rock', () => {
+  // The site may be up to a fifth blocked; on the balance sim's own seed
+  // ('demo') the Forum and the second market used to be skipped without a
+  // word, so that city never collected a denarius of tax.
+  const want = { forum: 1, market: 2, prefecture: 2, engineer_post: 2, clinic: 1, school: 1, theater: 1, barber: 1, temple_mars: 1, temple_neptune: 1, temple_vesta: 1, temple_ceres: 1, temple_jupiter: 1 };
+  for (const seed of ['demo', 'a1', 'test-seed', 'near']) {
+    const game = newGame({ seed });
+    assert.ok(buildDemoCity(game, { level: 2 }).ok, `${seed}: demo city built`);
+    const have = {};
+    for (const b of game.buildings.values()) have[b.type] = (have[b.type] || 0) + 1;
+    // At least: the industry and farm quarters add prefectures of their own.
+    for (const [type, n] of Object.entries(want)) assert.ok((have[type] || 0) >= n, `${seed}: ${type} ${have[type] || 0} of ${n}`);
+  }
+});

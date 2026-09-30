@@ -90,7 +90,10 @@ const DARK_KINDS = new Set(['farm', 'raw', 'workshop', 'granary', 'warehouse', '
  * type. Functions get the footprint size S.
  */
 const TORCHES = {
-  temple: (S) => [[0.25, S - 0.08, 6], [0.4, S - 0.12, 10], [S - 0.4, S - 0.12, 10]],
+  // the altar's fire at the front right, torches either side of the steps
+  temple: (S) => [[S - 0.24, S - 0.08, 6], [0.4, S - 0.12, 10], [S - 0.4, S - 0.12, 10]],
+  // Vesta's round temple: the sacred hearth in front, a torch on the podium
+  temple_vesta: (S) => [[S / 2, S - 0.06, 8], [0.45, S - 0.5, 9]],
   oracle: (S) => [[S / 2, S / 2, 8]],
   forum: (S) => [[0.3, S - 0.2, 12], [S - 0.2, 0.3, 12], [1.35, 1.3, 8]],
   senate: (S) => [[S * 0.3, S - 0.15, 12], [S * 0.7, S - 0.15, 12]],

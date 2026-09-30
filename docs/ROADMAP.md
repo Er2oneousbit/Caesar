@@ -8,16 +8,24 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); an aqueduct crossing a road should be drawn as a bridge, the channel carried over the road on an arch; the three statues and the iron mine need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 7 needs no second pass.
-2. **A longer, deeper campaign**: the campaign is short and its first cities are done quickly (7 missions, from 250 people to 6,000 with ratings of 40 to 60), where the original's campaign runs to about eleven promotions and its later cities take hours. More missions, with the choice between a peaceful and a military province at points along the way (parity item 13), goals that grow into the 20-level ladder (populations into the tens of thousands, ratings up to the 70s and 80s, the later ones needing villa and palace districts) on bigger maps, and harder later provinces (raids, the Emperor's demands). Pace targets: about half an hour to an hour for the first missions, several hours for the last ones at normal speed; the headless sim can check how long the goals take to reach. In two steps: first stretch the 7 missions there are (goals and maps for the new ladder, the pace targets), then add the new missions and branches once disease, crime, the Emperor's legions and the five gods exist (items 4, 6 and 7), so the new provinces are not built twice.
-3. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-4. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-5. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-6. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-7. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
-8. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+1. **A longer, deeper campaign**: the campaign is short and its first cities are done quickly (7 missions, from 250 people to 6,000 with ratings of 40 to 60), where the original's campaign runs to about eleven promotions and its later cities take hours. More missions, with the choice between a peaceful and a military province at points along the way (parity item 13), goals that grow into the 20-level ladder (populations into the tens of thousands, ratings up to the 70s and 80s, the later ones needing villa and palace districts) on bigger maps, and harder later provinces (raids, the Emperor's demands). Pace targets: about half an hour to an hour for the first missions, several hours for the last ones at normal speed; the headless sim can check how long the goals take to reach. In two steps: first stretch the 7 missions there are (goals and maps for the new ladder, the pace targets), then add the new missions and branches once disease, crime, the Emperor's legions and the five gods exist (items 3, 5 and 6), so the new provinces are not built twice.
+2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+5. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+6. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
+7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.8.1)
+
+* **Every god's temple looks like its god**, on the map and in the build menu: roof and wall colors, the god's color and emblem on the pediment, and something of the god's in front (Jupiter: a gilded roof, a thunderbolt and an eagle on a column; Ceres: an ochre roof, a wheat sheaf and baskets of the harvest; Neptune: a verdigris roof, a trident and a pool with a dolphin; Mars: a dark red roof, a shield and a trophy of arms; Vesta: a round temple with a bronze dome and the sacred hearth, as the real one in the Forum). Mercury's and Venus's temples are drawn already, for the switch to the original's five gods
+* **New statues**: a marble orator on a moulded pedestal, a bronze warrior with spear and cloak on a stepped plinth among cypresses and flower beds, and a bronze horseman on a tall inscribed pedestal in a paved square
+* **A new iron mine**: a rocky hillside with a timber-framed entrance, a winding frame, rails, an ore cart and a heap of red ore
+* **Aqueducts**: the channel steps down to a reservoir's rim and pours in (it used to butt into the reservoir's wall above its rim); a straight aqueduct crossing a road is a bridge, a pier each side and one wide arch with the road beneath
+* `render.html?artset=1` sets out these pieces beside the demo city; the art sheet shows every temple, statue and mine (`extras=1`)
+* 144 unit tests (+3)
 
 ## Done (v0.8.0)
 

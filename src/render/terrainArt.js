@@ -604,11 +604,17 @@ export function rocksSpec(variant, snow = 0) {
   };
 }
 
+/** Height of a reservoir's rim (reservoirArt): an aqueduct steps down to it. */
+const RESERVOIR_RIM = 12;
+
 /**
- * Aqueduct segment. mask bits 1=N 2=E 4=S 8=W (connections).
- * filled: water in the channel.
+ * Aqueduct segment. mask bits 1=N 2=E 4=S 8=W: connections; the same bits
+ * shifted up 4 (16=N ... 128=W) mark the ones that are a reservoir, where the
+ * channel ramps down to the reservoir's rim and pours in. filled: water in
+ * the channel. overRoad: a straight aqueduct crossing a road is a bridge, a
+ * pier each side and one wide arch the road passes under.
  */
-export function aqueductSpec(mask, filled) {
+export function aqueductSpec(mask, filled, overRoad = false) {
   return {
     w: TW,
     h: TH + 30,
@@ -619,6 +625,12 @@ export function aqueductSpec(mask, filled) {
       const t = 0.14; // half thickness
       const stone = '#bdb3a0';
       const water = filled ? '#4b95cf' : '#8a7e6a';
+      const conn = mask & 15;
+      const res = (mask >> 4) & 15;
+      if (overRoad && !res && (conn === 10 || conn === 5)) {
+        aqueductBridge(ctx, conn === 10 ? 'u' : 'v', H, t, stone, water);
+        return;
+      }
       const seg = (u0, v0, u1, v1) => {
         const du = u1 - u0;
         const dv = v1 - v0;
@@ -634,20 +646,103 @@ export function aqueductSpec(mask, filled) {
           quad(ctx, 0.5 - t * 0.6, b, 0.5 + t * 0.6, b + Math.abs(dv), H + 0.5, water);
         }
       };
+      // Into a reservoir: the wall slopes from the pier's height down to the
+      // rim (reaching a little past the tile edge, where the rim is), the
+      // channel with it.
+      const ramp = (dir) => {
+        const reach = 0.12;
+        const [u0, v0, u1, v1] = {
+          1: [0.5 - t, -reach, 0.5 + t, 0.5 - t],
+          2: [0.5 + t, 0.5 - t, 1 + reach, 0.5 + t],
+          4: [0.5 - t, 0.5 + t, 0.5 + t, 1 + reach],
+          8: [-reach, 0.5 - t, 0.5 - t, 0.5 + t],
+        }[dir];
+        // Height: H at the pier, the rim at the far end.
+        const z = (u, v) => {
+          const f = dir === 2 ? (u - u0) / (u1 - u0) : dir === 8 ? (u1 - u) / (u1 - u0) : dir === 4 ? (v - v0) / (v1 - v0) : (v1 - v) / (v1 - v0);
+          return H + (RESERVOIR_RIM - H) * f;
+        };
+        slopedWall(ctx, u0, v0, u1, v1, z, stone);
+        const w = t * 0.6;
+        const [cu0, cv0, cu1, cv1] = dir === 2 || dir === 8 ? [u0, 0.5 - w, u1, 0.5 + w] : [0.5 - w, v0, 0.5 + w, v1];
+        poly(ctx, [P(cu0, cv0, z(cu0, cv0) + 0.5), P(cu1, cv0, z(cu1, cv0) + 0.5), P(cu1, cv1, z(cu1, cv1) + 0.5), P(cu0, cv1, z(cu0, cv1) + 0.5)], water);
+      };
+      const part = (dir, u0, v0, u1, v1) => {
+        if (!(conn & dir)) return;
+        if (res & dir) ramp(dir);
+        else seg(u0, v0, u1, v1);
+      };
       // back segments first (N, W), then pier, then front (E, S)
-      if (mask & 1) seg(0.5, 0, 0.5, 0.5 - t);
-      if (mask & 8) seg(0, 0.5, 0.5 - t, 0.5);
+      part(1, 0.5, 0, 0.5, 0.5 - t);
+      part(8, 0, 0.5, 0.5 - t, 0.5);
       boxWithArch(ctx, 0.5 - t, 0.5 - t, t * 2, t * 2, H, shade(stone, -0.05), null);
       quad(ctx, 0.5 - t * 0.6, 0.5 - t * 0.6, 0.5 + t * 0.6, 0.5 + t * 0.6, H + 0.5, water);
-      if (mask & 2) seg(0.5 + t, 0.5, 1, 0.5);
-      if (mask & 4) seg(0.5, 0.5 + t, 0.5, 1);
-      if (!mask) {
+      part(2, 0.5 + t, 0.5, 1, 0.5);
+      part(4, 0.5, 0.5 + t, 0.5, 1);
+      if (!conn) {
         // lonely pier: draw a short cross so it reads as aqueduct
         seg(0.1, 0.5, 0.5 - t, 0.5);
         seg(0.5 + t, 0.5, 0.9, 0.5);
       }
     },
   };
+}
+
+/**
+ * A wall whose height varies along it: footprint u0..u1 x v0..v1, height
+ * z(u, v) at each corner; the two visible faces and the top.
+ */
+function slopedWall(ctx, u0, v0, u1, v1, z, color) {
+  const st = shade(color, -0.45);
+  poly(ctx, [P(u0, v1, 0), P(u1, v1, 0), P(u1, v1, z(u1, v1)), P(u0, v1, z(u0, v1))], color, st, 0.5);
+  poly(ctx, [P(u1, v0, 0), P(u1, v1, 0), P(u1, v1, z(u1, v1)), P(u1, v0, z(u1, v0))], shade(color, -0.2), st, 0.5);
+  poly(ctx, [P(u0, v0, z(u0, v0)), P(u1, v0, z(u1, v0)), P(u1, v1, z(u1, v1)), P(u0, v1, z(u0, v1))], shade(color, 0.15), st, 0.5);
+}
+
+/**
+ * An aqueduct carried over a road: a pier at each side of the tile and one
+ * wide arch between them, so the road shows through underneath.
+ * along: 'u' (the aqueduct runs east-west) or 'v' (north-south).
+ */
+function aqueductBridge(ctx, along, H, t, stone, water) {
+  const pier = 0.14;
+  const spring = H - 9; // where the arch springs from the piers
+  const st = shade(stone, -0.45);
+  const w = t * 0.6;
+  if (along === 'u') {
+    const v0 = 0.5 - t;
+    const v1 = 0.5 + t;
+    boxWithArch(ctx, 0, v0, pier, t * 2, H, shade(stone, -0.05), null);
+    // the span: its face follows the arch below and the channel above
+    const face = [P(pier, v1, H), P(1 - pier, v1, H), P(1 - pier, v1, spring)];
+    for (let k = 1; k < 12; k++) {
+      const f = k / 12;
+      face.push(P(1 - pier - (1 - 2 * pier) * f, v1, spring + 6 * Math.sin(Math.PI * f)));
+    }
+    face.push(P(pier, v1, spring));
+    poly(ctx, face, stone, st, 0.5);
+    poly(ctx, [P(pier, v0, H), P(1 - pier, v0, H), P(1 - pier, v1, H), P(pier, v1, H)], shade(stone, 0.15), st, 0.5);
+    quad(ctx, pier, 0.5 - w, 1 - pier, 0.5 + w, H + 0.5, water);
+    boxWithArch(ctx, 1 - pier, v0, pier, t * 2, H, shade(stone, -0.05), null);
+    quad(ctx, 0, 0.5 - w, pier, 0.5 + w, H + 0.5, water);
+    quad(ctx, 1 - pier, 0.5 - w, 1, 0.5 + w, H + 0.5, water);
+  } else {
+    const u0 = 0.5 - t;
+    const u1 = 0.5 + t;
+    boxWithArch(ctx, u0, 0, t * 2, pier, H, shade(stone, -0.05), null);
+    const face = [P(u1, pier, H), P(u1, 1 - pier, H), P(u1, 1 - pier, spring)];
+    for (let k = 1; k < 12; k++) {
+      const f = k / 12;
+      face.push(P(u1, 1 - pier - (1 - 2 * pier) * f, spring + 6 * Math.sin(Math.PI * f)));
+    }
+    face.push(P(u1, pier, spring));
+    poly(ctx, face, shade(stone, -0.2), st, 0.5);
+    poly(ctx, [P(u0, pier, H), P(u1, pier, H), P(u1, 1 - pier, H), P(u0, 1 - pier, H)], shade(stone, 0.15), st, 0.5);
+    quad(ctx, 0.5 - w, pier, 0.5 + w, 1 - pier, H + 0.5, water);
+    boxWithArch(ctx, u0, 1 - pier, t * 2, pier, H, shade(stone, -0.05), null);
+    quad(ctx, 0.5 - w, 0, 0.5 + w, pier, H + 0.5, water);
+    quad(ctx, 0.5 - w, 1 - pier, 0.5 + w, 1, H + 0.5, water);
+  }
 }
 
 /** Box with a dark arch opening on its visible long face. */

@@ -19,6 +19,8 @@
                 look=market (center on the nearest building of that type or kind)
                 busy=1 (stock markets and book shows, to see shoppers and crowds)
                 ladder=1 (a home of every level, 1-20, set out beside the city, plus a 2x2 block)
+                artset=1 (reservoirs joined by an aqueduct that crosses a road, the statues,
+                every temple, the iron mine and the marble quarry, beside the city)
 -->
 <canvas id="c"></canvas>
 <script type="module">
@@ -31,6 +33,7 @@
   import { planAction } from '../../src/sim/construction.js';
   import { addBuilding } from '../../src/sim/entities.js';
   import { HOUSE_TIERS } from '../../src/data/housing.js';
+  import { BUILDINGS } from '../../src/data/buildings.js';
   import { Terrain } from '../../src/world/map.js';
 
   const q = new URLSearchParams(location.search);
@@ -146,6 +149,47 @@
         y += tall + 1;
       }
       focus = { x: spot.x + Math.floor(W / 2), y: spot.y + Math.floor(H / 2) };
+    }
+  }
+  // artset=1: the art the owner flagged, in the real renderer: two reservoirs
+  // joined by an aqueduct that crosses a road, the statues, every temple, the
+  // iron mine and the marble quarry, on the nearest open land.
+  if (q.get('artset') && focus) {
+    const { map } = game;
+    const W = 22, H = 12;
+    const open = (x0, y0) => {
+      for (let y = y0; y < y0 + H; y++) for (let x = x0; x < x0 + W; x++) if (!map.inBounds(x, y) || !map.isFree(x, y)) return false;
+      return true;
+    };
+    let spot = null;
+    for (let y = 1; y < map.h - H - 1; y++) {
+      for (let x = 1; x < map.w - W - 1; x++) {
+        const d = Math.hypot(x + W / 2 - focus.x, y + H / 2 - focus.y);
+        if ((!spot || d < spot.d) && open(x, y)) spot = { x, y, d };
+      }
+    }
+    if (spot) {
+      const { x, y } = spot;
+      for (let ty = y; ty < y + H; ty++) for (let tx = x; tx < x + W; tx++) map.terrain[map.idx(tx, ty)] = Terrain.GRASS;
+      const put = (type, bx, by) => { const b = addBuilding(game, type, bx, by, undefined, { quiet: true }); b.hasWater = true; b.efficiency = 1; return b; };
+      put('reservoir', x, y);
+      put('reservoir', x + 10, y);
+      // Aqueduct from one reservoir to the other, over a road running across it.
+      for (let tx = x + 3; tx < x + 10; tx++) map.aqueduct[map.idx(tx, y + 1)] = 2;
+      for (let ty = y - 1; ty < y + 5; ty++) map.road[map.idx(x + 6, ty)] = 1;
+      // A turn and a stub, for the corner pieces.
+      map.aqueduct[map.idx(x + 4, y + 2)] = 2;
+      map.aqueduct[map.idx(x + 4, y + 3)] = 2;
+      put('statue_small', x + 14, y + 1);
+      put('statue_medium', x + 16, y + 1);
+      put('statue_large', x + 18, y);
+      const temples = Object.keys(BUILDINGS).filter((k) => k.startsWith('temple_'));
+      temples.forEach((k, n) => put(k, x + n * 3, y + 6));
+      put('oracle', x + temples.length * 3, y + 6);
+      put('iron_mine', x + 1, y + 9);
+      put('marble_quarry', x + 4, y + 9);
+      map.touch();
+      focus = { x: x + Math.floor(W / 2), y: y + Math.floor(H / 2) };
     }
   }
   // place=<tool>: preview placing that building on the nearest valid tile.

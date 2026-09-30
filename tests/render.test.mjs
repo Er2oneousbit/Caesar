@@ -18,6 +18,8 @@
  *     storm throws lightning with thunder
  *   - edge blending: a tile learns which stronger ground borders it
  *   - water hints: which water is tinted under which tool
+ *   - art: aqueduct joins (reservoirs, road bridges), every temple, statue
+ *     and mine draws; each god's temple has a look of its own
  * ----------------------------------------------------------------------------
  */
 
@@ -31,7 +33,11 @@ import { skyAt, dayTime, DAY_TICKS } from '../src/render/lighting.js';
 import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf } from '../src/render/weather.js';
 import { groundColor } from '../src/render/terrainArt.js';
 import { GameTime } from '../src/sim/time.js';
-import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf } from '../src/render/renderer.js';
+import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf, aqueductMaskAt } from '../src/render/renderer.js';
+import { aqueductSpec } from '../src/render/terrainArt.js';
+import { buildingSpec, TEMPLE_LOOKS } from '../src/render/buildingArt.js';
+import { recordingContext } from '../src/render/draw.js';
+import { GOD_KEYS } from '../src/data/gods.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { GameMap, Terrain, WaterBits } from '../src/world/map.js';
 
@@ -608,4 +614,34 @@ test('water hints: housing shows well and fountain water, piped-water buildings 
   assert.equal(waterHintLayers('fountain')[0].style, house[0].style);
   // Wells and reservoirs show their own coverage while placed; others nothing.
   for (const tool of ['well', 'reservoir', 'road', 'prefecture', null]) assert.deepEqual(waterHintLayers(tool), [], String(tool));
+});
+
+test('aqueducts: a reservoir beside one is marked, so the channel steps down to its rim', () => {
+  const map = new GameMap(16, 16);
+  const buildings = new Map([[7, { def: { kind: 'reservoir' } }], [8, { def: { kind: 'house' } }]]);
+  map.aqueduct[map.idx(3, 3)] = 2;
+  map.aqueduct[map.idx(2, 3)] = 2; // W: another aqueduct
+  map.building[map.idx(4, 3)] = 7; // E: a reservoir
+  map.building[map.idx(3, 4)] = 8; // S: a house (no connection)
+  const mask = aqueductMaskAt(map, buildings, 3, 3);
+  assert.equal(mask & 15, 2 | 8, 'connected east and west');
+  assert.equal(mask >> 4, 2, 'the east one is a reservoir');
+});
+
+test('art: every aqueduct piece, every temple, statue and mine draws without error', () => {
+  const draw = (spec) => { const { ctx } = recordingContext(); spec.draw(ctx); };
+  for (let mask = 0; mask < 256; mask++) {
+    if ((mask >> 4) & ~(mask & 15)) continue; // a reservoir bit is always also a connection
+    for (const filled of [false, true]) for (const road of [false, true]) draw(aqueductSpec(mask, filled, road));
+  }
+  for (const g of Object.keys(TEMPLE_LOOKS)) draw(buildingSpec(`temple_${g}`, 2, 0, 0));
+  for (const [k, S] of [['statue_small', 1], ['statue_medium', 2], ['statue_large', 3], ['iron_mine', 2], ['marble_quarry', 2]]) draw(buildingSpec(k, S, 0, 0));
+});
+
+test('art: each god has a temple of its own look, the original five included', () => {
+  for (const g of [...GOD_KEYS, 'mercury', 'venus']) assert.ok(TEMPLE_LOOKS[g], `${g} has a temple look`);
+  const looks = Object.values(TEMPLE_LOOKS);
+  assert.equal(new Set(looks.map((l) => l.roof)).size, looks.length, 'every roof its own color');
+  assert.equal(new Set(looks.map((l) => l.emblem)).size, looks.length, 'every god its own emblem');
+  assert.equal(new Set(looks.map((l) => l.front)).size, looks.length, 'something of its own in front');
 });

@@ -18,7 +18,6 @@
  */
 
 import { HALF_W, CONFIG } from '../config.js';
-import { GODS } from '../data/gods.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
@@ -820,29 +819,230 @@ function hospitalArt(ctx, S) {
   tree(ctx, 1.5, 2.2, 0.6, '#4f8a3c');
 }
 
+/**
+ * Each god's temple looks like its god, so they can be told apart at a
+ * glance: roof and wall colors, the god's color and emblem on the pediment,
+ * and something of the god's in front. Vesta's is round, as the real one in
+ * the Forum was. Mercury and Venus are drawn already, for the switch to the
+ * original game's five gods (see the roadmap).
+ */
+export const TEMPLE_LOOKS = {
+  jupiter: { roof: '#c9a24a', wall: COL.marble, field: '#5b4fb3', emblem: 'bolt', front: 'eagle', grand: true },
+  ceres: { roof: '#c98f3a', wall: '#efe3c4', field: '#c9a227', emblem: 'wheat', front: 'baskets' },
+  neptune: { roof: '#3f8f86', wall: '#e2ebe8', field: '#2f7fb8', emblem: 'trident', front: 'pool' },
+  mars: { roof: '#7a2a22', wall: '#dcc7b4', field: '#a8322b', emblem: 'shield', front: 'trophy' },
+  vesta: { roof: '#b0763a', wall: COL.marble, field: '#d9772b', emblem: 'flame', front: 'fire', round: true },
+  mercury: { roof: '#6d7480', wall: '#e8e2d4', field: '#3a8f84', emblem: 'caduceus', front: 'herm' },
+  venus: { roof: '#d9909c', wall: '#f5e8e8', field: '#c2507a', emblem: 'shell', front: 'roses' },
+};
+
 function templeArt(ctx, S, variant, state, key) {
-  const god = GODS[key.replace('temple_', '')];
-  const accent = god ? god.color : COL.gold;
+  const look = TEMPLE_LOOKS[key.replace('temple_', '')] || TEMPLE_LOOKS.ceres;
+  if (look.round) { roundTempleArt(ctx, S, look); return; }
+  const top = look.grand ? 22 : 19; // Jupiter's is the tallest
   quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#d8cfbb');
   box(ctx, 0.12, 0.12, S - 0.24, S - 0.24, 0, 5, COL.stone);
   // steps at the front
   box(ctx, 0.4, S - 0.2, S - 0.8, 0.14, 0, 3, shade(COL.stone, 0.1));
   // cella
-  box(ctx, 0.35, 0.25, S - 0.7, S - 0.95, 5, 19, COL.marble);
+  box(ctx, 0.35, 0.25, S - 0.7, S - 0.95, 5, top, look.wall);
   door(ctx, 'left', 0.35, 0.25, S - 0.35, S - 0.7, 5, 0.5, '#5a4a3a', 0.22, 10);
   // front and side columns
-  colonnade(ctx, 0.3, S - 0.3, S - 0.3, S - 0.3, 5, 5, 19, COL.marble, 1.7);
-  colonnade(ctx, S - 0.3, 0.3, S - 0.3, S - 0.55, 4, 5, 19, COL.marble, 1.7);
-  // roof with the pediment facing the viewer
-  gableRoof(ctx, 0.25, 0.2, S - 0.5, S - 0.4, 24, 10, COL.terra, 'v', 0.05);
-  // colored frieze on the pediment
-  poly(ctx, [P(0.4, S - 0.2, 25), P(S - 0.4, S - 0.2, 25), P(S / 2, S - 0.2, 32)], accent);
-  // altar
-  const [x, y] = P(0.25, S - 0.08);
+  colonnade(ctx, 0.3, S - 0.3, S - 0.3, S - 0.3, look.grand ? 6 : 5, 5, top, COL.marble, 1.7);
+  colonnade(ctx, S - 0.3, 0.3, S - 0.3, S - 0.55, 4, 5, top, COL.marble, 1.7);
+  // roof with the pediment facing the viewer, in the god's colors
+  gableRoof(ctx, 0.25, 0.2, S - 0.5, S - 0.4, 5 + top, 10, look.roof, 'v', 0.05);
+  const z = 6 + top;
+  poly(ctx, [P(0.4, S - 0.2, z), P(S - 0.4, S - 0.2, z), P(S / 2, S - 0.2, z + 7)], look.field, shade(look.field, -0.4), 0.5);
+  const [ex, ey] = P(S / 2, S - 0.2, z + 2.4);
+  emblem(ctx, look.emblem, ex, ey);
+  // the god's piece at the front left, an altar with its fire at the front right
+  frontPiece(ctx, look.front, 0.24, S - 0.1);
+  altar(ctx, S - 0.24, S - 0.08, false);
+}
+
+/** Vesta's round temple: a ring of columns around a round cella, a bronze dome. */
+function roundTempleArt(ctx, S, look) {
+  quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#d8cfbb');
+  const [cx, cy] = P(S / 2, S / 2);
+  const ell = (x, y, rx, ry, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
+  // round podium
+  ell(cx, cy, 27, 13.5, shade(COL.stone, -0.08));
+  ctx.fillRect(cx - 27, cy - 5, 54, 5);
+  ell(cx, cy - 5, 27, 13.5, shade(COL.stone, 0.12));
+  const base = cy - 5;
+  const H = 18;
+  const cols = [];
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    cols.push([Math.cos(a) * 21, Math.sin(a) * 10.5]);
+  }
+  cols.sort((a, b) => a[1] - b[1]);
+  const column = (dx, dy) => {
+    ctx.fillStyle = dy > 0 ? COL.marble : shade(COL.marble, -0.14);
+    ctx.fillRect(cx + dx - 1.5, base + dy - H, 3, H);
+  };
+  for (const [dx, dy] of cols) if (dy <= 0) column(dx, dy);
+  // round cella, lit from the left
+  const grad = ctx.createLinearGradient(cx - 13, 0, cx + 13, 0);
+  grad.addColorStop(0, shade(look.wall, 0.06));
+  grad.addColorStop(1, shade(look.wall, -0.2));
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - 13, base - H, 26, H);
+  ell(cx, base, 13, 6.5, shade(look.wall, -0.12));
+  ctx.fillStyle = '#4a3a2a';
+  ctx.fillRect(cx - 3, base - 10, 6, 10); // the door
+  for (const [dx, dy] of cols) if (dy > 0) column(dx, dy);
+  // entablature ring and bronze dome
+  ell(cx, base - H, 23, 11.5, shade(COL.marble, -0.05));
+  ctx.fillStyle = look.roof;
+  ctx.beginPath();
+  ctx.ellipse(cx, base - H - 1, 22, 15, 0, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = shade(look.roof, 0.22);
+  ctx.beginPath();
+  ctx.ellipse(cx - 6, base - H - 7, 7, 5, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // the eternal flame's vent at the top
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(cx - 1.2, base - H - 19, 2.4, 4);
+  emblem(ctx, 'flame', cx, base - H - 22);
+  // the sacred hearth in front
+  altar(ctx, S * 0.5, S - 0.06, true);
+}
+
+/** A small altar with its fire (a big one for Vesta's hearth). */
+function altar(ctx, u, v, big) {
+  const [x, y] = P(u, v);
   ctx.fillStyle = shade(COL.stone, 0.2);
-  ctx.fillRect(x - 3, y - 4, 6, 4);
+  ctx.fillRect(x - (big ? 4.5 : 3), y - (big ? 5 : 4), big ? 9 : 6, big ? 5 : 4);
   ctx.fillStyle = '#e8903a';
-  ctx.beginPath(); ctx.arc(x, y - 5.5, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y - (big ? 7.5 : 5.5), big ? 2.8 : 1.8, 0, Math.PI * 2); ctx.fill();
+  if (big) { ctx.fillStyle = '#f7d35a'; ctx.beginPath(); ctx.arc(x, y - 8.2, 1.4, 0, Math.PI * 2); ctx.fill(); }
+}
+
+/** A god's emblem, about 7 px tall, centered at (x, y). */
+function emblem(ctx, kind, x, y) {
+  ctx.lineCap = 'round';
+  switch (kind) {
+    case 'bolt': // Jupiter's thunderbolt
+      ctx.strokeStyle = '#f3d56a';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(x - 2.2, y - 3); ctx.lineTo(x + 0.8, y - 0.8); ctx.lineTo(x - 1, y + 0.2); ctx.lineTo(x + 2.2, y + 3); ctx.stroke();
+      break;
+    case 'wheat': // Ceres: a sheaf
+      ctx.strokeStyle = '#f5df8a';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      for (const dx of [-1.6, 0, 1.6]) { ctx.moveTo(x, y + 3); ctx.lineTo(x + dx, y - 1.5); }
+      ctx.stroke();
+      ctx.fillStyle = '#f5df8a';
+      for (const dx of [-1.6, 0, 1.6]) { ctx.beginPath(); ctx.ellipse(x + dx, y - 2.4, 0.8, 1.4, 0, 0, Math.PI * 2); ctx.fill(); }
+      break;
+    case 'trident': // Neptune
+      ctx.strokeStyle = '#eef3f5';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 3.2); ctx.lineTo(x, y - 3.2);
+      ctx.moveTo(x - 2, y - 0.8); ctx.lineTo(x + 2, y - 0.8);
+      ctx.moveTo(x - 2, y - 0.8); ctx.lineTo(x - 2, y - 2.8);
+      ctx.moveTo(x + 2, y - 0.8); ctx.lineTo(x + 2, y - 2.8);
+      ctx.stroke();
+      break;
+    case 'shield': // Mars
+      ctx.fillStyle = '#d1a24a';
+      ctx.beginPath(); ctx.arc(x, y, 2.7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a5a2a';
+      ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'flame': // Vesta
+      ctx.fillStyle = '#f08a2a';
+      ctx.beginPath(); ctx.moveTo(x, y - 3.5); ctx.quadraticCurveTo(x + 2.6, y, x, y + 2.5); ctx.quadraticCurveTo(x - 2.6, y, x, y - 3.5); ctx.fill();
+      ctx.fillStyle = '#f7d35a';
+      ctx.beginPath(); ctx.moveTo(x, y - 1); ctx.quadraticCurveTo(x + 1.2, y + 0.8, x, y + 2); ctx.quadraticCurveTo(x - 1.2, y + 0.8, x, y - 1); ctx.fill();
+      break;
+    case 'caduceus': // Mercury: a winged staff
+      ctx.strokeStyle = '#f0d98a';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 3.2); ctx.lineTo(x, y - 3);
+      ctx.moveTo(x, y - 2.4); ctx.lineTo(x - 2.4, y - 3.4);
+      ctx.moveTo(x, y - 2.4); ctx.lineTo(x + 2.4, y - 3.4);
+      ctx.moveTo(x - 1.2, y + 2); ctx.quadraticCurveTo(x + 1.6, y + 0.8, x - 1.2, y - 0.4);
+      ctx.moveTo(x + 1.2, y + 2); ctx.quadraticCurveTo(x - 1.6, y + 0.8, x + 1.2, y - 0.4);
+      ctx.stroke();
+      break;
+    case 'shell': // Venus: a scallop shell
+      ctx.fillStyle = '#fbe3ea';
+      ctx.beginPath(); ctx.moveTo(x, y + 2.5); ctx.arc(x, y + 2.5, 3.6, Math.PI * 1.15, Math.PI * 1.85); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#c2507a';
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      for (let k = 0; k < 5; k++) { const a = Math.PI * (1.2 + k * 0.15); ctx.moveTo(x, y + 2.5); ctx.lineTo(x + Math.cos(a) * 3.4, y + 2.5 + Math.sin(a) * 3.4); }
+      ctx.stroke();
+      break;
+    default:
+      break;
+  }
+  ctx.lineCap = 'butt';
+}
+
+/** Something of the god's standing in front of the temple, at (u, v). */
+function frontPiece(ctx, kind, u, v) {
+  const [x, y] = P(u, v);
+  switch (kind) {
+    case 'eagle': { // Jupiter's eagle on a column
+      column(ctx, u, v, 0, 12, COL.marble, 1.4);
+      ctx.fillStyle = '#6b5226';
+      ctx.beginPath(); ctx.ellipse(x, y - 15, 1.6, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x - 1, y - 16); ctx.lineTo(x - 5, y - 19); ctx.lineTo(x - 1.5, y - 14); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 1, y - 16); ctx.lineTo(x + 5, y - 19); ctx.lineTo(x + 1.5, y - 14); ctx.fill();
+      ctx.fillStyle = COL.gold;
+      ctx.beginPath(); ctx.arc(x, y - 17.6, 1, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'baskets': // Ceres: baskets of the harvest
+      for (const [dx, dy] of [[-3, 0], [3, 1.5]]) {
+        ctx.fillStyle = '#8a6030';
+        ctx.fillRect(x + dx - 2.5, y + dy - 4, 5, 4);
+        ctx.fillStyle = '#e8c25a';
+        ctx.beginPath(); ctx.ellipse(x + dx, y + dy - 4.5, 2.6, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    case 'pool': { // Neptune: a basin with a dolphin
+      quad(ctx, u - 0.14, v - 0.18, u + 0.16, v + 0.04, 0.5, '#d8d2c2');
+      quad(ctx, u - 0.1, v - 0.14, u + 0.12, v, 1, COL.water);
+      ctx.strokeStyle = '#7d8a90';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y - 3, 2.6, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      break;
+    }
+    case 'trophy': // Mars: arms of the defeated on a post
+      ctx.fillStyle = COL.woodDark;
+      ctx.fillRect(x - 0.5, y - 14, 1, 14);
+      ctx.fillRect(x - 4, y - 11, 8, 1);
+      ctx.fillStyle = '#b8903a';
+      ctx.beginPath(); ctx.arc(x, y - 14.5, 2, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#a8322b';
+      ctx.beginPath(); ctx.ellipse(x, y - 8, 2.4, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'herm': // Mercury: a herm (a pillar with a head)
+      ctx.fillStyle = COL.stone;
+      ctx.fillRect(x - 1.5, y - 10, 3, 10);
+      ctx.fillStyle = COL.marble;
+      ctx.beginPath(); ctx.arc(x, y - 11.5, 1.8, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'roses': // Venus: rose bushes
+      for (const [dx, dy] of [[-3, 0], [3, 1.5]]) {
+        ctx.fillStyle = '#4f7a3a';
+        ctx.beginPath(); ctx.arc(x + dx, y + dy - 2.6, 2.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e06a8a';
+        for (const [rx, ry] of [[-1, -3.4], [1.2, -2.6], [0, -1.6]]) { ctx.beginPath(); ctx.arc(x + dx + rx, y + dy + ry, 0.8, 0, Math.PI * 2); ctx.fill(); }
+      }
+      break;
+    default:
+      break;
+  }
 }
 
 function oracleArt(ctx, S) {
@@ -1115,32 +1315,223 @@ function gardenArt(ctx, S, variant) {
   else tree(ctx, 0.5, 0.5, 0.6, '#4f8a3c', '#6b4a2a', variant);
 }
 
+/**
+ * Statues, by size: a marble citizen in a toga on a moulded pedestal; a
+ * bronze warrior with spear and cloak on a stepped plinth among cypresses and
+ * flower beds; a bronze horseman on a tall inscribed pedestal in a paved
+ * square with a cypress at each corner.
+ */
 function statueArt(ctx, S, variant, state, key) {
-  quad(ctx, 0.04, 0.04, S - 0.04, S - 0.04, 0, '#d8cfbb');
-  const sc = S;
-  const baseH = 5 * sc;
-  box(ctx, S / 2 - 0.22 * sc, S / 2 - 0.22 * sc, 0.44 * sc, 0.44 * sc, 0, baseH, COL.stone);
-  const [x, y] = P(S / 2, S / 2, baseH);
-  const bronze = key === 'statue_large' ? '#8c6d3f' : '#d9d4c8';
-  const k = sc;
-  // simple standing figure with an outstretched arm
-  ctx.fillStyle = bronze;
-  ctx.beginPath();
-  ctx.moveTo(x - 3 * k, y);
-  ctx.lineTo(x - 2.2 * k, y - 11 * k);
-  ctx.lineTo(x + 2.2 * k, y - 11 * k);
-  ctx.lineTo(x + 3 * k, y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillRect(x - 2.4 * k, y - 16 * k, 4.8 * k, 6 * k);
-  ctx.beginPath(); ctx.arc(x, y - 18.5 * k, 2.2 * k, 0, Math.PI * 2); ctx.fill();
-  ctx.fillRect(x + 2 * k, y - 15.5 * k, 5 * k, 1.4 * k);
-  ctx.fillStyle = shade(bronze, 0.25);
-  ctx.fillRect(x - 2.2 * k, y - 15.5 * k, 1.4 * k, 5 * k);
-  if (S >= 2) {
-    cypress(ctx, 0.35, S - 0.35, 0.6 + S * 0.1);
-    cypress(ctx, S - 0.35, 0.35, 0.6 + S * 0.1);
+  if (key === 'statue_large') grandStatue(ctx, S);
+  else if (key === 'statue_medium') heroStatue(ctx, S);
+  else smallStatue(ctx);
+}
+
+/** A pedestal: base, shaft, cornice; returns the height of its top. */
+function pedestal(ctx, c, half, h, stone) {
+  box(ctx, c - half - 0.05, c - half - 0.05, (half + 0.05) * 2, (half + 0.05) * 2, 0, 2.5, shade(stone, -0.12));
+  box(ctx, c - half, c - half, half * 2, half * 2, 2.5, h, stone);
+  box(ctx, c - half - 0.04, c - half - 0.04, (half + 0.04) * 2, (half + 0.04) * 2, 2.5 + h, 1.6, shade(stone, 0.08));
+  return 4.1 + h;
+}
+
+/**
+ * A standing figure with its feet at (x, y), `k` px per unit (about 18 units
+ * tall), lit from the upper left. pose: 'toga' (an orator's raised arm) or
+ * 'spear' (a warrior with a spear and a cloak).
+ */
+function figure(ctx, x, y, k, color, pose) {
+  const light = shade(color, 0.22);
+  const dark = shade(color, -0.22);
+  if (pose === 'spear') {
+    // cloak behind, falling from the shoulders
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.moveTo(x - 2.4 * k, y - 13 * k); ctx.lineTo(x + 2.6 * k, y - 13 * k); ctx.lineTo(x + 3.6 * k, y - 1 * k); ctx.lineTo(x - 3.4 * k, y - 1.5 * k); ctx.closePath(); ctx.fill();
   }
+  // legs and robe (a toga falls to the feet; a warrior's tunic stops above the knees)
+  ctx.fillStyle = color;
+  if (pose === 'toga') {
+    ctx.beginPath(); ctx.moveTo(x - 2.7 * k, y); ctx.lineTo(x - 1.9 * k, y - 10 * k); ctx.lineTo(x + 1.9 * k, y - 10 * k); ctx.lineTo(x + 2.9 * k, y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 0.5 * k;
+    ctx.beginPath(); ctx.moveTo(x - 1.6 * k, y - 9 * k); ctx.lineTo(x + 1.8 * k, y - 1 * k); ctx.moveTo(x - 0.4 * k, y - 9.6 * k); ctx.lineTo(x + 2.4 * k, y - 4 * k); ctx.stroke();
+  } else {
+    ctx.fillRect(x - 1.5 * k, y - 5 * k, 1.2 * k, 5 * k);
+    ctx.fillRect(x + 0.3 * k, y - 5 * k, 1.2 * k, 5 * k);
+    ctx.beginPath(); ctx.moveTo(x - 2.2 * k, y - 4.5 * k); ctx.lineTo(x - 1.9 * k, y - 10 * k); ctx.lineTo(x + 1.9 * k, y - 10 * k); ctx.lineTo(x + 2.2 * k, y - 4.5 * k); ctx.closePath(); ctx.fill();
+  }
+  // torso, lit side
+  ctx.fillStyle = color;
+  ctx.fillRect(x - 2 * k, y - 14.5 * k, 4 * k, 5 * k);
+  ctx.fillStyle = light;
+  ctx.fillRect(x - 2 * k, y - 14.5 * k, 1.4 * k, 5 * k);
+  // head
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y - 16.4 * k, 1.8 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = light;
+  ctx.beginPath(); ctx.arc(x - 0.6 * k, y - 16.9 * k, 0.8 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 1.3 * k;
+  ctx.beginPath();
+  if (pose === 'toga') {
+    // the orator's right arm raised, the left holding a fold of the toga
+    ctx.moveTo(x + 1.8 * k, y - 13.6 * k); ctx.lineTo(x + 4.6 * k, y - 16.4 * k);
+    ctx.moveTo(x - 1.8 * k, y - 13.4 * k); ctx.lineTo(x - 2.6 * k, y - 10.4 * k);
+  } else {
+    // spear in the left hand, the right arm on the hip
+    ctx.moveTo(x - 1.8 * k, y - 13.6 * k); ctx.lineTo(x - 3.4 * k, y - 11 * k);
+    ctx.moveTo(x + 1.8 * k, y - 13.4 * k); ctx.lineTo(x + 2.8 * k, y - 11 * k); ctx.lineTo(x + 1.8 * k, y - 10 * k);
+  }
+  ctx.stroke();
+  if (pose === 'spear') {
+    ctx.strokeStyle = shade(color, -0.35);
+    ctx.lineWidth = 0.6 * k;
+    ctx.beginPath(); ctx.moveTo(x - 3.6 * k, y + 0.5 * k); ctx.lineTo(x - 3.6 * k, y - 22 * k); ctx.stroke();
+    ctx.fillStyle = shade(color, 0.3);
+    ctx.beginPath(); ctx.moveTo(x - 3.6 * k, y - 24.5 * k); ctx.lineTo(x - 4.4 * k, y - 21.5 * k); ctx.lineTo(x - 2.8 * k, y - 21.5 * k); ctx.fill();
+    // a crested helmet
+    ctx.fillStyle = '#a8322b';
+    ctx.fillRect(x - 0.4 * k, y - 19.6 * k, 0.8 * k, 1.6 * k);
+  }
+  ctx.lineCap = 'butt';
+}
+
+const MARBLE_STATUE = '#ece7dc';
+const BRONZE = '#6f8f7c'; // weathered bronze, green with age
+
+function smallStatue(ctx) {
+  quad(ctx, 0.08, 0.08, 0.92, 0.92, 0, COL.paving);
+  const top = pedestal(ctx, 0.5, 0.16, 7, COL.stone);
+  const [x, y] = P(0.5, 0.5, top);
+  figure(ctx, x, y, 0.95, MARBLE_STATUE, 'toga');
+}
+
+function heroStatue(ctx, S) {
+  quad(ctx, 0.04, 0.04, S - 0.04, S - 0.04, 0, COL.paving);
+  // flower beds at the front corners, cypresses at the back
+  for (const [u, v] of [[0.1, S - 0.5], [S - 0.5, 0.1]]) quad(ctx, u, v, u + 0.4, v + 0.4, 0, '#5d8a3e');
+  for (const [u, v] of [[0.3, S - 0.3], [S - 0.3, 0.3]]) {
+    const [fx, fy] = P(u, v);
+    ctx.fillStyle = '#e0b94a';
+    ctx.fillRect(fx - 3, fy - 2, 2, 1.4);
+    ctx.fillStyle = '#d9534f';
+    ctx.fillRect(fx + 1, fy - 1.4, 2, 1.4);
+  }
+  cypress(ctx, 0.3, 0.3, 0.75);
+  box(ctx, 0.45, 0.45, S - 0.9, S - 0.9, 0, 2.5, shade(COL.stone, -0.06));
+  box(ctx, 0.6, 0.6, S - 1.2, S - 1.2, 2.5, 2.5, COL.stone);
+  const c = S / 2;
+  box(ctx, c - 0.22, c - 0.22, 0.44, 0.44, 5, 12, COL.marble);
+  box(ctx, c - 0.26, c - 0.26, 0.52, 0.52, 17, 1.6, shade(COL.marble, -0.06));
+  // a bronze plaque on the front face
+  poly(ctx, [P(c - 0.12, c + 0.22, 8), P(c + 0.12, c + 0.22, 8), P(c + 0.12, c + 0.22, 13), P(c - 0.12, c + 0.22, 13)], '#8a6d3a');
+  const [x, y] = P(c, c, 18.6);
+  figure(ctx, x, y, 1.35, BRONZE, 'spear');
+  cypress(ctx, S - 0.3, S - 0.3, 0.7);
+}
+
+function grandStatue(ctx, S) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, COL.paving);
+  // a darker band around the square
+  quad(ctx, 0.2, 0.2, S - 0.2, S - 0.2, 0.2, shade(COL.paving, -0.08));
+  quad(ctx, 0.35, 0.35, S - 0.35, S - 0.35, 0.4, COL.paving);
+  cypress(ctx, 0.25, 0.25, 0.85);
+  cypress(ctx, S - 0.25, 0.25, 0.85);
+  cypress(ctx, 0.25, S - 0.25, 0.85);
+  const c = S / 2;
+  box(ctx, c - 0.8, c - 0.8, 1.6, 1.6, 0, 3, shade(COL.stone, -0.06));
+  box(ctx, c - 0.62, c - 0.62, 1.24, 1.24, 3, 3, COL.stone);
+  box(ctx, c - 0.42, c - 0.42, 0.84, 0.84, 6, 20, COL.marble);
+  box(ctx, c - 0.48, c - 0.48, 0.96, 0.96, 26, 2, shade(COL.marble, -0.06));
+  // the inscription, on the front face
+  ctx.strokeStyle = 'rgba(70,60,50,0.55)';
+  ctx.lineWidth = 0.6;
+  for (let k = 0; k < 3; k++) {
+    const p = P(c - 0.26, c + 0.42, 20 - k * 3.2);
+    const q = P(c + 0.26, c + 0.42, 20 - k * 3.2);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
+  // the horseman, in bronze
+  const [x, y] = P(c, c, 28);
+  const s = 1.7;
+  horse(ctx, x, y, s, BRONZE, 1, 0.35, shade(BRONZE, -0.3));
+  ctx.fillStyle = shade(BRONZE, -0.08);
+  ctx.fillRect(x - 1.8 * s, y - 16 * s, 3 * s, 6.4 * s);
+  ctx.fillStyle = shade(BRONZE, 0.2);
+  ctx.fillRect(x - 1.8 * s, y - 16 * s, 1 * s, 6.4 * s);
+  ctx.beginPath(); ctx.arc(x - 0.3 * s, y - 17.4 * s, 1.3 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = shade(BRONZE, -0.08);
+  ctx.lineWidth = 1.1 * s;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x + 0.8 * s, y - 15 * s); ctx.lineTo(x + 3.6 * s, y - 18.4 * s); ctx.stroke();
+  ctx.lineCap = 'butt';
+  cypress(ctx, S - 0.25, S - 0.25, 0.85);
+}
+
+/**
+ * The iron mine: a rocky hillside with a timber-framed entrance, a winding
+ * frame over the shaft, rails, an ore cart, and a heap of red iron ore.
+ */
+function ironMineArt(ctx, S) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#8d8373');
+  quad(ctx, 0.25, 1.1, S - 0.15, S - 0.1, 0, '#75685a'); // trodden ground in front
+  // the hillside, rising to the back
+  const R = S - 0.15;
+  poly(ctx, [P(0.1, 0.1, 26), P(R, 0.1, 18), P(R, 0.45, 16), P(0.1, 0.55, 22)], '#a39985', '#5d564b', 0.6); // top
+  poly(ctx, [P(0.1, 0.55, 22), P(R, 0.45, 16), P(R, 0.9, 0), P(0.1, 1.2, 0)], '#8c8272', '#5d564b', 0.6); // front face
+  poly(ctx, [P(R, 0.1, 18), P(R, 0.45, 16), P(R, 0.9, 0), P(R, 0.1, 0)], '#6d6457', '#5d564b', 0.6); // side
+  // cracks and ledges in the rock
+  ctx.strokeStyle = 'rgba(60,54,46,0.6)';
+  ctx.lineWidth = 0.6;
+  for (const [a, b] of [[[1.0, 0.95, 5], [1.3, 0.85, 10]], [[0.3, 1.05, 12], [0.5, 0.98, 16]], [[1.5, 0.8, 3], [1.7, 0.6, 9]]]) {
+    const p = P(...a);
+    const q = P(...b);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
+  // the entrance, framed in timber
+  poly(ctx, [P(0.46, 1.13, 0), P(0.74, 1.08, 0), P(0.74, 1.08, 9), P(0.46, 1.13, 9)], '#1e1a16');
+  box(ctx, 0.42, 1.1, 0.05, 0.05, 0, 11, COL.wood);
+  box(ctx, 0.74, 1.05, 0.05, 0.05, 0, 11, COL.wood);
+  box(ctx, 0.4, 1.06, 0.42, 0.08, 11, 1.6, COL.woodDark);
+  // rails out of the entrance to the ore heap
+  ctx.strokeStyle = '#4a4540';
+  ctx.lineWidth = 0.7;
+  for (const off of [-0.05, 0.05]) {
+    const p = P(0.6 + off, 1.15);
+    const q = P(1.25 + off, 1.75);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
+  // the winding frame over the shaft, at the back right
+  const [wx, wy] = P(1.55, 1.05);
+  ctx.strokeStyle = COL.woodDark;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(wx - 7, wy); ctx.lineTo(wx, wy - 26); ctx.lineTo(wx + 7, wy);
+  ctx.moveTo(wx - 4.5, wy - 9); ctx.lineTo(wx + 4.5, wy - 9);
+  ctx.stroke();
+  ctx.strokeStyle = COL.wood;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(wx, wy - 24, 4, 0, Math.PI * 2); ctx.moveTo(wx - 4, wy - 24); ctx.lineTo(wx + 4, wy - 24); ctx.moveTo(wx, wy - 28); ctx.lineTo(wx, wy - 20); ctx.stroke();
+  ctx.strokeStyle = '#3a3530';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(wx + 4, wy - 24); ctx.lineTo(wx + 4, wy - 4); ctx.stroke();
+  // the ore heap: red-brown iron ore with dark lumps
+  const [hx, hy] = P(1.45, 1.7);
+  ctx.fillStyle = '#7a4a36';
+  ctx.beginPath(); ctx.ellipse(hx, hy - 2, 9, 4.5, 0, Math.PI, 0); ctx.lineTo(hx + 9, hy); ctx.lineTo(hx - 9, hy); ctx.fill();
+  ctx.fillStyle = '#5a3326';
+  for (const [dx, dy] of [[-4, -3], [1, -5], [4, -2], [-1, -1.5]]) { ctx.beginPath(); ctx.arc(hx + dx, hy + dy, 1.3, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#9aa0a6';
+  ctx.fillRect(hx + 2, hy - 4.5, 1, 1);
+  // an ore cart on the rails
+  const [cx, cy] = P(1.0, 1.5);
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(cx - 4, cy - 6, 8, 4);
+  ctx.fillStyle = '#7a4a36';
+  ctx.beginPath(); ctx.ellipse(cx, cy - 6, 3.6, 1.5, 0, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#3a3a3a';
+  ctx.beginPath(); ctx.arc(cx - 2.5, cy - 1.5, 1.4, 0, Math.PI * 2); ctx.arc(cx + 2.5, cy - 1.5, 1.4, 0, Math.PI * 2); ctx.fill();
 }
 
 // ---------------------------------------------------------------------------
@@ -1342,21 +1733,7 @@ function mineArt(ctx, S, variant, state, key) {
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 2, y - 24); ctx.lineTo(x - 12, y - 16); ctx.stroke();
   } else {
-    // rocky mound with a dark entrance
-    poly(ctx, [P(0.1, 0.1), P(S - 0.3, 0.1), P(S - 0.3, 0.6, 22), P(0.1, 1.0, 26)], '#7d7466', '#4d463c');
-    poly(ctx, [P(0.1, 1.0, 26), P(S - 0.3, 0.6, 22), P(S - 0.3, 1.3), P(0.1, 1.5)], '#948a7a', '#4d463c');
-    const [x, y] = P(0.9, 1.35);
-    ctx.fillStyle = '#1e1a16';
-    ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x - 6, y - 8); ctx.arc(x, y - 8, 6, Math.PI, 0); ctx.lineTo(x + 6, y); ctx.fill();
-    ctx.strokeStyle = COL.wood;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(x - 7, y); ctx.lineTo(x - 7, y - 11); ctx.lineTo(x + 7, y - 11); ctx.lineTo(x + 7, y); ctx.stroke();
-    // ore cart
-    const [cx, cy] = P(1.5, 1.7);
-    ctx.fillStyle = COL.iron;
-    ctx.fillRect(cx - 4, cy - 5, 8, 4);
-    ctx.fillStyle = '#3a3a3a';
-    ctx.beginPath(); ctx.arc(cx - 2.5, cy - 1, 1.4, 0, Math.PI * 2); ctx.arc(cx + 2.5, cy - 1, 1.4, 0, Math.PI * 2); ctx.fill();
+    ironMineArt(ctx, S);
   }
 }
 

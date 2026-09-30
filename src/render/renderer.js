@@ -113,6 +113,28 @@ export function lookStep(cur, prev, next, hard = false) {
   return { prev: cur, drop: [] };
 }
 
+/**
+ * Aqueduct connections of tile (x, y), bits 1=N 2=E 4=S 8=W: other aqueducts
+ * or reservoirs; the same bits shifted up 4 mark the reservoirs (the channel
+ * steps down to their rim, see aqueductSpec).
+ */
+export function aqueductMaskAt(map, buildings, x, y) {
+  const what = (tx, ty) => {
+    if (!map.inBounds(tx, ty)) return 0;
+    const i = map.idx(tx, ty);
+    if (map.aqueduct[i]) return 1;
+    const b = buildings.get(map.building[i]);
+    return b && b.def.kind === 'reservoir' ? 2 : 0;
+  };
+  let mask = 0;
+  [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(([dx, dy], k) => {
+    const w = what(x + dx, y + dy);
+    if (w) mask |= 1 << k;
+    if (w === 2) mask |= 16 << k;
+  });
+  return mask;
+}
+
 /** Pennant colors of the map gates: where people arrive, and where they leave. */
 const ENTRY_COLOR = '#3f9a3a';
 const EXIT_COLOR = '#b8322b';
@@ -468,7 +490,8 @@ export class Renderer {
         if (map.aqueduct[i]) {
           const mask = this.aqueductMask(x, y);
           const filled = map.aqueduct[i] === 2;
-          items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`aq${mask}.${filled ? 1 : 0}`, () => aqueductSpec(mask, filled)), wx, wy, full: true });
+          const overRoad = map.road[i] ? 1 : 0; // a bridge over the road
+          items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`aq${mask}.${filled ? 1 : 0}.${overRoad}`, () => aqueductSpec(mask, filled, !!overRoad)), wx, wy, full: true });
         }
         if (game.fires.size && game.fires.has(i)) {
           items.push({ d: depth + 0.002, kind: K_FIRE, wx, wy: wy + HALF_H, seed: i });
@@ -1181,17 +1204,13 @@ export class Renderer {
     }
   }
 
-  /** Aqueduct connections: other aqueducts or reservoirs. */
+  /**
+   * Aqueduct connections (bits 1=N 2=E 4=S 8=W): other aqueducts or
+   * reservoirs; the same bits shifted up 4 mark the reservoirs (the channel
+   * steps down to their rim, see aqueductSpec).
+   */
   aqueductMask(x, y) {
-    const { map, buildings } = this.game;
-    const conn = (tx, ty) => {
-      if (!map.inBounds(tx, ty)) return false;
-      const i = map.idx(tx, ty);
-      if (map.aqueduct[i]) return true;
-      const b = buildings.get(map.building[i]);
-      return !!b && b.def.kind === 'reservoir';
-    };
-    return (conn(x, y - 1) ? 1 : 0) | (conn(x + 1, y) ? 2 : 0) | (conn(x, y + 1) ? 4 : 0) | (conn(x - 1, y) ? 8 : 0);
+    return aqueductMaskAt(this.game.map, this.game.buildings, x, y);
   }
 
   /** Fill a tile diamond (world coords of its top corner) with a color. */

@@ -19,7 +19,7 @@
   homes), plus buildings with live details,
   drawn straight from the procedural art (no game running). Handy for artists
   reviewing changes, and as a side-by-side reference when making replacement
-  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)
+  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
@@ -68,9 +68,13 @@
     for (let v = 0; v < 8; v++) cells.push([`look ${v}`, buildingSpec('house', S, v, tier)]);
     section(`Level ${tier}: ${HOUSE_TIERS[tier].name} (${S}x${S})`, cells);
   }
-  if (!only) {
+  if (!only || q.get('extras')) {
     // Four single-tile homes of one level that joined into a 2x2 block.
     section('Blocks: four single-tile homes joined into one 2x2 home', [1, 4, 7, 10].map((t) => [`${HOUSE_TIERS[t].name}`, buildingSpec('house', 2, t, t)]));
+    // Every god's temple (Mercury's and Venus's are drawn ahead of the switch
+    // to the original's five gods), the statues and the mines.
+    section('Temples', ['jupiter', 'ceres', 'neptune', 'mars', 'vesta', 'mercury', 'venus'].map((g) => [g, buildingSpec(`temple_${g}`, 2, 0, 0)]));
+    section('Statues and mines', [['statue_small', 1], ['statue_medium', 2], ['statue_large', 3], ['iron_mine', 2], ['marble_quarry', 2]].map(([k, S]) => [k, buildingSpec(k, S, 0, 0)]));
     section('Buildings with flags (still pictures get painted cloth)', ['prefecture', 'forum', 'senate', 'barracks', 'fort_legion', 'colosseum'].map((t) => {
       const S = { prefecture: 1, forum: 2, senate: 4, barracks: 3, fort_legion: 3, colosseum: 5 }[t];
       return [t, buildingSpec(t, S, 0, 0)];

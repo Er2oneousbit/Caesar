@@ -24,6 +24,7 @@ Fixes from playing mission 3 on Insane (the game said things that were not so, o
 * **Wells and reservoirs out of every engineer's reach**: they need no road, but they wear out, and an engineer repairs only what lies within 2 tiles of the road he walks. Placing one further off now warns, and its panel and the Problems overlay flag it (a reservoir collapsing unseen dries every fountain and bath it feeds)
 * **A home's tax line says why it pays nothing**: no Forum, a Forum without workers or a road, or no tax collector in the last 48 days (with what to do about it); a registered home shows how many days its registration has left. It used to say "needs a Forum nearby" with a Forum next door. The Finance tab counts the homes that are not registered
 * The balance sim is byte-identical on every difficulty after these three
+* **Roamers prefer streets with something to serve**: at a junction a roaming walker looks up to 8 tiles down each way and favors the ways lined with buildings. A lone Forum's tax collector (and the engineers) used to spend whole rounds on the Imperial road out to the empty map edge. Replaying the mission 3 game with the same moves, the three key buildings that collapsed in August now stand. Over 12 maps: fires down on every difficulty (Hard 11 to 7.8 in 3 years), protests down, the campaign's pace unchanged
 
 ## Done (v0.10.1)
 
@@ -278,7 +279,6 @@ From playtesting (mission 3 on Insane, three attempts, all lost within about 15 
 * **Early cash flow on Insane**: a worker's wage costs about what six Huts pay in tax, and 2,800 Dn leaves little room to reach the homes that pay. The first year is decided by cash flow more than by the player's layout.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
-* **Roamers waste rounds on the Imperial road**: a lone Forum's tax collector walked to the empty map edge and back, and the homes he skipped lapsed. Roamers could prefer streets with buildings.
 
 Playing smoother:
 

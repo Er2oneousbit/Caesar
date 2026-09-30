@@ -101,6 +101,51 @@ export function roadblockStops(map, w, idx) {
 const ROAM_RADIUS = 13;
 /** How many recently walked tiles a roamer remembers (and avoids). */
 const ROAM_MEMORY = 24;
+/**
+ * A roamer looks this far down each way it could take (following the road
+ * through bends, up to the next junction) and weighs the way by the share of
+ * those tiles with anything to serve: an empty way keeps EMPTY_STREET_WEIGHT
+ * of its weight, not zero, since an empty stretch can lead to more homes.
+ * Looking only at the next tile was not enough: a lone Forum's tax collector
+ * turned onto the Imperial road (its first tile still beside a home), then
+ * had no way but on to the empty map edge, and the registrations of the
+ * homes he skipped ran out.
+ */
+const ROAM_LOOKAHEAD = 8;
+const EMPTY_STREET_WEIGHT = 0.2;
+
+/** Is there any building within SERVICE_RADIUS of (x, y), i.e. would a walker there serve anything? */
+function servesSomething(map, x, y) {
+  const r = CONFIG.SERVICE_RADIUS;
+  for (let ty = y - r; ty <= y + r; ty++) {
+    for (let tx = x - r; tx <= x + r; tx++) if (map.inBounds(tx, ty) && map.building[map.idx(tx, ty)]) return true;
+  }
+  return false;
+}
+
+/** Share (0..1) of the next ROAM_LOOKAHEAD road tiles from (x, y), heading `dir`, with something to serve. */
+function streetValue(map, x, y, dir) {
+  let served = 0;
+  let n = 0;
+  for (let k = 0; k < ROAM_LOOKAHEAD; k++) {
+    n++;
+    if (servesSomething(map, x, y)) served++;
+    // On along the only way ahead; stop at a junction or a dead end.
+    let next = -1;
+    let ways = 0;
+    for (let e = 0; e < 4; e++) {
+      if (e === (dir + 2) % 4) continue;
+      const nx = x + DX[e];
+      const ny = y + DY[e];
+      if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) { ways++; next = e; }
+    }
+    if (ways !== 1) break;
+    dir = next;
+    x += DX[dir];
+    y += DY[dir];
+  }
+  return served / n;
+}
 
 /**
  * Choose the next road tile for a roaming walker.
@@ -108,6 +153,7 @@ const ROAM_MEMORY = 24;
  *   - prefers going straight
  *   - avoids tiles it walked recently (better coverage)
  *   - avoids wandering far from its home building (keeps service local)
+ *   - avoids streets with nothing along them to serve
  * @returns {number} tile index or -1 if the walker is stranded
  */
 export function pickRoamTile(game, w) {
@@ -129,6 +175,7 @@ export function pickRoamTile(game, w) {
     let weight = d === w.lastDir ? 3 : 2;
     if (w.memory.includes(idx)) weight *= 0.25;
     if (Math.max(Math.abs(nx - ox), Math.abs(ny - oy)) > ROAM_RADIUS) weight *= 0.1;
+    weight *= EMPTY_STREET_WEIGHT + (1 - EMPTY_STREET_WEIGHT) * streetValue(map, nx, ny, d);
     choices.push(d, weight);
     total += weight;
   }

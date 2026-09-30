@@ -85,7 +85,7 @@ Needs add up: each level also needs everything the levels below it need. "To rea
 
 ## Services (walkers)
 
-Most services are delivered by walkers. A walker serves every building within **2 tiles** of each road tile it steps on, and a home remembers the visit for **96 days** (a tax collector's visit, 48). Roamers walk 22-30 tiles, prefer to go straight, avoid tiles they just walked, and stay within about 13 tiles of their building. Short loops of road around housing blocks are covered far better than long dead ends.
+Most services are delivered by walkers. A walker serves every building within **2 tiles** of each road tile it steps on, and a home remembers the visit for **96 days** (a tax collector's visit, 48). Roamers walk 22-30 tiles, prefer to go straight, avoid tiles they just walked, stay within about 13 tiles of their building, and prefer streets with something to serve: at a junction a roamer looks up to 8 tiles down each way and favors the ways with buildings along them over empty road (such as the Imperial road out to the map edge). Short loops of road around housing blocks are covered far better than long dead ends.
 
 | Service | Building | Notes |
 |---|---|---|

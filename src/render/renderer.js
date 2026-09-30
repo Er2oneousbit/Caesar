@@ -943,12 +943,16 @@ export class Renderer {
       const color = b.house ? 'rgba(214,190,140,0.9)' : 'rgba(150,145,135,0.85)';
       items.push({ d: front - 0.5, kind: K_EXTRA, b, flat: color, wx, wy });
       let v = null;
-      if (b.house && ov.house) v = b.house.pop > 0 ? ov.house(b) : null;
+      let tint = null; // the overlay's own column color
+      if (ov.column) {
+        const col = ov.column(b, this.game);
+        if (col) ({ v, color: tint } = col);
+      } else if (b.house && ov.house) v = b.house.pop > 0 ? ov.house(b) : null;
       else if (ov.value) v = ov.value(b);
       if (v !== null && v !== undefined) {
         const cx = b.x + b.size / 2;
         const cy = b.y + b.size / 2;
-        items.push({ d: front + 0.001, kind: K_COLUMN, wx: (cx - cy) * HALF_W, wy: (cx + cy) * HALF_H, v: Math.max(0, Math.min(1, v)), bad: !!ov.bad, S: b.size });
+        items.push({ d: front + 0.001, kind: K_COLUMN, wx: (cx - cy) * HALF_W, wy: (cx + cy) * HALF_H, v: Math.max(0, Math.min(1, v)), bad: !!ov.bad, color: tint, S: b.size });
       }
       return;
     }
@@ -1277,7 +1281,7 @@ export class Renderer {
     const y = (it.wy - cam.y) * k;
     const h = (6 + it.v * 44) * k;
     const r = (3 + it.S) * k;
-    const color = columnColor(it.v, it.bad);
+    const color = it.color || columnColor(it.v, it.bad);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
     ctx.ellipse(x + 2 * k, y, r * 1.3, r * 0.6, 0, 0, Math.PI * 2);

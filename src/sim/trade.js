@@ -28,6 +28,7 @@ import { followPath, walkTo } from './movement.js';
 import { cityStock, storageSpaceFor, takeGoods, isStorage } from './storage.js';
 import { dispatchCart, cartsOut } from './production.js';
 import { transact } from './economy.js';
+import { logGoods } from './goodsLedger.js';
 
 /** 'land' or 'sea' */
 export function routeKind(partnerId) {
@@ -359,6 +360,8 @@ function buyImports(game, partnerId, budget, out, spaceFor, put) {
 /** Remember a visit in the trade log (Trade advisor). */
 function logTrade(game, partnerId, summary, kind) {
   if (!summary.earned && !summary.spent) return;
+  for (const [good, n] of Object.entries(summary.sold || {})) logGoods(game, good, 'exported', n);
+  for (const [good, n] of Object.entries(summary.bought || {})) logGoods(game, good, 'imported', n);
   const log = game.city.trade.log;
   log.unshift({ date: game.time.shortLabel(), partner: TRADE_PARTNERS[partnerId].name, kind, ...summary });
   if (log.length > 20) log.pop();

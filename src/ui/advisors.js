@@ -3,9 +3,11 @@
  * ----------------------------------------------------------------------------
  * The Advisors window: one tab per area of city management.
  *
- *   Overview   scenario goals, city mood and what drives it
+ *   Overview   scenario goals, city mood and what drives it, trend charts
  *   Labor      workforce, wages, hiring priorities per category
  *   Population housing tiers, immigration
+ *   Production goods made and used last month, idle buildings and why,
+ *              the bottlenecks (ui/production.js)
  *   Finance    tax rate and the yearly ledger
  *   Trade      trade routes and import/export settings per good
  *   Military   threats, forts and their orders, supplies, battle record
@@ -32,11 +34,13 @@ import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
 import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
+import { productionReport } from './production.js';
 
 export const ADVISOR_TABS = [
   ['overview', 'Overview'],
   ['labor', 'Labor'],
   ['population', 'Population'],
+  ['production', 'Production'],
   ['finance', 'Finance'],
   ['trade', 'Trade'],
   ['military', 'Military'],
@@ -66,6 +70,7 @@ export class Advisors {
     this.body = null;
     this.timer = 0;
     this.interacting = false;
+    this.showNext = new Map(); // Production: which building of a trouble group "Show" goes to next
   }
 
   /** Build the modal element (UI puts it in the modal root). */
@@ -128,6 +133,7 @@ export class Advisors {
           kv('Homes with food', pct(c.fedShare)),
           kv('Free housing space', fmt(c.vacancies || 0)),
           kv('Emperor\'s favor', `${Math.round(c.ratings.favor)}`))),
+      trendCharts(c.history || []),
       h('div', { class: 'card', style: { marginTop: '10px' } },
         h('h4', {}, `City mood: ${c.sentiment} / 100`),
         bar(c.sentiment, 100),
@@ -177,6 +183,45 @@ export class Advisors {
       h('h4', {}, 'Labor categories'),
       h('div', { class: 'muted' }, 'When workers are short, priority categories are staffed first; the rest share what is left.'),
       h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Category'), h('th', { class: 'r' }, 'Staffed'), h('th', {}, ''), h('th', {}, '')), rows),
+    ];
+  }
+
+  tab_production(g) {
+    const rep = productionReport(g);
+    const num = (v) => (v ? fmt(Math.round(v)) : '');
+    const show = (grp) => {
+      const k = `${grp.name}|${grp.text}`;
+      const i = (this.showNext.get(k) || 0) % grp.ids.length;
+      this.showNext.set(k, i + 1);
+      const b = g.buildings.get(grp.ids[i]);
+      if (!b) return;
+      this.app.ui.closeModal();
+      this.app.renderer.camera.glideToTile(b.x + (b.size - 1) / 2, b.y + (b.size - 1) / 2);
+      this.app.ui.info.showBuilding(b.id);
+    };
+    return [
+      h('div', { class: 'card' },
+        h('h4', {}, 'Bottlenecks'),
+        rep.hints.length ? h('ul', { class: 'needs' }, rep.hints.map((t) => h('li', {}, t))) : h('div', { class: 'muted' }, 'None: everything built is working and nothing is running out.')),
+      h('h4', {}, 'Goods last month'),
+      rep.hasMonth ? null : h('div', { class: 'muted' }, 'The figures fill in at the end of the first month.'),
+      rep.goods.length ? h('table', { class: 'tbl' },
+        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Made'), h('th', { class: 'r' }, 'Used'), h('th', { class: 'r' }, 'Imported'), h('th', { class: 'r' }, 'Exported'), h('th', { class: 'r' }, 'In store'), h('th', { class: 'r' }, 'Change')),
+        rep.goods.map((r) => h('tr', {},
+          h('td', {}, r.name),
+          h('td', { class: 'r num' }, num(r.made)),
+          h('td', { class: 'r num' }, num(r.used)),
+          h('td', { class: 'r num' }, num(r.imported)),
+          h('td', { class: 'r num' }, num(r.exported)),
+          h('td', { class: 'r num' }, fmt(Math.round(r.stock))),
+          h('td', { class: `r num ${r.net > 0.5 ? 'ok' : r.net < -0.5 ? 'no' : ''}` }, Math.abs(r.net) < 0.5 ? '0' : `${r.net > 0 ? '+' : ''}${fmt(Math.round(r.net))}`)))) : h('div', { class: 'muted' }, 'Nothing made or stored yet.'),
+      h('div', { class: 'muted' }, 'Used: eaten, worked up in workshops, used by homes, spent on recruits and sent to the Emperor. In store: granaries, warehouses and docks.'),
+      h('h4', {}, 'Buildings not working as they should'),
+      rep.troubles.length ? h('table', { class: 'tbl' },
+        rep.troubles.map((grp) => h('tr', {},
+          h('td', {}, h('span', { class: grp.level === 'bad' ? 'no' : '' }, grp.level === 'bad' ? '●' : '○'), ` ${grp.name}${grp.ids.length > 1 ? ` ×${grp.ids.length}` : ''}`),
+          h('td', {}, grp.text),
+          h('td', { class: 'r' }, h('button', { class: 'btn small', title: grp.ids.length > 1 ? 'Each press shows the next one' : 'Go there', onclick: () => show(grp) }, 'Show'))))) : h('div', { class: 'muted' }, 'All working.'),
     ];
   }
 
@@ -467,4 +512,59 @@ export function tierNeeds(i) {
   if (prev > -50) parts.push(`des ${prev}`);
   if (t.size > 1) parts.push(`${t.size}x${t.size}`);
   return parts.join(' · ') || 'settlers';
+}
+
+/**
+ * Small line charts of the city's monthly history (population, treasury,
+ * mood): the last 20 years at most, one point a month.
+ */
+function trendCharts(history) {
+  if (history.length < 2) return h('div', { class: 'card', style: { marginTop: '10px' } }, h('h4', {}, 'Trends'), h('div', { class: 'muted' }, 'The charts fill in month by month.'));
+  const years = Math.max(1, Math.round(history.length / 12));
+  return h('div', { class: 'card', style: { marginTop: '10px' } },
+    h('h4', {}, `Trends (last ${history.length < 12 ? `${history.length} months` : `${years} year${years > 1 ? 's' : ''}`})`),
+    h('div', { class: 'grid3' },
+      lineChart('Population', history.map((p) => p.pop), (v) => fmt(v)),
+      lineChart('Treasury', history.map((p) => p.treasury), (v) => `${fmt(v)} Dn`),
+      lineChart('Mood', history.map((p) => p.sentiment), (v) => `${v}`, [0, 100])));
+}
+
+/** One chart: a canvas with the line, its range and the latest value. */
+function lineChart(title, values, label, range = null) {
+  const W = 220;
+  const H = 64;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const canvas = h('canvas', { width: W * dpr, height: H * dpr, class: 'trend', 'aria-label': `${title} chart` });
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const css = getComputedStyle(document.documentElement);
+    const line = css.getPropertyValue('--bronze').trim() || '#a0703a';
+    const grid = css.getPropertyValue('--line').trim() || '#ccc';
+    let lo = range ? range[0] : Math.min(...values);
+    let hi = range ? range[1] : Math.max(...values);
+    if (hi - lo < 1) { hi += 1; lo -= 1; }
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 1;
+    if (lo < 0 && hi > 0) { // the zero line (a treasury in debt)
+      const y0 = H - 4 - ((0 - lo) / (hi - lo)) * (H - 8);
+      ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+    }
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const x = (i / (values.length - 1)) * (W - 2) + 1;
+      const y = H - 4 - ((v - lo) / (hi - lo)) * (H - 8);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  return h('div', { class: 'trend-box' },
+    h('div', { class: 'trend-head' }, h('b', {}, title), h('span', { class: 'num' }, label(values[values.length - 1]))),
+    canvas,
+    h('div', { class: 'muted trend-range' }, `${label(Math.min(...values))} to ${label(Math.max(...values))}`));
 }

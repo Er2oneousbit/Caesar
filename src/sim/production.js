@@ -38,6 +38,7 @@ import { spawnWalker } from './entities.js';
 import { followPath } from './movement.js';
 import { findDeliveryTarget, takeGoods } from './storage.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
+import { logGoods } from './goodsLedger.js';
 
 /** Number of cart pushers this building has out. */
 export function cartsOut(game, b) {
@@ -140,6 +141,7 @@ export function updateProducer(game, b) {
       b.progress -= 100;
       b.stock[good] += CONFIG.CART_CAPACITY;
       game.city.produced[good] = (game.city.produced[good] || 0) + CONFIG.CART_CAPACITY;
+      logGoods(game, good, 'made', CONFIG.CART_CAPACITY);
       if (FOOD_TYPES.includes(good)) game.city.foodFlow.harvested += CONFIG.CART_CAPACITY;
     }
   }
@@ -201,9 +203,10 @@ export function updateWorkshop(game, b) {
     b.progress += ((b.efficiency * 100) / def.productionDays) * game.difficulty.production;
     if (b.progress >= 100) {
       b.progress = 0;
-      for (const [good, n] of recipe) b.stock[good] -= n;
+      for (const [good, n] of recipe) { b.stock[good] -= n; logGoods(game, good, 'used', n); }
       b.stock[out] += CONFIG.CART_CAPACITY;
       game.city.produced[out] = (game.city.produced[out] || 0) + CONFIG.CART_CAPACITY;
+      logGoods(game, out, 'made', CONFIG.CART_CAPACITY);
     }
   }
   shipOutput(game, b, out, CONFIG.CART_LOAD);

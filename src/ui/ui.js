@@ -33,6 +33,11 @@ export class UI {
     this.advisors = new Advisors(app);
     this.console = new DebugConsole(app, root);
     this.debugEl = h('div', { id: 'debug-hud', class: 'hidden' });
+    // Overlay helpers: a tooltip over the building under the pointer, and a legend.
+    this.tipEl = h('div', { id: 'tooltip', class: 'hidden', role: 'tooltip' });
+    this.legendEl = h('div', { id: 'overlay-legend', class: 'hidden' });
+    this.legendKey = null;
+    root.append(this.tipEl, this.legendEl);
     this.modalRoot = h('div', { id: 'modal-root' });
     this.menuRoot = h('div', { id: 'menu-root' });
     root.append(this.debugEl, this.menuRoot, this.modalRoot);
@@ -271,7 +276,44 @@ export class UI {
     if (this.app.game) this.sidebar.update(now);
     this.info.update(dt);
     if (this.modalKind === 'advisors') this.advisors.update(dt);
+    this.updateOverlayHelp();
     this.updateDebug(dt);
+  }
+
+  /**
+   * The overlay's legend (while an overlay with one is on) and its tooltip:
+   * what `overlay.tip` says about the building under the pointer.
+   */
+  updateOverlayHelp() {
+    const app = this.app;
+    const g = app.game;
+    const ov = app.renderer.overlay;
+    const legend = g && !this.mainMenuOpen && ov.legend ? ov : null;
+    if ((legend ? legend.key : null) !== this.legendKey) {
+      this.legendKey = legend ? legend.key : null;
+      this.legendEl.classList.toggle('hidden', !legend);
+      if (legend) {
+        mount(this.legendEl,
+          h('b', {}, legend.name),
+          legend.legend.map(([color, label]) => h('div', { class: 'legend-row' }, h('i', { style: { background: color } }), label)),
+          h('div', { class: 'muted' }, 'Point at a column to see why.'));
+      }
+    }
+    const t = app.renderer.hoverTile;
+    const m = app.input ? app.input.mouse : null;
+    let text = null;
+    if (g && ov.tip && t && m && m.over && !app.input.tool && !this.hasModal()) {
+      const b = g.buildings.get(g.map.buildingAt(t.x, t.y));
+      if (b) text = ov.tip(g, b);
+    }
+    this.tipEl.classList.toggle('hidden', !text);
+    if (!text) return;
+    if (this.tipEl.textContent !== text) this.tipEl.textContent = text;
+    const r = app.canvas.getBoundingClientRect();
+    const x = Math.min(r.left + m.x + 16, window.innerWidth - this.tipEl.offsetWidth - 8);
+    const y = Math.min(r.top + m.y + 18, window.innerHeight - this.tipEl.offsetHeight - 8);
+    this.tipEl.style.left = `${Math.max(4, x)}px`;
+    this.tipEl.style.top = `${Math.max(4, y)}px`;
   }
 
   updateDebug(dt) {

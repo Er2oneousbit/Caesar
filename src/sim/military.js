@@ -35,6 +35,7 @@ import { spawnWalker, killWalker, STRIDE_WRAP } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
 import { igniteBuilding, collapseBuilding } from './risk.js';
+import { logGoods } from './goodsLedger.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -454,6 +455,7 @@ export function updateBarracks(game, b) {
     f.recruiting = (f.recruiting || 0) + 1;
     const w = spawnWalker(game, 'recruit', b.accessRoad, b, { target: f.id, state: 'toFort', reserve: { id: f.id, recruit: 1 }, unitType: f.def.unit });
     if (!w) { f.recruiting--; for (const [good, n] of Object.entries(cost)) b.stock[good] += n; return; }
+    for (const [good, n] of Object.entries(cost)) logGoods(game, good, 'used', n);
     followPath(game, w, path);
     b.trainProgress = 0;
     b.blocked = '';

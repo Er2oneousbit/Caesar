@@ -10,6 +10,10 @@
  *   house(b)         -> 0..1 column height for houses (coverage level)
  *   value(b)         -> 0..1 column height for any building (risk, staffing)
  *   bad              -> true when a high column is BAD (risks), for coloring
+ *   column(b, game)  -> { v, color } or null: a column of its own color
+ *                      (used instead of house/value)
+ *   tip(game, b)     -> text for the tooltip over a building, or null
+ *   legend           -> [color, label] rows shown while the overlay is on
  *   walkers          -> walker types still drawn in this overlay
  * ----------------------------------------------------------------------------
  */
@@ -18,11 +22,21 @@ import { WaterBits } from '../world/map.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { FOOD_TYPES } from '../data/goods.js';
 import { educationTier } from '../sim/housing.js';
+import { problemOf, PROBLEM_LEGEND } from '../ui/problems.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
 export const OVERLAYS = [
   { key: 'none', name: 'No overlay', hotkey: '0' },
+  {
+    // Everything that is wrong, and why (ui/problems.js).
+    key: 'problems', name: 'Problems',
+    show: () => false,
+    column: (b, game) => problemOf(game, b),
+    tip: (game, b) => problemOf(game, b)?.text || null,
+    legend: PROBLEM_LEGEND,
+    walkers: [],
+  },
   {
     key: 'water', name: 'Water supply',
     tile(game, i) {

@@ -132,6 +132,8 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 
 Workshops follow a **recipe**: most use 100 units of one raw material per 100-unit batch; the Fletcher needs both timber and iron and waits until it has both.
 
+**Finding what is wrong.** The **Problems** overlay (top bar) raises a column over every home that cannot move up, colored by the first thing it lacks (water, food, temples, entertainment, education, health, goods, desirability, room to grow), taller when the home is already falling back (a home already as good as the province allows, whose next level needs a building or a trade partner the mission does not have, shows none); empty lots no settler can reach and buildings that do not work are red, buildings that work badly (understaffed, short of goods, nowhere to deliver) amber. Point at a column for the reason; a legend lists the colors. The **Production** advisor shows, for each good, what was made, used (eaten, worked up, used by homes, spent on recruits, sent to the Emperor), imported and exported last month and what the storehouses hold; lists the buildings that are not working, grouped by reason, with a *Show* button that goes to each in turn; and names the bottlenecks: workshops waiting for a raw material (and what makes it or who sells it), buildings without workers, harvests with nowhere to go, goods used faster than they come in, homes short of food. The **Overview** tab charts population, treasury and mood month by month (up to 20 years).
+
 ## Money
 
 * **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.

@@ -236,7 +236,7 @@ try {
   // 4. Menus and advisors via keyboard
   await page.keyboard.press('F2');
   check('F2 opens advisors', await page.isVisible('text=Advisors'));
-  for (const tab of ['Labor', 'Population', 'Finance', 'Trade', 'Military', 'Religion', 'Ratings', 'Imperial']) {
+  for (const tab of ['Labor', 'Population', 'Production', 'Finance', 'Trade', 'Military', 'Religion', 'Ratings', 'Imperial']) {
     await page.click(`.tab:has-text("${tab}")`);
   }
   check('advisor tabs render', errors.length === 0, errors.join(' | '));
@@ -417,6 +417,38 @@ try {
       check('Follow keeps a walker in view; closing the panel lets go', following && closed, JSON.stringify({ following, closed }));
     }
   }
+
+  // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
+  //      the Production advisor and the trend charts.
+  await page.selectOption('.hud-select', 'problems');
+  const flagged = await page.evaluate(async () => {
+    const app = window.colonia;
+    const g = app.game;
+    const ov = app.renderer.overlay;
+    const b = [...g.buildings.values()].find((x) => ov.tip(g, x) && x.size === 1);
+    if (!b) return null;
+    app.renderer.camera.centerOnTile(b.x, b.y);
+    return { x: b.x, y: b.y, text: ov.tip(g, b) };
+  });
+  check('the Problems overlay flags something in the demo city', !!flagged);
+  if (flagged) {
+    await page.waitForTimeout(150);
+    const fp = await toScreen(flagged.x, flagged.y);
+    await page.mouse.move(fp.x, fp.y);
+    await page.waitForTimeout(250);
+    const tip = await page.evaluate(() => { const t = document.getElementById('tooltip'); return { shown: !t.classList.contains('hidden'), text: t.textContent }; });
+    const legend = await page.isVisible('#overlay-legend:has-text("Home needs: water")');
+    check('Problems overlay: a legend, and pointing at a building says what is wrong', tip.shown && tip.text === flagged.text && legend, JSON.stringify({ tip, legend, want: flagged.text }));
+  }
+  await page.selectOption('.hud-select', 'none');
+  const legendGone = await page.isHidden('#overlay-legend');
+  await page.keyboard.press('F2');
+  await page.click('.tab:has-text("Production")');
+  const prod = await page.evaluate(() => ({ rows: document.querySelectorAll('.modal table.tbl tr').length, text: document.querySelector('.modal-body')?.textContent || '' }));
+  await page.click('.tab:has-text("Overview")');
+  const charts = await page.evaluate(() => document.querySelectorAll('.modal canvas.trend').length);
+  check('Production advisor lists goods and bottlenecks; the Overview draws three trend charts', legendGone && prod.rows > 1 && /Bottlenecks/.test(prod.text) && /Wheat/.test(prod.text) && charts === 3, JSON.stringify({ legendGone, rows: prod.rows, charts }));
+  await page.keyboard.press('Escape');
 
   // 5b. Military: garrison, fort panel + deploy by clicking the map, raid alert, advisor
   const gar = await page.evaluate(() => {

@@ -46,6 +46,7 @@ import { hashSeed } from '../core/rng.js';
 import { Terrain, WaterBits } from '../world/map.js';
 import { addBuilding, computeAccessRoad, killWalker, removeBuilding, sendHomeless, spawnWalker } from './entities.js';
 import { walkTo } from './movement.js';
+import { logGoods } from './goodsLedger.js';
 
 // ---------------------------------------------------------------------------
 // Measuring a home
@@ -673,6 +674,7 @@ export function consumeHouse(game, b) {
       const n = Math.min(h.food[f], portion);
       h.food[f] -= n;
       eaten += n;
+      logGoods(game, f, 'used', n);
       kinds++;
     }
     for (const f of FOOD_TYPES) {
@@ -680,6 +682,7 @@ export function consumeHouse(game, b) {
       const n = Math.min(h.food[f], ration - eaten);
       h.food[f] -= n;
       eaten += n;
+      logGoods(game, f, 'used', n);
     }
     h.hungry = kinds === 0;
     flow.eaten += eaten;
@@ -698,5 +701,8 @@ export function useGoods(game, b) {
   if (h.pop <= 0) return;
   const tier = HOUSE_TIERS[h.tier];
   const perGood = Math.max(0.25, h.pop / CONFIG.GOODS_PER_HOUSE_PEOPLE) / 2;
-  for (const g of tier.goods) h.goods[g] = Math.max(0, h.goods[g] - perGood);
+  for (const g of tier.goods) {
+    logGoods(game, g, 'used', Math.min(h.goods[g], perGood));
+    h.goods[g] = Math.max(0, h.goods[g] - perGood);
+  }
 }

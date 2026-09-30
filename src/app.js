@@ -616,7 +616,10 @@ export class App {
     this.paused = false;
   }
 
-  setOverlay(key) { this.renderer.setOverlay(key); }
+  setOverlay(key) {
+    this.renderer.setOverlay(key);
+    this.ui.updateOverlayHelp(); // the legend changes with it, not a frame later
+  }
 
   cycleOverlay(dir) {
     const i = OVERLAYS.findIndex((o) => o.key === this.renderer.overlay.key);

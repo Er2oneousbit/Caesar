@@ -16,6 +16,7 @@ import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { cityStock, takeFromCity } from './storage.js';
 import { transact } from './economy.js';
+import { logGoods } from './goodsLedger.js';
 
 /** Goods the city could plausibly supply (it can build the producer). */
 function requestableGoods(game) {
@@ -85,7 +86,7 @@ export function fulfillRequest(game) {
   if (!r) return { ok: false, reason: 'There is no request.' };
   if (!canFulfill(game)) return { ok: false, reason: 'You do not have enough in storage yet.' };
   if (r.kind === 'money') transact(game, 'gifts', -r.amount);
-  else takeFromCity(game, r.good, r.amount);
+  else logGoods(game, r.good, 'used', takeFromCity(game, r.good, r.amount)); // sent to Rome
   c.ratings.favor = Math.min(100, c.ratings.favor + 10);
   c.stats.requestsMet++;
   game.message(`The Emperor thanks you for the ${describeRequest(r)}. Favor has risen.`, 'good');

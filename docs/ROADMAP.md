@@ -8,14 +8,21 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-2. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-3. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-4. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
-5. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1, 3 and 4, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
-6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
+1. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy). Needs the analyst's spec first (the clean-room step in `claude.md`); the Problems overlay then gets crime and sickness too.
+2. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+3. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
+4. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1, 2 and 3, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
+5. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.9.1)
+
+* **The Problems overlay** (top bar): a column over every home that cannot move up, colored by the first thing it lacks (water, food, temples, entertainment, education, health, goods, desirability, room to grow) and taller when it is already falling back (none where the next level needs something the mission cannot give, such as fountains in the first mission); red over empty lots no settler can reach and over buildings that do not work, amber over those that work badly. Point at a column for the reason in words; a legend lists the colors (not on phones, where a tap on the building says it)
+* **The Production advisor**: per good, what was made, used, imported and exported last month and what the storehouses hold, with the month's change; the buildings that are not working, grouped by reason, each group with a *Show* button that goes to the next one; and the bottlenecks in plain words (workshops waiting for a raw material, with what makes it and who sells it; buildings without workers; harvests with nowhere to go; goods used faster than they come in; homes short of food)
+* **Trend charts** on the Overview tab: population, treasury and mood, month by month, up to 20 years
+* A goods book in the simulation counts it all (bookkeeping only: the city plays exactly as before)
+* 160 unit tests (+5), 78 browser checks (+3)
 
 ## Done (v0.9.0)
 
@@ -202,7 +209,7 @@ Fixes from a review of v0.6:
 12. **Empire map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. Like the original's empire map it covers the whole inland sea (the partners reach from Tarraco to Alexandria). To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), and whether clicking a warband pans the city view to its entry edge.
 13. **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 14. **The original's five gods**: Ceres, Neptune, Mercury, Mars and Venus. Colonia has Jupiter and Vesta in place of Mercury (trade) and Venus (happiness).
-15. **Health, Education and Entertainment advisors**, and a **Problems overlay**.
+15. **Health, Education and Entertainment advisors**, and a **Problems overlay** (the overlay done in v0.9.1, with the reason behind each problem).
 16. **Triumphal arches**, awarded for battles won.
 17. **Military academy**: trains soldiers who fight better.
 18. **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
@@ -233,8 +240,8 @@ What Augustus (4.0) added to the original, checked against its manual and releas
 
 Seeing why:
 
-* **Reasons in the Problems overlay**: color every home by the one thing blocking its next level (water, food variety, a temple, desirability...), and every idle building by its reason, with the details in the tooltip.
-* **Production and logistics stats**: per good, how much was made and used each month; per building, why it is idle (no workers, no raw material, no storage, no road); a hint at the bottleneck. Charts in the advisors belong here (population, treasury and mood history are already recorded in `city.history`).
+* **Reasons in the Problems overlay**: done in v0.9.1.
+* **Production and logistics stats**: done in v0.9.1 (the Production advisor and the trend charts). Still to come: charts per good over time.
 * **Production calculator**: turns a target into building counts (feeding 1,000 people takes about 3 full wheat farms).
 * **Walker traffic heat map**: where walkers actually go, which shows where roadblocks belong.
 * **Year in review** and a **city chronicle**: a yearly report card with charts, and an auto-written history of the city ("297 BC: the great fire of the east quarter took 14 homes").

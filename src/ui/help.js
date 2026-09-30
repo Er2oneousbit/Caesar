@@ -95,6 +95,7 @@ function content(tab) {
         chain('Iron Mine (by rocks)', 'Weaponsmith', 'Warehouse', 'Export'),
         chain('Marble Quarry (by rocks)', 'Warehouse', 'Export'),
         h('p', {}, 'Raw materials go straight to a workshop that needs them, otherwise to a warehouse, which later sends them to workshops that run low.'),
+        h('p', {}, 'Something not working? The Problems overlay (top bar) raises a column over every home that cannot grow, colored by what it lacks, and over every building that does not work; point at one to see why. The Production advisor shows what was made and used last month, lists the idle buildings with a button to go to each, and names the bottlenecks.'),
         h('h4', {}, 'Trade'),
         h('p', {}, 'Open routes in the Trade advisor, then mark goods for export (keep a reserve) or import (up to a target). The empire map there shows every partner and how they trade:'),
         h('ul', {},

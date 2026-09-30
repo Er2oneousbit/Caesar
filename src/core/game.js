@@ -46,6 +46,7 @@ import { updateRatings, checkOutcome } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
 import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
+import { closeGoodsMonth } from '../sim/goodsLedger.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -92,6 +93,8 @@ export function newCityState(scenario, funds) {
     produced: {},
     foodFlow: { harvested: 0, stored: 0, toMarket: 0, sold: 0, eaten: 0, shortfall: 0 },
     foodFlowLast: null,
+    goodsFlow: {}, // this month's goods book (sim/goodsLedger.js)
+    goodsFlowLast: null, // last month's
     lostCitizens: 0,
     taxCoverage: 0,
     lastMonth: { wages: 0, taxes: 0 },
@@ -288,6 +291,7 @@ export class Game {
     const c = this.city;
     c.foodFlowLast = { ...c.foodFlow };
     for (const k in c.foodFlow) c.foodFlow[k] = 0;
+    closeGoodsMonth(this);
     if (c.festivalCooldown > 0) c.festivalCooldown--;
     if (c.giftCooldown > 0) c.giftCooldown--;
     c.history.push({ m: this.time.totalMonths, pop: c.population, treasury: Math.round(c.treasury), sentiment: c.sentiment });

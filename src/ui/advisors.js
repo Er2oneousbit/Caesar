@@ -36,6 +36,7 @@ import { festivalCost, holdFestival } from '../sim/religion.js';
 import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
 import { productionReport } from './production.js';
 import { homesWithFood } from '../sim/population.js';
+import { loanTerms, takeLoan } from '../sim/loans.js';
 
 export const ADVISOR_TABS = [
   ['overview', 'Overview'],
@@ -271,8 +272,8 @@ export class Advisors {
     const est = h('span', { class: 'num' }, `${fmt(estTax())} Dn / month`);
     const ly = c.finance.lastYear;
     const ty = c.finance.thisYear;
-    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Gifts & requests', military: 'Army pay', plunder: 'Lost to raiders', stolen: 'Stolen by thieves' };
-    const income = ['taxes', 'exports', 'other'];
+    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Gifts & requests', military: 'Army pay', plunder: 'Lost to raiders', stolen: 'Stolen by thieves', loans: 'Loan from Rome', repayments: 'Loan repayments' };
+    const income = ['taxes', 'exports', 'other', 'loans'];
     return [
       h('div', { class: 'grid2' },
         h('div', { class: 'card' },
@@ -287,7 +288,8 @@ export class Advisors {
           kv('Wages last month', `${fmt(c.lastMonth?.wages || 0)} Dn`),
           kv('Taxes last month', `${fmt(c.lastMonth?.taxes || 0)} Dn`),
           kv('Net this year', `${fmt(ledgerNet(ty))} Dn`),
-          ly ? kv('Net last year', `${fmt(ledgerNet(ly))} Dn`) : null)),
+          ly ? kv('Net last year', `${fmt(ledgerNet(ly))} Dn`) : null,
+          this.loanCard(g))),
       h('h4', {}, 'Ledger'),
       h('table', { class: 'tbl' },
         h('tr', {}, h('th', {}, ''), h('th', { class: 'r' }, 'This year'), h('th', { class: 'r' }, 'Last year')),
@@ -296,6 +298,22 @@ export class Advisors {
           h('td', { class: 'r num' }, fmt(ty[k] || 0)),
           h('td', { class: 'r num' }, ly ? fmt(ly[k] || 0) : '-')))),
     ];
+  }
+
+  /** Finance tab: the loan being repaid, or Rome's offer (sim/loans.js). */
+  loanCard(g) {
+    const c = g.city;
+    if (c.loan) {
+      const months = Math.ceil(c.loan.left / c.loan.monthly);
+      return h('div', { style: { marginTop: '6px' } }, kv('Loan from Rome', `${fmt(c.loan.left)} Dn owed: ${fmt(c.loan.monthly)} Dn a month, ${months} more month${months === 1 ? '' : 's'}`));
+    }
+    const t = loanTerms(g);
+    return h('div', { style: { marginTop: '6px' } },
+      h('button', {
+        class: 'btn small',
+        onclick: () => { const res = takeLoan(g); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('coin'); this.render(); },
+      }, `Borrow ${fmt(t.amount)} Dn from Rome`),
+      h('div', { class: 'muted' }, `Repaid as ${fmt(t.monthly)} Dn a month for ${t.months} months (${fmt(t.total)} Dn in all). Borrowed money is not counted as profit.`));
   }
 
   tab_trade(g) {

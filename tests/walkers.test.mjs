@@ -22,7 +22,8 @@ import { ROADBLOCK_GROUPS, roadblockBit, WALKER_TYPES } from '../src/data/walker
 import { ROADBLOCK, Wall } from '../src/world/map.js';
 import { planAction, undoLast } from '../src/sim/construction.js';
 import { spawnWalker } from '../src/sim/entities.js';
-import { startRoaming, followPath } from '../src/sim/movement.js';
+import { startRoaming, followPath, pickRoamTile } from '../src/sim/movement.js';
+import { addBuilding } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { walkerInfo, walkerSays, cityTrouble } from '../src/ui/walkerTalk.js';
 import { Renderer, walkerWorld } from '../src/render/renderer.js';
@@ -218,4 +219,46 @@ test('a roadblock is drawn across its road either way', () => {
     spec.draw(ctx);
     assert.ok(spec.w > 0 && spec.h > spec.ay, `${axis}: sprite size`);
   }
+});
+
+test('a roamer at a junction prefers the street with buildings along it over an empty one', () => {
+  // A T: a road comes up from the south to a junction; west runs empty, east
+  // is lined with homes. A lone Forum's tax collector once spent his rounds
+  // on the empty Imperial road while the homes he skipped stopped paying.
+  const game = newGame({ size: 96, type: 'plains', seed: 'roam-street' });
+  const spot = findFree(game, 21, 8);
+  const jx = spot.x + 10;
+  const jy = spot.y + 3;
+  assert.ok(build(game, 'road', spot.x, jy, spot.x + 20, jy).ok);
+  assert.ok(build(game, 'road', jx, jy, jx, jy + 3).ok);
+  for (let x = jx + 3; x <= jx + 9; x++) addBuilding(game, 'house', x, jy - 1, 1);
+  let east = 0;
+  const trials = 400;
+  for (let k = 0; k < trials; k++) {
+    const w = { x: jx, y: jy, lastDir: 0, memory: [], origin: 0 }; // heading north, at the junction
+    const next = pickRoamTile(game, w);
+    if (game.map.xOf(next) > jx) east++;
+  }
+  // Both turns weigh the same without the rule (about half each).
+  assert.ok(east / trials > 0.7, `east ${east} of ${trials}`);
+});
+
+test('a roamer looks past the first tile: a way that runs on empty (the Imperial road to the map edge) loses out', () => {
+  // A road comes from the east to a corner: north runs 7 tiles to a dead end
+  // with a single home beside its first tile; south is lined with homes.
+  const game = newGame({ size: 96, type: 'plains', seed: 'roam-street' });
+  const spot = findFree(game, 11, 14);
+  const cx = spot.x + 2;
+  const cy = spot.y + 8;
+  assert.ok(build(game, 'road', cx, cy, cx + 8, cy).ok, 'the street in from the east');
+  assert.ok(build(game, 'road', cx, cy - 7, cx, cy + 3).ok, 'north (7 tiles) and south of the corner');
+  addBuilding(game, 'house', cx - 1, cy - 1, 1); // beside the first tile north, and near the corner
+  for (let y = cy + 1; y <= cy + 3; y++) addBuilding(game, 'house', cx - 1, y, 1);
+  let south = 0;
+  const trials = 400;
+  for (let k = 0; k < trials; k++) {
+    const w = { x: cx, y: cy, lastDir: 3, memory: [], origin: 0 }; // heading west, at the corner
+    if (game.map.yOf(pickRoamTile(game, w)) > cy) south++;
+  }
+  assert.ok(south / trials > 0.6, `south ${south} of ${trials}`);
 });

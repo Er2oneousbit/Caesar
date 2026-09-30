@@ -408,7 +408,13 @@ try {
       // with no walker on its roads still fails.
       how = await page.evaluate(() => {
         const g = window.colonia.game;
-        const w = [...g.walkers.values()].find((v) => g.map.road[g.map.idx(v.x, v.y)]);
+        // Away from the map's edges (the camera stops at the border, so a walker
+        // at the entrance, like a newcomer, would sit under the top panel), and
+        // a street walker if there is one.
+        const m = g.map;
+        const inland = (v) => m.road[m.idx(v.x, v.y)] && v.x > 15 && v.y > 15 && v.x < m.w - 15 && v.y < m.h - 15;
+        const all = [...g.walkers.values()];
+        const w = all.find((v) => inland(v) && v.kind === 'roamer') || all.find(inland);
         if (!w) return `no walker on a road (${g.walkers.size} walkers, seed ${g.seed})`;
         window.colonia.renderer.camera.centerOnTile(w.x, w.y);
         return `none in view (seed ${g.seed}), centered on walker type ${w.type}`;

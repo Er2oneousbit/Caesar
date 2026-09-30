@@ -50,15 +50,16 @@ test('difficulty: every level sets every lever, Normal is neutral, Insane is har
     assert.ok(d.name && d.desc, `${k} has a name and description`);
   }
   // Multipliers are 1 on Normal; mood is in points (0), devolveDays in days
-  // (3, the original game's rule) and protestPeaceEvery a count (0: never).
-  const normalValue = { mood: 0, devolveDays: 3, protestPeaceEvery: 0 };
+  // (3, the original game's rule), protestPeaceEvery a count (0: never) and
+  // loanInterest a share (0.2: 20%).
+  const normalValue = { mood: 0, devolveDays: 3, protestPeaceEvery: 0, loanInterest: 0.2 };
   for (const [k, v] of Object.entries(DIFFICULTY.normal)) {
     if (typeof v === 'number') assert.equal(v, normalValue[k] ?? 1, `normal.${k}`);
   }
   assert.deepEqual(DIFFICULTY_ORDER, ['easy', 'normal', 'hard', 'insane']);
   // Levers where less is harder, and where more is harder.
   const lessIsHarder = ['funds', 'production', 'winterGrowth', 'immigration', 'mood', 'raidInterval', 'requestInterval', 'requestTime', 'devolveDays'];
-  const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize', 'crime', 'crimePeace', 'disease'];
+  const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize', 'crime', 'crimePeace', 'disease', 'loanInterest'];
   for (let i = 1; i < DIFFICULTY_ORDER.length; i++) {
     const easier = DIFFICULTY[DIFFICULTY_ORDER[i - 1]];
     const harder = DIFFICULTY[DIFFICULTY_ORDER[i]];

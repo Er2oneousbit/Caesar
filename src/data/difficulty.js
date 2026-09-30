@@ -27,6 +27,8 @@
  *   protestPeaceEvery  every this many protests cost CONFIG.PROTEST_PEACE, then the
  *                    count starts again (0: protests never cost peace)
  *   disease          how fast unhealthy homes build disease risk (sim/disease.js)
+ *   loanInterest     what a loan from Rome costs, over its whole term (0.2: 20%;
+ *                    sim/loans.js)
  *
  * Easy, Normal and Hard only use the first four levers plus raid size, crime,
  * crimePeace and disease (and Easy a longer devolveDays); Insane pulls on all
@@ -65,6 +67,7 @@ export const DIFFICULTY = Object.freeze({
     crime: 0.5, // unrest seldom goes past a protest
     crimePeace: 0, protestPeaceEvery: 0,
     disease: 0.5, // an outbreak is rare
+    loanInterest: 0.1,
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -76,6 +79,7 @@ export const DIFFICULTY = Object.freeze({
     crime: 1,
     crimePeace: 1, protestPeaceEvery: 0,
     disease: 1,
+    loanInterest: 0.2,
   }),
   hard: Object.freeze({
     name: 'Hard',
@@ -87,6 +91,7 @@ export const DIFFICULTY = Object.freeze({
     crime: 1.2,
     crimePeace: 2, protestPeaceEvery: 0,
     disease: 1.3,
+    loanInterest: 0.3,
   }),
   insane: Object.freeze({
     name: 'Insane',
@@ -100,6 +105,7 @@ export const DIFFICULTY = Object.freeze({
     crime: 1.4,
     crimePeace: 3, protestPeaceEvery: 5,
     disease: 1.5,
+    loanInterest: 0.4,
   }),
 });
 

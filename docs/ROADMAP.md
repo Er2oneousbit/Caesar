@@ -24,6 +24,8 @@ Fixes from playing mission 3 on Insane (the game said things that were not so, o
 * **Wells and reservoirs out of every engineer's reach**: they need no road, but they wear out, and an engineer repairs only what lies within 2 tiles of the road he walks. Placing one further off now warns, and its panel and the Problems overlay flag it (a reservoir collapsing unseen dries every fountain and bath it feeds)
 * **A home's tax line says why it pays nothing**: no Forum, a Forum without workers or a road, or no tax collector in the last 48 days (with what to do about it); a registered home shows how many days its registration has left. It used to say "needs a Forum nearby" with a Forum next door. The Finance tab counts the homes that are not registered
 * The balance sim is byte-identical on every difficulty after these three
+* **Loans from Rome** (Finance advisor): a city in debt could never build again, so one that lost its Forum while in the red could never recover. Rome now lends 2,000 Dn whenever no loan is being repaid, repaid monthly over 24 months with interest by difficulty (10% Easy to 40% Insane, a new lever in the difficulty table); the debt message points to it. Borrowed money is not counted as profit. A city that never borrows plays exactly as before
+* **Roamers prefer streets with something to serve**: at a junction a roaming walker looks up to 8 tiles down each way and favors the ways lined with buildings. A lone Forum's tax collector (and the engineers) used to spend whole rounds on the Imperial road out to the empty map edge. Replaying the mission 3 game with the same moves, the three key buildings that collapsed in August now stand. Over 12 maps: fires down on every difficulty (Hard 11 to 7.8 in 3 years), protests down, the campaign's pace unchanged
 
 * **Disease** (parity item 4): every home has a health score (its level, a medicus, a hospital within reach, baths, a barber, fountain water, each kind of food; at most 40 with no food at all). Crowded, unhealthy homes build disease risk like fire risk, and a passing physician clears it; at 100 a home may fall sick: a fifth of its people die (a tenth near a hospital), and for 32 days it cannot move up or take in settlers and may pass it to the homes touching it (once a day each). A staffed Medicus sends a physician to cure it, as prefectures send prefects to fires. City health (the residents' average score) moves 2 a month, shown only. None below 200 people or in the first two missions; a new difficulty lever (x0.5 Easy, x1.3 Hard, x1.5 Insane). A Health overlay (disease risk, sick homes marked), a *Health* section in the house panel, a pale cloth on a sick home's door post, sick homes and homes in unrest first on the Problems overlay, citizens who talk about it, console `health` and `sick`, and the sim report's outbreaks and deaths
 * Saves are version 6; version 5 and 4 saves load with nobody sick
@@ -276,12 +278,10 @@ Seeing why:
 
 From playtesting (mission 3 on Insane, three attempts, all lost within about 15 months; the owner decides which to take):
 
-* **Debt locks all construction**, so a city that loses its Forum while in the red can never rebuild the one thing that brings money in. Loans from Rome (under *Beyond the original*), or letting a Forum be built in debt, would give a way back.
 * **The new city's mood bonus ends as a 20-point cliff** at month 12; on Insane it lands just when the economy is weakest. A taper over several months would be kinder and easier to read.
 * **Early cash flow on Insane**: a worker's wage costs about what six Huts pay in tax, and 2,800 Dn leaves little room to reach the homes that pay. The first year is decided by cash flow more than by the player's layout.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
-* **Roamers waste rounds on the Imperial road**: a lone Forum's tax collector walked to the empty map edge and back, and the homes he skipped lapsed. Roamers could prefer streets with buildings.
 
 Playing smoother:
 
@@ -324,7 +324,6 @@ Ideas that would change the original's economy or rules; each would come as an o
 
 * **Dynamic prices**: each partner's prices drift with what you sell to it.
 * **Partner contracts**: optional side jobs ("Carthago wants 800 wine by next year and pays 150%").
-* **Loans from Rome**, at interest.
 * **Deeper production chains**: salt pans, garum (fish and salt), a mill and bakery for bread, sheep to wool to cloth.
 * **Paved roads**: faster carts, higher cost.
 * **Sewers and latrines**, paired with disease.

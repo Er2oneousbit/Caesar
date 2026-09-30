@@ -73,11 +73,11 @@ function content(tab) {
         h('tr', {}, h('td', {}, h('b', {}, 'Touch')), h('td', {}, 'Tap = click, drag = scroll or build, pinch = zoom, two fingers = scroll')));
     case 'housing':
       return [
-        h('p', {}, 'Homes climb one level at a time when they have everything the next level needs, and fall back when they lose something for a few days. Levels 7+ need a 2×2 block and 10+ a 3×3 block: small neighboring homes merge as they grow, so leave them room.'),
+        h('p', {}, 'Homes move up one level a day as soon as they have everything the next level needs, and fall back one level after a few bad days in a row (3, or 6 on Easy): a missing need, or desirability down at the floor of its level. Levels 1-10 are single tiles (four alike next to each other may join into one block), 11-14 are 2×2, 15-18 3×3 and 19-20 4×4: a home takes over homes of its level or lower, clear land and gardens beside it as it grows, so leave it room. Villas hold fewer people than insulae, so some residents move out when one is built.'),
         h('table', { class: 'tbl' },
-          h('tr', {}, h('th', {}, 'Level'), h('th', { class: 'r' }, 'People/tile'), h('th', {}, 'Needs')),
-          HOUSE_TIERS.slice(1).map((t, i) => h('tr', {}, h('td', {}, `${i + 1}. ${t.name}${t.patrician ? ' ★' : ''}`), h('td', { class: 'r num' }, t.popPerTile), h('td', { style: { fontSize: '12.5px' } }, tierNeeds(i + 1))))),
-        h('p', { class: 'muted' }, '★ = patricians: they pay far more tax but do not work.'),
+          h('tr', {}, h('th', {}, 'Level'), h('th', { class: 'r' }, 'People'), h('th', {}, 'Needs')),
+          HOUSE_TIERS.slice(1).map((t, i) => h('tr', {}, h('td', {}, `${i + 1}. ${t.name}${t.patrician ? ' ★' : ''}`), h('td', { class: 'r num' }, t.people), h('td', { style: { fontSize: '12.5px' } }, tierNeeds(i + 1))))),
+        h('p', { class: 'muted' }, '★ = patricians: they pay far more tax but do not work. People: per tile for levels 1-10, per home above. Desirability (des) is what the level below needs to move up.'),
       ];
     case 'production':
       return [

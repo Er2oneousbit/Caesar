@@ -236,7 +236,7 @@ try {
   // 4. Menus and advisors via keyboard
   await page.keyboard.press('F2');
   check('F2 opens advisors', await page.isVisible('text=Advisors'));
-  for (const tab of ['Labor', 'Finance', 'Trade', 'Military', 'Religion', 'Ratings', 'Imperial']) {
+  for (const tab of ['Labor', 'Population', 'Finance', 'Trade', 'Military', 'Religion', 'Ratings', 'Imperial']) {
     await page.click(`.tab:has-text("${tab}")`);
   }
   check('advisor tabs render', errors.length === 0, errors.join(' | '));
@@ -257,6 +257,30 @@ try {
   const saved = await page.evaluate(() => ({ b: window.colonia.game.buildings.size, pop: window.colonia.game.city.population }));
   check('city grows', saved.pop > 50, `pop ${saved.pop}`);
   await page.evaluate(() => window.colonia.togglePause());
+
+  // 5. (cont.) The housing ladder: a home shown at every level (1-20) gets its info
+  //     panel with the level's name, and the Population advisor lists them all.
+  const ladder = await page.evaluate(() => {
+    const app = window.colonia;
+    const home = [...app.game.buildings.values()].find((b) => b.house && b.house.pop > 0 && b.size === 1);
+    if (!home) return { ok: false };
+    const was = home.house.tier;
+    const heads = [];
+    for (let t = 1; t <= 20; t++) {
+      home.house.tier = t;
+      app.ui.info.showBuilding(home.id);
+      heads.push(document.querySelector('#info-panel h3')?.textContent || '');
+    }
+    home.house.tier = was;
+    app.ui.info.close();
+    return { ok: true, heads };
+  });
+  check('the info panel names all 20 housing levels', ladder.ok && ladder.heads.length === 20 && ladder.heads[0] === 'Tent' && ladder.heads[19] === 'Imperial Palatium' && new Set(ladder.heads).size === 20 && errors.length === 0, JSON.stringify(ladder.heads));
+  await page.keyboard.press('F2');
+  await page.click('.tab:has-text("Population")');
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.modal tr')].filter((tr) => /^\d+\. /.test(tr.textContent)).length);
+  check('Population advisor lists 20 housing levels', rows === 20, `${rows} rows`);
+  await page.keyboard.press('Escape');
 
   // 5a. Water radius: clicking a well shows its area (dark blue); placing one
   //     shows the new area in dark blue over existing coverage in pale blue.

@@ -402,8 +402,10 @@ export class Advisors {
     const row = (key, name, tip) => h('div', { class: 'card', style: { marginTop: '8px' } },
       kv(name, `${Math.floor(r[key])}${goals[key] ? ` (goal ${goals[key]})` : ''}`), bar(r[key], 100),
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '3px' } }, tip));
+    const seats = g.city.entCoverage || {};
+    const seatText = `Venue seats for ${seats.theater || 0}% (theaters), ${seats.amphitheater || 0}% (amphitheaters) and ${seats.colosseum || 0}% (colosseums) of the city give every home +${g.city.entBase || 0} entertainment.`;
     return [
-      row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. Build temples, schools, libraries and venues where people live.`),
+      row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. ${seatText} Build temples, schools, libraries and venues where people live.`),
       row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Senate. Changes slowly.'),
       row('peace', 'Peace', 'Grows each month the city is content (mood 45+). Falls with unrest and the wrath of Mars.'),
       row('favor', 'Favor', 'The Emperor likes paid tributes, fulfilled requests and gifts. Debt and missed requests anger him. At 0 you are recalled!'),
@@ -447,7 +449,7 @@ export class Advisors {
   }
 }
 
-/** Short summary of what a tier needs (Population tab). */
+/** Short summary of what a level needs (Population tab, help). */
 export function tierNeeds(i) {
   const t = HOUSE_TIERS[i];
   const parts = [];
@@ -455,10 +457,14 @@ export function tierNeeds(i) {
   if (t.food) parts.push(`${t.food} food`);
   if (t.religion) parts.push(`${t.religion} god${t.religion > 1 ? 's' : ''}`);
   if (t.ent) parts.push(`ent ${t.ent}`);
-  if (t.edu) parts.push(['', 'school', 'school+library', 'school+library+academy'][t.edu]);
-  if (t.health) parts.push(`${t.health} health`);
+  if (t.edu) parts.push(['', 'school or library', 'school+library', 'school+library+academy'][t.edu]);
+  if (t.baths) parts.push('baths');
+  if (t.barber) parts.push('barber');
+  if (t.health) parts.push(t.health >= 2 ? 'medicus+hospital' : 'medicus or hospital');
   if (t.goods.length) parts.push(t.goods.join(', '));
-  if (t.des > -50) parts.push(`des ${t.des}`);
+  if (t.wine > 1) parts.push(`${t.wine} wine sources`);
+  const prev = i > 0 ? HOUSE_TIERS[i - 1].up : -99;
+  if (prev > -50) parts.push(`des ${prev}`);
   if (t.size > 1) parts.push(`${t.size}x${t.size}`);
   return parts.join(' · ') || 'settlers';
 }

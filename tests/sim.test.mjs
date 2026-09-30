@@ -23,7 +23,7 @@ import { SCENARIOS, sandboxScenario } from '../src/data/scenarios.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { planAction, applyPlan, undoLast, canUndo } from '../src/sim/construction.js';
 import { addBuilding } from '../src/sim/entities.js';
-import { checkTier, expandHouse } from '../src/sim/housing.js';
+import { checkTier, growHouse } from '../src/sim/housing.js';
 import { updateLabor } from '../src/sim/labor.js';
 import { updateWater } from '../src/sim/water.js';
 import { monthlyEconomy, houseMonthlyTax } from '../src/sim/economy.js';
@@ -233,30 +233,32 @@ test('reservoir by the water fills, aqueduct feeds a second one, fountains get w
 });
 
 test('housing tiers: requirement checks behave', () => {
-  const none = { des: 0, water: 0, food: 0, religion: 0, ent: 0, edu: 0, health: 0, goods: [] };
+  const none = { des: 0, water: 0, food: 0, religion: 0, ent: 0, edu: 0, barber: 0, baths: 0, health: 0, goods: [], wine: 0 };
   assert.ok(checkTier(1, none).ok, 'tents need nothing');
   const r2 = checkTier(2, none);
   assert.ok(!r2.ok);
   assert.equal(r2.missing[0].key, 'water');
   assert.ok(checkTier(2, { ...none, water: 1 }).ok);
-  const domus = { des: 7, water: 2, food: 1, religion: 1, ent: 15, edu: 0, health: 0, goods: ['pottery'] };
-  assert.ok(checkTier(6, domus).ok);
-  assert.ok(!checkTier(6, { ...domus, goods: [] }).ok);
+  const domus = { ...none, des: HOUSE_TIERS[8].up, water: 2, food: 1, religion: 1, ent: 20, edu: 1, baths: 1, goods: ['pottery'] };
+  assert.ok(checkTier(9, domus).ok);
+  assert.ok(!checkTier(9, { ...domus, goods: [] }).ok);
+  assert.ok(!checkTier(9, { ...domus, des: HOUSE_TIERS[8].up - 1 }).ok, 'desirability to move up comes from the level below');
+  assert.ok(checkTier(9, { ...domus, des: HOUSE_TIERS[9].down + 1 }, 'stay').ok, 'staying needs only to be above the floor');
 });
 
-test('small houses merge into a 2x2 home', () => {
+test('four Apartment Houses grow into one Tenement', () => {
   const game = newGame();
   const spot = findFree(game, 4, 4);
   const hs = [];
   for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
     const b = addBuilding(game, 'house', spot.x + dx, spot.y + dy);
-    b.house.tier = 6;
+    b.house.tier = 10;
     b.house.pop = 15;
     b.house.food.wheat = 5;
     hs.push(b);
   }
-  const ok = expandHouse(game, hs[0], 2);
-  assert.ok(ok, 'merge succeeded');
+  const ok = growHouse(game, hs[0], 2);
+  assert.ok(ok, 'grew');
   assert.equal(hs[0].size, 2);
   assert.equal(hs[0].house.pop, 60);
   assert.equal(hs[0].house.food.wheat, 20);
@@ -363,7 +365,7 @@ test('a demo city survives two years without errors and grows', () => {
   }
   assert.deepEqual(errors, [], 'no errors logged by the simulation');
   assert.ok(game.city.population > 300, `population ${game.city.population}`);
-  assert.ok(HOUSE_TIERS.length === 13);
+  assert.equal(HOUSE_TIERS.length, 21, 'a vacant lot and 20 levels');
 });
 
 test('campaign scenarios all build a valid game', () => {

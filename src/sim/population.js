@@ -127,14 +127,23 @@ export function updateImmigration(game) {
   }
 }
 
-/** Daily: unhappy citizens pack up and leave. */
+/**
+ * Daily: unhappy citizens pack up and leave, from the humblest homes first.
+ * Patricians (villas and palaces) never leave this way.
+ */
 export function updateEmigration(game) {
   const c = game.city;
   if (c.sentiment >= 25 || c.population < 20) return;
   const chance = (25 - c.sentiment) / 40;
   if (!game.rng.chance(chance)) return;
-  const occupied = [];
-  for (const b of game.buildings.values()) if (b.house && b.house.pop > 0) occupied.push(b);
+  let lowest = Infinity;
+  let occupied = [];
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h || h.pop <= 0 || HOUSE_TIERS[h.tier].patrician || h.tier > lowest) continue;
+    if (h.tier < lowest) { lowest = h.tier; occupied = []; }
+    occupied.push(b);
+  }
   if (occupied.length === 0) return;
   const b = game.rng.pick(occupied);
   const n = Math.min(b.house.pop, game.rng.range(2, 6));
@@ -239,7 +248,8 @@ export function computeSentiment(game) {
   f.wages = (c.wage - CONFIG.BASE_WAGE) * 0.8;
   f.unemployment = c.unemploymentRate > 0.1 ? -Math.min(15, (c.unemploymentRate - 0.1) * 60) : 0;
   f.food = c.population > 60 ? -(1 - c.fedShare) * 18 : 0;
-  f.housing = Math.min(10, Math.max(-4, (c.avgTier - 2) * 2));
+  // Family Tents (2) are neutral; a city averaging Apartment Houses (10) gets the full +10.
+  f.housing = Math.min(10, Math.max(-4, (c.avgTier - 2) * 1.25));
   let moodSum = 0;
   for (const g of GOD_KEYS) moodSum += c.gods[g].mood;
   f.gods = Math.max(-8, Math.min(6, (moodSum / GOD_KEYS.length - 50) * 0.15));

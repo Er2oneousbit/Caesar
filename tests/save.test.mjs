@@ -4,10 +4,11 @@
  * Run:  npm test
  *
  * Covers the packing added in save version 3 (map layers PackBits run-length
- * coded as "pb:<base64>", paths as 16-bit values "u16:<base64>"), that saves
- * from older versions (plain base64 layers, array paths) still load, and that
- * an Uber (256x256) city saves to a size that fits comfortably in browser
- * storage and loads back intact.
+ * coded as "pb:<base64>", paths as 16-bit values "u16:<base64>"), that the
+ * unpacked forms (plain base64 layers, array paths) still load, that saves
+ * from before version 4 (the 20-level housing ladder) are refused with a
+ * readable message, and that an Uber (256x256) city saves to a size that
+ * fits comfortably in browser storage and loads back intact.
  * The basic city round trip is in sim.test.mjs, military state in
  * military.test.mjs.
  * ----------------------------------------------------------------------------
@@ -18,7 +19,7 @@ import assert from 'node:assert/strict';
 
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
-import { serializeGame, deserializeGame, packBits, unpackBits, encodeLayer, decodeLayer, encodeBytes, decodeBytes, encodePath, decodePath } from '../src/core/save.js';
+import { serializeGame, deserializeGame, MIN_SAVE_VERSION, packBits, unpackBits, encodeLayer, decodeLayer, encodeBytes, decodeBytes, encodePath, decodePath } from '../src/core/save.js';
 import { MAP_SIZES } from '../src/world/mapgen.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { newGame } from './helpers.mjs';
@@ -100,14 +101,26 @@ test('save: paths pack to 16-bit values and come back the same', () => {
   assert.throws(() => decodePath('garbage'), /Corrupt path/);
 });
 
-test('save: a version 2 save (plain base64 layers) still loads', () => {
+test('save: saves from before the 20-level housing ladder are refused with a readable message', () => {
+  const game = newGame({ seed: 'old-save' });
+  buildDemoCity(game, { level: 1 });
+  game.runDays(16);
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  assert.equal(data.version, CONFIG.SAVE_VERSION);
+  assert.equal(MIN_SAVE_VERSION, 4);
+  for (const v of [1, 2, 3]) {
+    data.version = v;
+    assert.throws(() => deserializeGame(data), /older version of Colonia \(save v\d\) and cannot be loaded/, `version ${v}`);
+  }
+});
+
+test('save: plain base64 layers and array paths still load', () => {
   const game = newGame({ seed: 'old-save' });
   buildDemoCity(game, { level: 1 });
   game.runDays(16 * 2);
   const data = JSON.parse(JSON.stringify(serializeGame(game)));
   assert.equal(data.version, CONFIG.SAVE_VERSION);
-  // Rewrite it the way version 2 wrote it.
-  data.version = 2;
+  // Rewrite layers and paths the unpacked way (both forms stay readable).
   for (const name of LAYERS) data.map[name] = encodeBytes(decodeLayer(data.map[name], game.map.size));
   for (const w of data.walkers) w.path = decodePath(w.path);
   assert.ok(LAYERS.every((name) => !data.map[name].startsWith('pb:')));

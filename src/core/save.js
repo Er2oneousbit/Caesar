@@ -22,6 +22,9 @@
  *      layers that are mostly runs of the same byte, and long paths cost
  *      about 6 characters a step as JSON numbers. Older saves (plain base64
  *      layers, paths as arrays) load.
+ *   4  the 20-level housing ladder (v0.7): house levels were renumbered and
+ *      homes got new fields, so saves before version 4 are refused with a
+ *      readable message (until 1.0, a release may break older saves).
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -47,6 +50,9 @@ import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario, withDifficulty } from '../data/scenarios.js';
 import { log } from './debug.js';
+
+/** Oldest save version this game can load (4: the 20-level housing ladder). */
+export const MIN_SAVE_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Base64 for Uint8Array (works in browsers and Node 16+)
@@ -137,7 +143,7 @@ export function encodeLayer(bytes) {
   return packed.length < bytes.length * 0.95 ? `pb:${encodeBytes(packed)}` : encodeBytes(bytes);
 }
 
-/** Read a map layer written by encodeLayer (or by older versions: plain base64). */
+/** Read a map layer written by encodeLayer: "pb:" + PackBits, or plain base64 (when that was smaller). */
 export function decodeLayer(str, length) {
   if (typeof str !== 'string') throw new Error('Map layer is not a string');
   if (str.startsWith('pb:')) return unpackBits(decodeBytes(str.slice(3)), length);
@@ -164,7 +170,7 @@ export function encodePath(path) {
   return `u16:${encodeBytes(bytes)}`;
 }
 
-/** Read a path written by encodePath (or by older versions: a plain array, or null). */
+/** Read a path written by encodePath ("u16:" + base64), or a plain array (hand-edited saves), or null. */
 export function decodePath(p) {
   if (p === null || p === undefined) return null;
   if (Array.isArray(p)) return p;
@@ -240,6 +246,7 @@ export function deserializeGame(data, flags = {}) {
   assert(data.format === 'colonia-save', 'this is not a Colonia save file');
   assert(Number.isInteger(data.version), 'missing version');
   if (data.version > CONFIG.SAVE_VERSION) throw new Error(`This save was made by a newer version of the game (save v${data.version}, game supports v${CONFIG.SAVE_VERSION}).`);
+  if (data.version < MIN_SAVE_VERSION) throw new Error(`This save was made by an older version of Colonia (save v${data.version}) and cannot be loaded: homes now have 20 levels. Start a new city.`);
   assert(data.map && data.time && data.city && Array.isArray(data.buildings), 'missing sections');
 
   const scenario = data.scenario && data.scenario.map ? data.scenario : withDifficulty(findScenario(data.scenario?.id), data.difficulty);
@@ -262,7 +269,7 @@ export function deserializeGame(data, flags = {}) {
     nextUnitId: data.nextIds?.unit || 1,
     wallHp: new Map(Array.isArray(data.wallHp) ? data.wallHp : []),
   };
-  // Military state (absent in version 1 saves: Game fills in a fresh one).
+  // Military state: Game fills in a fresh one if a save lacks it.
   if (data.military && typeof data.military === 'object') restore.military = data.military;
   const game = new Game({ scenario, flags: { ...data.flags, ...flags }, restore });
   if (data.cheats) Object.assign(game.cheats, data.cheats);

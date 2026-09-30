@@ -18,6 +18,7 @@
                 month=9 (season: 0 Ianuarius .. 11 December)  weather=rain|storm|snow|cloudy
                 look=market (center on the nearest building of that type or kind)
                 busy=1 (stock markets and book shows, to see shoppers and crowds)
+                ladder=1 (a home of every level, 1-20, set out beside the city, plus a 2x2 block)
 -->
 <canvas id="c"></canvas>
 <script type="module">
@@ -28,6 +29,9 @@
   import { launchInvasion } from '../../src/sim/military.js';
   import { buildDemoHarbor } from '../../src/dev/demoCity.js';
   import { planAction } from '../../src/sim/construction.js';
+  import { addBuilding } from '../../src/sim/entities.js';
+  import { HOUSE_TIERS } from '../../src/data/housing.js';
+  import { Terrain } from '../../src/world/map.js';
 
   const q = new URLSearchParams(location.search);
   const scen = q.get('scenario') === 'sandbox' ? sandboxScenario({ size: 64, type: q.get('maptype') || 'river', seed: q.get('seed') || 'demo' }) : (SCENARIOS.find((s) => s.id === (q.get('scenario') || 'c1')) || SCENARIOS[0]);
@@ -105,6 +109,44 @@
       if (!best || d < best.d) best = { b, d };
     }
     if (best) focus = { x: best.b.x + Math.floor(best.b.size / 2), y: best.b.y + Math.floor(best.b.size / 2) };
+  }
+  // ladder=1: one home of every level in rows by footprint (1x1, 2x2, 3x3,
+  // 4x4) on the nearest open land, trees cleared for the picture.
+  if (q.get('ladder') && focus) {
+    const rows = [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [11, 12, 13, 14], [15, 16, 17, 18], [19, 20, 0]];
+    const W = 21;
+    const H = rows.reduce((n, r) => n + Math.max(...r.map((t) => (t ? HOUSE_TIERS[t].size : 2))) + 1, 0);
+    const { map } = game;
+    const open = (x0, y0) => {
+      for (let y = y0; y < y0 + H; y++) for (let x = x0; x < x0 + W; x++) if (!map.inBounds(x, y) || !map.isFree(x, y)) return false;
+      return true;
+    };
+    let spot = null;
+    for (let y = 1; y < map.h - H - 1; y++) {
+      for (let x = 1; x < map.w - W - 1; x++) {
+        const d = Math.hypot(x + W / 2 - focus.x, y + H / 2 - focus.y);
+        if ((!spot || d < spot.d) && open(x, y)) spot = { x, y, d };
+      }
+    }
+    if (spot) {
+      let y = spot.y;
+      for (const row of rows) {
+        let x = spot.x;
+        let tall = 1;
+        for (const t of row) {
+          const S = t ? HOUSE_TIERS[t].size : 2; // 0: a 2x2 block of Domus homes
+          for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) map.terrain[map.idx(x + dx, y + dy)] = Terrain.GRASS;
+          const b = addBuilding(game, 'house', x, y, S, { quiet: true });
+          b.house.tier = t || 9;
+          b.house.merged = !t;
+          b.house.pop = 1;
+          x += S + 1;
+          tall = Math.max(tall, S);
+        }
+        y += tall + 1;
+      }
+      focus = { x: spot.x + Math.floor(W / 2), y: spot.y + Math.floor(H / 2) };
+    }
   }
   // place=<tool>: preview placing that building on the nearest valid tile.
   let placing = null;

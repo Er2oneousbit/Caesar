@@ -8,10 +8,14 @@
  *   theater       accepts actors
  *   amphitheater  accepts gladiators (or actors)
  *   colosseum     accepts gladiators and beasts
+ *
+ * Every home also gets a city-wide base (0..ENT_BASE_MAX) for how well the
+ * seats of working venues cover the population, averaged over the venue
+ * kinds: a big city needs more venues, not just one of each.
  * ----------------------------------------------------------------------------
  */
 
-import { VENUE_SUPPLIERS } from '../data/buildings.js';
+import { VENUE_SUPPLIERS, VENUE_SEATS, ENT_BASE_MAX } from '../data/buildings.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath } from './movement.js';
 
@@ -64,4 +68,30 @@ export function updateVenue(game, b) {
   // Shows only play when the venue is staffed.
   if (b.efficiency <= 0) return;
   for (const k of ['theater', 'amphitheater', 'colosseum']) if (b.shows[k] > 0) b.shows[k]--;
+}
+
+/**
+ * Daily: the city-wide entertainment base. For each venue kind, the share of
+ * the population its working venues (staffed, shows booked) can seat, capped
+ * at 100%; the average over the kinds, over 5, is the base (0..20).
+ */
+export function updateEntertainmentBase(game) {
+  const c = game.city;
+  const seats = {};
+  for (const k in VENUE_SEATS) seats[k] = 0;
+  for (const b of game.buildings.values()) {
+    if (b.def.kind !== 'venue' || b.efficiency <= 0 || !b.shows) continue;
+    const k = b.def.venue;
+    if (seats[k] === undefined) continue;
+    if (Object.values(b.shows).some((d) => d > 0)) seats[k] += VENUE_SEATS[k];
+  }
+  const kinds = Object.keys(VENUE_SEATS);
+  let sum = 0;
+  const cover = {};
+  for (const k of kinds) {
+    cover[k] = c.population > 0 ? Math.min(100, Math.floor((seats[k] * 100) / c.population)) : 0;
+    sum += cover[k];
+  }
+  c.entCoverage = cover;
+  c.entBase = Math.min(ENT_BASE_MAX, Math.floor(sum / kinds.length / 5));
 }

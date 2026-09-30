@@ -31,7 +31,7 @@ Everything is made from scratch: the art is drawn procedurally in code, the soun
 3. **Water:** a Well lets tents become lean-tos. Later, a Reservoir by a river pipes water to Fountains for better homes.
 4. **Safety:** Prefectures (fire) and Engineer's Posts (collapse) must send walkers past every building.
 5. **Food:** Wheat Farm on meadow → Granary → Market. Market vendors sell door to door.
-6. **Culture and money:** temples, schools, theaters, baths and a Forum (taxes) let homes climb from Tent to Palatium (12 levels).
+6. **Culture and money:** temples, schools, theaters, baths and a Forum (taxes) let homes climb the 20 levels of the original game's housing ladder, from Tent to Imperial Palatium: single homes, then 2x2 insulae and villas, 3x3 villas and 4x4 palaces.
 7. **Click everything.** Every building explains what it is doing, and homes list exactly what they need next.
 8. **Trade** (Trade advisor): open land routes (caravans on the Imperial road) and sea routes (merchant ships to a **Dock** on a river or coast). The empire map shows who trades how.
 9. **Defend:** from mission 4 on, raiders attack. A **Barracks** trains recruits for **forts**: legionaries need weapons (Weaponsmith), archers need arrows (**Fletcher**: timber + iron), cavalry need horses from a **Horse Ranch**, whose breeding herd grows from 2 to 8 mares over time. Add **watchtowers**, **walls** and **gates**, and use **Deploy** to post troops where the raiders will come.
@@ -46,7 +46,7 @@ Seven original missions from a riverside village (*Novum Castrum*, 250 people) t
 
 ### Saving
 
-Games are saved in your browser's **localStorage**: an autosave slot (every 3 months and whenever you leave or hide the page), a quicksave (F5 / F9) and 5 manual slots. Saves are packed (a year-old Uber city is about 300 KB), and the Save/Load menus show how much space they use. Saves belong to that browser and site only, so use *Export to file* or *Copy save data* for backups or to move a city to another computer.
+Games are saved in your browser's **localStorage**: an autosave slot (every 3 months and whenever you leave or hide the page), a quicksave (F5 / F9) and 5 manual slots. Saves are packed (a year-old Uber city is about 300 KB), and the Save/Load menus show how much space they use. Saves belong to that browser and site only, so use *Export to file* or *Copy save data* for backups or to move a city to another computer. Until version 1.0 a new release may not load older saves (v0.7 rebuilt homes on 20 levels, so earlier saves are refused, with a message saying so).
 
 ### A living world
 
@@ -136,7 +136,7 @@ src/
   config.js             EVERY balance knob in one place
   core/                 game.js (simulation orchestrator), rng, events, debug, save
   world/                map layers, procedural map generator, pathfinding
-  data/                 buildings, housing tiers, goods, gods, walkers, scenarios,
+  data/                 buildings, housing levels, goods, gods, walkers, scenarios,
                         difficulty (every difficulty lever in one table)
   sim/                  one file per system: housing, labor, water, risk, economy,
                         market, production, trade (caravans + ships), military,
@@ -151,7 +151,7 @@ src/
                         (writes the notes), instruments.js (synth), music.js (player)
   dev/demoCity.js       builds a sample city through the public construction API
 scripts/                serve.mjs, build.mjs, simulate.mjs, run.ps1, run.sh
-tests/                  *.test.mjs (sim, military, trade, save, sandbox, render, input, music), e2e/smoke.mjs,
+tests/                  *.test.mjs (sim, housing, military, trade, save, sandbox, render, input, music), e2e/smoke.mjs,
                         e2e/screenshots.mjs, e2e/render.html, e2e/artsheet.html,
                         e2e/music.html (listen to each mood, check levels and tuning)
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md

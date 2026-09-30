@@ -9,7 +9,7 @@
 
 import { h, mount, fmt, pct, bar, kv } from './dom.js';
 import { CONFIG } from '../config.js';
-import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_SUPPLIERS, PERFORMER_NAMES } from '../data/buildings.js';
+import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX } from '../data/units.js';
@@ -17,7 +17,7 @@ import { GODS, GOD_KEYS } from '../data/gods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall } from '../world/map.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
-import { venueActive } from '../sim/services.js';
+import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
 import { dockBerth, dockUsed } from '../sim/trade.js';
@@ -38,12 +38,17 @@ export function describeNeed(m) {
     case 'water': return m.need >= 2 ? 'Clean water from a fountain within 4 tiles (fountains need a reservoir).' : 'Access to water: a well within 2 tiles.';
     case 'food': return `${m.need} type${m.need > 1 ? 's' : ''} of food (has ${m.have}). A market vendor must pass by, and the market needs a stocked granary.`;
     case 'religion': return `Priests of ${m.need} different god${m.need > 1 ? 's' : ''} visiting (has ${m.have}). Build temples nearby.`;
-    case 'ent': return `Entertainment ${m.need} (has ${m.have}). Theater 15, amphitheater 25, colosseum 35.`;
-    case 'edu': return ['', 'A school nearby.', 'Both a school and a library nearby.', 'School, library and academy access.'][m.need] + ` (has ${m.have})`;
-    case 'health': return `${m.need} health service${m.need > 1 ? 's' : ''} (has ${m.have}): barber, medicus, thermae, hospital.`;
+    case 'ent': return `Entertainment ${m.need} (has ${m.have}). Entertainers passing by: theater ${VENUE_POINTS.theater}, amphitheater ${VENUE_POINTS.amphitheater} (${VENUE_POINTS.amphitheater + VENUE_BOTH_BONUS.amphitheater} with plays and gladiators), colosseum ${VENUE_POINTS.colosseum} (${VENUE_POINTS.colosseum + VENUE_BOTH_BONUS.colosseum} with gladiators and beasts), plus up to ${ENT_BASE_MAX} when the city's venues have seats for everyone.`;
+    case 'edu': return `${['', 'A school or a library nearby.', 'Both a school and a library nearby.', 'A school, a library and an academy nearby.'][m.need]} (has ${['none', 'one of school and library', 'school and library', 'all three'][m.have]})`;
+    case 'barber': return 'A barber nearby.';
+    case 'baths': return 'Public baths (Thermae) nearby. They need piped water from a reservoir.';
+    case 'health': return m.need >= 2
+      ? `Both a medicus nearby and a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles (has ${m.have === 0 ? 'neither' : m.hospital ? 'the hospital' : 'the medicus'}).`
+      : `A medicus nearby, or a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles.`;
     case 'goods': return `${GOODS[m.good].name} sold by a market vendor (needs a warehouse stocked with ${GOODS[m.good].name.toLowerCase()}).`;
-    case 'des': return `Desirability ${m.need} (now ${m.have}). Gardens, statues, plazas and temples help; industry and storage hurt.`;
-    case 'space': return `Room to grow into a ${m.need}×${m.need} home: neighboring small houses or empty land.`;
+    case 'wine': return `Two sources of wine in the city (has ${m.have}): a working winery, and each open trade route that sells wine while wine is set to import.`;
+    case 'des': return `Desirability ${m.need} (now ${m.have}). Gardens, statues, plazas, temples and grand homes help; humble homes, industry and storage hurt.`;
+    case 'space': return `Room to grow into a ${m.need}×${m.need} home: homes of its level or lower, clear land or gardens beside it.`;
     default: return m.key;
   }
 }
@@ -199,7 +204,7 @@ export class InfoPanel {
     const hs = b.house;
     const tier = HOUSE_TIERS[hs.tier];
     const cap = houseCapacity(hs.tier, b.size);
-    const parts = [this.head(tier.name, `${b.size}×${b.size}`)];
+    const parts = [this.head(tier.name, hs.merged ? `${b.size}×${b.size} block` : `${b.size}×${b.size}`)];
     if (hs.tier === 0 || hs.pop === 0) {
       let text = 'Waiting for settlers.';
       let level = 'warn';
@@ -213,21 +218,26 @@ export class InfoPanel {
       parts.push(kv('Class', tier.patrician ? 'Patricians (do not work)' : 'Plebeians (can work)'));
       // Evolution status
       let status;
-      if (hs.devolving && hs.blocked) {
-        status = h('div', { class: 'status bad' }, h('b', {}, `Will decline to ${HOUSE_TIERS[hs.tier - 1].name} unless it gets:`), h('ul', { class: 'needs' }, hs.blocked.map((m) => h('li', {}, describeNeed(m)))));
+      const fresh = hs.bornDay === g.time.totalDays;
+      if (fresh && hs.devolving && hs.blocked) {
+        status = h('div', { class: 'status warn' }, h('b', {}, 'Split off a bigger home today, with no service visits yet. To keep its level it needs:'), h('ul', { class: 'needs' }, hs.blocked.map((m) => h('li', {}, describeNeed(m)))));
+      } else if (hs.devolving && hs.blocked) {
+        const left = Math.max(1, g.difficulty.devolveDays - hs.devolveDays);
+        status = h('div', { class: 'status bad' }, h('b', {}, `Will decline to ${HOUSE_TIERS[hs.tier - 1].name} in ${left} day${left > 1 ? 's' : ''} unless it gets:`), h('ul', { class: 'needs' }, hs.blocked.map((m) => h('li', {}, describeNeed(m)))));
       } else if (hs.tier >= MAX_TIER) {
         status = h('div', { class: 'status good' }, 'The finest home in the province.');
       } else if (hs.blocked && hs.blocked.length) {
         status = h('div', { class: 'status warn' }, h('b', {}, `To become a ${HOUSE_TIERS[hs.tier + 1].name} it needs:`), h('ul', { class: 'needs' }, hs.blocked.map((m) => h('li', {}, describeNeed(m)))));
       } else {
-        status = h('div', { class: 'status good' }, `All needs met: it will soon become a ${HOUSE_TIERS[hs.tier + 1].name}.`);
+        status = h('div', { class: 'status good' }, `All needs met: it will become a ${HOUSE_TIERS[hs.tier + 1].name} tomorrow.`);
       }
       parts.push(status);
       const lv = hs.levels || {};
       const gods = GOD_KEYS.filter((k) => hs.religion[k] > 0).map((k) => GODS[k].name);
-      const ent = Object.keys(VENUE_POINTS).filter((v) => hs.ent[v] > 0);
+      const ent = Object.keys(VENUE_POINTS).filter((v) => hs.ent[v] > 0).map((v) => (hs.entBoth && hs.entBoth[v] > 0 ? `${v} (both shows)` : v));
+      if (g.city.entBase > 0) ent.push(`city ${g.city.entBase}`);
       const health = [['barber', 'Barber'], ['clinic', 'Medicus'], ['baths', 'Thermae']].filter(([k]) => hs[k] > 0).map(([, n]) => n);
-      if (lv.health > health.length) health.push('Hospital');
+      if (lv.hospital) health.push('Hospital');
       const edu = [['school', 'School'], ['library', 'Library'], ['academy', 'Academy']].filter(([k]) => hs[k] > 0).map(([, n]) => n);
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Services'),
@@ -238,7 +248,7 @@ export class InfoPanel {
         kv('Education', edu.join(', ') || 'None'),
         kv('Health', health.join(', ') || 'None'),
         kv('Goods', HOUSE_GOODS.filter((x) => hs.goods[x] > 0.01).map((x) => GOODS[x].name).join(', ') || 'None'),
-        kv('Desirability', `${hs.des}`),
+        kv('Desirability', hs.tier >= MAX_TIER ? `${hs.des} (falls at ${tier.down})` : `${hs.des} (${tier.up} to move up${hs.tier > 1 ? `, falls at ${tier.down}` : ''})`),
         kv('Taxes', hs.tax > 0 ? `Registered: ~${fmt(houseMonthlyTax(g, hs))} Dn/month` : 'Not registered (needs a Forum nearby)'),
       ));
     }
@@ -293,7 +303,9 @@ export class InfoPanel {
         break;
       case 'venue': {
         const acc = VENUE_SUPPLIERS[def.venue];
-        parts.push(sec('Shows', kv('Entertainment value', `${VENUE_POINTS[def.venue]}`), acc.map((v) => kv(`${PERFORMER_NAMES[v]} shows`, `${b.shows[v]} days left`))));
+        const both = venueHasBoth(b, def.venue);
+        const value = VENUE_POINTS[def.venue] + (both ? VENUE_BOTH_BONUS[def.venue] || 0 : 0);
+        parts.push(sec('Shows', kv('Entertainment value', `${value}${VENUE_BOTH_BONUS[def.venue] ? (both ? ' (both kinds of show)' : ` (${VENUE_POINTS[def.venue] + VENUE_BOTH_BONUS[def.venue]} with both kinds of show)`) : ''}`), acc.map((v) => kv(`${PERFORMER_NAMES[v]} shows`, `${b.shows[v]} days left`))));
         break;
       }
       case 'training': {

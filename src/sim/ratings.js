@@ -15,8 +15,8 @@
 
 import { CONFIG } from '../config.js';
 import { GOD_KEYS } from '../data/gods.js';
-import { VENUE_POINTS } from '../data/buildings.js';
 import { ledgerNet } from './economy.js';
+import { entertainmentScore } from './housing.js';
 
 /** Coverage shares (0..1) of the population for culture services. */
 export function computeCoverage(game) {
@@ -37,9 +37,7 @@ export function computeCoverage(game) {
     if (h.school > 0) school += h.pop;
     if (h.library > 0) library += h.pop;
     if (h.academy > 0) academy += h.pop;
-    let ent = 0;
-    for (const v in VENUE_POINTS) if (h.ent[v] > 0) ent += VENUE_POINTS[v];
-    entPoints += ent * h.pop;
+    entPoints += entertainmentScore(game, h) * h.pop;
     if (h.barber > 0 || h.clinic > 0 || h.baths > 0) health += h.pop;
   }
   const p = Math.max(1, pop);
@@ -48,7 +46,7 @@ export function computeCoverage(game) {
     school: school / p,
     library: library / p,
     academy: academy / p,
-    entertainment: entPoints / p, // average points per resident
+    entertainment: entPoints / p, // average entertainment score per resident
     health: health / p,
   };
 }
@@ -67,12 +65,13 @@ export function updateRatings(game) {
   const tiny = c.population < 100;
 
   // Culture
-  const culture = tiny ? 0 : cov.religion * 25 + Math.min(1, cov.entertainment / 35) * 25 + cov.school * 15 + cov.library * 15 + cov.academy * 12 + (hasSenate ? 8 : 0);
+  const culture = tiny ? 0 : cov.religion * 25 + Math.min(1, cov.entertainment / 40) * 25 + cov.school * 15 + cov.library * 15 + cov.academy * 12 + (hasSenate ? 8 : 0);
   r.culture = approach(r.culture, culture, 4);
 
   // Prosperity
   const net = ledgerNet(c.finance.lastYear);
-  let prosperity = Math.min(1, c.avgTier / 9) * 40;
+  // Full marks for housing quality at an average of level 12 (Insula).
+  let prosperity = Math.min(1, c.avgTier / 12) * 40;
   prosperity += Math.min(15, (c.patricians / Math.max(1, c.population)) * 100);
   prosperity += net > 0 ? 15 : net > -500 ? 5 : 0;
   prosperity += c.unemploymentRate < 0.05 ? 10 : c.unemploymentRate < 0.12 ? 5 : 0;

@@ -314,12 +314,11 @@ test('military state survives save and load', () => {
   copy.runDays(10); // keeps running
 });
 
-test('saves from before the military (version 1) still load', () => {
+test('a save without military state gets a fresh one', () => {
   const game = newGame();
   buildDemoCity(game, { level: 1 });
   game.runDays(20);
   const data = JSON.parse(JSON.stringify(serializeGame(game)));
-  data.version = 1;
   delete data.units;
   delete data.military;
   delete data.wallHp;

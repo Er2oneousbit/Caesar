@@ -16,8 +16,8 @@
 
 import { WaterBits } from '../world/map.js';
 import { GOD_KEYS } from '../data/gods.js';
-import { VENUE_POINTS } from '../data/buildings.js';
 import { FOOD_TYPES } from '../data/goods.js';
+import { educationTier } from '../sim/housing.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
@@ -68,13 +68,14 @@ export const OVERLAYS = [
   {
     key: 'entertainment', name: 'Entertainment',
     show: (b) => b.def.kind === 'venue' || b.def.kind === 'training',
-    house: (b) => Object.keys(VENUE_POINTS).reduce((n, v) => n + (b.house.ent[v] > 0 ? VENUE_POINTS[v] : 0), 0) / 75,
+    // The score the home had at its last daily check (80 = the top level's need).
+    house: (b) => Math.min(1, ((b.house.levels && b.house.levels.ent) || 0) / 80),
     walkers: ['entertainer', 'performer'],
   },
   {
     key: 'education', name: 'Education',
     show: is('school', 'library', 'academy'),
-    house: (b) => ((b.house.school > 0) + (b.house.library > 0) + (b.house.academy > 0)) / 3,
+    house: (b) => educationTier(b.house) / 3,
     walkers: ['teacher', 'librarian', 'scholar'],
   },
   {

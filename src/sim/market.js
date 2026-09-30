@@ -26,22 +26,40 @@ export function houseWantsGood(h, good) {
   return cur.goods.includes(good) || next.goods.includes(good);
 }
 
+/**
+ * Food types a home wants in its pantry: as many as its level, or the next
+ * one, needs (tents need none, but a Family Tent stocks up for a Lean-to).
+ */
+export function foodKindsWanted(h) {
+  if (h.pop <= 0) return 0;
+  return Math.max(HOUSE_TIERS[h.tier].food, HOUSE_TIERS[Math.min(MAX_TIER, h.tier + 1)].food);
+}
+
 /** Vendor visit: hand food and goods from the market to one house. */
 export function vendorSupply(game, market, house) {
   const h = house.house;
   if (!h || h.pop <= 0) return;
   h.lastMarket = game.time.totalDays;
-  // Each food type is topped up to three months of eating, so houses ride
-  // out gaps between vendor visits.
-  const monthly = h.pop * CONFIG.FOOD_PER_PERSON_MONTH;
-  const target = Math.max(1, monthly * 3);
-  for (const f of FOOD_TYPES) {
-    const have = h.food[f];
-    if (have >= target || market.stock[f] <= 0) continue;
-    const give = Math.min(market.stock[f], target - have);
-    market.stock[f] -= give;
-    h.food[f] += give;
-    game.city.foodFlow.sold += give;
+  // A home keeps only the kinds of food its level (or the next) needs, each
+  // topped up to three months of its share of the ration, so it rides out
+  // gaps between vendor visits. Kinds it already has come first, as long as
+  // the market can top them up or the home still has a month of them; then
+  // new kinds the market has, in the order of FOOD_TYPES.
+  const kinds = foodKindsWanted(h);
+  if (kinds > 0) {
+    const monthly = (h.pop * CONFIG.FOOD_PER_PERSON_MONTH) / kinds;
+    const target = Math.max(1, monthly * 3);
+    const held = FOOD_TYPES.filter((f) => h.food[f] > 0.01 && (market.stock[f] > 0 || h.food[f] >= monthly));
+    const fresh = FOOD_TYPES.filter((f) => !held.includes(f) && market.stock[f] > 0);
+    const pick = [...held, ...fresh].slice(0, kinds);
+    for (const f of pick) {
+      const have = h.food[f];
+      if (have >= target || market.stock[f] <= 0) continue;
+      const give = Math.min(market.stock[f], target - have);
+      market.stock[f] -= give;
+      h.food[f] += give;
+      game.city.foodFlow.sold += give;
+    }
   }
   const goodsTarget = Math.max(2, (h.pop / CONFIG.GOODS_PER_HOUSE_PEOPLE) * 3);
   for (const g of HOUSE_GOODS) {

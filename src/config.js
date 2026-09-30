@@ -17,8 +17,8 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.6.2',
-  SAVE_VERSION: 3, // v2 added the military, v3 packed map layers and paths; older saves still load
+  VERSION: '0.7.0',
+  SAVE_VERSION: 4, // v4: the 20-level housing ladder; saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -46,7 +46,8 @@ export const CONFIG = {
   WALKER_SPEED: 0.1, // tiles per tick: 2 tiles a game day (1.2 tiles/s at 1x)
   CART_SPEED: 0.08,
   SERVICE_RADIUS: 2, // walkers serve buildings within this many tiles
-  ACCESS_DAYS: 48, // how long a house "remembers" a service visit
+  ACCESS_DAYS: 96, // how long a house "remembers" a service visit (six months)
+  TAX_ACCESS_DAYS: 48, // how long a tax collector's visit keeps a house registered
   LABOR_ACCESS_DAYS: 24, // grace period: labor access lingers this long after housing disappears
   DEFAULT_ROAM: 26, // tiles a roaming walker travels before heading home
   MAX_WALKERS: 3000,
@@ -64,11 +65,11 @@ export const CONFIG = {
   MARKET_BUYER_LOAD: 400, // units of the main item a market buyer carries back
 
   // --- Housing -------------------------------------------------------------
-  EVOLVE_DELAY_DAYS: 3, // consecutive good days before a house evolves
-  DEVOLVE_DELAY_DAYS: 10, // consecutive bad days before a house devolves
-  DEVOLVE_DES_TOLERANCE: 5, // hysteresis on desirability requirement
+  // Homes move up at once and fall back after game.difficulty.devolveDays bad
+  // days in a row (data/difficulty.js); the ladder itself is data/housing.js.
   FOOD_PER_PERSON_MONTH: 0.25, // units of food eaten per resident per month (a 100-unit load feeds 400 person-months)
   GOODS_PER_HOUSE_PEOPLE: 20, // one unit of each needed good per this many residents per month
+  GOODS_MIDMONTH_DAY: 8, // goods are used up twice a month: at the month's start and on this day
   WORKFORCE_RATIO: 0.32, // share of plebeian residents that can work
   LABOR_RANGE: 40, // a building can hire if occupied housing is within this many road tiles
 

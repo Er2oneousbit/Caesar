@@ -141,22 +141,22 @@ export const BUILDINGS = Object.freeze({
   barber: B({
     name: 'Barber', category: 'health', cost: 25, size: 1, workers: 2, labor: 'healthEdu',
     des: [2, 1, -1, 2], walker: 'barber', spawnDays: 4,
-    desc: 'A shave and the latest gossip. Counts as one health service.',
+    desc: 'A shave and the latest gossip. Homes need a barber from Tenement up.',
   }),
   clinic: B({
     name: 'Medicus', category: 'health', cost: 30, size: 1, workers: 5, labor: 'healthEdu',
     des: [0, 1, 0, 0], walker: 'physician', spawnDays: 4,
-    desc: 'A physician visits homes to treat the sick. Counts as one health service.',
+    desc: 'A physician visits homes to treat the sick. Health care for Apartment Houses and up (a hospital also counts).',
   }),
   baths: B({
     name: 'Thermae', category: 'health', cost: 55, size: 2, workers: 10, labor: 'healthEdu',
     des: [4, 1, -1, 3], walker: 'bather', spawnDays: 4, needsPiped: true,
-    desc: 'Public baths. Need piped water from a reservoir. Counts as one health service.',
+    desc: 'Public baths. Need piped water from a reservoir. Homes need the baths from Merchant House up.',
   }),
   hospital: B({
     name: 'Valetudinarium', category: 'health', kind: 'hospital', cost: 300, size: 3, workers: 30, labor: 'healthEdu',
     des: [-1, 2, 1, 2], fire: 1, damage: 1,
-    desc: 'A hospital serving every home within 12 tiles. Required by the grandest homes.',
+    desc: 'A hospital serving every home within 12 tiles. With a medicus as well, it is the full health care Garden Villas and up need.',
   }),
 
   // --- Religion ------------------------------------------------------------
@@ -212,17 +212,17 @@ export const BUILDINGS = Object.freeze({
   theater: B({
     name: 'Theater', category: 'entertainment', kind: 'venue', venue: 'theater', cost: 50, size: 2, workers: 8, labor: 'entertainment',
     des: [4, 1, -1, 4], walker: 'entertainer', spawnDays: 4,
-    desc: 'Stages plays when actors arrive from an Actor Troupe. Worth 15 entertainment.',
+    desc: 'Stages plays when actors arrive from an Actor Troupe. Worth 10 entertainment to the homes its entertainers pass.',
   }),
   amphitheater: B({
     name: 'Amphitheater', category: 'entertainment', kind: 'venue', venue: 'amphitheater', cost: 110, size: 3, workers: 12, labor: 'entertainment',
     des: [4, 1, -1, 4], walker: 'entertainer', spawnDays: 4,
-    desc: 'Hosts gladiator bouts supplied by a Gladiator School. Worth 25 entertainment.',
+    desc: 'Hosts gladiator bouts (from a Gladiator School) and plays (from an Actor Troupe). Worth 15 entertainment, 20 while it has both.',
   }),
   colosseum: B({
     name: 'Colosseum', category: 'entertainment', kind: 'venue', venue: 'colosseum', cost: 400, size: 5, workers: 25, labor: 'entertainment',
     des: [-3, 2, 1, 6], walker: 'entertainer', spawnDays: 4,
-    desc: 'Grand spectacles with gladiators and beasts from a Menagerie. Worth 35 entertainment.',
+    desc: 'Grand spectacles with gladiators (Gladiator School) and beasts (Menagerie). Worth 20 entertainment, 30 while it has both.',
   }),
   actor_troupe: B({
     name: 'Actor Troupe', category: 'entertainment', kind: 'training', venue: 'theater', cost: 50, size: 2, workers: 5, labor: 'entertainment',
@@ -435,8 +435,31 @@ export function buildingsInCategory(cat) {
   return out;
 }
 
-/** Entertainment points a house gets from each venue type. */
-export const VENUE_POINTS = Object.freeze({ theater: 15, amphitheater: 25, colosseum: 35 });
+/**
+ * Entertainment a home gets from a venue whose entertainer passed by recently
+ * (see entertainmentScore in sim/housing.js).
+ */
+export const VENUE_POINTS = Object.freeze({ theater: 10, amphitheater: 15, colosseum: 20 });
+
+/**
+ * Extra points when the visiting venue had both of its kinds of show booked:
+ * actors and gladiators at an amphitheater, gladiators and beasts at a colosseum.
+ */
+export const VENUE_BOTH_BONUS = Object.freeze({ amphitheater: 5, colosseum: 10 });
+
+/**
+ * The two kinds of show that earn a venue its VENUE_BOTH_BONUS (performer
+ * types, as in `shows`). Theaters only stage plays.
+ */
+export const VENUE_BOTH_SHOWS = Object.freeze({ amphitheater: ['theater', 'amphitheater'], colosseum: ['amphitheater', 'colosseum'] });
+
+/**
+ * City-wide entertainment: people each working venue (staffed, shows booked)
+ * can seat. How well the seats cover the population, averaged over the venue
+ * kinds, gives every home up to ENT_BASE_MAX points on top of its own visits.
+ */
+export const VENUE_SEATS = Object.freeze({ theater: 400, amphitheater: 900, colosseum: 2000 });
+export const ENT_BASE_MAX = 20;
 
 /** Performer display names by venue they train for. */
 export const PERFORMER_NAMES = Object.freeze({ theater: 'Actor', amphitheater: 'Gladiator', colosseum: 'Beast Tamer' });

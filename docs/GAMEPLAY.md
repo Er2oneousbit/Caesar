@@ -33,6 +33,7 @@ Chosen in the Sandbox setup and in every campaign briefing (the menus remember y
 | Size of the Emperor's requests | | | | x1.5 |
 | Months between requests | | | | x0.7 (about 10-18) |
 | Months to deliver a request | 12 | 12 | 12 | 9 |
+| Bad days in a row before a home falls back a level | 6 | 3 | 3 | 3 |
 
 Insane is for veterans: staff the Prefecture and Engineer's Post first (labor priorities), because an unpatrolled building now burns or collapses in about two months instead of three, and plan for roughly twice Normal's army. In winter nothing grows on any farm (crops, pigs, and the Horse Ranch's foals and herd): fields keep their progress and grow again from Martius, workers stay on, and carts still haul the harvest already in store. Games start in Ianuarius, so the first harvest waits for spring; a message warns in October, and the city lives on its granaries (or imports) from December to Februarius. Size farms for about a third more than the city eats (a full Insane wheat farm grows about 576 units a year instead of 768) and keep roughly 0.75 units per citizen in store when winter comes. Winter also costs the Horse Ranch about a quarter of the year's foals and mares, so start it early. The headless simulator shows how a level plays out: `npm run sim -- --difficulty insane --raids occasional --garrison`.
 
@@ -40,30 +41,50 @@ Insane is for veterans: staff the Prefecture and Engineer's Post first (labor pr
 
 A Housing Plot costs 10 Dn. Settlers arrive when the city mood is at least 30, the plot is within 2 tiles of a road, and that road connects to the map entrance. A home uses the nearest road that reaches the entrance, even when an unconnected street runs closer; other buildings use a road touching them, again preferring one that reaches the entrance, so a stray bit of road laid against a building never cuts it off from its workers and walkers.
 
-A home climbs **one level at a time** after 3 consecutive days with everything the next level needs, and falls one level after 10 consecutive days of missing something its current level needs (desirability gets a 5-point grace margin). Residents over the new capacity move out.
+Homes follow the housing ladder of the original game: 20 levels, rebuilt with Colonia's own names and numbers (`src/data/housing.js`).
 
-| # | Level | Size | People/tile | Needs (cumulative) |
-|---|---|---|---|---|
-| 1 | Tent | 1x1 | 5 | settlers |
-| 2 | Lean-to | 1x1 | 7 | well, desirability -12 |
-| 3 | Hut | 1x1 | 9 | 1 food, des -8 |
-| 4 | Cottage | 1x1 | 11 | 1 god, des -4 |
-| 5 | Townhouse | 1x1 | 13 | fountain, entertainment 10, des 2 |
-| 6 | Domus | 1x1 | 15 | pottery, ent 15, des 6 |
-| 7 | Tenement | 2x2 | 16 | 2 foods, school, 1 health, des 10 |
-| 8 | Insula | 2x2 | 18 | furniture, 2 gods, ent 25, 2 health, des 14 |
-| 9 | Upper Insula | 2x2 | 20 | oil, library, ent 35, des 18 |
-| 10 | Villa ★ | 3x3 | 9 | wine, 3 foods, 3 gods, ent 45, 3 health, des 25 |
-| 11 | Grand Villa ★ | 3x3 | 11 | academy, ent 55, des 34 |
-| 12 | Palatium ★ | 3x3 | 13 | 4 gods, hospital (4 health), ent 70, des 45 |
+* **Moving up:** each day a home checks the next level. As soon as it has everything that level needs, and its desirability is at least its own level's `up`, it moves up at once. Never more than one level a day.
+* **Falling back:** a bad day is desirability at or below the level's floor ("Bad at" below), or any need of its own level missing. After **3 bad days in a row** (6 on Easy) it drops one level; any other day resets the count. The info panel says how many days are left. Tents never fall back.
+* **Residents over capacity** (after falling back, or moving up into a Villa, which holds far fewer people than an Insula) leave as homeless and look for room elsewhere, or leave the city if there is none.
+* **Footprints:** levels 1-10 are single tiles, 11-14 are 2x2, 15-18 3x3 and 19-20 4x4. Reaching 11, 15 or 19, a home grows into the bigger square: it tries the square anchored on itself, then shifted up-left, left and up, and takes over homes of its level or lower first, then clear land, and gardens only as a last resort. A home only partly inside the square breaks into single-tile homes, and those left outside carry on (with no service visits yet). No room: the panel says so, and it tries again every day. Leave room, or build housing in bands 2, 3 or 4 deep.
+* **Blocks:** four single-tile homes of the same level, side by side in a square, may join into one 2x2 block (vacant lots count as tents). It is still that level, holds four times the people, and is judged on its best tile. About one tile in three never starts a block (fixed per map), so streets keep some variety.
+* **Splitting:** a 2x2, 3x3 or 4x4 home that falls below its footprint's levels keeps its top-left corner at the smaller size (or another corner, if only that one still has a road within 2 tiles); every other tile becomes an Apartment House. People and goods are shared by the tiles each part covers. A tile with no road within 2 tiles becomes a vacant lot, and its people look for another home.
 
-★ Patricians do not work but pay much higher taxes.
+| # | Level | Size | People | To reach it | Bad at | Tax |
+|---|---|---|---|---|---|---|
+| 1 | Tent | 1x1 | 5/tile | settlers | never | 1 |
+| 2 | Family Tent | 1x1 | 7/tile | des -12, well | -14 | 1 |
+| 3 | Lean-to | 1x1 | 9/tile | des -6, 1 food type | -9 | 1 |
+| 4 | Hut | 1x1 | 11/tile | des -1, 1 god | -4 | 2 |
+| 5 | Cottage | 1x1 | 13/tile | des 3, fountain | 0 | 2 |
+| 6 | Stone Cottage | 1x1 | 14/tile | des 7, entertainment 10 | 4 | 2 |
+| 7 | Townhouse | 1x1 | 16/tile | des 11, school or library | 8 | 3 |
+| 8 | Merchant House | 1x1 | 17/tile | des 15, baths, pottery | 12 | 3 |
+| 9 | Domus | 1x1 | 18/tile | des 19, entertainment 20 | 16 | 3 |
+| 10 | Apartment House | 1x1 | 20/tile | des 23, medicus or hospital, furniture | 20 | 4 |
+| 11 | Tenement | 2x2 | 80 | des 28, school and library, barber, oil, room to grow to 2x2 | 22 | 4 |
+| 12 | Insula | 2x2 | 88 | des 34, 2 food types, entertainment 30 | 31 | 5 |
+| 13 | Villa ★ | 2x2 | 44 | des 40, 2 gods, wine | 37 | 8 |
+| 14 | Garden Villa ★ | 2x2 | 48 | des 45, entertainment 40, medicus and hospital | 41 | 9 |
+| 15 | Peristyle Villa ★ | 3x3 | 99 | des 49, entertainment 45, academy (with school and library), room to grow to 3x3 | 43 | 10 |
+| 16 | Marble Villa ★ | 3x3 | 108 | des 53, 3 food types, 3 gods, entertainment 50 | 49 | 11 |
+| 17 | Mansion ★ | 3x3 | 117 | des 57, entertainment 55, 2 wine sources | 53 | 12 |
+| 18 | Palatium ★ | 3x3 | 126 | des 61, 4 gods, entertainment 60 | 57 | 13 |
+| 19 | Grand Palatium ★ | 4x4 | 192 | des 66, entertainment 70, room to grow to 4x4 | 60 | 15 |
+| 20 | Imperial Palatium ★ | 4x4 | 208 | des 72, entertainment 80 | 68 | 16 |
 
-**Growing bigger:** when a 1x1 home qualifies for level 7 it merges with small neighboring homes or empty land into a 2x2 block (and 2x2 into 3x3 for level 10). Leave room, or place housing in 2-deep and 3-deep bands.
+Needs add up: each level also needs everything the levels below it need. "To reach it" gives the desirability the level below needs to move up. "Bad at" is the floor for a home at that level. ★ Patricians (levels 13 and up) do not work, but pay much higher taxes, and never emigrate.
+
+* **Food:** tents forage and need none. Others eat only as many kinds as their level needs (a quarter unit per person per month, shared between the kinds; when one runs short, the rest comes from other food in the house), and market vendors bring only those kinds, topped up to three months.
+* **Goods** (pottery, furniture, oil, wine) are used up twice a month, and only the ones the level needs. When one runs out, the next day is a bad day.
+* **Wine sources** (levels 17 and up): a working (staffed) winery counts as one, and so does each open trade route that sells wine while wine is set to import.
+* **Education** is a tier: a school or a library, then both, then both and an academy. An academy alone does nothing.
+* **Health:** barber and baths are needs of their own; medical care is a medicus or a hospital (within 12 tiles), then both.
+* **Desirability** is read on the best tile of the home. Humble homes (levels 1-6) are poor neighbors, levels 9 and up good ones, villas and palaces very good. Gardens, statues, temples and plazas lift a block; a big home's best tile is usually on its edge, so decorate around it. Palaces need plazas or large statues.
 
 ## Services (walkers)
 
-Most services are delivered by walkers. A walker serves every building within **2 tiles** of each road tile it steps on, and a home remembers the visit for **48 days**. Roamers walk 22-30 tiles, prefer to go straight, avoid tiles they just walked, and stay within about 13 tiles of their building. Short loops of road around housing blocks are covered far better than long dead ends.
+Most services are delivered by walkers. A walker serves every building within **2 tiles** of each road tile it steps on, and a home remembers the visit for **96 days** (a tax collector's visit, 48). Roamers walk 22-30 tiles, prefer to go straight, avoid tiles they just walked, and stay within about 13 tiles of their building. Short loops of road around housing blocks are covered far better than long dead ends.
 
 | Service | Building | Notes |
 |---|---|---|
@@ -71,10 +92,12 @@ Most services are delivered by walkers. A walker serves every building within **
 | Collapse | Engineer's Post (5) | Engineers reset collapse risk |
 | Religion | Temples (2) | One per god: Jupiter, Ceres, Neptune, Mars, Vesta |
 | Food & goods | Market (5) | Up to two vendors on the streets; the buyer restocks from granaries/warehouses |
-| Education | School (10), Library (20), Academy (30) | |
-| Health | Barber (2), Medicus (5), Thermae (10, needs piped water), Valetudinarium (30, area 12 tiles) | |
-| Entertainment | Theater 15 pts, Amphitheater 25, Colosseum 35 | Each needs performers from a training building: Actor Troupe, Gladiator School, Menagerie |
+| Education | School (10), Library (20), Academy (30) | Tiers: school or library, both, both and an academy |
+| Health | Barber (2), Medicus (5), Thermae (10, needs piped water), Valetudinarium (30, area 12 tiles) | Barber and baths are needs of their own; medicus and hospital make up medical care |
+| Entertainment | Theater 10 pts, Amphitheater 15 (20 with plays and gladiators booked), Colosseum 20 (30 with gladiators and beasts) | Each needs performers from a training building: Actor Troupe, Gladiator School, Menagerie |
 | Taxes | Forum (6), Senate (30) | Only visited homes pay tax |
+
+A home's **entertainment score** is the points of every venue whose entertainer passed by recently, plus a city-wide base of up to 20: for each kind of venue, the share of the population its working venues can seat (theater 400, amphitheater 900, colosseum 2,000 people), averaged over the three kinds and divided by 5. A growing city needs more venues, not just one of each.
 
 Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir.
 
@@ -108,7 +131,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 ## Money
 
 * **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.
-* **Taxes:** at the default 7% rate each resident pays `2 x tier tax level` Dn per year (a Domus resident ~6, an Insula resident ~10, a Palatium resident ~32). The rate scales this linearly. Only homes a tax collector visited pay.
+* **Taxes:** at the default 7% rate each resident pays `2 x the level's tax` Dn per year (a Domus resident ~6, an Insula resident ~10, an Imperial Palatium resident ~32; see the housing table). The rate scales this linearly. Only homes a tax collector visited pay.
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
 * **Trade:** open a route once (Trade advisor), then a caravan or ship comes every 32-56 days. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
 * **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").
@@ -165,7 +188,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 3); older saves still load.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 4). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
 
 ## City mood (sentiment)
 
@@ -177,7 +200,7 @@ Starts from 50 and is recalculated monthly (moving halfway toward the new value)
 | Wages | +0.8 per Dn above 24, -0.8 below |
 | Unemployment | -60 x (rate - 10%), max -15 |
 | Hunger | up to -18 when nobody has food |
-| Housing quality | -4 to +10 by average level |
+| Housing quality | -4 to +10 by average level (+10 at an average of Apartment Houses) |
 | Gods | -8 to +6 by average mood |
 | Festivals | temporary boost |
 | New city | +20 for the first year |
@@ -203,8 +226,8 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 
 ## Ratings and winning
 
-* **Culture:** religion, entertainment, school, library, academy coverage (+ Senate).
-* **Prosperity:** average house level, patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
+* **Culture:** religion, entertainment (full marks at an average score of 40), school, library, academy coverage (+ Senate).
+* **Prosperity:** average house level (full marks at an average of Insulae), patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
 * **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy.
 * **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over). The Emperor asks every 14-26 months (from 150 people) for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 

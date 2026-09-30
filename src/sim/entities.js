@@ -32,6 +32,9 @@ export function newHouseData(variant = 0) {
     // Service access timers (days remaining). >0 means the house has access.
     religion: Object.fromEntries(GOD_KEYS.map((k) => [k, 0])),
     ent: { theater: 0, amphitheater: 0, colosseum: 0 },
+    // Days left of a visit from a venue that had both of its kinds of show
+    // booked (worth extra entertainment, see VENUE_BOTH_BONUS).
+    entBoth: { amphitheater: 0, colosseum: 0 },
     school: 0,
     library: 0,
     academy: 0,
@@ -39,8 +42,9 @@ export function newHouseData(variant = 0) {
     clinic: 0,
     baths: 0,
     tax: 0,
-    evolveDays: 0,
-    devolveDays: 0,
+    devolveDays: 0, // consecutive bad days (the home falls a level after game.difficulty.devolveDays)
+    merged: false, // true = a 2x2 block of four single-tile homes (levels 1-10)
+    bornDay: -1, // day a split or break-up created this home: first checked the day after
     des: 0, // cached desirability
     water: 0, // cached water level 0/1/2
     blocked: null, // why the house cannot evolve (for the info panel)
@@ -216,8 +220,10 @@ export function computeAccessRoad(game, b) {
 /**
  * Register a new building on the map.
  * The caller (construction.js) is responsible for validation and payment.
+ * `quiet`: no 'buildingAdded' event, so the renderer does not raise it out of
+ * the ground (homes split off a bigger home were there all along).
  */
-export function addBuilding(game, type, x, y, size) {
+export function addBuilding(game, type, x, y, size, { quiet = false } = {}) {
   const id = game.nextBuildingId++;
   const b = new Building(id, type, x, y, size);
   const { map } = game;
@@ -234,7 +240,7 @@ export function addBuilding(game, type, x, y, size) {
   b.createdDay = game.time.totalDays;
   game.markDirty('des', 'water');
   map.touch();
-  game.events.emit('buildingAdded', b);
+  if (!quiet) game.events.emit('buildingAdded', b);
   return b;
 }
 
@@ -265,8 +271,17 @@ export function removeBuilding(game, b, reason = 'demolish') {
 
 /** Turn a house's residents into homeless walkers. */
 function evictResidents(game, b) {
-  let people = b.house.pop;
+  const people = b.house.pop;
   b.house.pop = 0;
+  sendHomeless(game, b, people);
+}
+
+/**
+ * `people` who no longer have room (already taken off the house's count)
+ * leave it as homeless walkers and look for another home, or leave the city
+ * if there is none.
+ */
+export function sendHomeless(game, b, people) {
   const start = b.accessRoad >= 0 && game.map.road[b.accessRoad] ? b.accessRoad : -1;
   if (start < 0) {
     game.city.lostCitizens += people;

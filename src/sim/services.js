@@ -13,6 +13,7 @@
  */
 
 import { CONFIG } from '../config.js';
+import { VENUE_BOTH_SHOWS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { spawnWalker } from './entities.js';
 import { startRoaming } from './movement.js';
@@ -62,10 +63,15 @@ function applyEffect(game, effect, w, origin, b) {
       if (h) h[effect] = days;
       break;
     case 'venue':
-      if (h && w.venue) h.ent[w.venue] = days;
+      if (h && w.venue) {
+        h.ent[w.venue] = days;
+        // A venue with both of its kinds of show booked is worth more; the
+        // better visit is kept until it runs out.
+        if (h.entBoth && venueHasBoth(origin, w.venue)) h.entBoth[w.venue] = days;
+      }
       break;
     case 'tax':
-      if (h && h.pop > 0) h.tax = days;
+      if (h && h.pop > 0) h.tax = CONFIG.TAX_ACCESS_DAYS;
       break;
     case 'market':
       if (h && origin) vendorSupply(game, origin, b);
@@ -83,6 +89,13 @@ function roamersOut(game, b, type) {
     if (w && w.type === type) n++;
   }
   return n;
+}
+
+/** Does this venue have both kinds of show it can stage booked right now? */
+export function venueHasBoth(venue, type) {
+  const both = VENUE_BOTH_SHOWS[type];
+  if (!venue || !venue.shows || !both) return false;
+  return both.every((perf) => venue.shows[perf] > 0);
 }
 
 /** Is a venue currently booked with performances? */

@@ -736,7 +736,7 @@ export class Renderer {
         const on = b.house ? 0.1 + hash01(b.id, 7) * 0.5 : 0.05 + hash01(b.id, 7) * 0.2;
         const a = Math.min(1, (lamps - on) / 0.15);
         if (a <= 0) continue;
-        const bright = b.house ? 0.16 + Math.min(12, b.house.tier) * 0.025 : 0.4;
+        const bright = b.house ? 0.16 + b.house.tier * 0.015 : 0.4;
         L.pool(ox + info.cx * k, oy + info.cy * k, tile * (0.9 + b.size * 0.75), a * bright);
         if (windowsToo) {
           const share = b.house ? 0.55 : 0.8;
@@ -909,7 +909,7 @@ export class Renderer {
       this.effects.smoke(wx + (0.99 - 0.34) * HALF_W, wy + (0.99 + 0.34) * HALF_H - 32);
     }
     // Hearth smoke from lived-in homes (only when zoomed in enough to see it).
-    if (b.house && b.house.pop > 0 && b.house.tier >= 3 && b.house.tier <= 9 && this.camera.zoom >= 1 && Math.random() < 0.0015) {
+    if (b.house && b.house.pop > 0 && b.house.tier >= 4 && b.house.tier <= 12 && this.camera.zoom >= 1 && Math.random() < 0.0015) {
       this.effects.smoke(wx + (Math.random() - 0.5) * 8, wy + b.size * HALF_H - 14 - b.size * 10);
     }
     if (kind === 'fountain' && b.hasWater && b.efficiency > 0 && this.motionOn) {

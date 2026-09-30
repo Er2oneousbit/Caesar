@@ -12,11 +12,21 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
 3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
 4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-5. **Classic content still missing**: hippodrome, fishing wharves and shipyards, military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
+5. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
 6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
-7. **The 20-level housing ladder**, after disease and crime, since it rebalances the whole economy.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.7.0)
+
+* **The 20-level housing ladder** of the original game, rebuilt with Colonia's own names and numbers: single-tile homes up to level 10 (four alike, side by side, can join into a 2x2 block), 2x2 insulae and villas, 3x3 villas and palaces, 4x4 palaces. New art for the new levels (Family Tent, Stone Cottage, Merchant House, Apartment House, the 2x2 villas and the 4x4 palaces); the art sheet shows every level and the blocks, and `render.html?ladder=1` sets out one home of every level beside the city
+* **The original's rules for moving up and down**: a home moves up as soon as it qualifies (one level a day) and falls back after 3 bad days in a row, a bad day being a missing need or desirability at its level's floor (each level now has its own floor and ceiling); Easy allows 6 bad days (a new difficulty lever). Growing homes take over homes of their own level or lower, then clear land, then gardens, and break up homes they only partly cover; big homes split when they fall back (keeping a corner that still has a road in reach); residents over capacity look for another home, as when an Insula becomes a Villa
+* **The original's needs**: education and medical care as tiers, barber and baths as needs of their own, two wine sources for the top levels (a staffed winery, and each open route selling wine while wine is set to import), and entertainment as a city-wide base (venue seats against the population) plus the venues whose entertainers passed by, worth more while a venue runs both kinds of show. Tents forage; homes eat and stock only the kinds of food their level needs; goods are used twice a month; a service visit lasts 96 days; emigrants leave the humblest homes first, never villas or palaces
+* **Where the original has a plain bug, Colonia does not copy it**: a 3x3 home broken up by a growing palace keeps all nine tiles (and its people and goods); homes that split share people and goods by the tiles each part covers; market food deliveries top a home up instead of piling a full portion on top; an unstaffed winery is not a wine source
+* Mood and prosperity rescaled to the longer ladder (full marks for housing at an average of Apartment Houses and Insulae); culture needs an average entertainment of 40 for full marks (was 35), since every home now gets the city-wide base
+* Saves from before v0.7 cannot be loaded, and say so (until 1.0 a release may break older saves)
+* Measured (`npm run sim`, demo city, 4 landscapes x 3 seeds x 4 difficulties, 5 years, no raids): population about the same as v0.6.2 (Easy +4%, Normal +5%, Hard flat, Insane +11%), everyone fed where some cities starved (tents forage), a fifth fewer homes moving up and down on Easy and Normal (fewer on Hard and Insane too), prosperity about 3 points lower and culture 1 to 8 higher (a service visit now lasts 96 days, so more homes count as covered); the demo city (wells only, no shows) never gets past level 4 in either version, so the upper ladder was checked with desirability probes of decorated blocks instead. With Colonia's building values a well-decorated block reaches the 2x2 levels with gardens, temples and statues, and the palaces with plazas or large statues
+* 129 unit tests (+26), 65 browser checks (+2)
 
 ## Done (v0.6.2)
 
@@ -128,16 +138,15 @@ Fixes from a review of v0.6:
 12. **Empire map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. Like the original's empire map it covers the whole inland sea (the partners reach from Tarraco to Alexandria). To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), and whether clicking a warband pans the city view to its entry edge.
 13. **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 14. **The original's five gods**: Ceres, Neptune, Mercury, Mars and Venus. Colonia has Jupiter and Vesta in place of Mercury (trade) and Venus (happiness).
-15. **The full 20-level housing ladder**, from small tents to luxury palaces (Colonia has 12 levels).
-16. **Health, Education and Entertainment advisors**, and a **Problems overlay**.
-17. **Triumphal arches**, awarded for battles won.
-18. **Military academy**: trains soldiers who fight better.
-19. **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
-20. **Wolves** on wild land that attack walkers until soldiers clear them.
-21. **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
-22. **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
-23. **Hall of Fame** for the best career scores.
-24. **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.
+15. **Health, Education and Entertainment advisors**, and a **Problems overlay**.
+16. **Triumphal arches**, awarded for battles won.
+17. **Military academy**: trains soldiers who fight better.
+18. **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
+19. **Wolves** on wild land that attack walkers until soldiers clear them.
+20. **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
+21. **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
+22. **Hall of Fame** for the best career scores.
+23. **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.
 
 ## Modernization: from the community engines
 
@@ -227,8 +236,10 @@ Ideas that would change the original's economy or rules; each would come as an o
 
 * **Modern features**: pure quality of life (roadblocks, market special orders, partial warehouse storage, building rotation) is on by default. Changes to the original's rules (supply posts, the global labour pool, everything under "Beyond the original") come as options that default to the original.
 * **Gods**: the original's five, Ceres, Neptune, Mercury, Mars and Venus. Mercury and Venus replace Jupiter and Vesta, and older saves map the old gods' moods over.
-* **Housing**: the original's 20 levels, done after disease and crime.
+* **Housing**: the original's 20 levels, with Colonia's own names and numbers. Done in v0.7, ahead of disease and crime (the owner's call). Where the original has a plain bug, Colonia does not copy it and makes no option of it; behavior that is odd but possibly meant stays as the original had it.
 * **Crime, disease and events**: on at every difficulty, as they always were in the original, and gentler on Easy.
 * **Localization**: not planned.
+* **Saves**: until 1.0 a release may stop loading older saves (always with a readable message).
+* **Version numbers**: after 0.9 comes 0.10; 1.0 only when the owner says the game is ready.
 
 Made with ❤️ from your friendly hacker - er2oneousbit

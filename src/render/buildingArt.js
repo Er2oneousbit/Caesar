@@ -75,8 +75,8 @@ const SHADOW = {
   warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
   prefecture: 0.45,
 };
-/** Shadow length per house tier (tents are low, insulae tall, villas wide but low). */
-const HOUSE_SHADOW = [0, 0.18, 0.22, 0.26, 0.3, 0.45, 0.5, 0.8, 0.95, 1.1, 0.55, 0.6, 0.7];
+/** Shadow length per house level (tents are low, insulae tall, villas wide but low, palaces tall). */
+const HOUSE_SHADOW = [0, 0.18, 0.2, 0.22, 0.26, 0.3, 0.34, 0.45, 0.5, 0.5, 0.65, 0.95, 1.1, 0.5, 0.55, 0.55, 0.6, 0.65, 0.7, 0.85, 0.9];
 
 export function shadowLength(b) {
   if (b.house) return HOUSE_SHADOW[b.house.tier] ?? 0.3;
@@ -241,10 +241,15 @@ function fence(ctx, u0, v0, color = COL.wood) {
   }
 }
 
+/**
+ * A home: `tier` is its level (0 = vacant lot). Levels 1-10 are single-tile
+ * homes (a 2x2 block of them is drawn as four), 11-12 insulae, 13-18 villas
+ * (2x2, then 3x3) and 19-20 palaces (4x4).
+ */
 function houseArt(ctx, S, variant, tier) {
   const native = tier === 0 ? 1 : HOUSE_TIERS[tier].size;
   if (S > native && native === 1) {
-    // A big footprint at a small tier: a cluster of small homes.
+    // A 2x2 block of single-tile homes: four homes, each with its own look.
     for (let s = 0; s <= 2 * (S - 1); s++) {
       for (let i = 0; i < S; i++) {
         const j = s - i;
@@ -259,9 +264,13 @@ function houseArt(ctx, S, variant, tier) {
     return;
   }
   if (native === 1) { smallHouse(ctx, variant, tier); return; }
-  if (tier <= 9) { insulaArt(ctx, S, variant, tier); return; }
-  villaArt(ctx, S, variant, tier);
+  if (tier <= 12) { insulaArt(ctx, S, variant, tier === 12); return; }
+  if (tier <= 18) { villaArt(ctx, S, variant, tier - 13); return; }
+  palaceArt(ctx, S, variant, tier - 19);
 }
+
+/** Awning colors for shop fronts. */
+const AWNINGS = ['#b8573a', '#5d7fa3', '#a38b3d', '#7a9c5a'];
 
 function smallHouse(ctx, variant, tier) {
   const wall = houseWall(variant);
@@ -287,6 +296,7 @@ function smallHouse(ctx, variant, tier) {
       return;
     }
     case 1: {
+      // Tent
       quad(ctx, 0.1, 0.1, 0.9, 0.9, 0, '#a7925f');
       const cloth = ['#e9dcc0', '#d9c7a3', '#efe6d2', '#cdb894'][variant % 4];
       gableRoof(ctx, 0.18, 0.22, 0.58, 0.46, 0, 13, cloth, 'u', 0);
@@ -302,6 +312,30 @@ function smallHouse(ctx, variant, tier) {
       return;
     }
     case 2: {
+      // Family Tent: a big tent, a second one beside it, an awning over the
+      // cooking place and a water jar from the well.
+      quad(ctx, 0.07, 0.07, 0.93, 0.93, 0, '#a58f5c');
+      const cloth = ['#e9dcc0', '#d9c7a3', '#efe6d2', '#cdb894'][variant % 4];
+      gableRoof(ctx, 0.12, 0.14, 0.54, 0.46, 0, 14, cloth, 'u', 0);
+      poly(ctx, [P(0.66, 0.26), P(0.66, 0.46), P(0.66, 0.36, 9)], '#4b3a28');
+      gableRoof(ctx, 0.6, 0.12, 0.3, 0.34, 0, 10, shade(cloth, -0.1), 'v', 0);
+      // awning: a sheet on two poles, sloping to the front
+      for (const u of [0.2, 0.58]) {
+        const [x, y] = P(u, 0.86);
+        ctx.fillStyle = COL.woodDark;
+        ctx.fillRect(x - 0.5, y - 7, 1, 7);
+      }
+      poly(ctx, [P(0.18, 0.64, 10), P(0.6, 0.64, 10), P(0.6, 0.88, 7), P(0.18, 0.88, 7)], shade(cloth, alt ? -0.18 : 0.04), shade(cloth, -0.4), 0.5);
+      const [fx, fy] = P(0.38, 0.78);
+      ctx.fillStyle = '#6b5f52';
+      ctx.fillRect(fx - 2, fy - 1, 4, 2);
+      ctx.fillStyle = '#3d3630';
+      ctx.fillRect(fx - 1.2, fy - 3.2, 2.4, 2.2); // cooking pot
+      jar(ctx, 0.84, 0.72, '#8a6a4a');
+      return;
+    }
+    case 3: {
+      // Lean-to
       quad(ctx, 0.1, 0.1, 0.9, 0.9, 0, '#a08a5c');
       box(ctx, 0.2, 0.22, 0.58, 0.5, 0, 9, alt ? '#7d5431' : COL.wood);
       // mono-pitch plank roof
@@ -325,7 +359,8 @@ function smallHouse(ctx, variant, tier) {
       }
       return;
     }
-    case 3: {
+    case 4: {
+      // Hut
       quad(ctx, 0.08, 0.08, 0.92, 0.92, 0, '#a59067');
       box(ctx, 0.18, 0.2, 0.64, 0.6, 0, 10, alt ? '#bfa276' : COL.mud);
       hipRoof(ctx, 0.18, 0.2, 0.64, 0.6, 10, 9, alt ? '#b8954c' : COL.thatch);
@@ -339,7 +374,8 @@ function smallHouse(ctx, variant, tier) {
       }
       return;
     }
-    case 4: {
+    case 5: {
+      // Cottage
       quad(ctx, 0.06, 0.06, 0.94, 0.94, 0, '#b3a27a');
       box(ctx, 0.16, 0.16, 0.68, 0.66, 0, 12, wall);
       gableRoof(ctx, 0.16, 0.16, 0.68, 0.66, 12, 9, ROOFS[pal], variant % 2 ? 'u' : 'v');
@@ -349,7 +385,26 @@ function smallHouse(ctx, variant, tier) {
       if (!alt) jar(ctx, 0.9, 0.55, '#c7643e');
       return;
     }
-    case 5: {
+    case 6: {
+      // Stone Cottage: dressed stone walls, a tiled roof, a chimney and a
+      // walled herb garden (or a fruit tree).
+      quad(ctx, 0.05, 0.05, 0.95, 0.95, 0, '#b5a77f');
+      const stone = alt ? '#b9ae98' : COL.stone;
+      box(ctx, 0.14, 0.14, 0.62, 0.6, 0, 14, stone);
+      gableRoof(ctx, 0.14, 0.14, 0.62, 0.6, 14, 9, ROOFS[pal], variant % 2 ? 'v' : 'u');
+      box(ctx, 0.56, 0.24, 0.1, 0.1, 18, 9, COL.stoneDark);
+      door(ctx, 'left', 0.14, 0.14, 0.76, 0.74, 0, 0.3, DOORS[pal]);
+      windows(ctx, 'right', 0.14, 0.14, 0.76, 0.74, 0, 1, 2, '#4a3a2a', { z: 5, h: 4, shutters: SHUTTERS[(pal + alt) % 4] });
+      if (alt) {
+        box(ctx, 0.8, 0.14, 0.06, 0.72, 0, 3, COL.stoneDark, { plain: true });
+        for (let k = 0; k < 3; k++) { const [x, y] = P(0.88, 0.3 + k * 0.2); ctx.fillStyle = '#5f9a48'; ctx.fillRect(x - 1.2, y - 2, 2.4, 2); }
+      } else {
+        tree(ctx, 0.86, 0.84, 0.42, '#4f8a3c', '#6b4a2a', variant);
+      }
+      return;
+    }
+    case 7: {
+      // Townhouse
       quad(ctx, 0.05, 0.05, 0.95, 0.95, 0, COL.paving);
       box(ctx, 0.12, 0.12, 0.76, 0.74, 0, 21, wall);
       hipRoof(ctx, 0.12, 0.12, 0.76, 0.74, 21, 9, ROOFS[alt ? (pal + 2) % 4 : 0]);
@@ -357,7 +412,21 @@ function smallHouse(ctx, variant, tier) {
       windows(ctx, 'right', 0.12, 0.12, 0.88, 0.86, 0, 2, 2, '#4a3a2a', { z: 5, h: 4, gap: 9, shutters: alt ? null : SHUTTERS[pal] });
       return;
     }
-    default: {
+    case 8: {
+      // Merchant House: a shop on the ground floor, the family above.
+      quad(ctx, 0.04, 0.04, 0.96, 0.96, 0, COL.paving);
+      box(ctx, 0.1, 0.1, 0.78, 0.74, 0, 24, wall);
+      hipRoof(ctx, 0.1, 0.1, 0.78, 0.74, 24, 9, ROOFS[(pal + 1) % 4]);
+      windows(ctx, 'left', 0.1, 0.1, 0.88, 0.84, 0, 1, 3, '#4a3a2a', { z: 14, h: 4, flowers: alt === 0 });
+      windows(ctx, 'right', 0.1, 0.1, 0.88, 0.84, 0, 1, 2, '#4a3a2a', { z: 14, h: 4, shutters: alt ? SHUTTERS[pal] : null });
+      poly(ctx, [P(0.2, 0.84, 1), P(0.72, 0.84, 1), P(0.72, 0.84, 9), P(0.2, 0.84, 9)], '#3a2c20');
+      poly(ctx, [P(0.16, 0.84, 11), P(0.76, 0.84, 11), P(0.76, 0.98, 7.5), P(0.16, 0.98, 7.5)], AWNINGS[pal], shade(AWNINGS[pal], -0.4), 0.5);
+      door(ctx, 'right', 0.1, 0.1, 0.88, 0.84, 0, 0.62, DOORS[pal], 0.14, 8);
+      jar(ctx, 0.84, 0.93, '#c7643e');
+      if (alt) jar(ctx, 0.12, 0.92, '#b8683f');
+      return;
+    }
+    case 9: {
       // Domus: L-shaped house around a tiny courtyard
       quad(ctx, 0.04, 0.04, 0.96, 0.96, 0, COL.paving);
       box(ctx, 0.08, 0.08, 0.84, 0.36, 0, 17, wall);
@@ -369,13 +438,37 @@ function smallHouse(ctx, variant, tier) {
       windows(ctx, 'right', 0.58, 0.44, 0.92, 0.92, 0, 1, 2, '#4a3a2a', { z: 5, h: 4, shutters: alt ? SHUTTERS[pal] : null, flowers: !alt });
       door(ctx, 'left', 0.58, 0.44, 0.92, 0.92, 0, 0.5, DOORS[pal]);
       if (alt) jar(ctx, 0.5, 0.9, '#b8683f');
+      return;
+    }
+    default: {
+      // Apartment House: a narrow three-storey block with a shop below.
+      const a = 0.1;
+      const b = 0.9;
+      const ochre = ['#d6ac6b', '#dcb77e', '#cfa262', '#e0bf88'][pal];
+      quad(ctx, 0.03, 0.03, 0.97, 0.97, 0, COL.paving);
+      box(ctx, a, a, b - a, b - a, 0, 32, ochre);
+      hipRoof(ctx, a, a, b - a, b - a, 32, 7, COL.terra, 0.05);
+      windows(ctx, 'left', a, a, b, b, 0, 2, 2, '#3f3126', { z: 13, h: 4.5, gap: 10, shutters: alt ? SHUTTERS[pal] : null });
+      windows(ctx, 'right', a, a, b, b, 0, 2, 2, '#3f3126', { z: 13, h: 4.5, gap: 10, flowers: !alt });
+      poly(ctx, [P(0.22, b, 2), P(0.62, b, 2), P(0.62, b, 8), P(0.22, b, 8)], '#3a2c20');
+      poly(ctx, [P(0.2, b, 10), P(0.64, b, 10), P(0.64, b + 0.12, 7), P(0.2, b + 0.12, 7)], AWNINGS[(pal + 1) % 4]);
+      door(ctx, 'right', a, a, b, b, 0, 0.5, DOORS[pal], 0.14, 7);
+      if (alt) {
+        // a wooden balcony along the right face
+        ctx.strokeStyle = COL.woodDark;
+        ctx.lineWidth = 0.8;
+        const p = P(b + 0.06, a + 0.1, 21);
+        const q = P(b + 0.06, b - 0.1, 21);
+        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      }
     }
   }
 }
 
-function insulaArt(ctx, S, variant, tier) {
-  const floors = tier === 7 ? 3 : tier === 8 ? 4 : 5;
-  const colors = tier === 9 ? ['#e2b9a1', '#e8c4a8', '#dcae96', '#e9cdb4'] : ['#d6ac6b', '#dcb77e', '#cfa262', '#e0bf88'];
+/** Tenement (4 floors, balconies) and Insula (5 floors, pink, roof garden). */
+function insulaArt(ctx, S, variant, grand) {
+  const floors = grand ? 5 : 4;
+  const colors = grand ? ['#e2b9a1', '#e8c4a8', '#dcae96', '#e9cdb4'] : ['#d6ac6b', '#dcb77e', '#cfa262', '#e0bf88'];
   const wall = colors[variant % 4];
   const h = floors * 10 + 2;
   const a = 0.12;
@@ -387,7 +480,7 @@ function insulaArt(ctx, S, variant, tier) {
   const cols = Math.round(S * 3);
   const alt = (variant >> 2) & 1;
   windows(ctx, 'left', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10, shutters: alt ? SHUTTERS[variant % 4] : null });
-  windows(ctx, 'right', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10, flowers: alt === 0 && tier >= 8 });
+  windows(ctx, 'right', a, a, b, b, 0, floors - 1, cols, '#3f3126', { z: 14, h: 4.5, gap: 10, flowers: alt === 0 });
   if (alt) {
     // washing hung out on a line across the right face
     const z = 10 * (floors - 1) + 9;
@@ -406,27 +499,24 @@ function insulaArt(ctx, S, variant, tier) {
     }
   }
   // ground floor shops with awnings
-  const awn = ['#b8573a', '#5d7fa3', '#a38b3d', '#7a9c5a'];
   for (let k = 0; k < cols; k++) {
     const t0 = (k + 0.15) / cols;
     const t1 = (k + 0.85) / cols;
     const u0 = a + (b - a) * t0;
     const u1 = a + (b - a) * t1;
     poly(ctx, [P(u0, b, 3), P(u1, b, 3), P(u1, b, 8), P(u0, b, 8)], '#3a2c20');
-    poly(ctx, [P(u0, b, 10), P(u1, b, 10), P(u1, b + 0.12, 7), P(u0, b + 0.12, 7)], awn[(k + variant) % 4]);
+    poly(ctx, [P(u0, b, 10), P(u1, b, 10), P(u1, b + 0.12, 7), P(u0, b + 0.12, 7)], AWNINGS[(k + variant) % 4]);
   }
-  if (tier >= 8) {
-    // wooden balconies along the right face
-    ctx.strokeStyle = COL.woodDark;
-    ctx.lineWidth = 0.8;
-    for (let f = 1; f < floors - 1; f++) {
-      const z = 10 * f + 11;
-      const p = P(b + 0.06, a + 0.1, z);
-      const q = P(b + 0.06, b - 0.1, z);
-      ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-    }
+  // wooden balconies along the right face
+  ctx.strokeStyle = COL.woodDark;
+  ctx.lineWidth = 0.8;
+  for (let f = 1; f < floors - 1; f++) {
+    const z = 10 * f + 11;
+    const p = P(b + 0.06, a + 0.1, z);
+    const q = P(b + 0.06, b - 0.1, z);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
   }
-  if (tier === 9) {
+  if (grand) {
     // roof garden
     for (let k = 0; k < 3; k++) {
       const [x, y] = P(a + 0.4 + k * 0.35, a + 0.35 + (k % 2) * 0.3, h + 3);
@@ -436,26 +526,46 @@ function insulaArt(ctx, S, variant, tier) {
   }
 }
 
-function villaArt(ctx, S, variant, tier) {
-  const wall = tier === 12 ? COL.marble : houseWall(variant);
-  const roof = tier === 12 ? '#a8513a' : ROOFS[variant % 2 ? 2 : 0];
+/**
+ * Villas around a courtyard with a pool. `grade` 0-1 are the 2x2 Villa and
+ * Garden Villa, 2-5 the 3x3 Peristyle Villa, Marble Villa, Mansion and
+ * Palatium: marble walls from grade 3, taller halls, more columns, gold
+ * accents from grade 4 and a dome on the Palatium.
+ */
+function villaArt(ctx, S, variant, grade) {
+  const small = S < 3;
+  const marble = grade >= 3;
+  const wall = marble ? COL.marble : houseWall(variant);
+  const roof = grade >= 4 ? '#a8513a' : ROOFS[variant % 2 ? 2 : 0];
   const alt = (variant >> 2) & 1;
   quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#7fa956');
-  // garden paths
+  // garden path
   quad(ctx, S * 0.52, S * 0.52, S * 0.6, S - 0.1, 0, COL.paving);
   // back wing
-  const wingH = tier >= 11 ? 24 : 16;
-  box(ctx, 0.12, 0.12, S - 0.24, 0.85, 0, wingH, wall);
-  gableRoof(ctx, 0.12, 0.12, S - 0.24, 0.85, wingH, 9, roof, 'u');
+  const d = small ? 0.7 : 0.85;
+  const wingH = small ? (grade >= 1 ? 17 : 14) : grade >= 3 ? 24 : 16;
+  box(ctx, 0.12, 0.12, S - 0.24, d, 0, wingH, wall);
+  gableRoof(ctx, 0.12, 0.12, S - 0.24, d, wingH, small ? 7 : 9, roof, 'u');
   // side wing
-  box(ctx, 0.12, 0.97, 0.85, S - 1.3, 0, 16, shade(wall, -0.03));
-  gableRoof(ctx, 0.12, 0.97, 0.85, S - 1.3, 16, 8, shade(roof, -0.05), 'v');
+  const sideH = small ? 12 : 16;
+  box(ctx, 0.12, 0.12 + d, d, S - 0.45 - d, 0, sideH, shade(wall, -0.03));
+  gableRoof(ctx, 0.12, 0.12 + d, d, S - 0.45 - d, sideH, small ? 6 : 8, shade(roof, -0.05), 'v');
   // courtyard pool
-  const pool = tier >= 11 ? 0.7 : 0.5;
-  quad(ctx, S * 0.62 - pool / 2, S * 0.5 - pool / 2 + 0.2, S * 0.62 + pool / 2, S * 0.5 + pool / 2 + 0.2, 0, '#e4dccb');
-  quad(ctx, S * 0.62 - pool / 2 + 0.06, S * 0.5 - pool / 2 + 0.26, S * 0.62 + pool / 2 - 0.06, S * 0.5 + pool / 2 + 0.14, 0.5, COL.water);
+  const pool = small ? 0.36 : grade >= 3 ? 0.7 : 0.5;
+  const pu = S * 0.62;
+  const pv = S * 0.5 + (small ? 0.25 : 0.2);
+  quad(ctx, pu - pool / 2, pv - pool / 2, pu + pool / 2, pv + pool / 2, 0, '#e4dccb');
+  quad(ctx, pu - pool / 2 + 0.06, pv - pool / 2 + 0.06, pu + pool / 2 - 0.06, pv + pool / 2 - 0.06, 0.5, COL.water);
   // peristyle columns along the courtyard edge
-  colonnade(ctx, 1.05, 1.02, S - 0.15, 1.02, tier >= 11 ? 6 : 4, 0, 14, COL.marble, 1.6);
+  const cu = 0.12 + d + 0.08;
+  const cv = 0.12 + d + 0.05;
+  colonnade(ctx, cu, cv, S - 0.15, cv, small ? 3 : grade >= 3 ? 6 : 4, 0, small ? 11 : 14, COL.marble, small ? 1.3 : 1.6);
+  if (grade === 1) {
+    // Garden Villa: flower beds and a fruit tree in the court
+    quad(ctx, S - 0.55, 1.0, S - 0.15, 1.3, 0, '#5d8a3e');
+    for (let k = 0; k < 3; k++) { const [x, y] = P(S - 0.5 + k * 0.14, 1.18); ctx.fillStyle = k % 2 ? '#d9534f' : '#f0c24a'; ctx.fillRect(x - 0.8, y - 1.6, 1.6, 1.4); }
+    tree(ctx, S - 0.35, S - 0.75, 0.5, '#4f8a3c', '#6b4a2a', variant + 3);
+  }
   if (alt) {
     // clipped hedges along the front and a statue in the garden
     box(ctx, 1.05, S - 0.2, S - 1.2, 0.12, 0, 4, '#4f7a3a', { top: '#5f8f46' });
@@ -465,13 +575,21 @@ function villaArt(ctx, S, variant, tier) {
     ctx.fillStyle = '#ece6d8';
     ctx.fillRect(sx - 1.2, sy - 10, 2.4, 7);
     ctx.beginPath(); ctx.arc(sx, sy - 11, 1.6, 0, Math.PI * 2); ctx.fill();
-    cypress(ctx, 1.2, S - 0.35, 0.75);
+    cypress(ctx, 1.2, S - 0.35, small ? 0.6 : 0.75);
   } else {
-    cypress(ctx, S - 0.3, S - 0.35, 0.8);
-    tree(ctx, 1.25, S - 0.3, 0.7, '#4f8a3c', '#6b4a2a', variant);
+    cypress(ctx, S - 0.3, S - 0.35, small ? 0.65 : 0.8);
+    tree(ctx, 1.25, S - 0.3, small ? 0.55 : 0.7, '#4f8a3c', '#6b4a2a', variant);
   }
-  if (tier === 12) {
-    // dome + golden accents on the main wing
+  if (grade === 4) {
+    // Mansion: gilded finials on the gable ends of the hall
+    for (const u of [0.1, S - 0.14]) {
+      const [x, y] = P(u, 0.12 + d / 2, wingH + 9);
+      ctx.fillStyle = COL.gold;
+      ctx.fillRect(x - 1, y - 4, 2, 4);
+    }
+  }
+  if (grade >= 5) {
+    // Palatium: a dome and golden accents on the main wing
     const [x, y] = P(S * 0.5, 0.55, wingH + 8);
     ctx.fillStyle = '#e9e4d8';
     ctx.beginPath(); ctx.ellipse(x, y, 13, 7, 0, Math.PI, 0); ctx.fill();
@@ -479,7 +597,82 @@ function villaArt(ctx, S, variant, tier) {
     ctx.beginPath(); ctx.ellipse(x, y, 13, 3, 0, 0, Math.PI); ctx.fill();
     ctx.fillStyle = COL.gold;
     ctx.fillRect(x - 1, y - 11, 2, 4);
-    colonnade(ctx, 0.2, 1.02, 0.9, 1.02, 4, 0, 18, COL.marble, 1.6);
+  }
+  if (grade >= 4) colonnade(ctx, 0.2, cv, 0.9, cv, 4, 0, 18, COL.marble, 1.6);
+}
+
+/**
+ * Palaces (4x4): a domed hall across the back, a long wing on the left, a
+ * paved court with colonnades, a fountain pool and statues. `grade` 1 (the
+ * Imperial Palatium) adds gilding, a larger dome and a second fountain.
+ */
+function palaceArt(ctx, S, variant, grade) {
+  const alt = (variant >> 2) & 1;
+  const wall = COL.marble;
+  const roof = grade ? '#9c4a36' : '#a8513a';
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#7fa956');
+  quad(ctx, 1.15, 1.25, S - 0.2, S - 0.2, 0, COL.paving);
+  // hall across the back
+  const hd = 1.0;
+  const hallH = grade ? 34 : 30;
+  box(ctx, 0.12, 0.12, S - 0.24, hd, 0, hallH, wall);
+  gableRoof(ctx, 0.12, 0.12, S - 0.24, hd, hallH, 11, roof, 'u');
+  windows(ctx, 'right', 0.12, 0.12, S - 0.12, 0.12 + hd, 0, 2, 2, '#4a3a2a', { z: 8, h: 6, gap: 12 });
+  // long wing on the left
+  const wingH = grade ? 24 : 22;
+  box(ctx, 0.12, 0.12 + hd, 0.9, S - 0.45 - hd, 0, wingH, shade(wall, -0.03));
+  gableRoof(ctx, 0.12, 0.12 + hd, 0.9, S - 0.45 - hd, wingH, 9, shade(roof, -0.05), 'v');
+  windows(ctx, 'left', 0.12, 0.12 + hd, 1.02, S - 0.33, 0, 1, 2, '#4a3a2a', { z: 8, h: 6 });
+  // dome on the hall
+  const [x, y] = P(S * 0.52, 0.62, hallH + 10);
+  const r = grade ? 18 : 15;
+  ctx.fillStyle = '#ece7db';
+  ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.55, 0, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#d6cfbf';
+  ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.22, 0, 0, Math.PI); ctx.fill();
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(x - 1.2, y - r * 0.55 - 5, 2.4, 5);
+  if (grade) {
+    ctx.fillStyle = shade(COL.gold, -0.1);
+    ctx.fillRect(x - r, y - 1, r * 2, 1.6); // gilded ring at the dome's foot
+  }
+  // colonnades facing the court
+  colonnade(ctx, 1.2, 1.2, S - 0.2, 1.2, 8, 0, 18, COL.marble, 1.7);
+  colonnade(ctx, 1.1, 1.45, 1.1, S - 0.4, 5, 0, 16, COL.marble, 1.6);
+  // fountain pool in the court
+  const pu = S * 0.62;
+  const pv = S * 0.62;
+  const pool = grade ? 1.0 : 0.85;
+  quad(ctx, pu - pool / 2, pv - pool / 2, pu + pool / 2, pv + pool / 2, 0, '#e4dccb');
+  quad(ctx, pu - pool / 2 + 0.07, pv - pool / 2 + 0.07, pu + pool / 2 - 0.07, pv + pool / 2 - 0.07, 0.5, COL.water);
+  // garden beds either side of the pool
+  for (const [u0, v0, u1, v1] of [[1.45, pv - 0.3, pu - pool / 2 - 0.15, pv + 0.3], [pu - 0.3, 1.5, pu + 0.3, pv - pool / 2 - 0.15]]) {
+    quad(ctx, u0, v0, u1, v1, 0, '#5d8a3e');
+    for (let k = 0; k < 3; k++) {
+      const [bx, by] = P(u0 + ((u1 - u0) * (k + 0.5)) / 3, v0 + ((v1 - v0) * (k + 0.5)) / 3);
+      ctx.fillStyle = (k + variant) % 3 ? '#4f7a3a' : '#d9534f';
+      ctx.beginPath(); ctx.arc(bx, by - 1.6, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  const [fx, fy] = P(pu, pv, 1);
+  ctx.fillStyle = COL.marble;
+  ctx.fillRect(fx - 1.5, fy - 7, 3, 7);
+  ctx.fillStyle = grade ? COL.gold : '#d6cfbf';
+  ctx.fillRect(fx - 3, fy - 8, 6, 1.6);
+  // statues on the court corners and cypresses along the front
+  for (const [u, v] of [[S - 0.45, 1.55], [1.5, S - 0.45]]) {
+    const [sx, sy] = P(u, v);
+    ctx.fillStyle = COL.stone;
+    ctx.fillRect(sx - 2.5, sy - 3, 5, 3);
+    ctx.fillStyle = grade ? COL.gold : '#ece6d8';
+    ctx.fillRect(sx - 1.2, sy - 10, 2.4, 7);
+    ctx.beginPath(); ctx.arc(sx, sy - 11, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+  if (alt) {
+    box(ctx, 1.3, S - 0.18, S - 1.5, 0.1, 0, 4, '#4f7a3a', { top: '#5f8f46' });
+  } else {
+    cypress(ctx, S - 0.3, S - 0.3, 0.85);
+    cypress(ctx, 0.35, S - 0.3, 0.8);
   }
 }
 

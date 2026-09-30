@@ -10,8 +10,9 @@
  *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
  *      (spreads work evenly across the day instead of spiking at midnight)
- *   4. on a new day:   labor, water, desirability, immigration, fires, trade,
- *                      raid progress
+ *   4. on a new day:   labor, water, desirability, city stats, entertainment
+ *                      base, wine sources, mid-month goods use, immigration,
+ *                      fires, trade, raid progress
  *   5. on a new month: consumption, finances, army pay, raid warnings,
  *                      mood, religion, ratings, Emperor, farm season notice
  *   6. on a new year:  tribute, ledger rollover, trade quotas
@@ -28,10 +29,10 @@ import { BUILDINGS } from '../data/buildings.js';
 import { GameTime } from '../sim/time.js';
 import { computeAccessRoad } from '../sim/entities.js';
 import { updateWalkers } from '../sim/walkers.js';
-import { updateHouse, consumeHouse } from '../sim/housing.js';
+import { updateHouse, consumeHouse, useGoods, updateWineSources } from '../sim/housing.js';
 import { updateProducer, updateWorkshop, updateWarehouseSupply, farmSeasonNotice } from '../sim/production.js';
 import { updateMarketBuyer } from '../sim/market.js';
-import { updateTraining, updateVenue } from '../sim/entertainment.js';
+import { updateTraining, updateVenue, updateEntertainmentBase } from '../sim/entertainment.js';
 import { updateServiceSpawns, updateLaborAccess } from '../sim/services.js';
 import { updateRisk, updateFires } from '../sim/risk.js';
 import { updateLabor } from '../sim/labor.js';
@@ -77,6 +78,9 @@ export function newCityState(scenario, funds) {
     immigrationAcc: 0,
     vacancies: 0,
     goodsDemand: {},
+    entBase: 0, // city-wide entertainment every home gets (sim/entertainment.js)
+    entCoverage: {}, // % of the population each venue kind can seat
+    wineSources: 0, // for the top housing levels (sim/housing.js updateWineSources)
     ratings: { culture: 0, prosperity: 0, peace: 20, favor: CONFIG.FAVOR_START },
     coverage: {},
     gods: newGodState(),
@@ -204,6 +208,8 @@ export class Game {
     updateDesirability(this);
     this.dirty.des = false;
     computeCityStats(this);
+    updateEntertainmentBase(this);
+    updateWineSources(this);
     updateDemand(this);
     this.map.touch();
   }
@@ -256,6 +262,11 @@ export class Game {
       this.dirty.des = false;
     }
     computeCityStats(this);
+    updateEntertainmentBase(this);
+    updateWineSources(this);
+    if (this.time.day === CONFIG.GOODS_MIDMONTH_DAY) {
+      for (const b of this.buildings.values()) if (b.house) useGoods(this, b);
+    }
     indexHomesByRoad(this);
     updateImmigration(this);
     updateEmigration(this);

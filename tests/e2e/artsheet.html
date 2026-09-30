@@ -15,10 +15,11 @@
 </head>
 <body>
 <!--
-  Art sheet: every home tier in all 8 looks, plus buildings with live details,
+  Art sheet: every home level in all 8 looks (and 2x2 blocks of single-tile
+  homes), plus buildings with live details,
   drawn straight from the procedural art (no game running). Handy for artists
   reviewing changes, and as a side-by-side reference when making replacement
-  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (subset)
+  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
@@ -65,9 +66,11 @@
     const S = HOUSE_TIERS[tier].size;
     const cells = [];
     for (let v = 0; v < 8; v++) cells.push([`look ${v}`, buildingSpec('house', S, v, tier)]);
-    section(`Tier ${tier}: ${HOUSE_TIERS[tier].name} (${S}x${S})`, cells);
+    section(`Level ${tier}: ${HOUSE_TIERS[tier].name} (${S}x${S})`, cells);
   }
   if (!only) {
+    // Four single-tile homes of one level that joined into a 2x2 block.
+    section('Blocks: four single-tile homes joined into one 2x2 home', [1, 4, 7, 10].map((t) => [`${HOUSE_TIERS[t].name}`, buildingSpec('house', 2, t, t)]));
     section('Buildings with flags (still pictures get painted cloth)', ['prefecture', 'forum', 'senate', 'barracks', 'fort_legion', 'colosseum'].map((t) => {
       const S = { prefecture: 1, forum: 2, senate: 4, barracks: 3, fort_legion: 3, colosseum: 5 }[t];
       return [t, buildingSpec(t, S, 0, 0)];

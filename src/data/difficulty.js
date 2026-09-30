@@ -18,9 +18,11 @@
  *   requestSize      size of the Emperor's requests (goods and money)
  *   requestInterval  months between the Emperor's requests
  *   requestTime      months to deliver a request (x CONFIG.REQUEST_DEADLINE_MONTHS)
+ *   devolveDays      bad days in a row before a home falls back a level (in days, not
+ *                    a multiplier): 3 as in the original game, more forgiving on Easy
  *
- * Easy, Normal and Hard only use the first four levers plus raid size, as
- * they always have; Insane pulls on all of them. Balance check:
+ * Easy, Normal and Hard only use the first four levers plus raid size (and
+ * Easy a longer devolveDays); Insane pulls on all of them. Balance check:
  * `npm run sim -- --difficulty insane` (scripts/simulate.mjs).
  *
  * Tuning notes (Insane, demo city over 12 maps, 4 years, no raids): risk 1.7
@@ -39,12 +41,13 @@
 export const DIFFICULTY = Object.freeze({
   easy: Object.freeze({
     name: 'Easy',
-    desc: 'More money, faster growth, rare fires and collapses, smaller raids. Good for learning.',
+    desc: 'More money, faster growth, rare fires and collapses, homes slower to decline, smaller raids. Good for learning.',
     // risk 0.5: an unpatrolled building takes about a year to get dangerous
     // (0.7 still set off ~3 fires per young city; see the tuning notes above).
     funds: 1.5, risk: 0.5, production: 1.15, immigration: 1.25, mood: 0, winterGrowth: 1,
     raidSize: 0.7, raidInterval: 1, enemy: 1,
     requestSize: 1, requestInterval: 1, requestTime: 1,
+    devolveDays: 6, // twice the grace: time for a market vendor or priest to come by
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -52,6 +55,7 @@ export const DIFFICULTY = Object.freeze({
     funds: 1, risk: 1, production: 1, immigration: 1, mood: 0, winterGrowth: 1,
     raidSize: 1, raidInterval: 1, enemy: 1,
     requestSize: 1, requestInterval: 1, requestTime: 1,
+    devolveDays: 3,
   }),
   hard: Object.freeze({
     name: 'Hard',
@@ -59,6 +63,7 @@ export const DIFFICULTY = Object.freeze({
     funds: 0.6, risk: 1.3, production: 0.9, immigration: 0.85, mood: 0, winterGrowth: 1,
     raidSize: 1.3, raidInterval: 1, enemy: 1,
     requestSize: 1, requestInterval: 1, requestTime: 1,
+    devolveDays: 3,
   }),
   insane: Object.freeze({
     name: 'Insane',
@@ -68,6 +73,7 @@ export const DIFFICULTY = Object.freeze({
     funds: 0.4, risk: 1.5, production: 0.8, immigration: 0.7, mood: -8, winterGrowth: 0,
     raidSize: 1.5, raidInterval: 0.75, enemy: 1.15,
     requestSize: 1.5, requestInterval: 0.7, requestTime: 0.75,
+    devolveDays: 3,
   }),
 });
 

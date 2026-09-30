@@ -88,7 +88,7 @@ Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Common recipes:
 
 **Add a unit type:** `src/data/units.js`, art in `src/render/militaryArt.js`, and a fort (`kind: 'fort'`, `unit: '<type>'`) plus a `RECRUIT_COST` entry in `src/data/goods.js`.
 
-**Change the save format:** bump `SAVE_VERSION` in `src/config.js`, keep loading older versions in `src/core/save.js`, and note it in the version history there.
+**Change the save format:** bump `SAVE_VERSION` in `src/config.js` and note it in the version history in `src/core/save.js`. Until 1.0 a release may stop loading older saves (raise `MIN_SAVE_VERSION`), but an older save must always fail with a readable message, never crash or load wrong.
 
 ---
 

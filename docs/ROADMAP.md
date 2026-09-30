@@ -8,15 +8,20 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Water where you build**: while placing housing plots, tint the ground faintly where homes would get water, as the original did: a pale blue for well water, a stronger blue for fountain water, so the next plots go where water already reaches. While placing a fountain (or baths, which also need piped water), tint the reservoirs' piped area the same faint blue, so you can see where it will actually run; today that preview shows only the fountain's own reach and the existing fountains' coverage. Coverage otherwise only shows while placing or selecting a well, fountain or reservoir. All of it reads the sim's water layer, like those hints.
-2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-5. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-6. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
-7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+5. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
+6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.7.1)
+
+* **Water where you build**: with the Housing tool in hand, a faint blue shows where homes would get water, as the original did (paler for well water, stronger for fountain water); placing a fountain or baths shows the reservoirs' piped area in the same faint blue, so you can see where it will run. Each area gets a thin outline, and the placement preview of a well, fountain or reservoir still draws on top
+* In-game help: well water turns tents into Family Tents (it still said lean-tos, from before the 20-level ladder)
+* 130 unit tests (+1), 67 browser checks (+2)
 
 ## Done (v0.7.0)
 

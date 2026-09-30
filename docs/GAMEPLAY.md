@@ -99,7 +99,7 @@ Most services are delivered by walkers. A walker serves every building within **
 
 A home's **entertainment score** is the points of every venue whose entertainer passed by recently, plus a city-wide base of up to 20: for each kind of venue, the share of the population its working venues can seat (theater 400, amphitheater 900, colosseum 2,000 people), averaged over the three kinds and divided by 5. A growing city needs more venues, not just one of each.
 
-Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir.
+Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, the same faint blue shows the reservoirs' piped area, where they would run. Placing or clicking a well, fountain or reservoir shows its own reach in dark blue.
 
 ## Workers
 

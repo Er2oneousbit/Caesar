@@ -130,6 +130,36 @@ const WATER_AREA = Object.freeze({
 /** Radius colors: the building being placed or selected (dark) vs. existing coverage (pale). */
 const RADIUS_STRONG = Object.freeze({ fill: 'rgba(28,96,214,0.36)', edge: 'rgba(16,64,170,0.95)' });
 const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(120,186,250,0.8)' });
+/** Faint water hints under a tool: the palest blue, and a stronger one for fountain water. */
+const HINT_FAINT = Object.freeze({ fill: 'rgba(150,208,255,0.15)', edge: 'rgba(120,186,250,0.45)' });
+const HINT_FOUNTAIN = Object.freeze({ fill: 'rgba(80,156,240,0.24)', edge: 'rgba(56,128,226,0.6)' });
+
+/**
+ * Water already there, tinted faintly while a tool is in hand (the original
+ * did this for housing): the layers to show, weakest first. Housing plots
+ * show where homes would get water (well water pale, fountain water a
+ * stronger blue); buildings that need piped water (fountains, baths) show
+ * the reservoirs' piped area, where they would run. Wells and reservoirs
+ * already show their own coverage while being placed.
+ * @returns {Array<{key:string, bit:number, style:{fill:string, edge:string}}>}
+ */
+export function waterHintLayers(tool) {
+  if (tool === 'house') {
+    return [
+      { key: 'well', bit: WaterBits.WELL, style: HINT_FAINT },
+      { key: 'fountain', bit: WaterBits.FOUNTAIN, style: HINT_FOUNTAIN },
+    ];
+  }
+  const def = BUILDINGS[tool];
+  if (def && def.needsPiped) return [{ key: 'piped', bit: WaterBits.PIPED, style: HINT_FAINT }];
+  return [];
+}
+
+/** The hint layer a tile's water bits fall in: the strongest that applies, or -1. */
+export function waterHintOf(bits, layers) {
+  for (let k = layers.length - 1; k >= 0; k--) if (bits & layers[k].bit) return k;
+  return -1;
+}
 
 /** Does a market have anything on its stalls? */
 function hasStock(b) {
@@ -201,7 +231,7 @@ export class Renderer {
     this.deployFort = 0; // fort id while the player picks a deployment tile
     this.time = 0;
     this.frame = 0;
-    this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null };
+    this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null, waterHint: null };
     this.viewTiles = null; // visible tile range of the last frame {tx0, tx1, ty0, ty1}
     this.stripCache = new WeakMap();
     this.unsub = [];
@@ -346,6 +376,7 @@ export class Renderer {
     const groundBottom = vr.y + vr.h + 4;
     this.viewTiles = { tx0, tx1, ty0, ty1 };
     this.stats.coverage = null;
+    this.stats.waterHint = null;
     this.puffBudget = 4;
     this.gates.length = 0;
     const motion = this.motionOn;
@@ -1021,18 +1052,97 @@ export class Renderer {
    * @param {Set<number>} strong  tile indices
    * @param {(i:number)=>boolean} [isPale]
    */
-  drawCoverage(strong, isPale = null) {
-    const { ctx, camera: cam, game } = this;
+  /**
+   * Sides of tile (x, y) on screen: [neighbor index or -1, from corner, to
+   * corner] for N, E, S and W, for outlining areas of tiles.
+   */
+  tileSides(x, y) {
+    const { camera: cam, game } = this;
     const map = game.map;
     const k = cam.scale;
-    const pt = (x, y) => [((x - y) * HALF_W - cam.x) * k, ((x + y) * HALF_H - cam.y) * k];
-    // Sides of tile (x, y): [neighbor, from corner, to corner] (N, E, S, W).
-    const sides = (x, y) => [
+    const pt = (px, py) => [((px - py) * HALF_W - cam.x) * k, ((px + py) * HALF_H - cam.y) * k];
+    return [
       [map.inBounds(x, y - 1) ? map.idx(x, y - 1) : -1, pt(x, y), pt(x + 1, y)],
       [map.inBounds(x + 1, y) ? map.idx(x + 1, y) : -1, pt(x + 1, y), pt(x + 1, y + 1)],
       [map.inBounds(x, y + 1) ? map.idx(x, y + 1) : -1, pt(x, y + 1), pt(x + 1, y + 1)],
       [map.inBounds(x - 1, y) ? map.idx(x - 1, y) : -1, pt(x, y), pt(x, y + 1)],
     ];
+  }
+
+  /** Stroke a list of screen-space segments (pairs of points). */
+  strokeEdges(edges, color, width) {
+    if (!edges.length) return;
+    const { ctx, camera: cam } = this;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width * cam.dpr;
+    ctx.beginPath();
+    for (let e = 0; e < edges.length; e += 2) {
+      ctx.moveTo(edges[e][0], edges[e][1]);
+      ctx.lineTo(edges[e + 1][0], edges[e + 1][1]);
+    }
+    ctx.stroke();
+  }
+
+  /**
+   * Faint water hints (see waterHintLayers): every visible tile in a layer is
+   * filled once, with its strongest layer's tint, and each layer's area gets
+   * a thin outline where it meets weaker ground. `skip(i)`: tiles another
+   * preview paints (they count as covered, so no outline runs along them).
+   * Each layer is one path and one fill: zoomed out over a big city the hint
+   * covers thousands of tiles, and a fill per tile would flush the canvas
+   * mid-frame (see ARCHITECTURE.md, Draw calls).
+   */
+  drawWaterHints(layers, skip = null) {
+    const v = this.viewTiles;
+    if (!v || !layers.length) return;
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const map = this.game.map;
+    const cls = (j) => {
+      if (j < 0) return -1;
+      if (skip && skip(j)) return Infinity;
+      return waterHintOf(map.water[j], layers);
+    };
+    const edges = layers.map(() => []);
+    const tiles = layers.map(() => []);
+    const counts = {};
+    for (const l of layers) counts[l.key] = 0;
+    for (let y = v.ty0; y <= v.ty1; y++) {
+      for (let x = v.tx0; x <= v.tx1; x++) {
+        const i = map.idx(x, y);
+        const c = cls(i);
+        if (c < 0 || c === Infinity) continue;
+        counts[layers[c].key]++;
+        tiles[c].push(x, y);
+        for (const [j, a, b] of this.tileSides(x, y)) if (cls(j) < c) edges[c].push(a, b);
+      }
+    }
+    layers.forEach((l, n) => {
+      const t = tiles[n];
+      if (!t.length) return;
+      ctx.fillStyle = l.style.fill;
+      ctx.beginPath();
+      for (let q = 0; q < t.length; q += 2) {
+        // Top corner of the tile, then around the diamond.
+        const sx = ((t[q] - t[q + 1]) * HALF_W - cam.x) * k;
+        const sy = ((t[q] + t[q + 1]) * HALF_H - cam.y) * k;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + HALF_W * k, sy + HALF_H * k);
+        ctx.lineTo(sx, sy + CONFIG.TILE_H * k);
+        ctx.lineTo(sx - HALF_W * k, sy + HALF_H * k);
+        ctx.closePath();
+      }
+      ctx.fill();
+    });
+    layers.forEach((l, n) => this.strokeEdges(edges[n], l.style.edge, 1));
+    // Exposed for the browser smoke test: tiles hinted this frame, by layer.
+    this.stats.waterHint = counts;
+  }
+
+  drawCoverage(strong, isPale = null) {
+    const { game } = this;
+    const map = game.map;
+    const sides = (x, y) => this.tileSides(x, y);
     const paleEdges = [];
     const strongEdges = [];
     let paleCount = 0;
@@ -1055,17 +1165,8 @@ export class Renderer {
       this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, RADIUS_STRONG.fill);
       for (const [j, a, b] of sides(x, y)) if (!strong.has(j)) strongEdges.push(a, b);
     }
-    for (const [edges, color, width] of [[paleEdges, RADIUS_PALE.edge, 1], [strongEdges, RADIUS_STRONG.edge, 1.6]]) {
-      if (!edges.length) continue;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width * cam.dpr;
-      ctx.beginPath();
-      for (let e = 0; e < edges.length; e += 2) {
-        ctx.moveTo(edges[e][0], edges[e][1]);
-        ctx.lineTo(edges[e + 1][0], edges[e + 1][1]);
-      }
-      ctx.stroke();
-    }
+    this.strokeEdges(paleEdges, RADIUS_PALE.edge, 1);
+    this.strokeEdges(strongEdges, RADIUS_STRONG.edge, 1.6);
     // Exposed for the browser smoke test (and the curious): tiles painted this frame.
     this.stats.coverage = { strong: strong.size, pale: paleCount };
   }
@@ -1195,26 +1296,33 @@ export class Renderer {
     }
   }
 
-  /** Construction previews: ghost building, tile markers, coverage radius. */
+  /** Construction previews: water hints, ghost building, tile markers, coverage radius. */
   drawToolPreview() {
     const { game, plan } = this;
+    const map = game.map;
+    const def = plan ? BUILDINGS[plan.tool] : null;
+    const water = def ? WATER_AREA[def.kind] : null;
+    // Water buildings: the new one(s) in dark blue over the pale area the
+    // existing ones of this kind already supply. While hovering a single
+    // spot the radius shows even where it cannot be built; in a drag only
+    // the valid spots count.
+    let strong = null;
+    if (water) {
+      strong = new Set();
+      const single = plan.items.length === 1;
+      for (const it of plan.items) if (single || it.ok) this.squareTiles(it.x, it.y, it.size, water.r, strong);
+    }
+    // Faint hints of the water already there, whenever the tool is in hand
+    // (under the rest; tiles the coverage preview paints are left to it).
+    const hints = waterHintLayers(this.tool);
+    if (hints.length) this.drawWaterHints(hints, water ? (i) => strong.has(i) || (map.water[i] & water.bit) !== 0 : null);
     if (!plan) {
       if (this.hoverTile) this.outlineFootprint(this.hoverTile.x, this.hoverTile.y, 1, 'rgba(255,255,255,0.55)', 1);
       return;
     }
-    const map = game.map;
-    const def = BUILDINGS[plan.tool];
-    const water = def ? WATER_AREA[def.kind] : null;
     // Other area-of-effect buildings keep a simple single-color hint.
     const radius = { hospital: CONFIG.HOSPITAL_RADIUS, tower: TOWER_RANGE }[plan.tool];
     if (water) {
-      // Water buildings: the new one(s) in dark blue over the pale area the
-      // existing ones of this kind already supply. While hovering a single
-      // spot the radius shows even where it cannot be built; in a drag only
-      // the valid spots count.
-      const strong = new Set();
-      const single = plan.items.length === 1;
-      for (const it of plan.items) if (single || it.ok) this.squareTiles(it.x, it.y, it.size, water.r, strong);
       this.drawCoverage(strong, (i) => (map.water[i] & water.bit) !== 0);
     } else if (radius && plan.items.length === 1) {
       const it = plan.items[0];

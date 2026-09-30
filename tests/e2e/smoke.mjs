@@ -314,6 +314,35 @@ try {
     }
     await page.keyboard.press('Escape'); // cancel the tool (a second Esc would open the pause menu)
     await page.evaluate(() => window.colonia.ui.info.close());
+
+    // 5a (cont.) Water where you build: with the Housing tool in hand the
+    // ground shows the water homes would get (well water faint, fountain
+    // water stronger); a fountain or baths shows the reservoirs' piped area.
+    // The demo city only has wells, so a piped area (wider than the preview
+    // of a fountain under the cursor, as a reservoir's is) with some fountain
+    // water in it is written into the water layer (the game is paused: it stays).
+    const hints = await page.evaluate(async ({ x, y }) => {
+      const app = window.colonia;
+      const m = app.game.map;
+      for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) if (m.inBounds(x + dx, y + dy)) m.water[m.idx(x + dx, y + dy)] |= 4; // PIPED
+      for (let dy = -1; dy <= 1; dy++) for (let dx = 3; dx <= 5; dx++) if (m.inBounds(x + dx, y + dy)) m.water[m.idx(x + dx, y + dy)] |= 2; // FOUNTAIN
+      const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await frame();
+      const none = app.renderer.stats.waterHint;
+      app.ui.selectTool('house');
+      await frame();
+      const house = app.renderer.stats.waterHint;
+      app.ui.selectTool('fountain');
+      await frame();
+      const fountain = app.renderer.stats.waterHint;
+      app.ui.selectTool('baths');
+      await frame();
+      const baths = app.renderer.stats.waterHint;
+      return { none, house, fountain, baths };
+    }, well);
+    check('Housing tool: faint blue where homes get water (wells pale, fountains stronger)', hints.none === null && !!hints.house && hints.house.well > 0 && hints.house.fountain > 0, JSON.stringify(hints));
+    check('placing a fountain or baths shows the reservoirs\' piped area', !!hints.fountain && hints.fountain.piped > 0 && !!hints.baths && hints.baths.piped > 0, JSON.stringify(hints));
+    await page.keyboard.press('Escape');
   }
 
   // 5b. Military: garrison, fort panel + deploy by clicking the map, raid alert, advisor

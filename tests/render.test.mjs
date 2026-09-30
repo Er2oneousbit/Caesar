@@ -17,6 +17,7 @@
  *     the rainy season, a new season draws new weather, levels ease, and a
  *     storm throws lightning with thunder
  *   - edge blending: a tile learns which stronger ground borders it
+ *   - water hints: which water is tinted under which tool
  * ----------------------------------------------------------------------------
  */
 
@@ -30,9 +31,9 @@ import { skyAt, dayTime, DAY_TICKS } from '../src/render/lighting.js';
 import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf } from '../src/render/weather.js';
 import { groundColor } from '../src/render/terrainArt.js';
 import { GameTime } from '../src/sim/time.js';
-import { blendCode, mapGateOffset, lookStep } from '../src/render/renderer.js';
+import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf } from '../src/render/renderer.js';
 import { generateMap } from '../src/world/mapgen.js';
-import { GameMap, Terrain } from '../src/world/map.js';
+import { GameMap, Terrain, WaterBits } from '../src/world/map.js';
 
 /** A camera looking at a 64x64 map through an 800x600 CSS px view. */
 function makeCamera(smooth = true) {
@@ -588,4 +589,23 @@ test('blend: a corner is skipped when an edge next to it already blends', () => 
   const code = blendCode(map, 5, 5);
   assert.equal((code >> 4) & 15, 1);
   assert.equal(code & 15, 0);
+});
+
+test('water hints: housing shows well and fountain water, piped-water buildings the reservoir area', () => {
+  const house = waterHintLayers('house');
+  assert.deepEqual(house.map((l) => l.key), ['well', 'fountain'], 'weakest first');
+  assert.equal(waterHintOf(WaterBits.WELL, house), 0);
+  assert.equal(waterHintOf(WaterBits.FOUNTAIN, house), 1);
+  assert.equal(waterHintOf(WaterBits.WELL | WaterBits.FOUNTAIN, house), 1, 'the stronger water wins');
+  assert.equal(waterHintOf(WaterBits.PIPED | WaterBits.HOSPITAL, house), -1, 'pipes and hospitals are not water for a home');
+  for (const tool of ['fountain', 'baths']) {
+    const layers = waterHintLayers(tool);
+    assert.deepEqual(layers.map((l) => l.key), ['piped'], tool);
+    assert.equal(waterHintOf(WaterBits.PIPED, layers), 0);
+    assert.equal(waterHintOf(WaterBits.WELL | WaterBits.FOUNTAIN, layers), -1);
+  }
+  // The same faint blue under houses (well water) and piped-water buildings.
+  assert.equal(waterHintLayers('fountain')[0].style, house[0].style);
+  // Wells and reservoirs show their own coverage while placed; others nothing.
+  for (const tool of ['well', 'reservoir', 'road', 'prefecture', null]) assert.deepEqual(waterHintLayers(tool), [], String(tool));
 });

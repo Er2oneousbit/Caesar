@@ -56,7 +56,7 @@ function content(tab) {
         h('ol', {},
           h('li', {}, h('b', {}, 'Roads first. '), 'Everything travels by road: settlers, workers, goods and services. Your city must connect to the Imperial road at the map edge. A gateway with green pennants marks the map entrance, where settlers and caravans arrive; red pennants mark the exit, where people leave (also green and red on the minimap).'),
           h('li', {}, h('b', {}, 'Housing plots. '), 'Drag the Housing tool (H) beside a road. Settlers walk in and pitch tents.'),
-          h('li', {}, h('b', {}, 'Water. '), 'A Well within 2 tiles lets tents become lean-tos. Later, fountains fed by a reservoir unlock better homes.'),
+          h('li', {}, h('b', {}, 'Water. '), 'A Well within 2 tiles lets tents become family tents. Later, fountains fed by a reservoir unlock better homes. With the Housing tool in hand, a faint blue shows where homes would get water (paler for wells, stronger for fountains); placing a fountain shows where the reservoirs pipe water.'),
           h('li', {}, h('b', {}, 'Safety. '), 'A Prefecture (fire) and an Engineer\'s Post (collapse) must send walkers past every building, or they will burn or fall down.'),
           h('li', {}, h('b', {}, 'Food. '), 'Wheat Farm on meadow → Granary → Market. The market vendor sells food door to door.'),
           h('li', {}, h('b', {}, 'Religion, culture, taxes. '), 'Temples, schools, theaters and a Forum (for taxes) let homes grow and money flow.'),

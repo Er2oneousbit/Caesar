@@ -9,7 +9,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 ## Next up (suggested order)
 
 1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); an aqueduct crossing a road should be drawn as a bridge, the channel carried over the road on an arch; the three statues need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 7 needs no second pass.
-2. **A library of music tracks**: about 10 tracks of a few minutes each (today a piece is about 20 bars, under a minute, then a pause and a new random piece), each with an opening of its own (lead instrument, tempo, mode and theme) so they are told apart from the first bars, picked at random without repeating the last few. Still composed by our generator, each track from a fixed seed and a longer form (more sections, varied returns of the theme). To decide: which tracks play for night, festivals, raids and the menu (their own tracks, or the special moods keep their shorter pieces), and whether the music advisor or settings name the tracks.
+2. **A library of music tracks**: about 10 tracks of a few minutes each (today a piece is about 20 bars, under a minute, then a pause and a new random piece), each with an opening of its own (lead instrument, tempo, mode and theme) so they are told apart from the first bars, picked at random without repeating the last few. Still composed by our generator, each track from a fixed seed and a longer form (more sections, varied returns of the theme). Day, night and the menu draw from the library; festivals and raids keep music of their own (it has to come in quickly when they start), but made just as long, a few minutes rather than under one. To decide: whether settings name the tracks.
 3. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
 4. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
 5. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
@@ -255,6 +255,7 @@ Ideas that would change the original's economy or rules; each would come as an o
 * **Housing**: the original's 20 levels, with Colonia's own names and numbers. Done in v0.7, ahead of disease and crime (the owner's call). Where the original has a plain bug, Colonia does not copy it and makes no option of it; behavior that is odd but possibly meant stays as the original had it.
 * **Crime, disease and events**: on at every difficulty, as they always were in the original, and gentler on Easy.
 * **Localization**: not planned.
+* **Music**: about 10 tracks of a few minutes for day, night and the menu, picked at random; festivals and raids keep their own music, also a few minutes long.
 * **Saves**: until 1.0 a release may stop loading older saves (always with a readable message).
 * **Version numbers**: after 0.9 comes 0.10; 1.0 only when the owner says the game is ready.
 

@@ -92,10 +92,19 @@ export function collapseBuilding(game, b, cause = 'decay') {
   game.events.emit('sound', { name: 'collapse' });
 }
 
-/** Daily: burning ruins burn down, may spread, and eventually go out. */
+/**
+ * Daily: burning ruins burn down, heat the buildings beside them, may spread,
+ * and eventually go out. A building beside the flames is heated, and gets
+ * one chance to catch, once a day however many burning tiles it touches:
+ * counted per tile, a big building burning next to a row of homes rolled
+ * against each of them several times a day, and one fire took a whole
+ * housing block before a prefect could arrive.
+ */
 export function updateFires(game) {
   if (game.fires.size === 0) return;
   const { map, rng, buildings } = game;
+  const near = [];
+  const seen = new Set();
   for (const [i, days] of [...game.fires]) {
     if (days <= 1) {
       game.fires.delete(i);
@@ -106,18 +115,21 @@ export function updateFires(game) {
     const y = map.yOf(i);
     for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
       const id = map.buildingAt(x + dx, y + dy);
-      if (!id) continue;
+      if (!id || seen.has(id)) continue;
       const nb = buildings.get(id);
       if (!nb) continue;
       const flammable = nb.house ? nb.house.tier > 0 : nb.def.fire > 0;
       if (!flammable) continue;
-      nb.fireRisk += 10;
-      if (rng.chance(CONFIG.FIRE_SPREAD_CHANCE)) {
-        igniteBuilding(game, nb);
-      }
+      seen.add(id);
+      near.push(nb);
     }
     // Remind a prefect every few days while the fire is unattended.
     if (days % 3 === 0) dispatchPrefect(game, i);
+  }
+  for (const nb of near) {
+    if (!buildings.has(nb.id)) continue;
+    nb.fireRisk += CONFIG.FIRE_HEAT_PER_DAY;
+    if (rng.chance(CONFIG.FIRE_SPREAD_CHANCE)) igniteBuilding(game, nb);
   }
 }
 

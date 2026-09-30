@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 
 import { RNG } from '../src/core/rng.js';
 import { log } from '../src/core/debug.js';
+import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { generateMap, MAP_TYPES, ROAD_CLEARANCE, MIN_FIELD_TILES, MIN_WATER_TILES, ROAD_STUB } from '../src/world/mapgen.js';
@@ -29,6 +30,7 @@ import { updateWater } from '../src/sim/water.js';
 import { monthlyEconomy, houseMonthlyTax } from '../src/sim/economy.js';
 import { openRoute, setTradeMode, tradeAt } from '../src/sim/trade.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
+import { updateFires, igniteBuilding } from '../src/sim/risk.js';
 
 log.setLevel('error');
 
@@ -468,4 +470,53 @@ test('roads: a house picks a road that reaches the entrance over a nearer isolat
   const home = [...game.buildings.values()].pop();
   assert.ok(home.house);
   assert.equal(map.roadNet[home.accessRoad], main, 'the road two tiles away that reaches the entrance, not the stub next door');
+});
+
+test('fire heats a building beside it once a day, however many burning tiles it touches', () => {
+  const game = newGame();
+  const spot = findFree(game, 3, 3);
+  const house = addBuilding(game, 'house', spot.x + 1, spot.y + 1);
+  house.house.tier = 3;
+  house.house.pop = 5;
+  house.fireRisk = 0;
+  // Burning ground on three sides of it.
+  for (const [dx, dy] of [[0, 1], [1, 0], [2, 1]]) game.fires.set(game.map.idx(spot.x + dx, spot.y + dy), CONFIG.FIRE_BURN_DAYS);
+  let rolls = 0;
+  game.rng.chance = () => { rolls++; return false; };
+  updateFires(game);
+  assert.equal(house.fireRisk, CONFIG.FIRE_HEAT_PER_DAY, 'heated once');
+  assert.equal(rolls, 1, 'one chance to catch');
+});
+
+test('one fire in an unguarded housing block takes a handful of homes, not the block', () => {
+  let total = 0;
+  const seeds = 8;
+  for (let s = 0; s < seeds; s++) {
+    const game = newGame({ seed: 'fire-block' });
+    game.rng = new RNG(`spread-${s}`);
+    const spot = findFree(game, 14, 6);
+    const { map } = game;
+    const X = spot.x + 1;
+    const Y = spot.y + 1;
+    // A 12 x 4 band of tents between two roads, no prefecture anywhere.
+    for (let x = X - 1; x <= X + 12; x++) { map.road[map.idx(x, Y - 1)] = 1; map.road[map.idx(x, Y + 4)] = 1; }
+    const homes = [];
+    for (let y = Y; y < Y + 4; y++) {
+      for (let x = X; x < X + 12; x++) {
+        const b = addBuilding(game, 'house', x, y);
+        b.house.tier = 1;
+        b.house.pop = 5;
+        b.fireRisk = game.rng.range(0, 50);
+        homes.push(b);
+      }
+    }
+    game.processRoadChanges();
+    igniteBuilding(game, homes[17]);
+    const origInfo = log.info;
+    log.info = () => {};
+    try { game.runDays(40); } finally { log.info = origInfo; }
+    for (let y = Y; y < Y + 4; y++) for (let x = X; x < X + 12; x++) if (map.rubble[map.idx(x, y)] || game.fires.has(map.idx(x, y))) total++;
+  }
+  // Before the fix a single fire took the whole 48-tile band.
+  assert.ok(total / seeds < 20, `mean tiles burned ${total / seeds} of 48`);
 });

@@ -20,6 +20,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.7.3)
+
+* **Fires spread more slowly**: a building beside a fire is heated (+5 fire risk, was +10) and gets its chance to catch (2%, was 3%) once a day, however many burning tiles it touches; before, it rolled once per burning tile, so a big burning building rolled against its neighbors several times a day. One fire in an unguarded 48-tile block of tents now burns about 10 tiles in 40 days (median 8, worst of 40 runs 31), where it burned the whole block (46); with a prefecture beside the block, 1.4 (was 1.8). How often fires start is unchanged: in the demo-city sweep (prefects on patrol) fire counts stay about the same, population within 3%
+* 134 unit tests (+2)
+
 ## Done (v0.7.2)
 
 * The Imperial road runs straight in from the map edge for 3 tiles at both ends, so the entrance and exit gateways always face the map edge with the road passing straight through (on about a quarter of maps a road end ran along the edge and turned its gateway sideways, toward the middle of the map)

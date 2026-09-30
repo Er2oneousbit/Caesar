@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.7.2',
+  VERSION: '0.7.3',
   SAVE_VERSION: 4, // v4: the 20-level housing ladder; saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -93,7 +93,8 @@ export const CONFIG = {
   FIRE_THRESHOLD: 100,
   DAMAGE_THRESHOLD: 100,
   FIRE_BURN_DAYS: 6, // how long a burning ruin keeps burning
-  FIRE_SPREAD_CHANCE: 0.03, // per neighbor per day
+  FIRE_SPREAD_CHANCE: 0.02, // chance a building beside a fire catches, per day (once, however many burning tiles it touches)
+  FIRE_HEAT_PER_DAY: 5, // fire risk a building beside a fire gains per day (once, however many burning tiles it touches)
   PREFECT_RUN_SPEED: 1.6, // prefects run (speed multiplier) when heading to a fire
   PREFECT_ALERT_RADIUS: 24, // prefects within this road distance respond to fires
 

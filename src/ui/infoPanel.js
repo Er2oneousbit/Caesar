@@ -116,8 +116,28 @@ export function buildingStatus(game, b) {
     default:
       break;
   }
+  if (def.needsRoad === false && def.damage > 0 && !game.map.roadWithin(b.x, b.y, b.size, CONFIG.SERVICE_RADIUS)) {
+    return { level: 'warn', text: `No road within ${CONFIG.SERVICE_RADIUS} tiles: engineers cannot reach it to repair it, and in time it will collapse.` };
+  }
   if (def.workers && b.efficiency < 1) return { level: 'warn', text: `Understaffed: working at ${pct(b.efficiency)}.` };
   return { level: 'good', text: 'Working normally.' };
+}
+
+/**
+ * What a home's panel says about its taxes, and why when it pays none: a
+ * home is registered only for TAX_ACCESS_DAYS after a tax collector walks by,
+ * and "needs a Forum nearby" once sent a player with a Forum next door
+ * looking in the wrong place (its collector was walking other streets).
+ */
+export function taxLine(game, hs) {
+  if (hs.tax > 0) {
+    const days = Math.ceil(hs.tax);
+    return `Registered: ~${fmt(houseMonthlyTax(game, hs))} Dn/month, for ${days} more day${days === 1 ? '' : 's'} unless a tax collector passes again`;
+  }
+  const offices = [...game.buildings.values()].filter((b) => b.def.walker === 'taxman');
+  if (!offices.length) return 'Not registered: the city has no Forum to send tax collectors';
+  if (!offices.some((b) => b.efficiency > 0 && b.accessRoad >= 0)) return 'Not registered: no Forum has the workers and a road to send tax collectors';
+  return `Not registered: no tax collector has passed in the last ${CONFIG.TAX_ACCESS_DAYS} days. A Forum nearer by, or roadblocks that keep its collector on these streets, would reach it`;
 }
 
 export class InfoPanel {
@@ -272,7 +292,7 @@ export class InfoPanel {
         kv('Health', health.join(', ') || 'None'),
         kv('Goods', HOUSE_GOODS.filter((x) => hs.goods[x] > 0.01).map((x) => GOODS[x].name).join(', ') || 'None'),
         kv('Desirability', hs.tier >= MAX_TIER ? `${hs.des} (falls at ${tier.down})` : `${hs.des} (${tier.up} to move up${hs.tier > 1 ? `, falls at ${tier.down}` : ''})`),
-        kv('Taxes', hs.tax > 0 ? `Registered: ~${fmt(houseMonthlyTax(g, hs))} Dn/month` : 'Not registered (needs a Forum nearby)'),
+        kv('Taxes', taxLine(g, hs)),
       ));
       parts.push(this.moodSection(g, hs));
     }

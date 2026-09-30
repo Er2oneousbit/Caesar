@@ -124,6 +124,11 @@ export function checkBuilding(game, type, x, y) {
     }
     if (!near) out.warnings.push('Too far from a road: settlers cannot reach it');
   }
+  // Wells and reservoirs need no road, but they wear out like everything else,
+  // and an engineer only repairs what lies within reach of the road he walks.
+  if (def.needsRoad === false && def.damage > 0 && !map.roadWithin(x, y, S, CONFIG.SERVICE_RADIUS)) {
+    out.warnings.push(`No road within ${CONFIG.SERVICE_RADIUS} tiles: engineers cannot reach it to repair it, and in time it will collapse`);
+  }
   if (def.needsPiped && !(map.water[map.idx(x, y)] & WaterBits.PIPED)) {
     out.warnings.push('Outside every full reservoir\'s piped area: it will have no water');
   }

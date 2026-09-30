@@ -121,6 +121,19 @@ export class GameMap {
 
   hasRoad(x, y) { return this.inBounds(x, y) && this.road[this.idx(x, y)] !== Road.NONE; }
 
+  /**
+   * Is there a road within `r` tiles of the size x size footprint at (x, y)?
+   * Walkers serve buildings within SERVICE_RADIUS of the road they walk, so a
+   * building with no road that near is never visited: an engineer cannot
+   * repair it (see construction.js and ui/infoPanel.js buildingStatus).
+   */
+  roadWithin(x, y, size, r) {
+    for (let ty = y - r; ty < y + size + r; ty++) {
+      for (let tx = x - r; tx < x + size + r; tx++) if (this.hasRoad(tx, ty)) return true;
+    }
+    return false;
+  }
+
   buildingAt(x, y) { return this.inBounds(x, y) ? this.building[this.idx(x, y)] : 0; }
 
   /**

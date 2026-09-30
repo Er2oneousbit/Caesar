@@ -16,6 +16,15 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.11.0, in progress)
+
+Fixes from playing mission 3 on Insane (the game said things that were not so, or said nothing):
+
+* **Homes with food** (Overview) counts the homes that hold food for their people. It used to count homes not going hungry, and tents never go hungry, so a city of tents with no food anywhere read 100%. The mood's food factor is unchanged
+* **Wells and reservoirs out of every engineer's reach**: they need no road, but they wear out, and an engineer repairs only what lies within 2 tiles of the road he walks. Placing one further off now warns, and its panel and the Problems overlay flag it (a reservoir collapsing unseen dries every fountain and bath it feeds)
+* **A home's tax line says why it pays nothing**: no Forum, a Forum without workers or a road, or no tax collector in the last 48 days (with what to do about it); a registered home shows how many days its registration has left. It used to say "needs a Forum nearby" with a Forum next door. The Finance tab counts the homes that are not registered
+* The balance sim is byte-identical on every difficulty after these three
+
 ## Done (v0.10.1)
 
 * **Crime costs peace by difficulty** (the owner's call): none on Easy; on Normal a riot costs 5 and a thief 1 and that month's gain; Hard doubles it (10 and 2), Insane triples it (15 and 3). Protests stay free, except on Insane, where every fifth costs 1: even a well-run Insane city sees about 17 a year, so a cost for each would sink peace faster than it can grow. Measured over 12 maps: Easy, Normal and Hard play exactly as v0.10.0; Insane ends 3 years with peace 31 instead of 45, and a neglected Insane city loses it all
@@ -261,6 +270,15 @@ Seeing why:
 * **Production calculator**: turns a target into building counts (feeding 1,000 people takes about 3 full wheat farms).
 * **Walker traffic heat map**: where walkers actually go, which shows where roadblocks belong.
 * **Year in review** and a **city chronicle**: a yearly report card with charts, and an auto-written history of the city ("297 BC: the great fire of the east quarter took 14 homes").
+
+From playtesting (mission 3 on Insane, three attempts, all lost within about 15 months; the owner decides which to take):
+
+* **Debt locks all construction**, so a city that loses its Forum while in the red can never rebuild the one thing that brings money in. Loans from Rome (under *Beyond the original*), or letting a Forum be built in debt, would give a way back.
+* **The new city's mood bonus ends as a 20-point cliff** at month 12; on Insane it lands just when the economy is weakest. A taper over several months would be kinder and easier to read.
+* **Early cash flow on Insane**: a worker's wage costs about what six Huts pay in tax, and 2,800 Dn leaves little room to reach the homes that pay. The first year is decided by cash flow more than by the player's layout.
+* **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
+* **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
+* **Roamers waste rounds on the Imperial road**: a lone Forum's tax collector walked to the empty map edge and back, and the homes he skipped lapsed. Roamers could prefer streets with buildings.
 
 Playing smoother:
 

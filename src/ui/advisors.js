@@ -35,6 +35,7 @@ import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
 import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
 import { productionReport } from './production.js';
+import { homesWithFood } from '../sim/population.js';
 
 export const ADVISOR_TABS = [
   ['overview', 'Overview'],
@@ -117,6 +118,7 @@ export class Advisors {
     const c = g.city;
     const goals = goalStatus(g);
     const f = c.sentimentFactors || {};
+    const food = homesWithFood(g);
     return [
       h('div', { class: 'grid2' },
         h('div', { class: 'card' },
@@ -130,7 +132,7 @@ export class Advisors {
           kv('Treasury', `${fmt(c.treasury)} Dn`),
           kv('Workforce / jobs', `${fmt(c.workforce)} / ${fmt(c.jobs)}`),
           kv('Unemployment', pct(c.unemploymentRate)),
-          kv('Homes with food', pct(c.fedShare)),
+          kv('Homes with food', food.homes ? `${fmt(food.withFood)} of ${fmt(food.homes)} (${pct(food.withFood / food.homes)})` : 'No homes yet'),
           kv('Free housing space', fmt(c.vacancies || 0)),
           kv('Emperor\'s favor', `${Math.round(c.ratings.favor)}`))),
       trendCharts(c.history || []),
@@ -278,7 +280,8 @@ export class Advisors {
           taxVal, taxInput,
           kv('Expected taxes', ''), est,
           kv('Homes registered', pct(c.taxCoverage)),
-          h('div', { class: 'muted' }, `Only homes visited by a tax collector (Forum/Senate) pay. Above ${CONFIG.DEFAULT_TAX_RATE}% citizens grumble.`)),
+          h('div', { class: 'muted' }, `Only homes visited by a tax collector (Forum/Senate) in the last ${CONFIG.TAX_ACCESS_DAYS} days pay. Above ${CONFIG.DEFAULT_TAX_RATE}% citizens grumble.`),
+          unregisteredNote(g)),
         h('div', { class: 'card' },
           kv('Treasury', `${fmt(c.treasury)} Dn`),
           kv('Wages last month', `${fmt(c.lastMonth?.wages || 0)} Dn`),
@@ -492,6 +495,18 @@ export class Advisors {
       onclick: () => { if (m.x !== undefined) { this.app.renderer.camera.glideToTile(m.x, m.y); this.app.ui.closeModal(); } },
     }, h('span', { class: 'date' }, m.date), m.text)));
   }
+}
+
+/**
+ * Finance tab: how many homes pay no tax, and where to find out why (a lone
+ * Forum's collector can spend his rounds on streets nobody lives on, and the
+ * registrations he left behind run out).
+ */
+function unregisteredNote(g) {
+  let n = 0;
+  for (const b of g.buildings.values()) if (b.house && b.house.pop > 0 && !(b.house.tax > 0)) n++;
+  if (!n) return null;
+  return h('div', { class: 'muted' }, `${fmt(n)} home${n === 1 ? ' is' : 's are'} not registered. Click one: its panel says why.`);
 }
 
 /** Short summary of what a level needs (Population tab, help). */

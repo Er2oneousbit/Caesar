@@ -16,7 +16,7 @@
 
 import { CONFIG } from '../config.js';
 import { GOD_KEYS } from '../data/gods.js';
-import { HOUSE_GOODS } from '../data/goods.js';
+import { FOOD_TYPES, HOUSE_GOODS } from '../data/goods.js';
 import { HOUSE_TIERS, houseCapacity } from '../data/housing.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath, walkTo } from './movement.js';
@@ -248,6 +248,24 @@ export function indexHomesByRoad(game) {
     list.push(b.id);
   }
   game.homeByRoad = idx;
+}
+
+/**
+ * Occupied homes with food in the larder for their people, of all occupied
+ * homes: the Overview's "Homes with food". Not the mood's food factor
+ * (fedShare), which counts homes not going hungry: tents forage and never go
+ * hungry, so a city of tents read "100% with food" with none in any home.
+ */
+export function homesWithFood(game) {
+  let homes = 0;
+  let withFood = 0;
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h || h.pop <= 0) continue;
+    homes++;
+    if (FOOD_TYPES.some((f) => h.food[f] > 0.01)) withFood++;
+  }
+  return { homes, withFood };
 }
 
 /** Monthly: recompute city sentiment (0-100). Returns the factor breakdown. */

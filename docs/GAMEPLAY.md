@@ -104,7 +104,7 @@ Most services are delivered by walkers. A walker serves every building within **
 
 A home's **entertainment score** is the points of every venue whose entertainer passed by recently, plus a city-wide base of up to 20: for each kind of venue, the share of the population its working venues can seat (theater 400, amphitheater 900, colosseum 2,000 people), averaged over the three kinds and divided by 5. A growing city needs more venues, not just one of each.
 
-Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, the same faint blue shows the reservoirs' piped area, where they would run. Placing or clicking a well, fountain or reservoir shows its own reach in dark blue.
+Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, the same faint blue shows the reservoirs' piped area, where they would run. Placing or clicking a well, fountain or reservoir shows its own reach in dark blue. Wells and reservoirs need no road, but they wear out like everything else, and an engineer repairs only what lies within 2 tiles of the road he walks: one placed further from every road is flagged when you place it, on its panel and on the Problems overlay, and in time it collapses.
 
 ## Workers
 
@@ -138,7 +138,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 ## Money
 
 * **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.
-* **Taxes:** at the default 7% rate each resident pays `2 x the level's tax` Dn per year (a Domus resident ~6, an Insula resident ~10, an Imperial Palatium resident ~32; see the housing table). The rate scales this linearly. Only homes a tax collector visited pay.
+* **Taxes:** at the default 7% rate each resident pays `2 x the level's tax` Dn per year (a Domus resident ~6, an Insula resident ~10, an Imperial Palatium resident ~32; see the housing table). The rate scales this linearly. Only homes a tax collector visited in the last 48 days pay; a home's panel says whether it is registered and for how many more days, or why not (no Forum, a Forum without workers, or no collector lately), and the Finance tab counts the homes that are not. A lone Forum's collector can spend whole rounds on streets nobody lives on, such as the Imperial road, and the registrations he left behind run out: a second Forum, or roadblocks at the ends of a block, keep collectors on your streets.
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
 * **Trade:** open a route once (Trade advisor), then a caravan or ship comes every 32-56 days. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
 * **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").

@@ -25,6 +25,10 @@ import { findScenario } from '../src/data/scenarios.js';
 import { productionReport } from '../src/ui/production.js';
 import { overlayByKey } from '../src/render/overlays.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
+import { checkBuilding } from '../src/sim/construction.js';
+import { addBuilding } from '../src/sim/entities.js';
+import { homesWithFood } from '../src/sim/population.js';
+import { buildingStatus, taxLine } from '../src/ui/infoPanel.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
 log.setLevel('error');
@@ -155,4 +159,58 @@ test('the Production advisor finds the bottleneck', () => {
   assert.match(hint, /Clay Pits/);
   const grp = rep.troubles.find((t) => t.ids.includes(potter.id));
   assert.ok(grp && grp.name === 'Potter' && /Waiting for clay/.test(grp.text), `the potter is listed with what is wrong: ${JSON.stringify(grp)}`);
+});
+
+// ---------------------------------------------------------------------------
+// Saying what is true (found playing mission 3 on Insane)
+// ---------------------------------------------------------------------------
+
+test('homes with food counts the homes that hold food, not the ones not going hungry', () => {
+  const game = newGame({ seed: 'larder' });
+  const spot = findFree(game, 6, 3);
+  const homes = [0, 2, 4].map((dx) => {
+    const b = addBuilding(game, 'house', spot.x + dx, spot.y + 1, 1);
+    Object.assign(b.house, { tier: 2, pop: 7 }); // family tents: they forage, never hungry
+    return b;
+  });
+  game.runTicks(1);
+  assert.deepEqual(homesWithFood(game), { homes: 3, withFood: 0 }, 'a tent city with no food anywhere');
+  assert.equal(game.city.fedShare, 1, 'the mood still counts them as fed: tents never go hungry');
+  homes[1].house.food.wheat = 20;
+  assert.deepEqual(homesWithFood(game), { homes: 3, withFood: 1 });
+});
+
+test("a well or reservoir out of every engineer's reach is flagged when placed and afterwards", () => {
+  const game = newGame({ seed: 'well-reach', money: 50000 });
+  const spot = findFree(game, 12, 9);
+  const y = spot.y + 1;
+  assert.ok(build(game, 'road', spot.x, y, spot.x + 11, y).ok);
+  const warn = (type, x, yy) => checkBuilding(game, type, x, yy).warnings.find((w) => /engineers cannot reach/.test(w));
+  assert.equal(warn('well', spot.x + 2, y + 2), undefined, 'two tiles off the road: an engineer walking it repairs it');
+  assert.ok(warn('well', spot.x + 2, y + 3), 'three tiles off: never repaired');
+  assert.equal(warn('prefecture', spot.x + 2, y + 5), undefined, 'buildings that need a road say so already');
+  const far = addBuilding(game, 'well', spot.x + 6, y + 4, 1);
+  const s = buildingStatus(game, far);
+  assert.equal(s.level, 'warn');
+  assert.match(s.text, /engineers cannot reach it/);
+  assert.match(problemOf(game, far).text, /engineers cannot reach it/, 'and the Problems overlay shows it');
+  const near = addBuilding(game, 'well', spot.x + 9, y + 1, 1);
+  assert.equal(buildingStatus(game, near).level, 'good');
+});
+
+test("a home's tax line says why it pays nothing: no Forum, a Forum without workers, or no collector lately", () => {
+  const game = newGame({ seed: 'tax-line' });
+  const spot = findFree(game, 8, 4);
+  const y = spot.y + 1;
+  assert.ok(build(game, 'road', spot.x, y, spot.x + 7, y).ok);
+  const home = addBuilding(game, 'house', spot.x + 1, y + 1, 1);
+  Object.assign(home.house, { tier: 4, pop: 11, tax: 0 });
+  assert.match(taxLine(game, home.house), /no Forum/);
+  const forum = addBuilding(game, 'forum', spot.x + 4, y + 1, 2);
+  forum.efficiency = 0;
+  assert.match(taxLine(game, home.house), /no Forum has the workers/);
+  forum.efficiency = 1;
+  assert.match(taxLine(game, home.house), new RegExp(`no tax collector has passed in the last ${CONFIG.TAX_ACCESS_DAYS} days`));
+  home.house.tax = 30;
+  assert.match(taxLine(game, home.house), /^Registered: .* for 30 more days unless a tax collector passes again$/);
 });

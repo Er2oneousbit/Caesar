@@ -17,7 +17,7 @@ import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../si
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
 import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
-import { MOODS } from '../audio/composer.js';
+import { MOODS, TRACKS } from '../audio/composer.js';
 import { log } from '../core/debug.js';
 
 export const CONSOLE_HELP = [
@@ -43,6 +43,8 @@ export const CONSOLE_HELP = [
   ['snow <0-3>', 'Set the snow lying on the ground (0 none .. 3 deep); it melts again by itself'],
   ['sky <0-1>|off', 'Freeze the time of day (0.3 noon, 0.67 sunset, 0.8 night) or let it run'],
   ['music [on|off|next]', 'Music status, switch it, or skip to a new piece'],
+  ['music tracks', 'List the music tracks (and the moods they play in)'],
+  ['music play <track>', 'Play a track now, by name (e.g. music play prima lux)'],
   ['music mood <m>|auto', 'Force a mood: menu, day, night, danger, festival (auto = follow the game)'],
   ['music wav [mood] [s]', 'Render music offline and download it as a WAV file (default: day, 60 s)'],
   ['music check', 'Render every mood offline and print its loudness (finds silent or clipping music)'],
@@ -287,6 +289,14 @@ export class DebugConsole {
           return mu.describe();
         }
         if (sub === 'next') { mu.skip(); return 'Starting a new piece.'; }
+        if (sub === 'tracks') return TRACKS.map((t, k) => `${String(k + 1).padStart(2)}. ${t.title.padEnd(13)} ${t.moods.join(', ')}`).join('\n');
+        if (sub === 'play') {
+          const name = args.slice(1).join(' ');
+          const byNumber = TRACKS[Number(name) - 1];
+          const t = mu.play(byNumber ? byNumber.id : name);
+          if (!t) throw new Error('usage: music play <track name or number> (music tracks lists them)');
+          return `Playing ${t.title}.`;
+        }
         if (sub === 'mood') {
           const m = (args[1] || '').toLowerCase();
           if (m !== 'auto' && !MOODS[m]) throw new Error(`usage: music mood ${Object.keys(MOODS).join('|')}|auto`);

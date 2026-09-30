@@ -16,22 +16,44 @@
  *   night     after dusk (with Day and night on)
  *   danger    raiders on the map
  *   festival  after a festival, and on victory
- * A new mood takes over at once: the playing piece fades out over a second
- * and a half and a new piece in the new mood starts on the next beat. Calm
- * moods leave some silence between pieces, as classic city builders do.
+ * Menu, day and night play the track library (composer.js TRACKS: ten
+ * pieces of a few minutes with names), picked at random but never one of
+ * the last few. Festivals and battles get a new piece each time, just as
+ * long.
  *
- * Pieces are generated (composer.js), so the music never loops.
+ * Mood changes: raiders and festivals take over at once (the playing piece
+ * fades out over a second and a half, the new one starts on the next beat).
+ * Between calm moods (day to night, say) a track is never cut off: if it
+ * belongs to the new mood too it plays on, otherwise it finishes the phrase
+ * it is in and plays its ending. Calm moods leave some silence between
+ * pieces, as classic city builders do.
  * renderWav() plays a mood into an OfflineAudioContext for the console's
  * `music wav` and for the browser tests.
  * ----------------------------------------------------------------------------
  */
 
-import { Piece, MOODS } from './composer.js';
+import { Piece, MOODS, TRACKS, TRACK_MEMORY, pickTrack, seededRandom } from './composer.js';
 import { Studio, Band } from './instruments.js';
 
 const LOOKAHEAD = 0.5; // seconds of music scheduled ahead
 const TICK_MS = 60;
 const FADE = 1.5; // seconds to fade a piece out when the mood changes
+/** Moods that take over at once (a raid will not wait for the end of a phrase). */
+const URGENT = new Set(['danger', 'festival']);
+
+/**
+ * The piece to play next in a mood: a track from the library (not one of
+ * `recent`, which it updates), or a new piece for moods without tracks.
+ */
+export function nextPiece(mood, recent, rng = Math.random, track = null) {
+  const t = track || pickTrack(mood, recent, rng);
+  if (!t) return new Piece(mood, rng);
+  recent.push(t.id);
+  while (recent.length > TRACK_MEMORY) recent.shift();
+  // A track keeps its own mood's settings (a track asked for by name during
+  // a raid plays as it always does: no horns, its own rhythm, its ending).
+  return new Piece(t.moods.includes(mood) ? mood : t.moods[0], seededRandom(t.seed), t);
+}
 
 export class Music {
   constructor() {
@@ -52,6 +74,8 @@ export class Music {
     this.nowPlaying = '';
     this.barsPlayed = 0;
     this.rng = Math.random;
+    this.recent = []; // ids of the tracks played last (not picked again for now)
+    this.queued = null; // a track asked for by name (console, music lab)
   }
 
   /** True once the audio context exists and the scheduler runs. */
@@ -141,8 +165,19 @@ export class Music {
     if (this.ac) this.nextBar = this.ac.currentTime + 0.1;
   }
 
+  /** Console, music lab: play a track now (by id or title, any mood). */
+  play(name) {
+    const key = String(name).toLowerCase();
+    const t = TRACKS.find((x) => x.id === key || x.title.toLowerCase() === key);
+    if (!t) return null;
+    this.queued = t;
+    this.skip();
+    return t;
+  }
+
   newPiece() {
-    this.piece = new Piece(this.mood, this.rng);
+    this.piece = nextPiece(this.mood, this.recent, this.rng, this.queued);
+    this.queued = null;
     this.band = new Band(this.studio);
     this.nowPlaying = this.piece.name;
   }
@@ -163,12 +198,19 @@ export class Music {
     if (this.nextBar < now - 0.05) this.nextBar = now + 0.05;
     const want = this.forced || this.wanted;
     if (want !== this.mood) {
-      // New mood: fade the old piece and start the new one right away (a slow
-      // night bar can last three seconds; raiders should not wait for it).
+      const was = this.mood;
       this.mood = want;
-      this.endPiece(FADE);
-      this.gapUntil = 0;
-      this.nextBar = now + 0.1;
+      if (URGENT.has(want) || !this.piece) {
+        // Raiders or a festival: fade the old piece and start the new one
+        // right away (a slow night bar can last three seconds).
+        this.endPiece(FADE);
+        this.gapUntil = 0;
+        this.nextBar = now + 0.1;
+      } else if (URGENT.has(was) || !(this.piece.track && this.piece.track.moods.includes(want))) {
+        // The piece does not belong here: it finishes its phrase and ends.
+        this.piece.windDown();
+      }
+      // Otherwise (a track of both moods) it simply plays on.
     }
     let guard = 0;
     while (this.nextBar < now + LOOKAHEAD && guard++ < 16) {
@@ -200,10 +242,11 @@ export class Music {
 
 /**
  * Render `seconds` of music in a mood into a stereo AudioBuffer (offline, as
- * fast as the machine allows). Used by the console's `music wav` and tests.
+ * fast as the machine allows), starting with `track` if given (a TRACKS
+ * entry). Used by the console's `music wav` and tests.
  * @returns {Promise<AudioBuffer>}
  */
-export async function renderMood(mood, seconds = 30, rng = Math.random, sampleRate = 44100) {
+export async function renderMood(mood, seconds = 30, rng = Math.random, sampleRate = 44100, track = null) {
   const OAC = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
   if (!OAC) throw new Error('This browser cannot render audio offline.');
   const ac = new OAC(2, Math.ceil(seconds * sampleRate), sampleRate);
@@ -218,8 +261,9 @@ export async function renderMood(mood, seconds = 30, rng = Math.random, sampleRa
   comp.connect(master).connect(ac.destination);
   const studio = new Studio(ac, comp);
   let t = 0.05;
+  const recent = [];
   while (t < seconds) {
-    const piece = new Piece(mood, rng);
+    const piece = nextPiece(mood, recent, rng, t < 1 ? track : null);
     const band = new Band(studio);
     let bar;
     while ((bar = piece.nextBar()) && t < seconds) {

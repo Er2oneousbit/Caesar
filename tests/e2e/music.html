@@ -15,20 +15,22 @@
 </head>
 <body>
 <!--
-  Music lab: listen to each mood live, and an automatic check of the synth.
+  Music lab: listen to each track and each mood live, and an automatic check
+  of the synth.
   Open with the dev server: npm run dev, then /tests/e2e/music.html
   The check renders every mood offline and reports peak, loudness and
   tuning; ?check=1 runs it on load (the browser tests use window.__result).
 -->
 <h1>Music lab</h1>
-<p>Play a mood (your browser needs a click before it makes sound):
+<p>Play a track (your browser needs a click before it makes sound):<br><span id="tracks"></span></p>
+<p>Or a mood (festivals and raids have music of their own):
   <span id="moods"></span> <button id="stop">Stop</button></p>
 <div id="now"></div>
 <p><button id="run">Run the check</button> renders every mood offline and measures it.</p>
 <div id="out"></div>
 <script type="module">
   import { Music, renderMood, renderNote, estimatePitch, measure } from '../../src/audio/music.js';
-  import { MOODS } from '../../src/audio/composer.js';
+  import { MOODS, TRACKS } from '../../src/audio/composer.js';
   import { midiToHz } from '../../src/audio/instruments.js';
 
   const music = new Music();
@@ -45,6 +47,20 @@
       music.skip();
     };
     moods.appendChild(b);
+  }
+  const tracks = document.getElementById('tracks');
+  for (const t of TRACKS) {
+    const b = document.createElement('button');
+    b.textContent = t.title;
+    b.title = `${t.moods.join(', ')}: ${t.mode}, ${t.bpm} bpm, opens with ${t.intro}`;
+    b.onclick = () => {
+      if (!ac) { ac = new AudioContext(); music.attach(ac); }
+      ac.resume();
+      music.setEnabled(true);
+      music.force(t.moods[0]);
+      music.play(t.id);
+    };
+    tracks.appendChild(b);
   }
   document.getElementById('stop').onclick = () => music.setEnabled(false);
   setInterval(() => { document.getElementById('now').textContent = ac ? music.describe() : ''; }, 500);

@@ -552,6 +552,24 @@ try {
   await page.keyboard.press('m');
   const mOn = await page.evaluate(() => window.colonia.settings.music === true);
   check('M key switches the music off and on', mOff && mOn);
+  // The track library, live: a named track plays, and a change of mood from
+  // day to night lets a day-only track finish its phrase and end (no cut).
+  const lib = await page.evaluate(async () => {
+    const m = window.colonia.music;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    m.force('day');
+    m.play('prima-lux');
+    await wait(500);
+    const title = m.piece && m.piece.track ? m.piece.track.title : null;
+    m.force('night');
+    await wait(300);
+    const still = m.piece && m.piece.track ? m.piece.track.title : null;
+    const ending = m.piece ? m.piece.sections[m.piece.sections.length - 1].name : null;
+    const left = m.piece ? m.piece.sections.length - m.piece.sectionIndex : -1;
+    m.force('auto');
+    return { title, still, ending, left, now: m.nowPlaying };
+  });
+  check('music: a named track plays; a change of mood lets it end its phrase instead of cutting it', lib.title === 'Prima Lux' && lib.still === 'Prima Lux' && lib.ending === 'outro' && lib.left >= 1 && lib.left <= 2, JSON.stringify(lib));
   // The synthesized music itself: every mood rendered offline, measured.
   const mc = await page.evaluate(() => window.colonia.musicSelfCheck(4));
   const mcOk = Object.values(mc).every((m) => !m.bad && m.peak > 0.02 && m.peak < 0.99 && m.rmsDb > -45);

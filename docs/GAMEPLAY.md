@@ -246,14 +246,16 @@ None of this changes the simulation: the same seed plays out the same way with e
 
 ## Music
 
-Original music, composed while you play and played by synthesized instruments (nothing is recorded, so it never loops). It starts on the title screen: at once where the browser allows autoplay, otherwise with the first click, tap or key press on *Click, tap or press a key to begin* (browsers hold sound back until then; that first gesture never presses a menu button). With the music off or muted there is no title screen. Then it follows the city:
+Original music, written by the game's own composer and played live by synthesized instruments (nothing is recorded). It starts on the title screen: at once where the browser allows autoplay, otherwise with the first click, tap or key press on *Click, tap or press a key to begin* (browsers hold sound back until then; that first gesture never presses a menu button). With the music off or muted there is no title screen. Then it follows the city:
 
-| Mood | When | Sounds like |
+| Mood | When | Plays |
 |---|---|---|
-| Menu | The main menu | Stately reed pipe over lyre, dorian or aeolian |
-| Day | Building the city | Lyre, reed pipe or pan flute, light frame drum; mixolydian, dorian or ionian, in 4/4 or a lilting 6/8; 8 to 20 seconds of silence between pieces |
-| Night | After dusk (with *Day and night* on) | Slow pan flute and sparse lyre, no drums |
-| Festival | For a while after a festival, and on victory | Bright lydian or mixolydian dance with jingles |
-| Danger | While raiders are on the map | Fast phrygian war drums, horn calls, no pauses |
+| Menu | The main menu | Tracks: *Colonia*, *Vesper* |
+| Day | Building the city | Tracks: *Colonia*, *Prima Lux*, *Mane in Foro*, *Via Nova*, *Aquae Vivae*, *Messis*, *Lares*; 6 to 14 seconds of silence between them |
+| Night | After dusk (with *Day and night* on) | Tracks: *Lares*, *Vesper*, *Nox Serena*, *Stellae* (slow pan flute and lyre, no drums) |
+| Festival | For a while after a festival, and on victory | A new bright lydian or mixolydian dance with jingles each time |
+| Danger | While raiders are on the map | New fast phrygian war music, drums and horn calls, one piece after another |
 
-A new mood takes over at once: the old piece fades out in a second and a half. *Settings* has a music switch and its own volume (separate from sound effects); **M** switches it too; *Mute all sounds* silences everything. Console: `music` (status), `music next`, `music mood danger` (or `auto`), `music check` (render and measure every mood), `music wav day 60` (download a WAV).
+The ten tracks each run 3 to 5 minutes and always sound the same: each has its own key, tempo, meter, pipes and tune, and its own way in (the lyre alone, a drone and a pipe call, the drums building up, the pipe alone, a slow swell, or the whole band). They come in random order, never one of the last three. A piece is built from an opening, rounds of sections (the theme, a higher answer, a calmer contrast on the other pipe, a passage for the lyre alone) and an ending; festival and battle pieces are built the same way and run about 3 minutes.
+
+Raiders and festivals take over at once: the old piece fades out in a second and a half. Between calm moods a track is never cut off: if it plays in the new mood too it carries on, otherwise it finishes its phrase and plays its ending before the next one starts. *Settings* has a music switch and its own volume (separate from sound effects); **M** switches it too; *Mute all sounds* silences everything. Console: `music` (status, with the track playing), `music next`, `music tracks`, `music play prima lux` (or a number), `music mood danger` (or `auto`), `music check` (render and measure every mood), `music wav day 60` (download a WAV).

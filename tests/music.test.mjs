@@ -5,17 +5,22 @@
  *
  * The composer only writes notes (no audio), so it can be checked here:
  * repeatable for a seed, every note in its mode and its instrument's range,
- * events inside their bar, the form of each mood, cadences landing home,
- * melodies that mostly move by step, and each mood's character (danger is
- * fast with war drums, night is slow with none). The synthesized sound itself
- * is checked in the browser (tests/e2e/smoke.mjs and tests/e2e/music.html).
+ * events inside their bar, the form of each mood (a few minutes long),
+ * cadences landing home, melodies that mostly move by step, each mood's
+ * character (danger is fast with war drums, night is slow with none), and
+ * the track library: ten named tracks of a few minutes, the same every time,
+ * each opening its own way, picked at random without repeating the last
+ * few, winding down to their ending when the mood moves on. The synthesized
+ * sound itself is checked in the browser (tests/e2e/smoke.mjs and
+ * tests/e2e/music.html).
  * ----------------------------------------------------------------------------
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { Piece, MOODS, MODES, degreeToMidi, stableRoots, noteName, isChordTone } from '../src/audio/composer.js';
+import { Piece, MOODS, MODES, TRACKS, TRACK_MEMORY, INTRO_STYLES, degreeToMidi, stableRoots, noteName, isChordTone, pickTrack, tracksFor, seededRandom } from '../src/audio/composer.js';
+import { nextPiece } from '../src/audio/music.js';
 
 /**
  * Deterministic random numbers. The seed is scrambled first: with a plain
@@ -81,16 +86,127 @@ test('music: events sit inside their bar, in order, with sane values', () => {
   }
 });
 
-test('music: each mood follows its form, then the piece ends', () => {
+test('music: every mood plays pieces of a few minutes: an opening, rounds of sections, an ending', () => {
+  const known = new Set(['intro', 'A', 'A2', 'A3', 'A4', 'B', 'B2', 'C', 'C2', 'interlude', 'outro']);
   for (const mood of Object.keys(MOODS)) {
-    const p = new Piece(mood, seeded(3));
-    const bars = playAll(p);
-    assert.equal(bars.length, p.bars, `${mood}: ${bars.length} bars`);
-    const sections = [...new Set(bars.map((b) => b.section))];
-    assert.deepEqual(sections, MOODS[mood].form);
-    assert.equal(p.nextBar(), null, 'stays finished');
-    assert.ok(p.duration > 15 && p.duration < 120, `${mood}: ${p.duration.toFixed(1)} s`);
+    for (let seed = 1; seed <= 4; seed++) {
+      const p = new Piece(mood, seeded(seed));
+      const bars = playAll(p);
+      assert.equal(bars.length, p.bars, `${mood}: ${bars.length} bars`);
+      const names = p.sections.map((sec) => sec.name);
+      assert.equal(names[0], 'intro');
+      assert.equal(names[names.length - 1], MOODS[mood].outro ? 'outro' : names[names.length - 1]);
+      for (const n of ['A', 'A2', 'B', 'A3']) assert.ok(names.includes(n), `${mood}: has ${n}`);
+      assert.ok(names.every((n) => known.has(n)), names.join(' '));
+      assert.equal(p.nextBar(), null, 'stays finished');
+      assert.ok(p.duration >= 150 && p.duration <= 330, `${mood}: ${p.duration.toFixed(0)} s`);
+    }
   }
+  assert.ok(!MOODS.danger.outro, 'battle pieces follow each other without an ending');
+});
+
+test('music: ten named tracks for day, night and the menu, a few minutes each, in key and range', () => {
+  assert.equal(TRACKS.length, 10);
+  for (const key of ['id', 'title', 'seed']) assert.equal(new Set(TRACKS.map((t) => t[key])).size, TRACKS.length, `unique ${key}s`);
+  for (const t of TRACKS) {
+    assert.ok(t.moods.length && t.moods.every((m) => ['menu', 'day', 'night'].includes(m)), `${t.title}: ${t.moods}`);
+    assert.ok(INTRO_STYLES.includes(t.intro), `${t.title}: opening ${t.intro}`);
+    const p = new Piece(t.moods[0], seededRandom(t.seed), t);
+    assert.ok(p.duration >= 180 && p.duration <= 320, `${t.title}: ${(p.duration / 60).toFixed(1)} min`);
+    const inScale = new Set(p.scale.map((d) => pc(p.root + d)));
+    for (const bar of playAll(p)) {
+      for (const e of bar.events) {
+        if (e.midi === undefined) continue;
+        assert.ok(inScale.has(pc(e.midi)), `${t.title}: ${e.inst} ${noteName(e.midi)}`);
+        const [lo, hi] = p.ranges[e.inst];
+        assert.ok(e.midi >= lo && e.midi <= hi, `${t.title}: ${e.inst} ${e.midi} outside ${lo}..${hi}`);
+      }
+    }
+  }
+  for (const mood of ['menu', 'day', 'night']) assert.ok(tracksFor(mood).length >= 2, `${mood} has tracks`);
+  assert.equal(tracksFor('danger').length + tracksFor('festival').length, 0, 'festivals and raids keep their own music');
+});
+
+test('music: a track sounds the same every time; tracks differ, and open differently', () => {
+  const notes = (t) => JSON.stringify(playAll(new Piece(t.moods[0], seededRandom(t.seed), t)));
+  for (const t of TRACKS.slice(0, 3)) assert.equal(notes(t), notes(t), t.title);
+  // The opening: who plays in the first two bars, and the first notes.
+  const opening = (t) => {
+    const p = new Piece(t.moods[0], seededRandom(t.seed), t);
+    const bars = [p.nextBar(), p.nextBar()];
+    return JSON.stringify(bars.map((b) => b.events.map((e) => [e.inst, e.midi ?? e.kind, Math.round(e.t * 100)])));
+  };
+  const openings = TRACKS.map(opening);
+  assert.equal(new Set(openings).size, TRACKS.length, 'no two tracks open alike');
+  assert.ok(new Set(TRACKS.map((t) => t.intro)).size >= 5, 'at least five kinds of opening');
+  // The kinds of opening do what they say.
+  const who = (t, bar) => {
+    const p = new Piece(t.moods[0], seededRandom(t.seed), t);
+    let b;
+    for (let k = 0; k <= bar; k++) b = p.nextBar();
+    return new Set(b.events.map((e) => e.inst));
+  };
+  const byIntro = (s) => TRACKS.find((t) => t.intro === s);
+  assert.deepEqual([...who(byIntro('pipe'), 0)], [byIntro('pipe').lead], 'the pipe alone');
+  assert.deepEqual([...who(byIntro('lyre'), 0)], ['lyre'], 'the lyre alone');
+  assert.deepEqual([...who(byIntro('drums'), 0)], ['drum'], 'the drums first');
+  assert.ok(who(byIntro('drums'), 2).has('lyre'), 'then the lyre joins');
+  assert.deepEqual([...who(byIntro('drone'), 0)], ['pad'], 'the drone alone');
+});
+
+test('music: C sections hand the tune to the other pipe', () => {
+  const t = TRACKS.find((x) => x.lead === 'aulos');
+  const p = new Piece(t.moods[0], seededRandom(t.seed), t);
+  assert.equal(p.lead2, 'syrinx');
+  const leads = {};
+  for (const bar of playAll(p)) {
+    for (const e of bar.events) if (e.inst === 'aulos' || e.inst === 'syrinx') (leads[bar.section] ||= new Set()).add(e.inst);
+  }
+  assert.deepEqual([...leads.C], ['syrinx']);
+  assert.deepEqual([...leads.A], ['aulos']);
+});
+
+test('music: tracks come in random order, never one of the last few', () => {
+  const rng = seeded(42);
+  for (const mood of ['day', 'night', 'menu']) {
+    const pool = tracksFor(mood).map((t) => t.id);
+    const recent = [];
+    const played = [];
+    for (let k = 0; k < 40; k++) {
+      const p = nextPiece(mood, recent, rng);
+      assert.ok(p.track && pool.includes(p.track.id), `${mood}: ${p.track?.id}`);
+      played.push(p.track.id);
+    }
+    const memory = Math.min(TRACK_MEMORY, pool.length - 1);
+    for (let k = 1; k < played.length; k++) {
+      for (let back = 1; back <= memory; back++) assert.notEqual(played[k], played[k - back], `${mood}: ${played[k]} again after ${back}`);
+    }
+    assert.equal(new Set(played).size, pool.length, `${mood}: every track plays`);
+  }
+  // A track asked for during a raid still plays as itself: no horns, same notes.
+  const day = TRACKS.find((x) => x.id === 'prima-lux');
+  const inRaid = nextPiece('danger', [], rng, day);
+  assert.equal(inRaid.mood, 'day');
+  assert.equal(JSON.stringify(playAll(inRaid)), JSON.stringify(playAll(new Piece('day', seededRandom(day.seed), day))));
+  assert.equal(pickTrack('danger', [], rng), null);
+  const battle = nextPiece('danger', [], rng);
+  assert.equal(battle.track, null, 'a new battle piece each time');
+});
+
+test('music: when the mood moves on, a piece finishes its phrase and plays its ending', () => {
+  const t = TRACKS.find((x) => x.id === 'prima-lux');
+  const p = new Piece('day', seededRandom(t.seed), t);
+  for (let k = 0; k < 9; k++) p.nextBar(); // into the second section
+  const at = p.sectionIndex;
+  const left = p.sections[at].bars - p.barInSection;
+  p.windDown();
+  assert.deepEqual(p.sections.slice(at).map((sec) => sec.name), [p.sections[at].name, 'outro']);
+  let n = 0;
+  let last;
+  let b;
+  while ((b = p.nextBar())) { n++; last = b; }
+  assert.equal(n, left + 2, 'the rest of the phrase, then the 2-bar ending');
+  assert.equal(last.section, 'outro');
 });
 
 test('music: phrases come home to the tonic and pause on the fifth', () => {

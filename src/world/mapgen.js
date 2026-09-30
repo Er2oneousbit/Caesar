@@ -5,13 +5,17 @@
  *
  * Pipeline:
  *   1. Fill the base terrain (grass, or sand for deserts).
- *   2. Carve water according to the map type (river, coast, lakes, ponds).
+ *   2. Carve water according to the map type (river, coast, lakes, ponds),
+ *      then drop specks: water patches smaller than MIN_WATER_TILES become
+ *      land (a lone tile of water reads as a glitch, not a pond).
  *   3. Sprinkle meadows (fertile land, more common near water), forests and
  *      rock outcrops using fbm noise with percentile thresholds so every seed
  *      gets similar proportions.
  *   4. Add beaches next to water.
  *   5. Lay the Imperial Road from an entry tile on one map edge to an exit tile
- *      on another edge using A* (it avoids water and rocks when it can).
+ *      on another edge using A* (it avoids water and rocks when it can). Each
+ *      end runs straight in from its edge for ROAD_STUB tiles, so the map
+ *      gates standing across it face the edge.
  *   6. Keep a band ROAD_CLEARANCE tiles wide each side of that road free of
  *      rock and meadow. Every city starts along it: rock can never be
  *      cleared, and farm plots (meadow) belong out in the fields, not in the
@@ -40,8 +44,21 @@ export const MAP_SIZES = Object.freeze({ small: 64, medium: 96, large: 128, uber
  */
 export const ROAD_CLEARANCE = 6;
 
+/**
+ * The Imperial road runs straight in from the map edge for this many tiles
+ * past its end tile before it may turn: the gates over its ends face the edge
+ * (they stand across the road), and the road passes straight through them.
+ */
+export const ROAD_STUB = 3;
+
 /** Meadow fields smaller than this many tiles are dropped (a 3x3 farm needs 9). */
 export const MIN_FIELD_TILES = 12;
+
+/**
+ * Water patches (tiles joined side to side) smaller than this become land:
+ * the smallest pond is 2x2. Patches that only touch at a corner count apart.
+ */
+export const MIN_WATER_TILES = 4;
 
 /** One-line notes shown under the size picker. */
 export const MAP_SIZE_NOTES = Object.freeze({
@@ -92,6 +109,7 @@ export function generateMap({ width, height, seed, type }) {
   if (type === 'river') info.river = carveRiver(map, rng, nWater);
   else if (type === 'coast') info.coastSide = carveCoast(map, rng, nWater);
   else carveLakes(map, nWater, type === 'lakes' ? 0.1 : type === 'plains' ? 0.03 : 0.045, type === 'lakes' ? 20 : 14);
+  dropWaterSpecks(map, type === 'desert' ? Terrain.SAND : Terrain.GRASS);
 
   map.computeWaterDistance();
 
@@ -250,39 +268,64 @@ function carveLakes(map, noise, fraction, scale) {
   for (let i = 0; i < size; i++) if (vals[i] > cut) map.terrain[i] = Terrain.WATER;
 }
 
-/** Find the land tile on an edge closest to the desired position. */
+/**
+ * Water patches smaller than MIN_WATER_TILES (joined side to side) become
+ * `base` ground. No random draws, so the rest of the map stays as it was
+ * for the seed.
+ */
+function dropWaterSpecks(map, base) {
+  const { size, w } = map;
+  const seen = new Uint8Array(size);
+  for (let i = 0; i < size; i++) {
+    if (seen[i] || map.terrain[i] !== Terrain.WATER) continue;
+    const patch = [i];
+    seen[i] = 1;
+    for (let k = 0; k < patch.length; k++) {
+      const x = patch[k] % w;
+      const y = (patch[k] / w) | 0;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        if (!map.inBounds(nx, ny)) continue;
+        const n = map.idx(nx, ny);
+        if (!seen[n] && map.terrain[n] === Terrain.WATER) {
+          seen[n] = 1;
+          patch.push(n);
+        }
+      }
+    }
+    if (patch.length < MIN_WATER_TILES) for (const j of patch) map.terrain[j] = base;
+  }
+}
+
+/** The step into the map from a tile on `edge`. */
+const INWARD = Object.freeze({ x0: [1, 0], x1: [-1, 0], y0: [0, 1], y1: [0, -1] });
+
+/**
+ * Find the tile on an edge closest to the desired position whose straight
+ * way in (the tile and ROAD_STUB tiles inward) is dry, open land.
+ */
 function snapToLandOnEdge(map, edge, pos) {
   const { w, h } = map;
   const len = edge === 'x0' || edge === 'x1' ? h : w;
+  const [ix, iy] = INWARD[edge];
+  const at = (p) => (edge === 'x0' ? { x: 0, y: p } : edge === 'x1' ? { x: w - 1, y: p } : edge === 'y0' ? { x: p, y: 0 } : { x: p, y: h - 1 });
+  const open = ({ x, y }) => {
+    for (let k = 0; k <= ROAD_STUB; k++) {
+      const t = map.terrain[map.idx(x + ix * k, y + iy * k)];
+      if (t === Terrain.WATER || t === Terrain.ROCK) return false;
+    }
+    return true;
+  };
   for (let off = 0; off < len; off++) {
     for (const s of [1, -1]) {
       const p = Math.round(pos + s * off);
       if (p < 2 || p >= len - 2) continue;
-      let x;
-      let y;
-      if (edge === 'x0') { x = 0; y = p; }
-      else if (edge === 'x1') { x = w - 1; y = p; }
-      else if (edge === 'y0') { x = p; y = 0; }
-      else { x = p; y = h - 1; }
-      const t = map.terrain[map.idx(x, y)];
-      if (t !== Terrain.WATER && t !== Terrain.ROCK) return { x, y };
+      if (open(at(p))) return at(p);
     }
   }
-  // Worst case: force a tile to grass.
-  const x = edge === 'x0' ? 0 : edge === 'x1' ? w - 1 : Math.floor(w / 2);
-  const y = edge === 'y0' ? 0 : edge === 'y1' ? h - 1 : Math.floor(h / 2);
-  map.terrain[map.idx(x, y)] = Terrain.GRASS;
-  return { x, y };
-}
-
-/** The step [dx, dy] from `end` to the first tile of `path` beside it (the road's way out of `end`), or null. */
-function roadStep(map, end, path) {
-  for (const i of path) {
-    const dx = map.xOf(i) - end.x;
-    const dy = map.yOf(i) - end.y;
-    if (Math.abs(dx) + Math.abs(dy) === 1) return [dx, dy];
-  }
-  return null;
+  // Worst case: force the way in to grass.
+  const end = at(Math.floor(len / 2));
+  for (let k = 0; k <= ROAD_STUB; k++) map.terrain[map.idx(end.x + ix * k, end.y + iy * k)] = Terrain.GRASS;
+  return end;
 }
 
 /** Choose entry/exit points and connect them with a road. */
@@ -335,6 +378,15 @@ function placeImperialRoad(map, rng, type, info) {
   const exit = snapToLandOnEdge(map, exitEdge, exitPos);
   map.entry = entry;
   map.exit = exit;
+  // Straight ways in at both ends; A* joins their inner tips.
+  const stub = (end, edge) => {
+    const [ix, iy] = INWARD[edge];
+    const out = [];
+    for (let k = 0; k <= ROAD_STUB; k++) out.push(map.idx(end.x + ix * k, end.y + iy * k));
+    return out;
+  };
+  const inStub = stub(entry, entryEdge);
+  const outStub = stub(exit, exitEdge);
 
   // Cost model: prefer grass, avoid meadows/forests a bit, avoid water and
   // rock strongly (they become bridges / get blasted only if unavoidable).
@@ -353,8 +405,9 @@ function placeImperialRoad(map, rng, type, info) {
     if (x < 2 || y < 2 || x > w - 3 || y > h - 3) c += 2;
     return c;
   };
-  const path = pf.astar(map.idx(entry.x, entry.y), map.idx(exit.x, exit.y), cost, { turnPenalty: 2.5 });
-  if (!path) throw new Error('Map generation failed to connect the imperial road');
+  const middle = pf.astar(inStub[ROAD_STUB], outStub[ROAD_STUB], cost, { turnPenalty: 2.5 });
+  if (!middle) throw new Error('Map generation failed to connect the imperial road');
+  const path = [...inStub.slice(0, ROAD_STUB), ...middle, ...outStub.slice(0, ROAD_STUB).reverse()];
   for (const i of path) {
     const t = map.terrain[i];
     if (t === Terrain.WATER) {
@@ -366,9 +419,10 @@ function placeImperialRoad(map, rng, type, info) {
   }
   map.fixedRoad[map.idx(entry.x, entry.y)] = 1;
   map.fixedRoad[map.idx(exit.x, exit.y)] = 1;
-  // Which way the road leaves each end (the map gates stand across it).
-  map.entryDir = roadStep(map, entry, path);
-  map.exitDir = roadStep(map, exit, [...path].reverse());
+  // Which way the road leaves each end (the map gates stand across it):
+  // always straight in from the edge.
+  map.entryDir = [...INWARD[entryEdge]];
+  map.exitDir = [...INWARD[exitEdge]];
   info.roadLength = path.length;
   return path;
 }

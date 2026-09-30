@@ -8,14 +8,23 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-5. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
-6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+1. **Art the owner flagged**: aqueducts meeting a reservoir join it badly (the channel should run up into the reservoir's rim); the three statues need redrawing (they look poor); and every temple needs a look of its own so each god can be told apart at a glance, on the map and in the build menu (roof and pediment colors, the god's emblem and statue). Design the temples for the original's five gods (Ceres, Neptune, Mercury, Mars, Venus; see Decisions), so the switch in item 6 needs no second pass.
+2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+5. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+6. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, the governor's residence with salary and rank, and the original's five gods.
+7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.7.2)
+
+* The Imperial road runs straight in from the map edge for 3 tiles at both ends, so the entrance and exit gateways always face the map edge with the road passing straight through (on about a quarter of maps a road end ran along the edge and turned its gateway sideways, toward the middle of the map)
+* No single-tile water: water patches smaller than a 2x2 pond become land (lakes, plains and desert maps had a few specks each)
+* Settings: each checkbox stays beside its label (a long help text used to push it onto a line of its own, where it looked unlabeled above the next setting)
+* Maps for a given seed changed where a speck or a road end moved; saves keep their own map
+* 132 unit tests (+2), 68 browser checks (+1)
 
 ## Done (v0.7.1)
 

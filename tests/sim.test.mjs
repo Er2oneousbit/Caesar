@@ -16,8 +16,8 @@ import { RNG } from '../src/core/rng.js';
 import { log } from '../src/core/debug.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
-import { generateMap, MAP_TYPES, ROAD_CLEARANCE, MIN_FIELD_TILES } from '../src/world/mapgen.js';
-import { Terrain, WaterBits } from '../src/world/map.js';
+import { generateMap, MAP_TYPES, ROAD_CLEARANCE, MIN_FIELD_TILES, MIN_WATER_TILES, ROAD_STUB } from '../src/world/mapgen.js';
+import { Terrain, WaterBits, Road } from '../src/world/map.js';
 import { PathFinder } from '../src/world/pathfinding.js';
 import { SCENARIOS, sandboxScenario } from '../src/data/scenarios.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
@@ -89,6 +89,50 @@ test('every map type generates a connected imperial road', () => {
     let water = 0;
     for (let i = 0; i < map.size; i++) if (map.terrain[i] === Terrain.WATER) water++;
     assert.ok(water > 0, `${type}: has some water`);
+  }
+});
+
+test('the Imperial road runs straight in from the map edge at both ends, so the gates face the edge', () => {
+  for (const type of Object.keys(MAP_TYPES)) {
+    for (const size of [64, 128]) {
+      for (let s = 0; s < 12; s++) {
+        const { map } = generateMap({ width: size, height: size, seed: `gate-${s}`, type });
+        for (const [name, end, dir] of [['entry', map.entry, map.entryDir], ['exit', map.exit, map.exitDir]]) {
+          const label = `${type} ${size} gate-${s} ${name}`;
+          const inward = end.x === 0 ? [1, 0] : end.x === map.w - 1 ? [-1, 0] : end.y === 0 ? [0, 1] : end.y === map.h - 1 ? [0, -1] : null;
+          assert.ok(inward, `${label}: on the map edge`);
+          assert.deepEqual(dir, inward, `${label}: the gate faces the edge`);
+          for (let k = 0; k <= ROAD_STUB; k++) {
+            const i = map.idx(end.x + inward[0] * k, end.y + inward[1] * k);
+            assert.equal(map.road[i], Road.ROAD, `${label}: road ${k} tiles in`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test('no water specks: every water patch has at least MIN_WATER_TILES tiles', () => {
+  for (const type of Object.keys(MAP_TYPES)) {
+    for (let s = 0; s < 10; s++) {
+      const { map } = generateMap({ width: 64, height: 64, seed: `speck-${s}`, type });
+      const seen = new Uint8Array(map.size);
+      for (let i = 0; i < map.size; i++) {
+        if (seen[i] || map.terrain[i] !== Terrain.WATER) continue;
+        const patch = [i];
+        seen[i] = 1;
+        for (let k = 0; k < patch.length; k++) {
+          const x = map.xOf(patch[k]);
+          const y = map.yOf(patch[k]);
+          for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+            if (!map.inBounds(nx, ny)) continue;
+            const n = map.idx(nx, ny);
+            if (!seen[n] && map.terrain[n] === Terrain.WATER) { seen[n] = 1; patch.push(n); }
+          }
+        }
+        assert.ok(patch.length >= MIN_WATER_TILES, `${type} speck-${s}: a ${patch.length}-tile water patch at ${map.xOf(i)},${map.yOf(i)}`);
+      }
+    }
   }
 });
 

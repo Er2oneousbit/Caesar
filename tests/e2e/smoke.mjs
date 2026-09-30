@@ -532,6 +532,14 @@ try {
   await page.click('label:has-text("Day and night") input');
   const dayOn = await page.evaluate(() => window.colonia.renderer.dayNightOn === true);
   check('settings switch day/night, seasons and weather', worldToggles && dayOff && dayOn, JSON.stringify({ worldToggles, dayOff, dayOn }));
+  // Every settings checkbox sits on the first line of its own label, even
+  // with a long help text below it (it used to wrap onto a line of its own).
+  const boxes = await page.evaluate(() => [...document.querySelectorAll('.modal .check-row')].map((row) => {
+    const box = row.querySelector('input').getBoundingClientRect();
+    const text = row.querySelector('span').getBoundingClientRect();
+    return { label: row.textContent.slice(0, 24), beside: box.right <= text.left + 1, sameLine: box.top >= text.top - 6 && box.top <= text.top + 10 };
+  }));
+  check('each settings checkbox sits beside its label', boxes.length >= 8 && boxes.every((b) => b.beside && b.sameLine), JSON.stringify(boxes.filter((b) => !b.beside || !b.sameLine)));
   const musicVol = await page.isVisible('text=Music volume');
   await page.click('label:has-text("Music (M)") input');
   const musicOff = await page.evaluate(() => window.colonia.music.enabled === false && !window.colonia.music.playing);

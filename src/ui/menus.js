@@ -243,7 +243,7 @@ export function settingsMenu(app) {
   const s = app.settings;
   const vol = h('b', {}, `${Math.round(s.volume * 100)}%`);
   const mvol = h('b', {}, `${Math.round((s.musicVolume ?? 0.35) * 100)}%`);
-  const check = (key, label, help) => h('label', { class: 'row', style: { margin: '6px 0' } },
+  const check = (key, label, help) => h('label', { class: 'check-row' },
     h('input', { type: 'checkbox', checked: !!s[key], onchange: (e) => { s[key] = e.target.checked; app.applySettings(); } }),
     h('span', {}, label, help ? h('div', { class: 'muted', style: { fontSize: '12px' } }, help) : null));
   return modal('Settings', [

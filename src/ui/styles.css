@@ -380,6 +380,11 @@ table.tbl td.r, table.tbl th.r { text-align: right; }
 .tab { border: 1px solid transparent; border-bottom: none; background: transparent; padding: 6px 10px; border-radius: 6px 6px 0 0; cursor: pointer; font-weight: 600; color: var(--ink-soft); }
 .tab.active { background: var(--panel); border-color: var(--line); color: var(--ink); }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* A checkbox beside its label and help text: never wraps, so a long help text
+   cannot push the box onto a line of its own above its label. */
+.check-row { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
+.check-row input { flex: none; margin-top: 3px; }
+.check-row > span { flex: 1; min-width: 0; }
 .field { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
 .field label { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
 .field input[type="text"], .field select, .field input[type="number"] {

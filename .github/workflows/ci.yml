@@ -1,10 +1,10 @@
 # Continuous integration: unit tests, a reproducible build check and the
-# browser smoke test, on every push (any branch) and every pull request.
+# browser smoke test, on every push (any branch). Not on pull requests: the
+# project does not take them (they are closed, see close-pull-requests.yml).
 name: CI
 
 on:
   push:
-  pull_request:
   workflow_dispatch:
 
 # A newer push to the same branch/PR cancels the older, still-running check.

@@ -1,0 +1,28 @@
+# Colonia does not take contributions (see CONTRIBUTING.md): a pull request
+# from anyone but the owner is closed at once, with a short note.
+#
+# pull_request_target runs this workflow from the default branch with a token
+# that may close the pull request. It never checks out or runs the pull
+# request's code, and nothing from the pull request (title, body, branch) is
+# put into the command: only its number, through an environment variable.
+name: Close pull requests
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    if: github.event.pull_request.user.login != github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close with a note
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr close "$PR" --repo "$REPO" --comment "Thanks, but Colonia is a one-person project and does not take pull requests. Bug reports are welcome as issues (see CONTRIBUTING.md). Under the MIT license you are free to fork it."

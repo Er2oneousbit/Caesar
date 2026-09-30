@@ -1,5 +1,9 @@
-blank_issues_enabled: true
+# Bug reports only: no blank issues, no feature requests (see CONTRIBUTING.md).
+blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability
+  - name: Security problem
     url: https://github.com/Er2oneousbit/Caesar/security/advisories/new
-    about: Please report security problems privately (see SECURITY.md).
+    about: Report security problems privately (see SECURITY.md), not as an issue.
+  - name: Feature requests and pull requests are not taken
+    url: https://github.com/Er2oneousbit/Caesar/blob/HEAD/CONTRIBUTING.md
+    about: Colonia is a one-person project. Bug reports are welcome; ideas and code are not taken.

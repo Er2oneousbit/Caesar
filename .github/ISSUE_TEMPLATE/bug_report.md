@@ -1,12 +1,11 @@
 ---
 name: Bug report
-about: Something in the game doesn't work the way it should
+about: Something in the game does not work the way it should
 title: "[Bug] "
 labels: bug
 ---
 
 **What happened?**
-A clear description of the bug.
 
 **Steps to reproduce**
 1.
@@ -15,18 +14,14 @@ A clear description of the bug.
 
 **What did you expect instead?**
 
-**Setup**
-- Browser + version:
-- OS:
-- How you ran it: `dist/colonia.html` / dev server / other:
-- Map seed (turn on `?debug=1` to see it) or scenario id:
+**Browser and operating system**
 
-**Save data or crash report (optional but very helpful)**
-- Save: *Save game → Copy save data*, then paste it into a `.json` file and attach it.
+**Save file or crash report (very helpful)**
+- Save: *Save game → Copy save data*, paste it into a `.json` file and attach it.
 - Crash screen: click *Copy report* and paste it below.
 
 ```
 paste the report here
 ```
 
-**Screenshots (optional)**
+**Screenshot (optional)**

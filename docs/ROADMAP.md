@@ -8,15 +8,25 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **A longer, deeper campaign**: the campaign is short and its first cities are done quickly (7 missions, from 250 people to 6,000 with ratings of 40 to 60), where the original's campaign runs to about eleven promotions and its later cities take hours. More missions, with the choice between a peaceful and a military province at points along the way (parity item 13), goals that grow into the 20-level ladder (populations into the tens of thousands, ratings up to the 70s and 80s, the later ones needing villa and palace districts) on bigger maps, and harder later provinces (raids, the Emperor's demands). Pace targets: about half an hour to an hour for the first missions, several hours for the last ones at normal speed; the headless sim can check how long the goals take to reach. In two steps: first stretch the 7 missions there are (goals and maps for the new ladder, the pace targets), then add the new missions and branches once disease, crime, the Emperor's legions and the five gods exist (items 3, 5 and 6), so the new provinces are not built twice.
-2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-5. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-6. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
+1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
+2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+5. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
+6. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 2, 4 and 5, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
 7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.8.2)
+
+* **A longer campaign**: the seven missions' goals follow the 20-level ladder and set their length. Mission 1 asks for 1,200 people, culture 15 and peace 35 (was 250 people alone, won in about 5 months); mission 7 for 12,000 people, culture 75, prosperity 70, peace 75 and favor 65 (was 6,000, 60, 55, 40, 55). Each mission's culture and prosperity goals ask for a good share of what its buildings can give, and the homes they allow climb through the campaign: Huts, Townhouses, Domus, Villas, then every level
+* **Bigger maps** for missions 2 to 7: 96, 112, 128, 128, 128 and 160 tiles a side (were 80, 96, 96, 112, 96 and 128), each with farmland for half as many again as its goal
+* **Planned pace**: the fewest game years the goals allow, from the game's own rates (settlers a month at a good mood, peace a point a month, culture and prosperity a few points a month): 1.3, 2.2, 3.6, 5.7, 7.8, 8.5 and 15.4 years (were 0.2 to 7). With the city to build first, that is roughly half an hour for the first missions and a few hours for the last at normal speed. `npm run sim -- --pace` prints the table; a test holds each mission to its plan
+* The first mission has a Forum: a longer first mission needs taxes (the demo town went broke in about two and a half years without one)
+* Mission hints use the new level names and say what the goals need (peace needs a mood of 45 or more; the top homes need wine from two sources)
+* Missions already under way keep their map and take the new goals
+* 148 unit tests (+4)
 
 ## Done (v0.8.1)
 

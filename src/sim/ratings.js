@@ -66,7 +66,7 @@ export function updateRatings(game) {
 
   // Culture
   const culture = tiny ? 0 : cov.religion * 25 + Math.min(1, cov.entertainment / 40) * 25 + cov.school * 15 + cov.library * 15 + cov.academy * 12 + (hasSenate ? 8 : 0);
-  r.culture = approach(r.culture, culture, 4);
+  r.culture = approach(r.culture, culture, CONFIG.CULTURE_STEP);
 
   // Prosperity
   const net = ledgerNet(c.finance.lastYear);
@@ -78,10 +78,10 @@ export function updateRatings(game) {
   prosperity += c.wage >= CONFIG.BASE_WAGE ? 8 : 0;
   prosperity += hasSenate ? 10 : 0;
   if (tiny) prosperity = Math.min(prosperity, 10);
-  r.prosperity = approach(r.prosperity, prosperity, 2);
+  r.prosperity = approach(r.prosperity, prosperity, CONFIG.PROSPERITY_STEP);
 
   // Peace: slowly builds while people are content.
-  if (c.sentiment >= 45) r.peace = Math.min(100, r.peace + 1);
+  if (c.sentiment >= CONFIG.PEACE_MOOD) r.peace = Math.min(100, r.peace + CONFIG.PEACE_PER_MONTH);
   else if (c.sentiment < 30) r.peace = Math.max(0, r.peace - 2);
 
   // Favor: gently returns toward 50.

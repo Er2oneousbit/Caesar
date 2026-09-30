@@ -81,7 +81,7 @@ export function newCityState(scenario, funds) {
     entBase: 0, // city-wide entertainment every home gets (sim/entertainment.js)
     entCoverage: {}, // % of the population each venue kind can seat
     wineSources: 0, // for the top housing levels (sim/housing.js updateWineSources)
-    ratings: { culture: 0, prosperity: 0, peace: 20, favor: CONFIG.FAVOR_START },
+    ratings: { culture: 0, prosperity: 0, peace: CONFIG.PEACE_START, favor: CONFIG.FAVOR_START },
     coverage: {},
     gods: newGodState(),
     trade: newTradeState(scenario.partners || []),

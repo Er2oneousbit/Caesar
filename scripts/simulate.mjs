@@ -11,6 +11,7 @@
  *                             [--difficulty normal] [--json]
  *   npm run sim -- --years 5
  *   npm run sim -- --difficulty insane --raids frequent --garrison
+ *   npm run sim -- --pace       (how long the campaign's goals take, no city)
  *
  * Made with ❤️ from your friendly hacker - er2oneousbit
  * ----------------------------------------------------------------------------
@@ -22,6 +23,7 @@ import { DIFFICULTY } from '../src/data/difficulty.js';
 import { buildDemoCity, buildDemoGarrison } from '../src/dev/demoCity.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
+import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
 
 const HELP = `
 Headless balance simulation
@@ -39,12 +41,13 @@ Options:
   --garrison        also build a barracks, forts, towers and a wall (equipped)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --json            print a JSON summary at the end
+  --pace            print the campaign's pace (the fewest months each goal takes) and exit
   --verbose         print game messages as they happen
   --help            this help
 `;
 
 function parse(argv) {
-  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null };
+  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -60,6 +63,7 @@ function parse(argv) {
     else if (a === '--garrison') o.garrison = true;
     else if (a === '--raids') o.raids = next();
     else if (a === '--verbose') o.verbose = true;
+    else if (a === '--pace') o.pace = true;
     else { console.error(`Unknown option ${a}\n${HELP}`); process.exit(2); }
   }
   return o;
@@ -67,6 +71,18 @@ function parse(argv) {
 
 const opts = parse(process.argv.slice(2));
 log.setLevel('warn');
+
+// --pace: the campaign's goals against the game's rate limits (sim/pace.js).
+if (opts.pace) {
+  const f = (m) => (m ? String(Math.round(m)).padStart(4) : '   -');
+  console.log(`Fewest months each goal takes (a city always ready, mood ${PACE_MOOD}); the slowest sets the mission's floor.`);
+  console.log(' mission  map          pop  cult  pros  peace   floor (years, minutes at 1x)  planned');
+  for (const s of SCENARIOS) {
+    const m = goalMonths(s.goals);
+    console.log(` ${s.id.padEnd(7)}  ${`${s.map.type} ${s.map.size}`.padEnd(11)} ${f(m.population)}  ${f(m.culture)}  ${f(m.prosperity)}  ${f(m.peace)}   ${(m.fastest / 12).toFixed(1).padStart(5)} y  ${String(Math.round(monthsToMinutes(m.fastest))).padStart(4)} min             ${s.paceYears} y`);
+  }
+  process.exit(0);
+}
 if (!DIFFICULTY[opts.difficulty]) { console.error(`Unknown difficulty ${opts.difficulty} (${Object.keys(DIFFICULTY).join(' | ')})`); process.exit(2); }
 
 const scenario = opts.scenario

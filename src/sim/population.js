@@ -64,6 +64,16 @@ function entryInfo(game) {
   return { idx, net: map.road[idx] ? map.roadNet[idx] : 0 };
 }
 
+/**
+ * Settlers a day at a given city mood, in a new city (its first months) or
+ * not, at a difficulty's immigration factor. Also the pace model's rate
+ * (sim/pace.js).
+ */
+export function immigrationPerDay(mood, newCity = false, factor = 1) {
+  if (mood < CONFIG.IMMIGRATION_MIN_MOOD) return 0;
+  return CONFIG.IMMIGRATION_BASE_PER_DAY * ((mood - 20) / 80) * (newCity ? CONFIG.NEW_CITY_IMMIGRATION : 1) * factor;
+}
+
 /** Daily: settlers arrive at homes with free space. */
 export function updateImmigration(game) {
   const c = game.city;
@@ -77,7 +87,7 @@ export function updateImmigration(game) {
     return;
   }
   c.flags.entryWarned = false;
-  if (c.sentiment < 30) return;
+  if (c.sentiment < CONFIG.IMMIGRATION_MIN_MOOD) return;
 
   const vacancies = [];
   for (const b of game.buildings.values()) {
@@ -94,8 +104,7 @@ export function updateImmigration(game) {
   c.vacancies = vacancies.reduce((s, v) => s + v.free, 0);
   if (vacancies.length === 0) return;
 
-  const newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? 1.6 : 1;
-  const perDay = CONFIG.IMMIGRATION_BASE_PER_DAY * ((c.sentiment - 20) / 80) * newCity * game.difficulty.immigration;
+  const perDay = immigrationPerDay(c.sentiment, game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS, game.difficulty.immigration);
   c.immigrationAcc = Math.min(40, c.immigrationAcc + perDay);
   let guard = 0;
   while (c.immigrationAcc >= 1 && vacancies.length > 0 && guard++ < 12) {
@@ -254,7 +263,7 @@ export function computeSentiment(game) {
   for (const g of GOD_KEYS) moodSum += c.gods[g].mood;
   f.gods = Math.max(-8, Math.min(6, (moodSum / GOD_KEYS.length - 50) * 0.15));
   f.festival = c.festivalBoost;
-  f.newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? 20 : 0;
+  f.newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? CONFIG.NEW_CITY_MOOD : 0;
   if (game.difficulty.mood) f.difficulty = game.difficulty.mood; // Insane: a hard-to-please populace
   let s = 0;
   for (const k in f) s += f[k];

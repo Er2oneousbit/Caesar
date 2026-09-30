@@ -38,6 +38,7 @@ npm i --no-save playwright && npx playwright install chromium
 | `npm run test:e2e` | Plays the built game in headless Chromium (`--file <html>` tests another build, `--shots <dir>` saves screenshots) |
 | `npm run check` | test + build + e2e, the same as CI |
 | `npm run sim -- --years 5 --type lakes` | Headless balance run, one line of stats per month (`--help` lists the options: difficulty, raids, garrison, size, seed...) |
+| `npm run sim -- --pace` | The campaign's pace: the fewest months each mission's goals take (`src/sim/pace.js`) |
 | `npm run screenshots` | Renders showcase frames to `tests/e2e/out/` |
 | `scripts/run.ps1`, `scripts/run.sh` | Launch the built game (Windows PowerShell 7+, Linux/macOS) |
 
@@ -87,7 +88,7 @@ In the browser's dev tools, `window.colonia` is the running app (`colonia.game` 
 
 ## Tests
 
-- `tests/*.test.mjs` drive the real game through the same construction API the player uses (`planAction` / `applyPlan`), so they catch problems across systems: `sim` (core city, maps, fires), `housing` (the 20-level ladder), `military`, `trade`, `save`, `sandbox` (difficulty, raids), `render` (camera, sprites, seasons, weather, water hints), `input`, `music` (composer and track library). Every new mechanic and every bug fix gets a test; a fix's test fails on the old code.
+- `tests/*.test.mjs` drive the real game through the same construction API the player uses (`planAction` / `applyPlan`), so they catch problems across systems: `sim` (core city, maps, fires), `housing` (the 20-level ladder), `campaign` (the missions' pace and goals), `military`, `trade`, `save`, `sandbox` (difficulty, raids), `render` (camera, sprites, seasons, weather, water hints), `input`, `music` (composer and track library). Every new mechanic and every bug fix gets a test; a fix's test fails on the old code.
 - `tests/e2e/smoke.mjs` plays the built game in headless Chromium with real mouse and keyboard input. Add a check for any new screen or control players depend on.
 
 ## Where things live
@@ -125,6 +126,7 @@ docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md, DEVELOPMENT.md
 
 * **A building:** add it to `BUILDINGS` in `src/data/buildings.js` (the field reference is at the top of that file), unlock it in `src/data/scenarios.js`, give it art in `src/render/buildingArt.js` (or it falls back to a generic block), and if it has new behavior, a `kind` handled in `Game.updateBuilding()`.
 * **A good:** `src/data/goods.js`, then something that produces it (a farm or raw producer, or a workshop `recipe`) and something that uses it.
+* **A campaign mission:** an entry in `SCENARIOS` (`src/data/scenarios.js`). Set its goals from what its unlocked buildings allow, then its `paceYears` from `npm run sim -- --pace`; `tests/campaign.test.mjs` checks both.
 * **A trade partner:** `TRADE_PARTNERS` in `src/data/scenarios.js`. `route: 'sea'` partners need a map with navigable water, so only list them in scenarios whose maps have it.
 * **A unit type:** `src/data/units.js`, art in `src/render/militaryArt.js`, and a fort (`kind: 'fort'`, `unit: '<type>'`) plus a `RECRUIT_COST` entry in `src/data/goods.js`.
 * **A music track:** an entry in `TRACKS` (`src/audio/composer.js`): an id, a title, the moods it plays in, a seed, and its key, tempo, meter, pipes, opening and length.

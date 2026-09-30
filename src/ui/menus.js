@@ -120,7 +120,9 @@ export function briefing(app, s, onBegin = null) {
   const goals = Object.entries(s.goals).filter(([, v]) => v);
   let diff = onBegin ? app.difficultyPref() : (app.game?.difficultyKey || 'normal');
   // In a game `s` is the running scenario (funds already scaled); before one, scale them here.
-  const fundsText = () => `Starting funds: ${fmt(onBegin ? withDifficulty(s, diff).funds : s.funds)} Dn · Map: ${MAP_TYPES[s.map.type].name} (${s.map.size}×${s.map.size})`;
+  // In a game the map is the one being played (a save from an older release may have another size).
+  const side = !onBegin && app.game ? app.game.map.w : s.map.size;
+  const fundsText = () => `Starting funds: ${fmt(onBegin ? withDifficulty(s, diff).funds : s.funds)} Dn · Map: ${MAP_TYPES[s.map.type].name} (${side}×${side})`;
   const fundsRow = h('div', { class: 'row muted' }, fundsText());
   return modal(`${s.name}: ${s.title}`, [
     h('p', {}, s.intro),

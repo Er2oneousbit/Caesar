@@ -226,12 +226,28 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 
 ## Ratings and winning
 
-* **Culture:** religion, entertainment (full marks at an average score of 40), school, library, academy coverage (+ Senate).
+* **Culture:** religion, entertainment (full marks at an average score of 40), school, library, academy coverage (+ Senate). Moves at most 4 points a month.
 * **Prosperity:** average house level (full marks at an average of Insulae), patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
 * **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy.
 * **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over). The Emperor asks every 14-26 months (from 150 people) for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.
+
+## The campaign
+
+Seven missions, each opening the next. The goals grow with the housing ladder: each mission's buildings let homes reach a certain level, and its culture and prosperity goals ask for a good share of what those buildings can give.
+
+| Mission | Map | Population | Culture | Prosperity | Peace | Favor | Homes up to | First raid |
+|---|---|---|---|---|---|---|---|---|
+| 1 Novum Castrum | river, 64 | 1,200 | 15 | | 35 | | Hut | |
+| 2 Aquae Clarae | lakes, 96 | 2,500 | 35 | 20 | 45 | | Townhouse | |
+| 3 Figlina | plains, 112 | 3,500 | 45 | 30 | 50 | | Domus | |
+| 4 Pons Aelius | river, 128 | 5,000 | 50 | 40 | 55 | | Villa | 5 years |
+| 5 Portus Mercatorum | coast, 128 | 6,500 | 60 | 50 | 60 | 55 | Imperial Palatium | 4 years |
+| 6 Oasis Aurea | desert, 128 | 7,000 | 60 | 55 | 65 | 60 | Imperial Palatium | 3.5 years |
+| 7 Urbs Magna | lakes, 160 | 12,000 | 75 | 70 | 75 | 65 | Imperial Palatium | 3 years |
+
+**How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month, so even a city that is always ready for the next settler needs about 1.3 years for the first mission, 2.2, 3.6, 5.7, 7.8 and 8.5 for the next ones and 15 for the last (`npm run sim -- --pace` prints the table). A year is about 5.3 minutes at 1x; with the city to build first, that makes roughly half an hour for the first missions and a few hours for the last at normal speed.
 
 ## The world around the city (visual only)
 

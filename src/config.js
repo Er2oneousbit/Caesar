@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.8.1',
+  VERSION: '0.8.2',
   SAVE_VERSION: 4, // v4: the 20-level housing ladder; saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -78,8 +78,11 @@ export const CONFIG = {
   IMMIGRANT_GROUP_MAX: 6,
   SETTLER_WALK_TILES: 70, // settlers with a longer trip than this (big maps) ride in on a mule...
   SETTLER_MAX_SPEEDUP: 2, // ...up to this many times walking speed (a trot): trips up to 140 tiles take no longer than a 70-tile walk
-  IMMIGRATION_BASE_PER_DAY: 6, // people/day arriving when sentiment is 100
-  NEW_CITY_BONUS_MONTHS: 12, // extra sentiment early on so cities can start
+  IMMIGRATION_BASE_PER_DAY: 6, // people/day arriving when sentiment is 100 (scaled by (mood - 20) / 80)
+  IMMIGRATION_MIN_MOOD: 30, // below this mood nobody moves in
+  NEW_CITY_BONUS_MONTHS: 12, // a new city's first months, when settlers are keen so cities can start:
+  NEW_CITY_MOOD: 20, // ...extra mood
+  NEW_CITY_IMMIGRATION: 1.6, // ...and this many times the settlers
 
   // --- Economy -------------------------------------------------------------
   DEFAULT_TAX_RATE: 7, // percent
@@ -123,6 +126,16 @@ export const CONFIG = {
   SHIP_DOCK_TICKS: 120, // how long a ship stays tied up (loading/unloading)
   DOCK_CAPACITY: 1600, // units of unloaded imports a dock can hold
   DOCK_REACH: 60, // road tiles: warehouses this close to a dock sell exports to ships
+
+  // --- Ratings ------------------------------------------------------------
+  // Culture and prosperity move toward what the city deserves by at most
+  // these many points a month; peace grows while the mood is good. These set
+  // how fast a mission's goals can be met (sim/pace.js).
+  CULTURE_STEP: 4,
+  PROSPERITY_STEP: 2,
+  PEACE_START: 20,
+  PEACE_PER_MONTH: 1, // while the mood is at least PEACE_MOOD
+  PEACE_MOOD: 45,
 
   // --- Emperor -------------------------------------------------------------
   REQUEST_INTERVAL_MONTHS: [14, 26],

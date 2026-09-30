@@ -345,6 +345,79 @@ try {
     await page.keyboard.press('Escape');
   }
 
+  // 5a2. Roadblocks and walkers: a roadblock placed from the build menu, its
+  //      panel lets a group through; a click on a walker's figure opens the
+  //      walker's panel, and Follow keeps it in view.
+  const rbSpot = await page.evaluate(() => {
+    const app = window.colonia;
+    const m = app.game.map;
+    // A straight piece of road in the demo city, away from the map edge.
+    const home = [...app.game.buildings.values()].find((b) => b.house && b.house.pop > 0);
+    for (let r = 1; r < 20; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = home.x + dx; const y = home.y + dy;
+        if (!m.inBounds(x, y) || m.road[m.idx(x, y)] !== 1 || m.wall[m.idx(x, y)] || m.fixedRoad[m.idx(x, y)]) continue;
+        if (m.hasRoad(x + 1, y) && m.hasRoad(x - 1, y) && !m.hasRoad(x, y + 1) && !m.hasRoad(x, y - 1)) {
+          app.renderer.camera.centerOnTile(x, y);
+          return { x, y };
+        }
+      }
+    }
+    return null;
+  });
+  check('demo city has a straight road for a roadblock', !!rbSpot);
+  if (rbSpot) {
+    await page.click('.cat-btn[title^="Roads"]');
+    await page.click('.build-item:has-text("Roadblock")');
+    await page.waitForTimeout(100);
+    const rp = await toScreen(rbSpot.x, rbSpot.y);
+    await page.mouse.move(rp.x, rp.y);
+    await page.waitForTimeout(100);
+    await page.mouse.click(rp.x, rp.y);
+    const placed = await page.evaluate(({ x, y }) => window.colonia.game.map.roadblock[window.colonia.game.map.idx(x, y)], rbSpot);
+    check('the Roadblock tool places a roadblock on a road', placed === 128, `layer ${placed}`);
+    await page.mouse.click(rp.x, rp.y, { button: 'right' });
+    await page.mouse.click(rp.x, rp.y);
+    const rbPanel = await page.isVisible('#info-panel h3:has-text("Roadblock")');
+    await page.click('#info-panel label:has-text("Priests") input');
+    const allowed = await page.evaluate(({ x, y }) => window.colonia.game.map.roadblock[window.colonia.game.map.idx(x, y)], rbSpot);
+    check('clicking a roadblock shows who it lets through; ticking a group lets it pass', rbPanel && allowed === (128 | 2), `panel ${rbPanel}, layer ${allowed}`);
+    // A walker in view, clicked on its body.
+    await page.evaluate(() => { window.colonia.ui.info.close(); window.colonia.game.runDays(2); });
+    await page.waitForTimeout(200);
+    const target = await page.evaluate(() => {
+      const r = window.colonia.renderer;
+      const cam = r.camera;
+      const rect = window.colonia.canvas.getBoundingClientRect();
+      for (const s of r.walkerSpots) {
+        const q = cam.toScreen(s.wx, s.wy - 9);
+        const x = rect.left + q.x / cam.dpr;
+        const y = rect.top + q.y / cam.dpr;
+        if (x < rect.left + 360 || x > rect.right - 40 || y < rect.top + 80 || y > rect.bottom - 120) continue; // clear of the panels
+        if (r.pickWalker(x - rect.left, y - rect.top) !== s.id) continue; // not hidden behind another walker
+        return { id: s.id, x, y };
+      }
+      return null;
+    });
+    check('walkers are on screen to click', !!target);
+    if (target) {
+      await page.mouse.click(target.x, target.y);
+      await page.waitForTimeout(150);
+      const wp = await page.evaluate(() => ({
+        target: window.colonia.ui.info.target,
+        ring: window.colonia.renderer.selectedWalker,
+        head: document.querySelector('#info-panel h3')?.textContent || '',
+        says: document.querySelector('#info-panel .walker-says')?.textContent || '',
+      }));
+      check('clicking a walker opens its panel: who it is and what it says', wp.target?.kind === 'walker' && wp.target.id === target.id && wp.ring === target.id && wp.head.length > 0 && wp.says.length > 4, JSON.stringify(wp));
+      await page.click('#info-panel button:has-text("Follow")');
+      const following = await page.evaluate(() => !!window.colonia.renderer.follow);
+      await page.mouse.click(target.x, target.y, { button: 'right' });
+      const closed = await page.evaluate(() => !window.colonia.renderer.follow && !window.colonia.renderer.selectedWalker);
+      check('Follow keeps a walker in view; closing the panel lets go', following && closed, JSON.stringify({ following, closed }));
+    }
+  }
+
   // 5b. Military: garrison, fort panel + deploy by clicking the map, raid alert, advisor
   const gar = await page.evaluate(() => {
     const app = window.colonia;

@@ -32,6 +32,15 @@ export const Road = Object.freeze({
   BRIDGE: 3, // road over water
 });
 
+/**
+ * map.roadblock: 0 = none; a roadblock stores ROADBLOCK.PRESENT plus the bits
+ * of the walker groups it lets through (data/walkers.js ROADBLOCK_GROUPS).
+ */
+export const ROADBLOCK = Object.freeze({
+  PRESENT: 128,
+  GROUPS: 127, // mask of the group bits
+});
+
 /** Values stored in map.wall */
 export const Wall = Object.freeze({
   NONE: 0,
@@ -76,6 +85,7 @@ export class GameMap {
     this.rubble = new Uint8Array(this.size); // 1 = collapsed/burnt debris
     this.fixedRoad = new Uint8Array(this.size); // 1 = imperial road tile that cannot be removed
     this.wall = new Uint8Array(this.size); // Wall.*
+    this.roadblock = new Uint8Array(this.size); // 0 or ROADBLOCK.PRESENT | allowed group bits (only on roads)
 
     // --- derived layers (recomputed, not saved) ---
     this.building = new Int32Array(this.size); // building id occupying the tile, 0 = none
@@ -318,15 +328,16 @@ export class GameMap {
       rubble: encode(this.rubble),
       fixedRoad: encode(this.fixedRoad),
       wall: encode(this.wall),
+      roadblock: encode(this.roadblock),
     };
   }
 
   /** Rebuild a map from serialized data. Derived layers are recomputed by the game. */
   static deserialize(data, decode) {
     const m = new GameMap(data.w, data.h);
-    const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad', 'wall'];
+    const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad', 'wall', 'roadblock'];
     for (const name of layers) {
-      if (data[name] === undefined && name === 'wall') continue; // older saves had no walls
+      if (data[name] === undefined && (name === 'wall' || name === 'roadblock')) continue; // older saves had no walls or roadblocks
       const arr = decode(data[name], m.size);
       if (arr.length !== m.size) throw new Error(`Save file map layer "${name}" has wrong size`);
       m[name].set(arr);

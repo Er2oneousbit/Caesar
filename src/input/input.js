@@ -4,7 +4,7 @@
  * Mouse, touch and keyboard handling for the game view.
  *
  * Mouse:
- *   left click          inspect a building / tile (or place with a tool)
+ *   left click          inspect a building / walker / tile (or place with a tool)
  *   left drag           pan the map (no tool) / drag roads, housing, clearing
  *   right click         cancel the current tool (or close the info panel)
  *   middle/right drag   pan the map
@@ -25,6 +25,7 @@ import { dragMode, planAction } from '../sim/construction.js';
 export const KEY_HELP = [
   ['W A S D / Arrow keys', 'Scroll the map'],
   ['Mouse wheel, + / -', 'Zoom in / out (eases toward the cursor)'],
+  ['Left click (no tool)', 'Inspect a building, a walker or a tile'],
   ['Left drag (no tool)', 'Scroll the map; let go while moving to fling it'],
   ['Right click', 'Cancel tool / close panel'],
   ['Space or P', 'Pause / resume'],
@@ -235,7 +236,7 @@ export class Input {
       }
       if (!press.moved) {
         const t = this.tileAt(p);
-        this.app.clickTile(t.x, t.y);
+        this.app.clickTile(t.x, t.y, p);
       } else {
         this.release(e);
       }

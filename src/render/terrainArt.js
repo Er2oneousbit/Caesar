@@ -448,6 +448,63 @@ export function roadSpec(mask, variant) {
   };
 }
 
+/**
+ * A roadblock: a striped bar on two trestles across the road, and a post with
+ * a small board by one end. axis: 'u' when the road runs along u (east-west
+ * in tile terms; the bar then spans v), 'v' when it runs along v.
+ */
+export function roadblockSpec(axis) {
+  return {
+    w: TW,
+    h: TH + 26,
+    ax: HALF_W,
+    ay: 26,
+    draw(ctx) {
+      // (a, b): a = along the road, b = across it; P wants (u, v).
+      const Q = axis === 'u' ? (a, b, z) => P(a, b, z) : (a, b, z) => P(b, a, z);
+      const wood = '#7a5634';
+      const dark = shade(wood, -0.4);
+      const line = (p, q, color, w) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p[0], p[1]);
+        ctx.lineTo(q[0], q[1]);
+        ctx.stroke();
+      };
+      const b0 = 0.16;
+      const b1 = 0.84;
+      const mid = 0.5;
+      const bar = 9; // height of the bar
+      // Shadow on the road.
+      poly(ctx, [Q(mid - 0.05, b0, 0), Q(mid + 0.09, b0, 0), Q(mid + 0.09, b1, 0), Q(mid - 0.05, b1, 0)], 'rgba(40,30,20,0.22)');
+      // Trestles: a pair of crossed legs at each end.
+      const trestle = (b) => {
+        line(Q(mid - 0.1, b, 0), Q(mid + 0.02, b, bar + 1), dark, 1.6);
+        line(Q(mid + 0.1, b, 0), Q(mid - 0.02, b, bar + 1), wood, 1.6);
+      };
+      trestle(b0 + 0.04);
+      // The bar: red and cream stripes, a top face and a front face.
+      const n = 6;
+      for (let k = 0; k < n; k++) {
+        const s0 = b0 + ((b1 - b0) * k) / n;
+        const s1 = b0 + ((b1 - b0) * (k + 1)) / n;
+        const col = k % 2 ? '#e8dcc0' : '#b3352a';
+        poly(ctx, [Q(mid - 0.025, s0, bar + 2), Q(mid + 0.025, s0, bar + 2), Q(mid + 0.025, s1, bar + 2), Q(mid - 0.025, s1, bar + 2)], shade(col, 0.15));
+        poly(ctx, [Q(mid + 0.025, s0, bar + 2), Q(mid + 0.025, s1, bar + 2), Q(mid + 0.025, s1, bar - 1), Q(mid + 0.025, s0, bar - 1)], col, shade(col, -0.45), 0.4);
+      }
+      trestle(b1 - 0.04);
+      // A post with a board, beside the far end of the bar.
+      const pb = b1 + 0.02;
+      line(Q(mid - 0.12, pb, 0), Q(mid - 0.12, pb, 20), dark, 1.5);
+      poly(ctx, [Q(mid - 0.12, pb - 0.1, 21), Q(mid - 0.12, pb + 0.1, 21), Q(mid - 0.12, pb + 0.1, 14), Q(mid - 0.12, pb - 0.1, 14)], '#d9c79b', dark, 0.6);
+      line(Q(mid - 0.12, pb - 0.06, 18.5), Q(mid - 0.12, pb + 0.06, 18.5), '#b3352a', 0.9);
+      line(Q(mid - 0.12, pb - 0.06, 16.5), Q(mid - 0.12, pb + 0.04, 16.5), '#6b5a40', 0.7);
+    },
+  };
+}
+
 /** Decorative paving (plaza) covering the whole tile. */
 export function plazaSpec(variant) {
   return {

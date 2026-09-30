@@ -565,7 +565,11 @@ export class App {
     else this.ui.openAdvisors('military');
   }
 
-  clickTile(x, y) {
+  /**
+   * A click on the map (no tool in hand). `screen` (CSS px, optional) lets a
+   * click on a walker's figure pick the walker instead of what is under it.
+   */
+  clickTile(x, y, screen = null) {
     const g = this.game;
     if (this.deploying && g) {
       const id = this.deploying;
@@ -579,6 +583,8 @@ export class App {
     }
     if (!g || !g.map.inBounds(x, y)) { this.ui.info.close(); return; }
     this.sfx.play('click');
+    const wid = screen ? this.renderer.pickWalker(screen.x, screen.y) : 0;
+    if (wid) { this.ui.info.showWalker(wid); return; }
     const id = g.map.buildingAt(x, y);
     if (id) this.ui.info.showBuilding(id);
     else this.ui.info.showTile(x, y);

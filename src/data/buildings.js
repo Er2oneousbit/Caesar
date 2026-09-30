@@ -81,9 +81,10 @@ export const TOOLS = Object.freeze({
   road: { name: 'Road', category: 'roads', cost: 4, drag: 'path', desc: 'Walkers only travel on roads. Most buildings need a road next to them.' },
   plaza: { name: 'Plaza', category: 'roads', cost: 15, drag: 'area', desc: 'Paves existing roads with decorative stone. Raises desirability nearby.' },
   bridge: { name: 'Bridge', category: 'roads', cost: 40, drag: 'line', desc: 'A straight road across water. Start and end on the banks.' },
+  roadblock: { name: 'Roadblock', category: 'roads', cost: 12, drag: 'single', desc: 'Placed on a road: walkers roaming the streets turn back here, so a building serves only the homes you mean it to. Carts, market buyers, settlers and anyone else heading somewhere pass. Click it to let some kinds of walker through.' },
   aqueduct: { name: 'Aqueduct', category: 'water', cost: 8, drag: 'path', desc: 'Carries water between reservoirs. Can cross roads.' },
   wall: { name: 'Wall', category: 'military', cost: 12, gateCost: 40, drag: 'path', desc: 'Stone walls that raiders must break through. Drag a wall across a road to build a gate that citizens (not raiders) can pass.' },
-  clear: { name: 'Clear Land', category: null, cost: 0, drag: 'area', desc: 'Demolish buildings, roads, walls and aqueducts, or clear trees and rubble.' },
+  clear: { name: 'Clear Land', category: null, cost: 0, drag: 'area', desc: 'Demolish buildings, roads, roadblocks, walls and aqueducts, or clear trees and rubble.' },
 });
 
 /** Units of each raw material a single-input workshop uses per batch (= one cart). */

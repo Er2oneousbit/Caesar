@@ -12,7 +12,8 @@
  */
 
 import { CONFIG } from '../config.js';
-import { WALKER_TYPES } from '../data/walkers.js';
+import { WALKER_TYPES, roadblockBit } from '../data/walkers.js';
+import { ROADBLOCK } from '../world/map.js';
 import { killWalker } from './entities.js';
 
 const DX = [0, 1, 0, -1];
@@ -85,6 +86,17 @@ export function goHome(game, w) {
   return true;
 }
 
+/**
+ * Does a roadblock on tile `idx` stop this roaming walker? Only roamers are
+ * ever stopped, and only by a roadblock that does not let their group through.
+ */
+export function roadblockStops(map, w, idx) {
+  const rb = map.roadblock[idx];
+  if (!rb) return false;
+  const bit = roadblockBit(w.type);
+  return bit !== 0 && !(rb & bit & ROADBLOCK.GROUPS);
+}
+
 /** Roamers strongly prefer to stay within this many tiles of home. */
 const ROAM_RADIUS = 13;
 /** How many recently walked tiles a roamer remembers (and avoids). */
@@ -113,7 +125,7 @@ export function pickRoamTile(game, w) {
     const ny = w.y + DY[d];
     if (!map.inBounds(nx, ny)) continue;
     const idx = map.idx(nx, ny);
-    if (!map.road[idx]) continue;
+    if (!map.road[idx] || roadblockStops(map, w, idx)) continue;
     let weight = d === w.lastDir ? 3 : 2;
     if (w.memory.includes(idx)) weight *= 0.25;
     if (Math.max(Math.abs(nx - ox), Math.abs(ny - oy)) > ROAM_RADIUS) weight *= 0.1;
@@ -124,11 +136,11 @@ export function pickRoamTile(game, w) {
   w.memory.push(map.idx(w.x, w.y));
   if (w.memory.length > ROAM_MEMORY) w.memory.shift();
   if (total === 0) {
-    // Dead end: turn around if there is a road behind us.
+    // Dead end (or a roadblock ahead): turn around if there is a road behind us.
     if (back >= 0) {
       const nx = w.x + DX[back];
       const ny = w.y + DY[back];
-      if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) return map.idx(nx, ny);
+      if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)] && !roadblockStops(map, w, map.idx(nx, ny))) return map.idx(nx, ny);
     }
     return -1;
   }
@@ -155,13 +167,13 @@ export function startRoaming(game, w, firstDir = 0) {
     const d = (firstDir + k) % 4;
     const nx = w.x + DX[d];
     const ny = w.y + DY[d];
-    if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) {
+    if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)] && !roadblockStops(map, w, map.idx(nx, ny))) {
       w.lastDir = d;
       setNextTile(game, w, map.idx(nx, ny));
       return true;
     }
   }
-  // Isolated single road tile: nothing to roam.
+  // Isolated single road tile (or roadblocks all round): nothing to roam.
   killWalker(game, w);
   return false;
 }

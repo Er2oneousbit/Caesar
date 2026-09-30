@@ -9,7 +9,7 @@
 
 import { BUILDINGS } from '../data/buildings.js';
 import { buildingSpec } from '../render/buildingArt.js';
-import { roadSpec, plazaSpec, aqueductSpec, bridgeSpec, waterTileSpec, groundTileSpec } from '../render/terrainArt.js';
+import { roadSpec, plazaSpec, aqueductSpec, bridgeSpec, waterTileSpec, groundTileSpec, roadblockSpec } from '../render/terrainArt.js';
 import { Terrain } from '../world/map.js';
 import { wallSpec } from '../render/militaryArt.js';
 
@@ -22,6 +22,7 @@ function specsFor(key) {
     case 'plaza': return [plazaSpec(0)];
     case 'aqueduct': return [groundTileSpec(Terrain.GRASS, 1), aqueductSpec(2 | 8, true)];
     case 'bridge': return [waterTileSpec(0, 0), bridgeSpec('u')];
+    case 'roadblock': return [groundTileSpec(Terrain.GRASS, 1), roadSpec(2 | 8, 1), roadblockSpec('u')];
     case 'wall': return [groundTileSpec(Terrain.GRASS, 1), wallSpec(2 | 8, false, false)];
     case 'clear': return null;
     case 'house': return [buildingSpec('house', 1, 1, 4)];

@@ -88,7 +88,7 @@ In the browser's dev tools, `window.colonia` is the running app (`colonia.game` 
 
 ## Tests
 
-- `tests/*.test.mjs` drive the real game through the same construction API the player uses (`planAction` / `applyPlan`), so they catch problems across systems: `sim` (core city, maps, fires), `housing` (the 20-level ladder), `campaign` (the missions' pace and goals), `military`, `trade`, `save`, `sandbox` (difficulty, raids), `render` (camera, sprites, seasons, weather, water hints), `input`, `music` (composer and track library). Every new mechanic and every bug fix gets a test; a fix's test fails on the old code.
+- `tests/*.test.mjs` drive the real game through the same construction API the player uses (`planAction` / `applyPlan`), so they catch problems across systems: `sim` (core city, maps, fires), `housing` (the 20-level ladder), `campaign` (the missions' pace and goals), `walkers` (roadblocks, walker inspection), `military`, `trade`, `save`, `sandbox` (difficulty, raids), `render` (camera, sprites, seasons, weather, water hints), `input`, `music` (composer and track library). Every new mechanic and every bug fix gets a test; a fix's test fails on the old code.
 - `tests/e2e/smoke.mjs` plays the built game in headless Chromium with real mouse and keyboard input. Add a check for any new screen or control players depend on.
 
 ## Where things live

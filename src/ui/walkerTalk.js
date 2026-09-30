@@ -1,0 +1,206 @@
+/**
+ * walkerTalk.js
+ * ----------------------------------------------------------------------------
+ * Who a walker is, what it is doing and what it has to say, for the info
+ * panel when a walker is clicked. Citizens talk about what troubles the city
+ * most (hunger, no work, taxes, raiders, fires, an angry god), or about
+ * their work when nothing does; newcomers, emigrants and foreign traders have
+ * lines of their own. Every line is written for Colonia.
+ *
+ * Read-only: nothing here changes the simulation. A walker keeps the same
+ * line for a few days (the pick is seeded by its id and the date), so the
+ * panel does not flicker between lines as it refreshes.
+ * ----------------------------------------------------------------------------
+ */
+
+import { CONFIG } from '../config.js';
+import { WALKER_TYPES } from '../data/walkers.js';
+import { GOODS, FOOD_TYPES, formatAmount } from '../data/goods.js';
+import { GODS, GOD_KEYS } from '../data/gods.js';
+import { HOUSE_TIERS } from '../data/housing.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { PERFORMER_NAMES } from '../data/buildings.js';
+
+/** Days a walker keeps saying the same thing. */
+const LINE_DAYS = 8;
+
+/** "400 wheat", "3 horses". */
+function amountText(good, n) {
+  return GOODS[good].unitSize ? formatAmount(good, n) : `${Math.round(n)} ${GOODS[good].name.toLowerCase()}`;
+}
+
+const CITY_LINES = Object.freeze({
+  hunger: ['My children went to bed hungry again.', 'The market had no bread today. Nor yesterday.', 'Food is scarce. Someone should see to the granaries.'],
+  work: ['There is no work to be had. I spend my days in the forum doing nothing.', 'My brother has been out of work for months.', 'Too many hands in this town and not enough jobs.'],
+  taxes: ['The tax collector takes more every month.', 'Taxes like these would make a senator weep.'],
+  wages: ['The pay is thin this year.', 'A day\'s work hardly buys a loaf.'],
+  raid: ['Raiders are coming, they say. I am keeping my door barred.', 'Where are the soldiers when you need them?'],
+  fire: ['Did you see the smoke? I hope the prefects are quick.', 'Another fire! This city needs more prefects.'],
+  debt: ['They say the treasury is empty. How does a city run out of money?'],
+  unhappy: ['Nothing works in this city.', 'I am thinking of packing up and leaving.'],
+  happy: ['What a city! I would not live anywhere else.', 'Life is good here. The gods smile on us.', 'I tell my cousins to come and live here.'],
+  fine: ['Not a bad place to live, all told.', 'Another fine day in the colony.', 'The streets are busy today.'],
+});
+
+const godLines = (god) => [`The priests say ${god} is angry with us.`, `We have forgotten ${god}, and ${god} has not forgotten us.`];
+
+/** What each kind of walker says about its own work. */
+function workLines(game, w) {
+  const god = w.god && GODS[w.god] ? GODS[w.god].name : 'the gods';
+  switch (w.type) {
+    case 'prefect':
+      if (w.state === 'toFire') return ['Out of the way! Fire!'];
+      if (w.state === 'extinguish') return ['More water! Keep it coming!'];
+      return ['Keep your lamps trimmed and your hearths swept.', 'Quiet streets. Just how I like them.', 'One spark on a dry roof and the whole street goes up.'];
+    case 'engineer': return ['These walls will not mend themselves.', 'A crack today is a collapse tomorrow.', 'Good stone, poor mortar. I see it everywhere.'];
+    case 'priest': return [`${god} watches over this street.`, `Honor ${god}, and ${god} will honor you.`, 'Bring an offering to the temple, friend.'];
+    case 'teacher': return ['The children are learning their letters. Some of them, anyway.', 'An educated city is a strong city.'];
+    case 'librarian': return ['I have a scroll here on the voyages of Ulysses. Care to borrow it?', 'Knowledge is the one thing no raider can carry off.'];
+    case 'scholar': return ['Today, rhetoric. Tomorrow, philosophy. The day after, more rhetoric.', 'A citizen should be able to argue both sides of any case.'];
+    case 'barber': return ['A shave, a trim and all the news of the town.', 'You would not believe what I heard at my chair today.'];
+    case 'physician': return ['Boil your water and air your rooms.', 'A clean house keeps the fever away.'];
+    case 'bather': return ['The baths are warm today. Come along!', 'Nothing clears the head like a hot bath and a cold plunge.'];
+    case 'entertainer':
+      if (w.venue === 'amphitheater') return ['Gladiators at the amphitheater! Do not miss it!'];
+      if (w.venue === 'colosseum') return ['Beasts from Africa at the colosseum! Come and see!'];
+      return ['A new play tonight at the theater. A comedy!'];
+    case 'taxman': return ['Everyone pays their share. Well, almost everyone.', 'Rome needs its taxes, and I need my list.'];
+    case 'vendor': {
+      const market = game.buildings.get(w.origin);
+      const food = market && market.stock ? FOOD_TYPES.reduce((n, f) => n + (market.stock[f] || 0), 0) : 0;
+      if (market && food <= 0) return ['Nothing to sell today. The granary sent us nothing.'];
+      return ['Bread! Olives! Pots and bowls!', 'Fresh from the granary, good people!'];
+    }
+    case 'cart':
+      if (w.cargo) return [`${amountText(w.cargo.good, w.cargo.amount)} on board. Mind the wheels!`, 'Heavy load, but it pays.'];
+      return ['Back for the next load.'];
+    case 'buyer': return w.load && Object.keys(w.load).length ? ['A full basket for the market. My back will not thank me.'] : ['The market needs stock. Off to the storehouse.'];
+    case 'performer': return ['Off to the stage. The show must go on.'];
+    case 'recruit': return ['Off to the fort. Rome needs me.', 'Twenty years of service, and then a farm of my own.'];
+    case 'homeless': return ['Our home is gone. Is there a roof anywhere?', 'We lost everything. We need a place to stay.'];
+    default: return CITY_LINES.fine;
+  }
+}
+
+/** The city's most pressing trouble, as a key of CITY_LINES (or 'god:<key>'), or null. */
+export function cityTrouble(game) {
+  const c = game.city;
+  const mil = game.military;
+  if (mil && (mil.active || mil.warned)) return 'raid';
+  if (c.population > 60 && c.fedShare < 0.85) return 'hunger';
+  if (game.fires && game.fires.size > 0) return 'fire';
+  if (c.unemploymentRate > 0.12) return 'work';
+  if (c.taxRate > CONFIG.DEFAULT_TAX_RATE + 2) return 'taxes';
+  if (c.wage < CONFIG.BASE_WAGE) return 'wages';
+  if (c.treasury < 0) return 'debt';
+  let angry = null;
+  for (const g of GOD_KEYS) if (c.gods[g] && c.gods[g].mood < 30 && (!angry || c.gods[g].mood < c.gods[angry].mood)) angry = g;
+  if (angry) return `god:${angry}`;
+  if (c.sentiment < 35) return 'unhappy';
+  return null;
+}
+
+/** Why emigrants are leaving: the worst factor in the city's mood. */
+function emigrantLine(game) {
+  const f = game.city.sentimentFactors || {};
+  let worst = null;
+  for (const k of ['taxes', 'wages', 'unemployment', 'food', 'housing', 'gods']) if (f[k] < 0 && (!worst || f[k] < f[worst])) worst = k;
+  return {
+    taxes: 'The taxes drove us out.',
+    wages: 'The pay was too poor to live on.',
+    unemployment: 'There is no work here for us.',
+    food: 'We could not feed the children.',
+    housing: 'Our home was no better than a hut.',
+    gods: 'The gods have turned their backs on this city.',
+  }[worst] || 'This city has nothing left for us.';
+}
+
+/** A stable pseudo-random pick: the same walker says the same thing for LINE_DAYS days. */
+function pick(lines, w, game, salt = 0) {
+  const seed = (w.id * 2654435761 + Math.floor(game.time.totalDays / LINE_DAYS) * 40503 + salt * 97) >>> 0;
+  return lines[seed % lines.length];
+}
+
+/** What the walker says. */
+export function walkerSays(game, w) {
+  const c = game.city;
+  switch (w.type) {
+    case 'immigrant': return pick(['We heard there was room for a family here.', 'A new city, a new start.', 'Is this the road to the colony? We have walked a long way.'], w, game);
+    case 'emigrant': return emigrantLine(game);
+    case 'caravan': {
+      const p = TRADE_PARTNERS[w.partner];
+      return pick([`Good roads and fair prices. ${p ? p.name : 'Home'} will send us again.`, 'Mind the mules, they bite.'], w, game);
+    }
+    case 'ship': return pick(['A fair wind brought us in. A fair price will send us home.', 'Unload the cargo, and quickly!'], w, game);
+    default: break;
+  }
+  const work = workLines(game, w);
+  // Busy with something urgent: no time for gossip.
+  if (w.state === 'toFire' || w.state === 'extinguish') return pick(work, w, game);
+  const trouble = cityTrouble(game);
+  // Every other walker mentions the city's trouble; the rest talk shop.
+  const gossip = pick([true, false], w, game, 1);
+  if (trouble && gossip) return pick(trouble.startsWith('god:') ? godLines(GODS[trouble.slice(4)].name) : CITY_LINES[trouble], w, game, 2);
+  if (!trouble && gossip) return pick(c.sentiment >= 70 ? CITY_LINES.happy : CITY_LINES.fine, w, game, 2);
+  return pick(work, w, game, 3);
+}
+
+/** The name of a building for these panels. */
+function nameOf(b) {
+  if (!b) return null;
+  return b.house ? HOUSE_TIERS[b.house.tier].name : b.def.name;
+}
+
+/** "the Granary", "a Hut". */
+function the(b) {
+  const n = nameOf(b);
+  return n ? `the ${n}` : 'somewhere';
+}
+
+/** What the walker is doing, in a few words. */
+export function walkerDoing(game, w) {
+  const target = w.target ? game.buildings.get(w.target) : null;
+  switch (w.state) {
+    case 'roam': return 'Walking the streets';
+    case 'return': return w.type === 'cart' || w.type === 'buyer' ? `Heading back to ${the(game.buildings.get(w.origin))}` : 'Heading home';
+    case 'toFire': return 'Running to a fire';
+    case 'extinguish': return 'Fighting a fire';
+    case 'deliver': return `Taking goods to ${the(target)}`;
+    case 'fetch': return `Going to ${the(target)} for ${w.want ? GOODS[w.want].name.toLowerCase() : 'goods'}`;
+    case 'toHouse': return `Moving into ${target ? `a ${nameOf(target)}` : 'a new home'}`;
+    case 'seeking': return 'Looking for a home';
+    case 'leaving':
+      if (w.type === 'caravan') return 'Heading home along the Imperial road';
+      if (w.type === 'ship') return 'Sailing home';
+      return 'Leaving the city';
+    case 'toVenue': return `On the way to perform at ${the(target)}`;
+    case 'toFort': return `Marching to ${the(target)}`;
+    case 'toWarehouse': return `Bringing goods to ${the(target)}`;
+    case 'toDock': return `Sailing to ${the(target)}`;
+    case 'docked': return 'Trading at the dock';
+    default: return 'Waiting';
+  }
+}
+
+/**
+ * Everything the info panel shows about a walker.
+ * @returns {{title:string, desc:string, rows:[string, string][], says:string}}
+ */
+export function walkerInfo(game, w) {
+  const def = WALKER_TYPES[w.type];
+  const rows = [];
+  const origin = w.origin ? game.buildings.get(w.origin) : null;
+  if (w.partner && TRADE_PARTNERS[w.partner]) rows.push(['From', TRADE_PARTNERS[w.partner].name]);
+  else if (origin) rows.push(['From', nameOf(origin)]);
+  else if (w.type === 'immigrant') rows.push(['From', 'Beyond the map edge']);
+  rows.push(['Doing', walkerDoing(game, w)]);
+  if (w.type === 'performer' && w.venue) rows.push(['Act', PERFORMER_NAMES[w.venue] || w.venue]);
+  if (w.cargo && w.cargo.amount > 0) rows.push(['Carrying', amountText(w.cargo.good, w.cargo.amount)]);
+  if (w.load) {
+    const items = Object.entries(w.load).filter(([, n]) => n > 0).map(([g, n]) => amountText(g, n));
+    if (items.length) rows.push(['Carrying', items.join(', ')]);
+  }
+  if (w.people > 0) rows.push(['People', String(w.people)]);
+  if (w.type === 'priest' && w.god && GODS[w.god]) rows.push(['God', GODS[w.god].name]);
+  return { title: def.name, desc: def.desc, rows, says: walkerSays(game, w) };
+}

@@ -266,6 +266,7 @@ button, input, select { font: inherit; color: inherit; }
 .btn.primary:hover { background: var(--bronze-2); }
 .btn.danger { border-color: var(--bad); color: var(--bad); }
 .btn.small { padding: 3px 7px; font-size: 12px; }
+.btn.active { background: var(--bronze); color: #fff; }
 
 .bar { height: 8px; border-radius: 4px; background: var(--panel-3); overflow: hidden; }
 .bar > i { display: block; height: 100%; background: var(--good); }
@@ -298,6 +299,7 @@ table.tbl td.r, table.tbl th.r { text-align: right; }
   padding: 10px 12px 12px;
 }
 .panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.walker-says { font-size: 14px; line-height: 1.4; }
 .panel-head h3 { margin: 0; font-family: var(--font-title); font-size: 17px; flex: 1; }
 .panel-close { border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--ink-soft); line-height: 1; }
 .panel-sec { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }

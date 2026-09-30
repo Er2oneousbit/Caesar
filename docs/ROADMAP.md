@@ -8,15 +8,21 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
-2. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
-3. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
-4. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
-5. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
-6. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 2, 4 and 5, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
-7. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts.
+1. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
+2. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.
+3. **The Emperor's world**: the empire map, then the Emperor's legions, requests for troops, distant battles and triumphal arches.
+4. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), the original's five gods (their temples are drawn already: Mercury's and Venus's too), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
+5. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1, 3 and 4, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`.
+6. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.9.0)
+
+* **Roadblocks** (Roads menu, 12 Dn): placed on a road, they turn back walkers who roam the streets serving homes, so a temple, market or school serves the blocks you mean it to. Click one to let groups through: prefects and engineers, priests, market vendors, entertainers, teachers and librarians, barbers and physicians, tax collectors (none at first). Carts, market buyers, settlers, caravans, prefects running to a fire and roamers on their way home always pass, and soldiers and raiders never notice one. Clearing a roadblock leaves its road; roadblocks are saved (older saves load without any)
+* **Click a walker** to see who it is, where it comes from, what it is doing and carrying, and what it has to say: citizens talk about what troubles the city most (raiders, hunger, fires, no work, taxes, low pay, debt, an angry god, a gloomy mood) or about their own work, newcomers about their hopes, emigrants about why they leave, traders about trade. All the lines are Colonia's own. *Follow* keeps the walker in view until you move the map; a ring marks it
+* In-game help: roadblocks and walkers; the raid rule now says 300 people (it still said 120, from before v0.7.5)
+* 155 unit tests (+7), 75 browser checks (+6)
 
 ## Done (v0.8.2)
 
@@ -192,7 +198,7 @@ Fixes from a review of v0.6:
 8. **Scenario/map editor**, which doubles as modding (missions saved as data files).
 9. **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 10. **Warehouse/granary orders** ("get goods", "empty storage") and granary-to-granary transfers.
-11. **Walker click-to-inspect** (currently only buildings and tiles): who it is, where it came from, where it is going, what it carries, and what it thinks of the city (the original's walkers talked; ours get their own lines).
+11. **Walker click-to-inspect**: done in v0.9.0 (who it is, where it came from, what it is doing and carrying, and what it thinks of the city, in lines of Colonia's own).
 12. **Empire map**: a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Today the Trade advisor has a small static empire map (`ui/empireMap.js`). Most of the rest can be shown from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`). Travelers moving on the map would be drawn from those timers, not simulated. Like the original's empire map it covers the whole inland sea (the partners reach from Tarraco to Alexandria). To decide: where it opens (hotkey, top-bar button, links from raid and trade messages), and whether clicking a warband pans the city view to its entry edge.
 13. **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 14. **The original's five gods**: Ceres, Neptune, Mercury, Mars and Venus. Colonia has Jupiter and Vesta in place of Mercury (trade) and Venus (happiness).
@@ -210,7 +216,7 @@ Fixes from a review of v0.6:
 
 What Augustus (4.0) added to the original, checked against its manual and release notes, adapted to Colonia:
 
-* **Roadblocks**: only roaming service walkers are stopped. Anything with a destination (carts, caravans, settlers, market buyers) passes, so service coverage becomes a puzzle instead of a dice roll. Each roadblock carries a permission per group of walkers: maintenance (engineers and prefects), priests, the market vendor, entertainers, education, medicine, tax collectors, labor seekers, missionaries and watchmen, plus everyone else. Gates, bridges, granaries and warehouses can carry the same permissions. Roadblocks default to denying everyone.
+* **Roadblocks** (done in v0.9.0, except the permissions on gates, bridges, granaries and warehouses): only roaming service walkers are stopped. Anything with a destination (carts, caravans, settlers, market buyers) passes, so service coverage becomes a puzzle instead of a dice roll. Each roadblock carries a permission per group of walkers: maintenance (engineers and prefects), priests, the market vendor, entertainers, education, medicine, tax collectors, labor seekers, missionaries and watchmen, plus everyone else. Gates, bridges, granaries and warehouses can carry the same permissions. Roadblocks default to denying everyone.
 * **Market special orders**: each market switches every good on or off (all on by default). The buyer only fetches goods that are on, and the vendor only hands out goods that are on and that the house's next level uses.
 * **Partial warehouse storage**: per good in each warehouse or granary, a state (not accepting, accepting up to a limit, getting from other storage, and later versions add maintaining a reserve) and a limit counted in loads.
 * **Supply posts**: fort soldiers eat. One post per map; its quartermaster fetches food from granaries, and shortages cut morale (an option; the original's rule is the default).
@@ -221,7 +227,7 @@ What Augustus (4.0) added to the original, checked against its manual and releas
 * **Extended campaign**: after victory, the player can accept the promotion again or extend the regency, indefinitely.
 * **Monthly levies**: some buildings (monuments) cost upkeep in denarii.
 * **Also in Augustus 4.0, candidates for later**: the **Cart Depot** (ox carts move goods between storage buildings on orders: source, destination, good, condition), the **Tavern** (wine, meat and fish give entertainment), the **Watchtower** (a cheaper tower that needs no weapons but needs a barracks), the **Highway** (a fast road that only destination walkers can use, with a cost per tile), and new materials (stone, sand, bricks, concrete, gold) with a **City Mint**.
-* Already in Colonia: zoom, much bigger maps (Uber) and a console.
+* Already in Colonia: zoom, much bigger maps (Uber), a console and roadblocks.
 
 ## Modernization: Colonia's own
 

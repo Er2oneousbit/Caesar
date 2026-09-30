@@ -97,14 +97,14 @@ export class Sidebar {
     if (!key) {
       mount(this.infoEl,
         h('h4', {}, 'Inspect mode'),
-        h('div', { class: 'muted' }, 'Click a building or tile for details. Pick something to build from the categories above.'),
+        h('div', { class: 'muted' }, 'Click a building, a walker or a tile for details. Pick something to build from the categories above.'),
       );
       return;
     }
     const def = BUILDINGS[key] || TOOLS[key];
     if (!def) return;
     const facts = [];
-    if (def.cost) facts.push(`${def.cost} Dn${TOOLS[key] ? ' / tile' : ''}`);
+    if (def.cost) facts.push(`${def.cost} Dn${TOOLS[key] && TOOLS[key].drag !== 'single' ? ' / tile' : ''}`);
     if (def.size) facts.push(`${def.size}×${def.size}`);
     if (def.workers) facts.push(`${def.workers} workers (${LABOR_CATEGORIES[def.labor] || 'Industry'})`);
     this.planEl = h('div', {});

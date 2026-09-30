@@ -2,8 +2,10 @@
  * infoPanel.js
  * ----------------------------------------------------------------------------
  * The "what is this and what does it need" panel shown when you click a
- * building or tile. For houses it spells out exactly which needs block the
- * next tier, which is the most important feedback loop in the game.
+ * building, a walker or a tile. For houses it spells out exactly which needs
+ * block the next tier, which is the most important feedback loop in the
+ * game. A roadblock's tile shows who it lets through; a walker shows where it
+ * comes from, what it is doing and what it has to say (ui/walkerTalk.js).
  * ----------------------------------------------------------------------------
  */
 
@@ -14,8 +16,9 @@ import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX } from '../data/units.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
-import { WALKER_TYPES } from '../data/walkers.js';
-import { TERRAIN_NAMES, WaterBits, Road, Wall } from '../world/map.js';
+import { WALKER_TYPES, ROADBLOCK_GROUPS } from '../data/walkers.js';
+import { TERRAIN_NAMES, WaterBits, Road, Wall, ROADBLOCK } from '../world/map.js';
+import { walkerInfo } from './walkerTalk.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
@@ -121,7 +124,7 @@ export class InfoPanel {
     this.app = app;
     this.el = h('div', { id: 'info-panel', class: 'hidden' });
     root.appendChild(this.el);
-    this.target = null; // { kind: 'building', id } | { kind: 'tile', x, y }
+    this.target = null; // { kind: 'building', id } | { kind: 'tile', x, y } | { kind: 'walker', id }
     this.timer = 0;
   }
 
@@ -129,6 +132,7 @@ export class InfoPanel {
 
   showBuilding(id) {
     this.target = { kind: 'building', id };
+    this.unselectWalker();
     this.app.renderer.selectedId = id;
     this.el.classList.remove('hidden');
     this.render();
@@ -136,14 +140,31 @@ export class InfoPanel {
 
   showTile(x, y) {
     this.target = { kind: 'tile', x, y };
+    this.unselectWalker();
     this.app.renderer.selectedId = 0;
     this.el.classList.remove('hidden');
     this.render();
   }
 
+  /** Show a walker; the renderer rings it (and follows it if asked). */
+  showWalker(id) {
+    this.target = { kind: 'walker', id };
+    this.app.renderer.selectedId = 0;
+    this.app.renderer.selectedWalker = id;
+    this.app.renderer.follow = null;
+    this.el.classList.remove('hidden');
+    this.render();
+  }
+
+  unselectWalker() {
+    this.app.renderer.selectedWalker = 0;
+    this.app.renderer.follow = null;
+  }
+
   close() {
     this.target = null;
     this.app.renderer.selectedId = 0;
+    this.unselectWalker();
     this.el.classList.add('hidden');
   }
 
@@ -161,6 +182,7 @@ export class InfoPanel {
     const g = this.app.game;
     if (!g || !this.target) { this.close(); return; }
     if (this.target.kind === 'tile') { this.renderTile(g); return; }
+    if (this.target.kind === 'walker') { this.renderWalker(g); return; }
     const b = g.buildings.get(this.target.id);
     if (!b) { this.close(); return; }
     if (b.house) this.renderHouse(g, b);
@@ -410,11 +432,57 @@ export class InfoPanel {
           }))))));
   }
 
+  /** A walker: who, from where, doing what, carrying what, and what it says. */
+  renderWalker(g) {
+    const w = g.walkers.get(this.target.id);
+    if (!w || w.dead) { this.close(); return; }
+    const info = walkerInfo(g, w);
+    const r = this.app.renderer;
+    const following = !!(r.follow && r.follow.id === w.id);
+    const origin = w.origin ? g.buildings.get(w.origin) : null;
+    mount(this.el,
+      this.head(info.title, WALKER_TYPES[w.type].kind === 'roamer' ? 'Roamer' : null),
+      h('div', { class: 'muted' }, info.desc),
+      ...info.rows.map(([k, v]) => kv(k, v)),
+      h('div', { class: 'panel-sec walker-says' }, h('i', {}, `"${info.says}"`)),
+      h('div', { class: 'panel-sec row' },
+        h('button', {
+          class: `btn small${following ? ' active' : ''}`,
+          title: 'Keep the view on this walker (move the map to stop)',
+          onclick: () => { r.follow = following ? null : { id: w.id }; this.render(); },
+        }, following ? 'Following' : 'Follow'),
+        origin ? h('button', { class: 'btn small', onclick: () => { r.camera.glideToTile(origin.x, origin.y); this.showBuilding(origin.id); } }, `Show ${origin.house ? 'home' : 'its building'}`) : null));
+  }
+
+  /** A roadblock: which walker groups it lets through. */
+  renderRoadblock(g, x, y) {
+    const map = g.map;
+    const i = map.idx(x, y);
+    const set = (bits) => { map.roadblock[i] = ROADBLOCK.PRESENT | (bits & ROADBLOCK.GROUPS); this.render(); };
+    const bits = map.roadblock[i] & ROADBLOCK.GROUPS;
+    mount(this.el,
+      this.head('Roadblock', `${x},${y}`),
+      h('div', { class: 'muted' }, 'Walkers roaming the streets turn back here. Carts, market buyers, settlers, caravans and anyone else heading somewhere always pass.'),
+      h('div', { class: 'panel-sec' },
+        h('h5', {}, 'Let through'),
+        ROADBLOCK_GROUPS.map((grp) => h('label', { class: 'check-row' },
+          h('input', { type: 'checkbox', checked: !!(bits & grp.bit), onchange: (e) => set(e.target.checked ? bits | grp.bit : bits & ~grp.bit) }),
+          h('span', {}, grp.name)))),
+      h('div', { class: 'panel-sec row' },
+        h('button', { class: 'btn small', onclick: () => set(ROADBLOCK.GROUPS) }, 'Everyone'),
+        h('button', { class: 'btn small', onclick: () => set(0) }, 'No one'),
+        h('button', {
+          class: 'btn danger small',
+          onclick: () => { map.roadblock[i] = 0; g.onMapEdited(); this.app.sfx.play('demolish'); this.render(); },
+        }, 'Remove')));
+  }
+
   renderTile(g) {
     const { x, y } = this.target;
     const map = g.map;
     if (!map.inBounds(x, y)) { this.close(); return; }
     const i = map.idx(x, y);
+    if (map.roadblock[i]) { this.renderRoadblock(g, x, y); return; }
     const t = map.terrain[i];
     const bits = map.water[i];
     const water = [bits & WaterBits.FOUNTAIN ? 'fountain' : null, bits & WaterBits.WELL ? 'well' : null, bits & WaterBits.PIPED ? 'reservoir pipes' : null].filter(Boolean);

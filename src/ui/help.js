@@ -16,6 +16,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { KEY_HELP } from '../input/input.js';
 import { tierNeeds } from './advisors.js';
 import { CONSOLE_HELP } from './console.js';
+import { RAID_MIN_POP } from '../sim/military.js';
 
 const TABS = [
   ['start', 'Getting started'],
@@ -63,6 +64,8 @@ function content(tab) {
           h('li', {}, h('b', {}, 'Click things! '), 'Every building explains what it is doing. Homes list exactly what they need to reach the next level.')),
         h('h4', {}, 'How walkers work'),
         h('p', {}, 'Most services are delivered by walkers who wander the streets. A home only counts as having a temple, market or prefect if the right walker passed within 2 tiles recently. Short loops of road around your blocks work better than long dead ends.'),
+        h('p', {}, 'A Roadblock (Roads menu) turns roaming walkers back, so they keep to the streets you mean them to serve. Click one to let some kinds through (priests, market vendors...). Carts, market buyers, settlers, caravans and anyone else heading somewhere always pass.'),
+        h('p', {}, 'Click a walker to see who it is, where it comes from, what it is doing and carrying, and what it thinks of the city. Follow keeps it in view until you move the map.'),
         h('h4', {}, 'Workers'),
         h('p', {}, `About ${Math.round(CONFIG.WORKFORCE_RATIO * 100)}% of ordinary citizens work. A building can only hire if people live within ${CONFIG.LABOR_RANGE} tiles of it along the roads. If there are more jobs than workers, set priorities in the Labor advisor.`),
         h('h4', {}, 'Day, night, seasons, weather and music'),
@@ -114,7 +117,7 @@ function content(tab) {
     }
     case 'military':
       return [
-        h('p', {}, 'Some provinces are raided by barbarian warbands. Scouts warn you about three months before a raid (the ⚠ alert in the top bar), and raiders never come before the city has 120 people. Warbands grow as your city grows.'),
+        h('p', {}, `Some provinces are raided by barbarian warbands. Scouts warn you about three months before a raid (the ⚠ alert in the top bar), and raiders never come before the city has ${RAID_MIN_POP} people. Warbands grow as your city grows.`),
         h('h4', {}, 'Recruiting'),
         chain('Barracks', 'recruit walks by road', 'Fort'),
         h('p', {}, 'A staffed Barracks trains a recruit every few days and sends him to the emptiest staffed fort. Each fort holds 8 soldiers. Recruits need equipment at the Barracks, delivered by cart from workshops, ranches and warehouses:'),

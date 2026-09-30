@@ -73,7 +73,7 @@ export const INVASION_PRESETS = Object.freeze({
  * unlocked buildings let homes reach (Huts in the first mission, Townhouses
  * in the second, Domus in the third, Villas in the fourth, then everything).
  */
-const BASIC = ['house', 'road', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_jupiter', 'garden', 'forum'];
+const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_jupiter', 'garden', 'forum'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_vesta', 'statue_small', 'plaza'];
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit'];
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'amphitheater', 'gladiator_school', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',

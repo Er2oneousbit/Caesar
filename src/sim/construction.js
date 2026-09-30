@@ -8,7 +8,10 @@
  *   applyPlan(game, plan)
  *
  * `tool` is a building key ('house', 'prefecture', ...) or a tile tool
- * ('road', 'aqueduct', 'plaza', 'bridge', 'wall', 'clear').
+ * ('road', 'aqueduct', 'plaza', 'bridge', 'wall', 'roadblock', 'clear').
+ *
+ * Roadblocks: placed on a road tile (map.roadblock), they turn back roaming
+ * walkers (see sim/movement.js). Clearing a roadblock leaves its road.
  *
  * Walls: dragged like roads over open land. Where a wall crosses a road it
  * becomes a gate (citizens pass, raiders must break it). Dragging a road
@@ -26,7 +29,7 @@
 import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
-import { Road, Terrain, WaterBits, Wall } from '../world/map.js';
+import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
 import { addBuilding, perimeterTiles, removeBuilding } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
@@ -152,6 +155,7 @@ export function planAction(game, tool, x0, y0, x1, y1) {
   if (tool === 'plaza') return planPlaza(game, x0, y0, x1, y1);
   if (tool === 'clear') return planClear(game, x0, y0, x1, y1);
   if (tool === 'bridge') return planBridge(game, x0, y0, x1, y1);
+  if (tool === 'roadblock') return planRoadblock(game, x1, y1);
   if (mode === 'area') return planBuildingArea(game, tool, x0, y0, x1, y1);
   // Single building
   const a = anchorFor(tool, x1, y1);
@@ -217,7 +221,7 @@ function pathTileCost(game, tool, i) {
   if (tool === 'wall') {
     if (map.wall[i]) return 0.3;
     if (t === Terrain.WATER || t === Terrain.ROCK) return Infinity;
-    if (map.building[i] || map.aqueduct[i]) return Infinity;
+    if (map.building[i] || map.aqueduct[i] || map.roadblock[i]) return Infinity;
     if (game.fires.has(i)) return Infinity;
     if (map.road[i]) return map.road[i] === Road.ROAD ? 1.5 : Infinity; // gate; never on bridges or plazas
     return t === Terrain.TREES ? 1.6 : map.rubble[i] ? 1.4 : 1;
@@ -225,7 +229,7 @@ function pathTileCost(game, tool, i) {
   // aqueduct
   if (map.aqueduct[i]) return 0.3;
   if (t === Terrain.WATER || t === Terrain.ROCK) return Infinity;
-  if (map.building[i] || map.wall[i]) return Infinity;
+  if (map.building[i] || map.wall[i] || map.roadblock[i]) return Infinity;
   if (map.road[i] === Road.BRIDGE || map.road[i] === Road.PLAZA) return Infinity;
   if (game.fires.has(i)) return Infinity;
   return map.road[i] ? 1.5 : t === Terrain.TREES ? 1.6 : 1;
@@ -283,6 +287,36 @@ function planPath(game, tool, x0, y0, x1, y1) {
   const bad = items.find((it) => !it.ok);
   const warnings = gates > 0 ? [`${gates} gate${gates === 1 ? '' : 's'} (${TOOLS.wall.gateCost} Dn each): citizens pass, raiders must break ${gates === 1 ? 'it' : 'them'}`] : [];
   return { tool, kind: 'path', items, cost, count, warnings, reason: bad ? bad.reason : null };
+}
+
+/** A roadblock on the road tile (x, y). */
+export function checkRoadblock(game, x, y) {
+  const { map } = game;
+  const cost = TOOLS.roadblock.cost;
+  const fail = (reason) => ({ ok: false, reason, cost });
+  if (!game.isUnlocked('roadblock')) return fail('Not available in this scenario');
+  if (!map.inBounds(x, y)) return fail('Outside the map');
+  const i = map.idx(x, y);
+  if (map.roadblock[i]) return fail('There is a roadblock here already');
+  if (!map.road[i]) return fail('Roadblocks go on a road');
+  if (map.road[i] === Road.BRIDGE) return fail('Not on a bridge');
+  if (map.wall[i]) return fail('Not in a gate');
+  if (map.aqueduct[i]) return fail('Not under an aqueduct');
+  if (!canAfford(game, cost)) return fail('Not enough money');
+  return { ok: true, cost };
+}
+
+function planRoadblock(game, x, y) {
+  const chk = checkRoadblock(game, x, y);
+  return {
+    tool: 'roadblock',
+    kind: 'building',
+    items: [{ x, y, size: 1, ok: chk.ok, reason: chk.reason, cost: chk.cost }],
+    cost: chk.ok ? chk.cost : 0,
+    count: chk.ok ? 1 : 0,
+    warnings: [],
+    reason: chk.reason,
+  };
 }
 
 function planPlaza(game, x0, y0, x1, y1) {
@@ -369,6 +403,12 @@ function planClear(game, x0, y0, x1, y1) {
       }
       continue;
     }
+    if (map.roadblock[i]) {
+      // A roadblock comes down first and leaves its road behind.
+      items.push({ x, y, size: 1, ok: true, roadblock: true, cost: 0 });
+      count++;
+      continue;
+    }
     if (map.wall[i]) {
       // Walls and gates come down first; a gate leaves its road behind.
       items.push({ x, y, size: 1, ok: true, wall: true, cost: 0 });
@@ -423,6 +463,10 @@ export function applyPlan(game, plan) {
         const i = map.idx(it.x, it.y);
         map.road[i] = Road.NONE;
         map.aqueduct[i] = 0;
+        map.roadblock[i] = 0;
+        done++;
+      } else if (it.roadblock) {
+        map.roadblock[map.idx(it.x, it.y)] = 0;
         done++;
       } else if (it.aqueduct) {
         map.aqueduct[map.idx(it.x, it.y)] = 0;
@@ -447,7 +491,16 @@ export function applyPlan(game, plan) {
     return { ok: done > 0, count: done, cost: spent };
   }
 
-  if (plan.tool === 'road' || plan.tool === 'aqueduct' || plan.tool === 'plaza' || plan.tool === 'bridge' || plan.tool === 'wall') {
+  if (plan.tool === 'roadblock') {
+    for (const it of plan.items) {
+      if (!it.ok || !checkRoadblock(game, it.x, it.y).ok) continue;
+      const i = map.idx(it.x, it.y);
+      map.roadblock[i] = ROADBLOCK.PRESENT; // lets nobody through until the player says so
+      undo.ops.push({ op: 'roadblock', i });
+      spent += it.cost;
+      done++;
+    }
+  } else if (plan.tool === 'road' || plan.tool === 'aqueduct' || plan.tool === 'plaza' || plan.tool === 'bridge' || plan.tool === 'wall') {
     for (const it of plan.items) {
       if (!it.ok || it.exists) continue;
       const i = map.idx(it.x, it.y);
@@ -552,6 +605,8 @@ export function undoLast(game) {
       map.rubble[op.i] = op.rubble;
     } else if (op.op === 'plaza') {
       map.road[op.i] = Road.ROAD;
+    } else if (op.op === 'roadblock') {
+      map.roadblock[op.i] = 0;
     }
   }
   if (u.cost > 0) {

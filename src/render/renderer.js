@@ -50,7 +50,7 @@ import { farmDormant } from '../sim/production.js';
 import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
-import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK } from './terrainArt.js';
+import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor } from './buildingArt.js';
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H } from './liveArt.js';
 import { drawWalker } from './walkerArt.js';
@@ -236,6 +236,18 @@ export function blendCode(map, x, y) {
   return (best << 8) | (edges << 4) | corners;
 }
 
+/**
+ * Where a walker stands this frame: tile coordinates (fx, fy) and world
+ * pixels (wx, wy) of its feet, part way to the next tile (alpha: 0..1 toward
+ * the next sim tick).
+ */
+export function walkerWorld(w, alpha) {
+  const p = w.moving ? Math.min(1, w.progress + alpha * w.speed) : 0;
+  const fx = w.x + (w.tx - w.x) * p + 0.5;
+  const fy = w.y + (w.ty - w.y) * p + 0.5;
+  return { fx, fy, wx: (fx - fy) * HALF_W, wy: (fx + fy) * HALF_H };
+}
+
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
   constructor(canvas) {
@@ -250,6 +262,10 @@ export class Renderer {
     this.plan = null; // construction preview from the input tool
     this.tool = null;
     this.selectedId = 0;
+    this.selectedWalker = 0; // walker shown in the info panel (ringed)
+    this.follow = null; // { id } of a walker the view follows (until the map is moved)
+    this.walkerSpots = []; // where each walker was drawn this frame, for clicks (pickWalker)
+    this.buildingBoxes = []; // footprint and height of each building drawn this frame (pickWalker)
     this.deployFort = 0; // fort id while the player picks a deployment tile
     this.time = 0;
     this.frame = 0;
@@ -289,6 +305,7 @@ export class Renderer {
     for (const u of this.unsub) u();
     this.unsub = [];
     this.game = game;
+    this.walkerSpots = [];
     this.camera.setMapBounds(game.map.w, game.map.h);
     this.stripCache = new WeakMap();
     this.effects = new Effects();
@@ -373,6 +390,7 @@ export class Renderer {
     ctx.fillStyle = '#2a241c';
     ctx.fillRect(0, 0, cam.viewW, cam.viewH);
     if (!game) return;
+    if (this.follow) this.followWalker(alpha);
     const k = cam.scale;
     const env = this.updateEnvironment(dt);
     const pal = env.pal;
@@ -404,6 +422,7 @@ export class Renderer {
     const motion = this.motionOn;
     const glints = motion && cam.zoom >= 1 && env.sun > 0.5 && env.overcast < 0.5;
     const visibleBuildings = [];
+    this.buildingBoxes = [];
     const waterFrame = Math.floor(this.time * 2.5) % 4;
 
     const items = [];
@@ -487,6 +506,10 @@ export class Renderer {
           const damaged = hp.hp < hp.max * 0.5;
           items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`wl${mask}.${gate ? 1 : 0}.${damaged ? 1 : 0}`, () => wallSpec(mask, gate, damaged)), wx, wy, full: true });
         }
+        if (map.roadblock[i]) {
+          const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
+          items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`rbk${axis}`, () => roadblockSpec(axis)), wx, wy, full: true });
+        }
         if (map.aqueduct[i]) {
           const mask = this.aqueductMask(x, y);
           const filled = map.aqueduct[i] === 2;
@@ -506,14 +529,12 @@ export class Renderer {
     if (!overlayOn && shadowA > 0.03) for (const b of visibleBuildings) this.drawBuildingShadow(b, shadowA);
 
     // --- walkers ------------------------------------------------------------
+    this.walkerSpots = [];
     for (const w of game.walkers.values()) {
       if (overlayOn && ov.walkers && !ov.walkers.includes(w.type)) continue;
-      const p = w.moving ? Math.min(1, w.progress + alpha * w.speed) : 0;
-      const fx = w.x + (w.tx - w.x) * p + 0.5;
-      const fy = w.y + (w.ty - w.y) * p + 0.5;
-      const wx = (fx - fy) * HALF_W;
-      const wy = (fx + fy) * HALF_H;
+      const { fx, fy, wx, wy } = walkerWorld(w, alpha);
       if (wx < x0w || wx > x1w || wy < y0w || wy > vr.y + vr.h + 30) continue;
+      this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship' });
       const ddx = (w.tx - w.x) - (w.ty - w.y);
       const ddy = (w.tx - w.x) + (w.ty - w.y);
       const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
@@ -569,6 +590,7 @@ export class Renderer {
           if (it.alpha) ctx.globalAlpha = 1;
           break;
         case K_WALKER:
+          if (it.w.id === this.selectedWalker) this.drawWalkerRing(it);
           drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride);
           break;
         case K_FIRE:
@@ -936,6 +958,7 @@ export class Renderer {
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
     const snow = this.pal.snow;
     const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow), this.snowPrev === null ? null : key + this.snowPrev);
+    if (spr && spr.s) this.buildingBoxes.push({ x: b.x, y: b.y, S: b.size, H: spr.ay / spr.s });
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).
     let alpha;
@@ -1315,6 +1338,70 @@ export class Renderer {
     }
   }
 
+  /**
+   * The walker drawn at CSS pixel (sx, sy) of the screen, or 0: the figure
+   * nearest the point among those whose box (a little bigger than the figure,
+   * and never under about 12 CSS px across) holds it. Where a building stands
+   * in front of a walker and covers the point, the building gets the click.
+   */
+  pickWalker(sx, sy) {
+    const cam = this.camera;
+    const p = cam.screenToWorld(sx, sy);
+    const css = cam.dpr / cam.scale; // world px per CSS px
+    // Buildings as prisms: height H over their footprint. The screen column
+    // through the point crosses a footprint between world y lo and hi; the
+    // building covers the point if the point is at most H above that span,
+    // and it is in front of a walker whose feet are above hi.
+    const hx = p.x / HALF_W;
+    const covers = (feetY) => (this.buildingBoxes || []).some((o) => {
+      const lo = Math.max(HALF_H * (2 * o.x - hx), HALF_H * (2 * o.y + hx));
+      const hi = Math.min(HALF_H * (2 * (o.x + o.S) - hx), HALF_H * (2 * (o.y + o.S) + hx));
+      return lo <= hi && hi > feetY + 1 && p.y <= hi && p.y + o.H >= lo;
+    });
+    let best = 0;
+    let bestD = Infinity;
+    for (const s of this.walkerSpots) {
+      const hw = s.ship ? Math.max(26, 12 * css) : Math.max(7, 6 * css);
+      const top = s.ship ? Math.max(40, 20 * css) : Math.max(22, 16 * css);
+      const bottom = Math.max(4, 3 * css);
+      const dx = p.x - s.wx;
+      const dy = p.y - s.wy;
+      if (Math.abs(dx) > hw || dy < -top || dy > bottom) continue;
+      const d = Math.hypot(dx, dy + top / 2);
+      if (d < bestD && !covers(s.wy)) { bestD = d; best = s.id; }
+    }
+    return best;
+  }
+
+  /** Keep the followed walker in the middle of the view; stop once the map is moved. */
+  followWalker(alpha) {
+    const f = this.follow;
+    const cam = this.camera;
+    const w = this.game.walkers.get(f.id);
+    const moved = f.x !== undefined && (Math.abs(cam.x - f.x) > 0.5 || Math.abs(cam.y - f.y) > 0.5);
+    if (!w || w.dead || moved) { this.follow = null; return; }
+    const { wx, wy } = walkerWorld(w, alpha);
+    cam.setCenter(wx, wy - 10);
+    f.x = cam.x;
+    f.y = cam.y;
+  }
+
+  /** A ring at the feet of the selected walker. */
+  drawWalkerRing(it) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const x = Math.round((it.wx - cam.x) * k);
+    const y = Math.round((it.wy - cam.y) * k);
+    const r = it.w.kind === 'ship' ? 20 : 7;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,230,120,0.95)';
+    ctx.lineWidth = Math.max(1.5, 1.6 * k);
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * k, r * 0.5 * k, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** Construction previews: water hints, ghost building, tile markers, coverage radius. */
   drawToolPreview() {
     const { game, plan } = this;
@@ -1357,7 +1444,13 @@ export class Renderer {
       const color = it.ok ? (plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : 'rgba(80,220,90,0.38)') : 'rgba(230,40,40,0.5)';
       const wx = (it.x - it.y) * HALF_W;
       const wy = (it.x + it.y) * HALF_H;
-      if (def && plan.kind === 'building' && it.ok) {
+      if (plan.tool === 'roadblock' && it.ok) {
+        const axis = map.hasRoad(it.x + 1, it.y) || map.hasRoad(it.x - 1, it.y) ? 'u' : 'v';
+        this.fillDiamond(wx, wy, color);
+        this.ctx.globalAlpha = 0.8;
+        this.blit(this.sprites.get(`rbk${axis}`, () => roadblockSpec(axis)), wx, wy);
+        this.ctx.globalAlpha = 1;
+      } else if (def && plan.kind === 'building' && it.ok) {
         // Same sprite (and cache key) as a placed building of variant 0: live flags.
         const snow = this.pal.snow;
         const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:0${this.snowKey}`, () => buildingSpec(plan.tool, it.size, 0, 0, true, snow));

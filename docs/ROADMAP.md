@@ -8,7 +8,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Water under the Housing tool**: while placing housing plots, tint the ground faintly where homes would get water, as the original did: a pale blue for well water, a stronger blue for fountain water, so the next plots go where water already reaches. Today the coverage only shows while placing or selecting a well, fountain or reservoir. It reads the sim's water layer, like those hints.
+1. **Water where you build**: while placing housing plots, tint the ground faintly where homes would get water, as the original did: a pale blue for well water, a stronger blue for fountain water, so the next plots go where water already reaches. While placing a fountain (or baths, which also need piped water), tint the reservoirs' piped area the same faint blue, so you can see where it will actually run; today that preview shows only the fountain's own reach and the existing fountains' coverage. Coverage otherwise only shows while placing or selecting a well, fountain or reservoir. All of it reads the sim's water layer, like those hints.
 2. **Roadblocks and walker click-to-inspect**: the modern must-have, and the walkers get something to say again.
 3. **Disease and crime**, with their overlays and the Health, Education and Entertainment advisors (on at every difficulty, gentler on Easy).
 4. **The Problems overlay and production stats**: the original's Problems overlay, now with the reason behind every problem.

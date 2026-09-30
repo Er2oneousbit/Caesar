@@ -103,13 +103,20 @@ const ROAM_RADIUS = 13;
 const ROAM_MEMORY = 24;
 /**
  * A roamer looks this far down each way it could take (following the road
- * through bends, up to the next junction) and weighs the way by the share of
- * those tiles with anything to serve: an empty way keeps EMPTY_STREET_WEIGHT
- * of its weight, not zero, since an empty stretch can lead to more homes.
+ * through bends, up to the next junction, a dead end or a roadblock that
+ * stops it) and weighs the way by what it finds (streetValue): an empty way
+ * keeps EMPTY_STREET_WEIGHT of its weight, not zero.
  * Looking only at the next tile was not enough: a lone Forum's tax collector
  * turned onto the Imperial road (its first tile still beside a home), then
  * had no way but on to the empty map edge, and the registrations of the
- * homes he skipped ran out.
+ * homes he skipped ran out. Scoring only the share of tiles with something
+ * to serve was too much: a clay pit at the end of an 8-tile spur lost a
+ * third of its engineers' visits, so a way that reaches a building within
+ * the lookahead counts in full. Not further: looking 16 tiles ahead made
+ * the empty road from a housing block down to its farm quarter "lead to a
+ * building" too, the block's engineers spent their rounds on it, and the
+ * mission 3 playtest lost its Forum, temple and prefectures again. A
+ * longer spur's outpost is better served by a post of its own.
  */
 const ROAM_LOOKAHEAD = 8;
 const EMPTY_STREET_WEIGHT = 0.2;
@@ -123,14 +130,21 @@ function servesSomething(map, x, y) {
   return false;
 }
 
-/** Share (0..1) of the next ROAM_LOOKAHEAD road tiles from (x, y), heading `dir`, with something to serve. */
-function streetValue(map, x, y, dir) {
+/**
+ * What a way is worth to roamer `w` (0..1), starting at road tile (x, y)
+ * heading `dir`: 1 when the tile it leads to (a dead end, a junction, the
+ * last tile looked at) has something to serve, else the share of the tiles
+ * on the way that do. A roadblock that stops `w` ends the way before it.
+ */
+export function streetValue(map, w, x, y, dir) {
   let served = 0;
   let n = 0;
+  let endServes = false;
   for (let k = 0; k < ROAM_LOOKAHEAD; k++) {
     n++;
-    if (servesSomething(map, x, y)) served++;
-    // On along the only way ahead; stop at a junction or a dead end.
+    endServes = servesSomething(map, x, y);
+    if (endServes) served++;
+    // On along the only way ahead; stop at a junction, a dead end or a roadblock.
     let next = -1;
     let ways = 0;
     for (let e = 0; e < 4; e++) {
@@ -139,12 +153,12 @@ function streetValue(map, x, y, dir) {
       const ny = y + DY[e];
       if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) { ways++; next = e; }
     }
-    if (ways !== 1) break;
+    if (ways !== 1 || roadblockStops(map, w, map.idx(x + DX[next], y + DY[next]))) break;
     dir = next;
     x += DX[dir];
     y += DY[dir];
   }
-  return served / n;
+  return endServes ? 1 : served / n;
 }
 
 /**
@@ -175,7 +189,7 @@ export function pickRoamTile(game, w) {
     let weight = d === w.lastDir ? 3 : 2;
     if (w.memory.includes(idx)) weight *= 0.25;
     if (Math.max(Math.abs(nx - ox), Math.abs(ny - oy)) > ROAM_RADIUS) weight *= 0.1;
-    weight *= EMPTY_STREET_WEIGHT + (1 - EMPTY_STREET_WEIGHT) * streetValue(map, nx, ny, d);
+    weight *= EMPTY_STREET_WEIGHT + (1 - EMPTY_STREET_WEIGHT) * streetValue(map, w, nx, ny, d);
     choices.push(d, weight);
     total += weight;
   }

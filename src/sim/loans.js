@@ -40,9 +40,10 @@ export function takeLoan(game) {
 }
 
 /**
- * Monthly: pay the instalment (the last one is what is left). It is paid
- * even from an empty treasury: Rome does not wait, and the debt that follows
- * costs favor as any debt does.
+ * Monthly, before wages and taxes (game.js): pay the instalment (the last
+ * one is what is left). It is paid even from an empty treasury: Rome does
+ * not wait, and the debt that follows costs favor as any debt does, from
+ * that same month.
  */
 export function repayLoan(game) {
   const c = game.city;
@@ -52,6 +53,9 @@ export function repayLoan(game) {
   c.loan.left -= pay;
   if (c.loan.left <= 0) {
     c.loan = null;
-    game.message('The loan from Rome is repaid in full.', 'good');
+    // The debt message comes once a spell of debt, so a city still in the red
+    // hears here that Rome would lend again.
+    const again = c.treasury < 0 ? ' The treasury is still in debt: Rome will lend again (Finance advisor).' : '';
+    game.message(`The loan from Rome is repaid in full.${again}`, c.treasury < 0 ? 'warn' : 'good');
   }
 }

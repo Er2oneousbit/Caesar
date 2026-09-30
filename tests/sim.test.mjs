@@ -590,6 +590,22 @@ test('a city in debt can borrow, and the loan is not counted as profit', () => {
   assert.ok(checkBuilding(game, 'forum', 30, 30).reason !== 'Not enough money', 'and the city can build again');
 });
 
+test('an instalment that empties the treasury is debt that month; a loan paid off in debt says Rome lends again', () => {
+  const game = loanGame();
+  const c = game.city;
+  takeLoan(game);
+  c.treasury = 50;
+  const favor = c.ratings.favor;
+  game.runDays(CONFIG.DAYS_PER_MONTH); // across one month's start
+  assert.ok(c.treasury < 0);
+  assert.ok(c.ratings.favor < favor, 'debt costs favor the month the instalment made it');
+  assert.ok(game.messages.some((m) => /treasury is in debt/.test(m.text)));
+  c.loan.left = c.loan.monthly; // the last instalment
+  repayLoan(game);
+  assert.equal(c.loan, null);
+  assert.ok(game.messages.some((m) => /repaid in full\. The treasury is still in debt: Rome will lend again/.test(m.text)));
+});
+
 test('a loan being repaid survives save and load', () => {
   const game = loanGame('hard');
   takeLoan(game);

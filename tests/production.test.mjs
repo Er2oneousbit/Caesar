@@ -165,7 +165,7 @@ test('the Production advisor finds the bottleneck', () => {
 // Saying what is true (found playing mission 3 on Insane)
 // ---------------------------------------------------------------------------
 
-test('homes with food counts the homes that hold food, not the ones not going hungry', () => {
+test('homes with food counts the homes whose people eat and hold food, not the ones not going hungry', () => {
   const game = newGame({ seed: 'larder' });
   const spot = findFree(game, 6, 3);
   const homes = [0, 2, 4].map((dx) => {
@@ -173,8 +173,10 @@ test('homes with food counts the homes that hold food, not the ones not going hu
     Object.assign(b.house, { tier: 2, pop: 7 }); // family tents: they forage, never hungry
     return b;
   });
+  const tent = addBuilding(game, 'house', spot.x + 5, spot.y + 1, 1);
+  Object.assign(tent.house, { tier: 1, pop: 5 }); // a Tent: forages, no vendor feeds it
   game.runTicks(1);
-  assert.deepEqual(homesWithFood(game), { homes: 3, withFood: 0 }, 'a tent city with no food anywhere');
+  assert.deepEqual(homesWithFood(game), { homes: 3, withFood: 0 }, 'a tent city with no food anywhere; the Tent is not counted at all');
   assert.equal(game.city.fedShare, 1, 'the mood still counts them as fed: tents never go hungry');
   homes[1].house.food.wheat = 20;
   assert.deepEqual(homesWithFood(game), { homes: 3, withFood: 1 });

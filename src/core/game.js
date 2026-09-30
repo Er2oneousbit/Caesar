@@ -303,8 +303,10 @@ export class Game {
 
   onMonth() {
     for (const b of this.buildings.values()) if (b.house) consumeHouse(this, b);
-    monthlyEconomy(this);
+    // The instalment first, so the month's debt check (in monthlyEconomy)
+    // sees a treasury it emptied.
     repayLoan(this);
+    monthlyEconomy(this);
     militaryMonthly(this);
     computeSentiment(this);
     updateHomeMoods(this); // after the month's city mood, which every home starts from

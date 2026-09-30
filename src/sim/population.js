@@ -20,7 +20,7 @@ import { FOOD_TYPES, HOUSE_GOODS } from '../data/goods.js';
 import { HOUSE_TIERS, houseCapacity } from '../data/housing.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath, walkTo } from './movement.js';
-import { houseWantsGood } from './market.js';
+import { houseWantsGood, foodKindsWanted } from './market.js';
 import { sendEmigrants } from './housing.js';
 import { newHousehold } from './mood.js';
 
@@ -253,17 +253,20 @@ export function indexHomesByRoad(game) {
 }
 
 /**
- * Occupied homes with food in the larder for their people, of all occupied
- * homes: the Overview's "Homes with food". Not the mood's food factor
- * (fedShare), which counts homes not going hungry: tents forage and never go
- * hungry, so a city of tents read "100% with food" with none in any home.
+ * Of the occupied homes whose people eat (or are about to: a Family Tent
+ * stocks up for a Lean-to), those with food in the larder: the Overview's
+ * "Homes with food". Not the mood's food factor (fedShare), which counts
+ * homes not going hungry: tents forage and never go hungry, so a city of
+ * tents read "100% with food" with none in any home. Tents are left out
+ * altogether: no vendor gives them food, so counting them read "0%" in a
+ * city whose every eating home was fed.
  */
 export function homesWithFood(game) {
   let homes = 0;
   let withFood = 0;
   for (const b of game.buildings.values()) {
     const h = b.house;
-    if (!h || h.pop <= 0) continue;
+    if (!h || h.pop <= 0 || foodKindsWanted(h) <= 0) continue;
     homes++;
     if (FOOD_TYPES.some((f) => h.food[f] > 0.01)) withFood++;
   }

@@ -86,7 +86,7 @@ Needs add up: each level also needs everything the levels below it need. "To rea
 
 ## Services (walkers)
 
-Most services are delivered by walkers. A walker serves every building within **2 tiles** of each road tile it steps on, and a home remembers the visit for **96 days** (a tax collector's visit, 48). Roamers walk 22-30 tiles, prefer to go straight, avoid tiles they just walked, stay within about 13 tiles of their building, and prefer streets with something to serve: at a junction a roamer looks up to 8 tiles down each way and favors the ways with buildings along them over empty road (such as the Imperial road out to the map edge). Short loops of road around housing blocks are covered far better than long dead ends.
+Most services are delivered by walkers. A walker serves every building within **2 tiles** of each road tile it steps on, and a home remembers the visit for **96 days** (a tax collector's visit, 48). Roamers walk 22-30 tiles, prefer to go straight, avoid tiles they just walked, stay within about 13 tiles of their building, and prefer streets with something to serve: at a junction a roamer looks up to 8 tiles down each way (to the next junction, a dead end, or a roadblock that would stop it) and favors the ways with buildings along them over empty road such as the Imperial road out to the map edge; a way that reaches a building within those 8 tiles, like a short spur to a clay pit, counts in full. An outpost at the end of a longer empty road is visited less: give it a post of its own. Short loops of road around housing blocks are covered far better than long dead ends.
 
 | Service | Building | Notes |
 |---|---|---|
@@ -144,7 +144,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 * **Trade:** open a route once (Trade advisor), then a caravan or ship comes every 32-56 days. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
 * **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").
 * Construction needs money in the treasury; running wages into debt costs 3 favor a month, and nothing can be built until you are out of it.
-* **Loans from Rome** (Finance advisor): Rome lends 2,000 Dn whenever no loan is being repaid, in debt or not, repaid automatically in equal monthly instalments over 24 months with interest over the whole term of 10% on Easy, 20% on Normal, 30% on Hard and 40% on Insane (2,200 to 2,800 Dn in all). Instalments are paid even from an empty treasury. The loan and its repayments have ledger lines of their own and do not count as profit or loss for prosperity.
+* **Loans from Rome** (Finance advisor): Rome lends 2,000 Dn whenever no loan is being repaid, in debt or not, repaid automatically in equal monthly instalments over 24 months with interest over the whole term of 10% on Easy, 20% on Normal, 30% on Hard and 40% on Insane (2,200 to 2,800 Dn in all). Instalments are paid each month before wages, even from an empty treasury (the debt that follows costs favor from that month). The loan and its repayments have ledger lines of their own and do not count as profit or loss for prosperity; borrowed money pays tribute and the Emperor's requests like any other, at the loan's interest.
 
 ## Trade
 

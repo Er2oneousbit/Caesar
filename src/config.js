@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.10.0',
+  VERSION: '0.10.1',
   SAVE_VERSION: 5, // v5: home mood and crime (v4 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -144,7 +144,9 @@ export const CONFIG = {
   RIOT_MOB_MAX: 6,
   RIOT_TARGET_RANGE: 40, // rioters go for the most prized building this close to their home
   RIOT_MOOD_BOOST: 20, // every home's mood rises this much after a riot: the anger is spent
-  RIOT_PEACE: 5, // peace lost at once to a riot
+  RIOT_PEACE: 5, // peace lost at once to a riot (x the difficulty's crimePeace)
+  THIEF_PEACE: 1, // peace lost at once to a thief (x crimePeace; above 0 he also costs that month's gain)
+  PROTEST_PEACE: 1, // peace lost to every protestPeaceEvery-th protest (Insane only)
   RIOTER_START_TICKS: 20, // rioter i sets off after this + i x RIOTER_STAGGER_TICKS
   RIOTER_STAGGER_TICKS: 4,
   RIOTER_BURN_TICKS: 64, // a rioter stays about 3 days by each building it sets on fire

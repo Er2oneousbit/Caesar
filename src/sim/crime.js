@@ -35,7 +35,7 @@
  *            (data/crime.js RIOT_TARGETS; the original's mob crossed the whole
  *            map), or with none near, the nearest listed building it can
  *            reach, setting fire to what it passes. Every home's mood rises by
- *            RIOT_MOOD_BOOST and peace falls by RIOT_PEACE at once. Rioters
+ *            RIOT_MOOD_BOOST and peace falls at once (see Peace). Rioters
  *            go home after RIOTER_MAX_DAYS.
  *
  * Catching: a prefect (not one fighting a fire) or a soldier next to a
@@ -47,9 +47,11 @@
  * his patrol. Fires come first: a prefect sent to a fire drops the hunt
  * (sim/risk.js).
  *
- * Peace: a month in which a thief appeared brings no peace gain
- * (sim/ratings.js); protesters cost none. The year's counts (city.crime)
- * feed the sim report.
+ * Peace, scaled by the difficulty's crimePeace (0 Easy, 1 Normal, 2 Hard,
+ * 3 Insane): a riot costs RIOT_PEACE x that at once, a thief THIEF_PEACE x
+ * that at once and (above 0) the month's peace gain (sim/ratings.js).
+ * Protests cost nothing, except that on Insane every protestPeaceEvery-th
+ * costs PROTEST_PEACE. The year's counts (city.crime) feed the sim report.
  * ----------------------------------------------------------------------------
  */
 
@@ -68,6 +70,12 @@ import { liftAllMoods, cityMoodCause } from './mood.js';
 // State
 // ---------------------------------------------------------------------------
 
+/** Crime's cost in peace, at once (the difficulty has already scaled it). */
+function losePeace(game, n) {
+  const r = game.city.ratings;
+  if (n > 0) r.peace = Math.max(0, r.peace - n);
+}
+
 /** A year's (or a game's) crime counts. */
 export function newCrimeCounts() {
   return { protesters: 0, thieves: 0, thefts: 0, stolen: 0, looted: 0, riots: 0, riotBurned: 0, caught: 0 };
@@ -76,7 +84,8 @@ export function newCrimeCounts() {
 /** Fresh city.crime for a new game (and for saves made before crime existed). */
 export function newCrimeState() {
   return {
-    month: false, // a thief appeared this month: no peace gain (ratings.js); protesters do not count
+    month: false, // a thief appeared this month: no peace gain (ratings.js; not on Easy); protesters do not count
+    protestTally: 0, // protests since the last one that cost peace (Insane, see data/difficulty.js)
     protestMonth: -1, // month of the last protest message (at most one a month)
     riotMessageDay: -99, // last "rioters set ... on fire" message (they are grouped)
     year: newCrimeCounts(),
@@ -326,11 +335,20 @@ function spawnProtester(game, b) {
   const [lo, hi] = CONFIG.PROTEST_TICKS;
   const w = spawnWalker(game, 'protester', road, null, { state: 'protest', home: b.id, hp: CONFIG.CRIMINAL_HP, waitTicks: game.rng.range(lo, hi), afterWait: 'vanish' });
   if (!w) return null;
-  // No peace cost: a protest is the mildest sign of unrest (the original
-  // charged any criminal only 1 peace a year), and homes protest below mood
-  // 50 while peace grows from 45, so a content city would never gain peace.
+  // Protests are the mildest sign of unrest and homes protest below mood 50
+  // while peace grows from 45, so a cost for each would keep even a content
+  // city from gaining peace. Only where the difficulty says so does every
+  // so-many-th protest cost a little (see data/difficulty.js).
   const cr = game.city.crime;
   bump(game, 'protesters');
+  const every = game.difficulty.protestPeaceEvery;
+  if (every > 0) {
+    cr.protestTally = (cr.protestTally || 0) + 1;
+    if (cr.protestTally >= every) {
+      cr.protestTally = 0;
+      losePeace(game, CONFIG.PROTEST_PEACE);
+    }
+  }
   if (cr.protestMonth !== game.time.totalMonths) {
     cr.protestMonth = game.time.totalMonths;
     const why = h.moodReason && MOOD_REASONS[h.moodReason] ? ` ${MOOD_REASONS[h.moodReason]}.` : '';
@@ -350,7 +368,11 @@ function spawnThief(game, b) {
   // One who vanished at once (a stub of road with nowhere to go) never
   // walked the streets: he is not counted and costs no peace.
   if (!game.walkers.has(w.id)) return null;
-  game.city.crime.month = true;
+  const m = game.difficulty.crimePeace;
+  if (m > 0) {
+    game.city.crime.month = true;
+    losePeace(game, CONFIG.THIEF_PEACE * m);
+  }
   bump(game, 'thieves');
   return w;
 }
@@ -450,7 +472,7 @@ export function startRiot(game, b) {
     if (w && !first) first = w;
   }
   liftAllMoods(game, CONFIG.RIOT_MOOD_BOOST);
-  c.ratings.peace = Math.max(0, c.ratings.peace - CONFIG.RIOT_PEACE);
+  losePeace(game, CONFIG.RIOT_PEACE * game.difficulty.crimePeace);
   bump(game, 'riots');
   const why = reason && MOOD_REASONS[reason] ? MOOD_REASONS[reason] : 'The people have had enough';
   const aim = target ? ` They are heading for ${withArticle(buildingLabel(target))}.` : '';

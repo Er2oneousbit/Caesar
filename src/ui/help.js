@@ -17,6 +17,11 @@ import { KEY_HELP } from '../input/input.js';
 import { tierNeeds } from './advisors.js';
 import { CONSOLE_HELP } from './console.js';
 import { RAID_MIN_POP } from '../sim/military.js';
+import { DIFFICULTY } from '../data/difficulty.js';
+
+/** "none on Easy, 5 on Normal, 10 on Hard, 15 on Insane": crime's cost in peace by difficulty. */
+const peaceByLevel = (base) => Object.values(DIFFICULTY)
+  .map((d) => (d.crimePeace > 0 ? `${base * d.crimePeace} on ${d.name}` : `none on ${d.name}`)).join(', ');
 
 const TABS = [
   ['start', 'Getting started'],
@@ -115,9 +120,9 @@ function content(tab) {
         h('h4', {}, 'Crime'),
         h('p', {}, `Every household has a mood of its own: the city's mood, lower for a hungry home, a squalid street or the poor living among villas, a little higher for plenty of food or no tax collector at the door. Click a home to see it (Mood and order). Once the city has ${CONFIG.CRIME_MIN_POP} people, an unhappy home can breed trouble:`),
         h('ul', {},
-          h('li', {}, h('b', {}, 'Protesters '), `(mood under ${CONFIG.CRIME_MOOD}) stand in the street for a few days. Harmless: they cost no peace.`),
-          h('li', {}, h('b', {}, 'Thieves '), `(under ${CONFIG.THIEF_MOOD}) sneak to the Forum or Senate and steal part of this year's taxes, at most ${CONFIG.THEFT_CAP} Dn and never more than the treasury holds, or empty half a market stall.`),
-          h('li', {}, h('b', {}, 'Riots '), `(${CONFIG.RIOT_MOOD} or less, while the city's mood is under ${CONFIG.RIOT_CITY_MOOD}): the rioters burn their own home and march on the finest building nearby, setting fire to what they pass. Peace falls by ${CONFIG.RIOT_PEACE}, but the anger is spent: every home's mood rises by ${CONFIG.RIOT_MOOD_BOOST}.`)),
+          h('li', {}, h('b', {}, 'Protesters '), `(mood under ${CONFIG.CRIME_MOOD}) stand in the street for a few days. Harmless: they cost no peace, except on Insane, where every ${DIFFICULTY.insane.protestPeaceEvery}th costs ${CONFIG.PROTEST_PEACE}.`),
+          h('li', {}, h('b', {}, 'Thieves '), `(under ${CONFIG.THIEF_MOOD}) sneak to the Forum or Senate and steal part of this year's taxes, at most ${CONFIG.THEFT_CAP} Dn and never more than the treasury holds, or empty half a market stall. Each costs peace (${peaceByLevel(CONFIG.THIEF_PEACE)}), and on all but Easy the month's peace gain.`),
+          h('li', {}, h('b', {}, 'Riots '), `(${CONFIG.RIOT_MOOD} or less, while the city's mood is under ${CONFIG.RIOT_CITY_MOOD}): the rioters burn their own home and march on the finest building nearby, setting fire to what they pass. Peace falls (${peaceByLevel(CONFIG.RIOT_PEACE)}), but the anger is spent: every home's mood rises by ${CONFIG.RIOT_MOOD_BOOST}.`)),
         h('p', {}, `The angrier the city, the likelier trouble is. A prefect passing a home halves the chance for ${CONFIG.POLICE_DAYS} days, and prefects and soldiers catch the criminals they meet; prefects on patrol chase thieves and rioters within ${CONFIG.HUNT_RANGE} tiles. The Crime overlay shows which homes are close to trouble and why. The first two campaign missions have no crime.`),
         h('h4', {}, 'Ratings'),
         h('p', {}, 'Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content. Favor is the Emperor\'s opinion: pay tribute, answer his requests, avoid debt.'),

@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
+import { DIFFICULTY, difficultyOf } from '../src/data/difficulty.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { SCENARIOS, withDifficulty } from '../src/data/scenarios.js';
 import { Game } from '../src/core/game.js';
@@ -683,4 +684,50 @@ test('a fire pulls a prefect off a chase', () => {
   assert.equal(p.state, 'toFire');
   assert.equal(p.huntTarget, 0);
   assert.equal(p.offRoad, false);
+});
+
+// ---------------------------------------------------------------------------
+// Crime's cost in peace, by difficulty (the owner's call: none on Easy, a
+// little on Normal, some on Hard, a lot on Insane)
+// ---------------------------------------------------------------------------
+
+test('crime costs peace by difficulty: none on Easy, a little on Normal, more on Hard, most on Insane', () => {
+  // [riot, thief at once, does a thief cost the month's gain]
+  const want = { easy: [0, 0, false], normal: [5, 1, true], hard: [10, 2, true], insane: [15, 3, true] };
+  for (const [key, [riot, thief, blocks]] of Object.entries(want)) {
+    const t = thiefStreet('thief-steals');
+    t.game.difficulty = difficultyOf(key);
+    const c = t.game.city;
+    c.ratings.peace = 40;
+    assert.ok(commitCrime(t.game, t.b, 'thief'), `${key}: a thief`);
+    assert.equal(c.ratings.peace, 40 - thief, `${key}: a thief's cost`);
+    assert.equal(c.crime.month, blocks, `${key}: the month's gain`);
+
+    const game = newGame({ size: 96, type: 'plains', seed: 'riot' });
+    game.difficulty = difficultyOf(key);
+    const { x0, y } = road(game, 20);
+    Object.assign(game.city, { population: 1000, sentiment: 20 });
+    game.city.ratings.peace = 30;
+    const b = home(game, x0 + 3, y + 1, { mood: 5 });
+    addBuilding(game, 'theater', x0 + 12, y + 1);
+    assert.ok(startRiot(game, b), `${key}: a riot`);
+    assert.equal(game.city.ratings.peace, 30 - riot, `${key}: a riot's cost`);
+  }
+});
+
+test('protests cost peace only on Insane: every fifth costs 1, then the count starts again', () => {
+  assert.equal(DIFFICULTY.insane.protestPeaceEvery, 5);
+  for (const key of ['easy', 'normal', 'hard', 'insane']) {
+    const game = newGame({ size: 128, type: 'plains', seed: 'thief-steals' });
+    game.difficulty = difficultyOf(key);
+    const { x0, y } = road(game, 30);
+    game.city.ratings.peace = 40;
+    for (let i = 0; i < 11; i++) {
+      const b = home(game, x0 + 2 + i * 2, y + 1, { mood: 45 });
+      assert.ok(commitCrime(game, b, 'protester'), `${key}: protest ${i + 1}`);
+    }
+    const every = game.difficulty.protestPeaceEvery;
+    assert.equal(game.city.ratings.peace, 40 - (every ? Math.floor(11 / every) : 0), `${key}: peace after 11 protests`);
+    assert.equal(game.city.crime.protestTally || 0, every ? 11 % every : 0, `${key}: the count starts again`);
+  }
 });

@@ -232,9 +232,9 @@ A new household starts at the city's mood. The panel and the crime overlay name 
 
 **The daily roll.** Once the city has 300 people (never in the first two campaign missions), each day one unhappy home may breed trouble: the one with the lowest mood among homes below 50 that still can (a home at 50 or more settles down and can start again). The chance is 61% x (1 - city mood / 108) a day (61% at mood 0, 44% at 30, 27% at 60, 5% at 100), times the difficulty's crime lever, and halved when a prefect passed that home in the last 32 days. What happens is the worst the home can do:
 
-* **Protester** (mood under 50, once per unhappy spell): stands in the street by the home for about four days. Harmless: it costs no peace.
+* **Protester** (mood under 50, once per unhappy spell): stands in the street by the home for about four days. Harmless: it costs no peace, except on Insane, where every fifth protest costs 1.
 * **Thief** (mood under 35, once): walks to the nearest staffed Forum or Senate (within 50 road tiles) and steals a quarter of this year's taxes there, at most 400 Dn and never more than the treasury holds (nothing under 5), shown as *Stolen by thieves* in the Finance ledger; with no Forum or Senate in reach he takes half the biggest stock of the nearest stocked market (at most 100). A prefect or soldier who catches him on the way saves it all.
-* **Riot** (mood 15 or less while the city's mood is under 30, with a road within 4 tiles): the rioters set their own home alight (its people become homeless), and a mob of 1 to 6 (by population: up to 150, 300, 800, 1,200, 2,000 people, more) marches across country on the most prized building within 40 tiles (the Senate, then villas and palatia, a colosseum, a hospital, venues, schools, baths, the Forum, a medicus, temples, workshops, the granary, markets, insulae...), or with none that close the nearest such building it can walk to, setting alight each building it passes (not warehouses, forts, towers, wells, fountains, reservoirs, statues or gardens, nor homes of level 6 or below) and resting by the flames about three days. Rioters leave after 16 days, or when nothing they can reach is left to burn. A riot costs 5 peace at once, but the anger is spent: every home's mood rises by 20.
+* **Riot** (mood 15 or less while the city's mood is under 30, with a road within 4 tiles): the rioters set their own home alight (its people become homeless), and a mob of 1 to 6 (by population: up to 150, 300, 800, 1,200, 2,000 people, more) marches across country on the most prized building within 40 tiles (the Senate, then villas and palatia, a colosseum, a hospital, venues, schools, baths, the Forum, a medicus, temples, workshops, the granary, markets, insulae...), or with none that close the nearest such building it can walk to, setting alight each building it passes (not warehouses, forts, towers, wells, fountains, reservoirs, statues or gardens, nor homes of level 6 or below) and resting by the flames about three days. Rioters leave after 16 days, or when nothing they can reach is left to burn. A riot costs peace at once (see *Peace* below), but the anger is spent: every home's mood rises by 20.
 
 **Catching criminals.** A prefect (not one fighting a fire) or a soldier beside a criminal holds him until he gives up: about 15 ticks for a prefect, 6 for a soldier. Every 10 ticks a prefect on patrol also looks for a thief or rioter within 30 tiles that nobody chases yet and runs after him (across fields if need be); after the catch he goes home. One he cannot reach (across a river) he leaves alone for 8 days and keeps on his patrol. Fires come first: a prefect sent to a fire drops the chase.
 
@@ -260,7 +260,13 @@ Each god wants one staffed temple per 500 of its share of citizens (a fifth of t
 
 * **Culture:** religion, entertainment (full marks at an average score of 40), school, library, academy coverage (+ Senate). Moves at most 4 points a month.
 * **Prosperity:** average house level (full marks at an average of Insulae), patricians, last year's profit, unemployment, wages, Senate. Moves at most 2 points a month.
-* **Peace:** +1 a month while mood is 45+ (but not in a month when a thief appeared), -2 while it is under 30; -5 for each riot; +8 for each raid repelled, -1 for each building raiders destroy.
+* **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy. Crime costs peace by difficulty:
+
+  | | Easy | Normal | Hard | Insane |
+  |---|---|---|---|---|
+  | Riot | none | -5 | -10 | -15 |
+  | Thief | none | -1, and no gain that month | -2, and no gain that month | -3, and no gain that month |
+  | Protests | none | none | none | -1 for every fifth |
 * **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over). The Emperor asks every 14-26 months (from 150 people) for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.

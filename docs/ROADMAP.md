@@ -16,6 +16,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.11.1)
+
+* **Money for every difficulty, measured** (the owner's calls: a sensibly run city of modest homes pays its way; the lever is taxes). Each resident now pays 5 Dn a year per point of their home's tax weight, not 2: before, only a city of Apartment Houses paid its wages, so every smaller one lost money on every difficulty, and the starting funds only said how soon it went broke (a sensible city on Normal was in debt by its third year in mission 3; on Insane by month 8). A Cottage town now about pays its way and better homes make a profit; the starting funds are unchanged
+* **`npm run sweep`**, the balance table: every difficulty on every campaign map, with a level 3 demo city (piped water, so its homes climb like a player's) that rebuilds what burns or collapses; it reports the money the city needed against what the difficulty gives, beside population, mood, peace, fires, thieves and outbreaks, read against each difficulty's intent (Easy never short, Normal comfortable, Hard tight, Insane barely enough). `npm run sim` now reports that money too (its city starts rich, so it never showed)
+* Measured with the sweep, missions 4, 6 and 7 (margin as a share of the starting funds): Easy about +75%, Normal +50%, Hard +3% to +27%, Insane about -50% for the demo city (it keeps a fixed layout and rebuilt 50 to 156 burned buildings in 5 years; a sharp player covers fires better). Replaying the lost mission 3 Insane game with the same moves: it now stays solvent (at worst -112 Dn after thieves took 1,135) instead of 1,276 Dn in debt, so money is no longer what decides Insane; mood (about 30 after the new-city bonus ends) is. The early missions stay harder for the demo city, partly because it builds what they do not unlock
+* 228 unit tests (+2), 80 browser checks
+
 ## Done (v0.11.0)
 
 Fixes from playing mission 3 on Insane (the game said things that were not so, or said nothing):
@@ -281,7 +288,7 @@ Seeing why:
 From playtesting (mission 3 on Insane, three attempts, all lost within about 15 months; the owner decides which to take):
 
 * **The new city's mood bonus ends as a 20-point cliff** at month 12; on Insane it lands just when the economy is weakest. A taper over several months would be kinder and easier to read.
-* **Early cash flow on Insane** (re-tested after v0.11.0's fixes: still lost, on money alone). With wages near 24 Dn a worker a year, a third of the people working and a Hut resident paying about 4 Dn a year, a city of low homes loses money on every job until its homes reach about Townhouse level; that holds on every difficulty, and the starting funds are the runway (7,000 Dn on Normal, 2,800 on Insane). In the re-test no key building burned or collapsed in 22 months and roadblocks plus a second Forum kept homes registered, but wages (228 Dn a month) outran taxes (140 to 162) and a 2,000 Dn loan only delayed the debt. Options: more starting money on Insane, cheaper wages there, or early income that does not need high homes. Note that `npm run sim` starts every city with 20,000 Dn, so the balance sim never meets this: a mode with the campaign's funds would.
+* **Early cash flow on Insane**: fixed in v0.11.1 (taxes x2.5 for every difficulty, measured with `npm run sweep`). Still to watch: Insane's mood after the new-city bonus (about 30, so peace cannot grow) and early missions for Hard and Insane, which the sweep's demo city finds harsh.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
 
@@ -319,7 +326,7 @@ The sim is deterministic (seeded RNG, never `Math.random`), so the same seed plu
 * **Desirability after loading**: a loaded game works out every home's desirability at once, while a running game does so only when the map changes, so a home's desirability can differ between a save and the game it came from (the random numbers stay in step; found reviewing v0.11.0). Work it out on the same schedule in both, or save it.
 * **Sim fuzzer**: thousands of game-days of random building, demolishing and speed changes, checking invariants: the books balance, no stock goes negative, save and reload gives the same game, no walker is stuck forever. It finds bugs before players do.
 * **Save corpus in CI**: keep a save from every release and prove each one still loads.
-* **`npm run sweep`**: the balance table (4 landscapes x 3 seeds x 4 difficulties, with and without a garrison) as a real script instead of one-off scratch copies.
+* **`npm run sweep`**: done in v0.11.1 (every difficulty on every campaign map). Still to add: sandbox landscapes and seeds, and a garrison run.
 
 ## Beyond the original (optional, later)
 

@@ -613,3 +613,33 @@ test('a loan being repaid survives save and load', () => {
   const copy = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
   assert.deepEqual(copy.city.loan, game.city.loan);
 });
+
+// ---------------------------------------------------------------------------
+// Money: a sensible city of modest homes pays its way (the owner's call)
+// ---------------------------------------------------------------------------
+
+test('taxes: a Cottage town with most of its people registered and working about pays its wages', () => {
+  // Before, each resident paid 2 Dn a year per point of tax weight, a worker
+  // cost 24, and a third of the people work: only a city of Apartment Houses
+  // (level 10) paid its way, so every smaller one lost money on every
+  // difficulty and its starting funds only said how soon it went broke.
+  const cottage = HOUSE_TIERS.findIndex((t) => t.name === 'Cottage');
+  const paidPerResident = HOUSE_TIERS[cottage].tax * CONFIG.TAX_K * 0.85; // 85% registered
+  const wagesPerResident = CONFIG.WORKFORCE_RATIO * CONFIG.BASE_WAGE * 0.8; // 80% of the workforce employed
+  assert.ok(paidPerResident >= wagesPerResident * 0.9 && paidPerResident <= wagesPerResident * 1.5,
+    `a Cottage resident pays ${paidPerResident.toFixed(1)} Dn a year against ${wagesPerResident.toFixed(1)} in wages`);
+  // Huts still do not, so climbing the ladder is what makes money.
+  const hut = HOUSE_TIERS.findIndex((t) => t.name === 'Hut');
+  assert.ok(HOUSE_TIERS[hut].tax * CONFIG.TAX_K * 0.85 < wagesPerResident * 1.5);
+});
+
+test('the level 3 demo city (the money yardstick) pipes water to its fountains', () => {
+  const game = new Game({ scenario: SCENARIOS.find((s) => s.id === 'c1'), flags: { unlockall: true, money: 20000 } });
+  assert.ok(buildDemoCity(game, { level: 3 }).ok);
+  game.runDays(8);
+  const res = [...game.buildings.values()].filter((b) => b.type === 'reservoir');
+  const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
+  assert.ok(res.length >= 1 && res.every((r) => r.hasWater), 'reservoirs full');
+  assert.ok(fountains.length >= 4 && fountains.every((f) => f.hasWater), 'fountains wet');
+  for (const r of res) assert.ok(game.map.roadWithin(r.x, r.y, 3, CONFIG.SERVICE_RADIUS), 'within an engineer\'s reach (a lakeshore one once collapsed)');
+});

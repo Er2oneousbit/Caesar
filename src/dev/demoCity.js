@@ -24,6 +24,19 @@ import { CONFIG } from '../config.js';
 /** Undo records of the builds made inside the current attempt() (null outside one). */
 let recording = null;
 
+/**
+ * Build only if all of it can be built: a path tool (an aqueduct) that finds
+ * no way round falls back to a straight line and builds the tiles that fit,
+ * and half an aqueduct carries no water.
+ */
+function buildWhole(game, tool, x0, y0, x1, y1) {
+  const plan = planAction(game, tool, x0, y0, x1, y1);
+  if (!plan || plan.count === 0 || plan.items.some((it) => !it.ok)) return false;
+  const ok = applyPlan(game, plan).ok;
+  if (ok && recording) recording.push(game.lastUndo);
+  return ok;
+}
+
 /** Try to build; returns true on success. */
 function build(game, tool, x0, y0, x1 = x0, y1 = y0) {
   const plan = planAction(game, tool, x0, y0, x1, y1);
@@ -144,7 +157,9 @@ function findSite(game, W, D) {
 /**
  * Build the demo city.
  * @param {object} game
- * @param {object} [opts] { level: 1 basic | 2 with culture & water | 3 with industry }
+ * @param {object} [opts] { level: 1 basic | 2 with culture and industry | 3 also piped water }
+ * Level 3 is the yardstick for money (npm run sweep): with fountain water its
+ * homes climb past Huts as a sensible player's do; level 2's stay Huts.
  * @returns {{ok:boolean, center?:{x:number,y:number}, reason?:string}}
  */
 export function buildDemoCity(game, opts = {}) {
@@ -175,6 +190,10 @@ export function buildDemoCity(game, opts = {}) {
       ['school', 9, 6, 2], ['theater', 15, 6, 2], ['barber', 2, 9, 1], ['forum', 15, 9, 2], ['temple_mars', 9, 9, 2],
       ['market', 5, 9, 2], ['temple_neptune', 12, 0, 2], ['temple_vesta', 1, 0, 2], ['clinic', 16, 3, 1],
     );
+  }
+  if (level >= 3) {
+    // Fountains in free slots of the housing bands (fed by pipeWater below).
+    services.push(['fountain', 4, 1, 1], ['fountain', 11, 1, 1], ['fountain', 8, 4, 1], ['fountain', 3, 7, 1], ['fountain', 14, 7, 1], ['fountain', 8, 10, 1]);
   }
   // top-left in world coords depends on orientation: take the min corner of the footprint.
   const placeLocal = (type, a, b, size) => {
@@ -215,6 +234,8 @@ export function buildDemoCity(game, opts = {}) {
 
   // Level 2+: a small pottery industry beside the city (jobs + goods).
   if (level >= 2) placeIndustry(game, at(W / 2, D / 2));
+  // Level 3: piped water for the fountains.
+  if (level >= 3) pipeWater(game, at(W / 2, D / 2));
 
   // Farms + granary on the best meadow within reach.
   const farms = placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2);
@@ -327,12 +348,54 @@ function placeIndustry(game, center) {
 }
 
 /**
+ * Level 3: pipe water to the town, as a sensible player would, so its homes
+ * can climb past Huts: a reservoir on the nearest shore and, when that is too
+ * far for its piped area (RESERVOIR_RADIUS) to reach the middle of town, an
+ * aqueduct to a second reservoir beside it. @returns {boolean} water is on its way
+ */
+function pipeWater(game, center) {
+  const { map } = game;
+  const R = CONFIG.RESERVOIR_RADIUS;
+  // A reservoir wears out like any building, and one no engineer reaches
+  // collapses in months (the lakeshore reservoir here once did): each gets a
+  // road and an engineer's post beside it.
+  const keepUp = (r) => { connectToRoad(game, r.x + 3, r.y + 1); guard(game, r.x + 3, r.y + 1, ['engineer_post']); };
+  let shore = null;
+  for (const s of findSpot(game, 3, center, 0, 60)) {
+    if (map.isNearTerrain(s.x, s.y, 3, Terrain.WATER, 1) && place(game, 'reservoir', s.x, s.y, 3)) { shore = s; break; }
+  }
+  if (!shore) return false;
+  keepUp(shore);
+  if (Math.max(Math.abs(shore.x + 1 - center.x), Math.abs(shore.y + 1 - center.y)) <= R - 4) return true;
+  for (const near of findSpot(game, 3, center, 6, R)) {
+    const ok = attempt(game, () => {
+      if (!place(game, 'reservoir', near.x, near.y, 3)) return null;
+      // Try the sides of each reservoir that face the other, nearest first.
+      for (const a of besideToward(shore, near)) {
+        for (const b of besideToward(near, shore)) if (buildWhole(game, 'aqueduct', a.x, a.y, b.x, b.y)) return true;
+      }
+      return null;
+    });
+    if (ok) { keepUp(near); return true; }
+  }
+  return false;
+}
+
+/** The tiles just outside a 3x3 building at `s`, those facing `t` first. */
+function besideToward(s, t) {
+  const out = [];
+  for (let k = 0; k < 3; k++) out.push({ x: s.x + 3, y: s.y + k }, { x: s.x - 1, y: s.y + k }, { x: s.x + k, y: s.y + 3 }, { x: s.x + k, y: s.y - 1 });
+  const d = (p) => Math.abs(p.x - (t.x + 1)) + Math.abs(p.y - (t.y + 1));
+  return out.sort((p, q) => d(p) - d(q)).slice(0, 4);
+}
+
+/**
  * Put a prefecture and an engineer's post on free tiles that touch a road,
  * as close as possible to (x, y). Keeps outlying storage/industry safe.
  */
-function guard(game, x, y) {
+function guard(game, x, y, types = ['prefecture', 'engineer_post']) {
   const { map } = game;
-  for (const type of ['prefecture', 'engineer_post']) {
+  for (const type of types) {
     let done = false;
     for (let r = 1; r <= 6 && !done; r++) {
       for (let dy = -r; dy <= r && !done; dy++) {

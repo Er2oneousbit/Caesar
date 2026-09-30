@@ -1,6 +1,6 @@
 {
   "name": "colonia",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Colonia: an original, open-source browser city builder inspired by classic Roman city-building games (Caesar III style): housing, services, trade by land and sea, and a military with walls, forts and cavalry.",
   "type": "module",
   "private": true,
@@ -34,6 +34,7 @@
     "test:e2e": "node tests/e2e/smoke.mjs",
     "screenshots": "node tests/e2e/screenshots.mjs",
     "sim": "node scripts/simulate.mjs",
+    "sweep": "node scripts/sweep.mjs",
     "check": "npm test && npm run build && npm run test:e2e"
   },
   "devDependencies": {

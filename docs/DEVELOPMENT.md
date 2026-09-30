@@ -39,6 +39,7 @@ npm i --no-save playwright && npx playwright install chromium
 | `npm run check` | test + build + e2e, the same as CI |
 | `npm run sim -- --years 5 --type lakes` | Headless balance run, one line of stats per month (`--help` lists the options: difficulty, raids, garrison, size, seed...) |
 | `npm run sim -- --pace` | The campaign's pace: the fewest months each mission's goals take (`src/sim/pace.js`) |
+| `npm run sweep` | The balance table: every difficulty on every campaign map (level 3 demo city with piped water, rebuilding what burns): the money it needed against what the difficulty gives, and how the city ended. `--missions c3,c4 --difficulties normal,insane --years 3` narrow it |
 | `npm run screenshots` | Renders showcase frames to `tests/e2e/out/` |
 | `scripts/run.ps1`, `scripts/run.sh` | Launch the built game (Windows PowerShell 7+, Linux/macOS) |
 
@@ -82,7 +83,7 @@ In the browser's dev tools, `window.colonia` is the running app (`colonia.game` 
 - Two-space indent, semicolons, single quotes (`.editorconfig` sets the basics).
 - Small modules with one job each. The simulation (`src/core`, `src/sim`, `src/world`, `src/data`) never touches the DOM, so it runs in Node for tests.
 - Every file starts with a header comment explaining what it does. Comment the *why* of anything non-obvious, for the person reading it in six months. Docs and comments avoid em dashes.
-- Balance numbers go in `src/config.js` or the `src/data/` tables, not inline in systems. Balance changes are checked with `npm run sim` before and after.
+- Balance numbers go in `src/config.js` or the `src/data/` tables, not inline in systems. Balance changes are checked with `npm run sim` before and after, and anything touching money or a difficulty lever also with `npm run sweep` (each difficulty's intent is in `scripts/sweep.mjs`). The sim city starts with 20,000 Dn so it never feels poverty; its `Money:` line says what it would have needed.
 - Randomness in the simulation comes from `game.rng` (seeded, saved), never `Math.random()`, or saves and tests stop being reproducible. Visual-only effects may use `Math.random()`.
 - Errors should be readable: a bad save file says what is wrong; a broken walker or building is logged and removed instead of crashing the city.
 
@@ -115,7 +116,7 @@ src/
   audio/                sound effects; music: composer.js (writes the notes and
                         holds the track library), instruments.js (synth), music.js
   dev/demoCity.js       builds a sample city through the public construction API
-scripts/                serve.mjs, build.mjs, simulate.mjs, run.ps1, run.sh
+scripts/                serve.mjs, build.mjs, simulate.mjs, sweep.mjs, run.ps1, run.sh
 tests/                  *.test.mjs, e2e/ (smoke test, screenshots, art sheet,
                         render and music pages)
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md, DEVELOPMENT.md

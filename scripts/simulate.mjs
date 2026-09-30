@@ -4,7 +4,14 @@
  * ----------------------------------------------------------------------------
  * Builds the demo city on a map and fast-forwards, printing one line of city
  * statistics per month, then a summary (fires, ratings, raids, crime,
- * health and disease). Use it to check balance changes without playing.
+ * health and disease, money). Use it to check balance changes without playing.
+ *
+ * Money: the city starts with SIM_MONEY so that it never feels poverty (a city
+ * in debt cannot build, and favor falls), and the report says what it would
+ * have needed instead: the most it was ever out of pocket (building plus the
+ * running losses before it pays its way) against what the difficulty gives,
+ * and the month it would have gone into debt. `npm run sweep` compares that
+ * across difficulties and missions.
  *
  * Usage:
  *   node scripts/simulate.mjs [--scenario c1] [--type river] [--size 64]
@@ -26,6 +33,7 @@ import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
 import { sickHomes } from '../src/sim/disease.js';
+import { planAction, applyPlan } from '../src/sim/construction.js';
 
 const HELP = `
 Headless balance simulation
@@ -41,6 +49,7 @@ Options:
   --years <n>       years to simulate (default 3)
   --level <1-3>     demo city complexity (default 2)
   --garrison        also build a barracks, forts, towers and a wall (equipped)
+  --caretaker       rebuild whatever burns or collapses, as a player would (npm run sweep)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --json            print a JSON summary at the end
   --pace            print the campaign's pace (the fewest months each goal takes) and exit
@@ -49,7 +58,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false };
+  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -66,6 +75,7 @@ function parse(argv) {
     else if (a === '--raids') o.raids = next();
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
+    else if (a === '--caretaker') o.caretaker = true;
     else { console.error(`Unknown option ${a}\n${HELP}`); process.exit(2); }
   }
   return o;
@@ -91,7 +101,8 @@ const scenario = opts.scenario
   ? withDifficulty(SCENARIOS.find((s) => s.id === opts.scenario), opts.difficulty)
   : sandboxScenario({ size: opts.size, type: opts.type, seed: opts.seed, difficulty: opts.difficulty });
 if (!scenario) { console.error(`Unknown scenario ${opts.scenario}`); process.exit(2); }
-const game = new Game({ scenario, flags: { unlockall: true, money: 20000, raids: opts.raids } });
+const SIM_MONEY = 20000;
+const game = new Game({ scenario, flags: { unlockall: true, money: SIM_MONEY, raids: opts.raids } });
 const messages = [];
 game.events.on('message', (m) => { messages.push(m); if (opts.verbose) console.log(`   [${m.level}] ${m.text}`); });
 
@@ -103,12 +114,44 @@ if (opts.garrison) {
 }
 console.log(`Map ${scenario.map.type} ${scenario.map.size} seed=${game.seed}  difficulty=${game.difficultyKey}  buildings=${game.buildings.size}  farms=${res.farms}  treasury=${Math.round(game.city.treasury)}`);
 
+// --caretaker: a player's minimum. The demo city never rebuilds, so on the
+// harder levels a burned Forum or a collapsed reservoir left it without taxes
+// or water for good, and the money it needed said more about neglect than
+// about the difficulty. Every few days, whatever the demo city built that is
+// gone (a home plot included) is cleared and built again, and paid for.
+const keep = opts.caretaker ? [...game.buildings.values()].map((b) => ({ type: b.house ? 'house' : b.type, x: b.x, y: b.y, size: b.house ? 1 : b.size })) : [];
+let rebuilt = 0;
+function caretake() {
+  for (const k of keep) {
+    let taken = false;
+    for (let dy = 0; dy < k.size && !taken; dy++) for (let dx = 0; dx < k.size; dx++) if (game.map.buildingAt(k.x + dx, k.y + dy)) { taken = true; break; }
+    if (taken) continue; // standing (a home may have grown into a block), or something else is there
+    applyPlan(game, planAction(game, 'clear', k.x, k.y, k.x + k.size - 1, k.y + k.size - 1));
+    const off = Math.floor((k.size - 1) / 2);
+    const plan = planAction(game, k.type, k.x + off, k.y + off, k.x + off, k.y + off);
+    if (plan && plan.count > 0 && applyPlan(game, plan).ok) rebuilt++;
+  }
+}
+const runMonth = () => {
+  if (!opts.caretaker) { game.runDays(16); return; }
+  for (let k = 0; k < 4; k++) { game.runDays(4); caretake(); }
+};
+
 const pad = (v, n) => String(v).padStart(n);
 console.log(' date        pop  work/jobs  unemp  mood  fed%  food(gran/mkt)  treas   tiers');
 const t0 = Date.now();
+// Money (see the header): what the city would have needed, month by month.
+const funds = scenario.funds; // what this difficulty starts a player with
+const built = SIM_MONEY - game.city.treasury;
+const money = { funds, built, need: built, needMonth: 0, debtMonth: null };
+const treasuryByMonth = [];
 for (let m = 0; m < opts.years * 12; m++) {
-  game.runDays(16);
+  runMonth();
   const c = game.city;
+  treasuryByMonth.push(c.treasury);
+  const out = SIM_MONEY - c.treasury;
+  if (out > money.need) { money.need = Math.round(out); money.needMonth = m + 1; }
+  if (money.debtMonth === null && out > funds) money.debtMonth = m + 1;
   let gran = 0;
   let mkt = 0;
   for (const b of game.buildings.values()) {
@@ -130,9 +173,16 @@ const health = { cityHealth: c.health.value, target: c.health.target, outbreaks:
 console.log(`Health: city health ${health.cityHealth} (homes average ${health.target}); outbreaks ${health.outbreaks} (${health.spread} caught from a neighbor), deaths ${health.deaths}, cured by physicians ${health.cured}, recovered ${health.recovered}; sick homes now ${health.sickHomes}, highest disease risk ${health.peakRisk}`);
 const req = c.stats;
 console.log(`Emperor: requests met ${req.requestsMet ?? '?'}, failed ${req.requestsFailed ?? '?'}; mood factors ${JSON.stringify(Object.fromEntries(Object.entries(c.sentimentFactors || {}).map(([k, v]) => [k, Math.round(v)])))}`);
+const last = treasuryByMonth.length;
+money.lastYearMonthly = last >= 12 ? Math.round((treasuryByMonth[last - 1] - treasuryByMonth[last - 13 < 0 ? 0 : last - 13]) / 12) : null;
+money.margin = funds - money.need;
+money.rebuilt = rebuilt;
+console.log(`Money: built ${Math.round(built)} Dn; most out of pocket ${money.need} Dn (month ${money.needMonth}); ${game.difficulty.name} gives ${funds} Dn: margin ${money.margin}${money.debtMonth ? `, in debt from month ${money.debtMonth}` : ''}; last year ${money.lastYearMonthly >= 0 ? '+' : ''}${money.lastYearMonthly} Dn a month${opts.caretaker ? `; ${rebuilt} rebuilt` : ''}`);
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
-if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health }));
+const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
+const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
+if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment }));
 
 /** The highest disease risk of any occupied home (sim/disease.js). */
 function peakRisk(g) {

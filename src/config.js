@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.11.0',
+  VERSION: '0.11.1',
   SAVE_VERSION: 6, // v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -88,7 +88,10 @@ export const CONFIG = {
   DEFAULT_TAX_RATE: 7, // percent
   DEFAULT_WAGE: 24, // Dn per worker per year
   BASE_WAGE: 24, // the wage citizens consider "fair"
-  TAX_K: 2, // Dn per resident per year for each point of a tier's `tax`, at the default tax rate
+  TAX_K: 5, // Dn per resident per year for each point of a tier's `tax`, at the default tax rate.
+  // 5, not 2 (v0.11.1, the owner's call): with 2 only a city of Apartment Houses paid its
+  // wages (a worker costs BASE_WAGE, WORKFORCE_RATIO of the people work), so every smaller one
+  // lost money on every difficulty. With 5 a Cottage town about pays its way (npm run sweep).
   CLEAR_TREE_COST: 2,
   CLEAR_RUBBLE_COST: 2,
   DEBT_LIMIT: 0, // cannot start construction when treasury is below this

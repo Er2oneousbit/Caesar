@@ -3,7 +3,8 @@
  * simulate.mjs - headless balance simulation
  * ----------------------------------------------------------------------------
  * Builds the demo city on a map and fast-forwards, printing one line of city
- * statistics per month. Use it to check balance changes without playing.
+ * statistics per month, then a summary (fires, ratings, raids, crime,
+ * health and disease). Use it to check balance changes without playing.
  *
  * Usage:
  *   node scripts/simulate.mjs [--scenario c1] [--type river] [--size 64]
@@ -24,6 +25,7 @@ import { buildDemoCity, buildDemoGarrison } from '../src/dev/demoCity.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
+import { sickHomes } from '../src/sim/disease.js';
 
 const HELP = `
 Headless balance simulation
@@ -123,11 +125,21 @@ const ms = game.military.stats;
 console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome').length}`);
 const cr = c.crime.total;
 console.log(`Crime: protesters ${cr.protesters}, thieves ${cr.thieves} (${cr.caught} criminals caught), thefts ${cr.thefts}, stolen ${cr.stolen} Dn and ${cr.looted} goods, riots ${cr.riots}, burned by rioters ${cr.riotBurned}; lowest home mood ${lowestMood(game)}`);
+const hs = c.health.total;
+const health = { cityHealth: c.health.value, target: c.health.target, outbreaks: hs.outbreaks, spread: hs.spread, deaths: hs.deaths, cured: hs.cured, recovered: hs.recovered, sickHomes: sickHomes(game).length, peakRisk: peakRisk(game) };
+console.log(`Health: city health ${health.cityHealth} (homes average ${health.target}); outbreaks ${health.outbreaks} (${health.spread} caught from a neighbor), deaths ${health.deaths}, cured by physicians ${health.cured}, recovered ${health.recovered}; sick homes now ${health.sickHomes}, highest disease risk ${health.peakRisk}`);
 const req = c.stats;
 console.log(`Emperor: requests met ${req.requestsMet ?? '?'}, failed ${req.requestsFailed ?? '?'}; mood factors ${JSON.stringify(Object.fromEntries(Object.entries(c.sentimentFactors || {}).map(([k, v]) => [k, Math.round(v)])))}`);
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
-if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total }));
+if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health }));
+
+/** The highest disease risk of any occupied home (sim/disease.js). */
+function peakRisk(g) {
+  let top = 0;
+  for (const b of g.buildings.values()) if (b.house && b.house.pop > 0) top = Math.max(top, b.house.diseaseRisk || 0);
+  return Math.round(top);
+}
 
 /** The unhappiest occupied home's mood (sim/mood.js), or '-' with nobody home. */
 function lowestMood(g) {

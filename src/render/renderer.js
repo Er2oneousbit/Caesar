@@ -114,6 +114,17 @@ export function lookStep(cur, prev, next, hard = false) {
 }
 
 /**
+ * A building sprite's cache key (before the snow suffix, `~n{level}`, which
+ * must stay last so a look change can drop sprites by suffix). A sick home
+ * (sim/disease.js) is drawn with a sign of its own, so it has a key of its
+ * own: `:sick`, after the art state.
+ */
+export function buildingKey(b, variant, state) {
+  const sick = b.house && b.house.pop > 0 && b.house.sick > 0;
+  return `b:${b.type}:${b.size}:${variant}:${state}${sick ? ':sick' : ''}`;
+}
+
+/**
  * Aqueduct connections of tile (x, y), bits 1=N 2=E 4=S 8=W: other aqueducts
  * or reservoirs; the same bits shifted up 4 mark the reservoirs (the channel
  * steps down to their rim, see aqueductSpec).
@@ -958,10 +969,11 @@ export class Renderer {
     }
     const state = artState(b, farmDormant(this.game, b));
     const variant = this.artVariant(b);
-    const key = `b:${b.type}:${b.size}:${variant}:${state}`;
+    const key = buildingKey(b, variant, state);
+    const sick = key.endsWith(':sick');
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
     const snow = this.pal.snow;
-    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow), this.snowPrev === null ? null : key + this.snowPrev);
+    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick), this.snowPrev === null ? null : key + this.snowPrev);
     if (spr && spr.s) this.buildingBoxes.push({ x: b.x, y: b.y, S: b.size, H: spr.ay / spr.s });
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).

@@ -3,7 +3,7 @@
  * ----------------------------------------------------------------------------
  * Who a walker is, what it is doing and what it has to say, for the info
  * panel when a walker is clicked. Citizens talk about what troubles the city
- * most (hunger, no work, taxes, raiders, fires, an angry god), or about
+ * most (hunger, no work, taxes, raiders, fires, sickness, an angry god), or about
  * their work when nothing does; newcomers, emigrants, foreign traders and
  * the city's criminals (protesters say what upsets their home) have lines of
  * their own. Every line is written for Colonia.
@@ -37,6 +37,7 @@ const CITY_LINES = Object.freeze({
   wages: ['The pay is thin this year.', 'A day\'s work hardly buys a loaf.'],
   raid: ['Raiders are coming, they say. I am keeping my door barred.', 'Where are the soldiers when you need them?'],
   fire: ['Did you see the smoke? I hope the prefects are quick.', 'Another fire! This city needs more prefects.'],
+  sick: ['There is fever in the next street. I am keeping the children indoors.', 'A whole family down the road has taken ill. Where is the physician?', 'They say the sickness came from those crowded rooms by the market.'],
   debt: ['They say the treasury is empty. How does a city run out of money?'],
   unhappy: ['Nothing works in this city.', 'I am thinking of packing up and leaving.'],
   happy: ['What a city! I would not live anywhere else.', 'Life is good here. The gods smile on us.', 'I tell my cousins to come and live here.'],
@@ -60,7 +61,10 @@ function workLines(game, w) {
     case 'librarian': return ['I have a scroll here on the voyages of Ulysses. Care to borrow it?', 'Knowledge is the one thing no raider can carry off.'];
     case 'scholar': return ['Today, rhetoric. Tomorrow, philosophy. The day after, more rhetoric.', 'A citizen should be able to argue both sides of any case.'];
     case 'barber': return ['A shave, a trim and all the news of the town.', 'You would not believe what I heard at my chair today.'];
-    case 'physician': return ['Boil your water and air your rooms.', 'A clean house keeps the fever away.'];
+    case 'physician':
+      if (w.state === 'toSick') return ['Make way! There is fever in a house down the street.', 'Hot water and clean linen, and quickly!'];
+      if (w.state === 'treat') return ['Rest, broth and fresh air. You will mend.', 'Keep the sick apart from the rest of the house.'];
+      return ['Boil your water and air your rooms.', 'A clean house keeps the fever away.'];
     case 'bather': return ['The baths are warm today. Come along!', 'Nothing clears the head like a hot bath and a cold plunge.'];
     case 'entertainer':
       if (w.venue === 'amphitheater') return ['Gladiators at the amphitheater! Do not miss it!'];
@@ -91,6 +95,7 @@ export function cityTrouble(game) {
   if (mil && (mil.active || mil.warned)) return 'raid';
   if (c.population > 60 && c.fedShare < 0.85) return 'hunger';
   if (game.fires && game.fires.size > 0) return 'fire';
+  if (anySick(game)) return 'sick';
   if (c.unemploymentRate > 0.12) return 'work';
   if (c.taxRate > CONFIG.DEFAULT_TAX_RATE + 2) return 'taxes';
   if (c.wage < CONFIG.BASE_WAGE) return 'wages';
@@ -100,6 +105,12 @@ export function cityTrouble(game) {
   if (angry) return `god:${angry}`;
   if (c.sentiment < 35) return 'unhappy';
   return null;
+}
+
+/** Is any home sick right now (sim/disease.js)? */
+function anySick(game) {
+  for (const b of game.buildings.values()) if (b.house && b.house.pop > 0 && b.house.sick > 0) return true;
+  return false;
 }
 
 /** Why emigrants are leaving: the worst factor in the city's mood. */
@@ -158,7 +169,7 @@ export function walkerSays(game, w) {
   }
   const work = workLines(game, w);
   // Busy with something urgent: no time for gossip.
-  if (w.state === 'toFire' || w.state === 'extinguish') return pick(work, w, game);
+  if (w.state === 'toFire' || w.state === 'extinguish' || w.state === 'toSick' || w.state === 'treat') return pick(work, w, game);
   const trouble = cityTrouble(game);
   // Every other walker mentions the city's trouble; the rest talk shop.
   const gossip = pick([true, false], w, game, 1);
@@ -186,6 +197,8 @@ export function walkerDoing(game, w) {
     case 'roam': return 'Walking the streets';
     case 'return': return w.type === 'cart' || w.type === 'buyer' ? `Heading back to ${the(game.buildings.get(w.origin))}` : 'Heading home';
     case 'toFire': return 'Running to a fire';
+    case 'toSick': return `Hurrying to ${target ? `a sick ${nameOf(target)}` : 'a sick home'}`;
+    case 'treat': return 'Treating the sick';
     case 'extinguish': return 'Fighting a fire';
     case 'deliver': return `Taking goods to ${the(target)}`;
     case 'fetch': return `Going to ${the(target)} for ${w.want ? GOODS[w.want].name.toLowerCase() : 'goods'}`;

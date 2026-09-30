@@ -30,6 +30,11 @@
  *      thieves and rioters are walkers. Version 4 saves load: every new field
  *      has a safe default (an occupied home starts at the city's mood, no
  *      flags, no police cover, no criminals about), see upgradeV4().
+ *   6  disease: homes have a disease risk and sick days; city.health holds
+ *      city health and the year's outbreaks; physicians can be on their way
+ *      to a sick home. Version 5 (and 4) saves load: no home is sick, every
+ *      risk starts at 0 and city health at its starting value, see
+ *      upgradeV5().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -324,6 +329,7 @@ export function deserializeGame(data, flags = {}) {
   game.nextUnitId = Math.max(game.nextUnitId, maxU + 1);
 
   if (data.version < 5) upgradeV4(game);
+  if (data.version < 6) upgradeV5(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -344,6 +350,21 @@ function upgradeV4(game) {
     h.hungerStreak = 0;
     h.criminal = 0;
     h.police = 0;
+  }
+}
+
+/**
+ * A version 5 save (before disease): no home is sick yet and every disease
+ * risk starts at 0. city.health (city health at its starting value, no
+ * outbreaks) was filled in by the Game constructor; it moves toward the
+ * homes' real average from the next month.
+ */
+function upgradeV5(game) {
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h) continue;
+    h.diseaseRisk = 0;
+    h.sick = 0;
   }
 }
 

@@ -21,6 +21,7 @@ import { performerArrive } from './entertainment.js';
 import { findDeliveryTarget, receiveGoods } from './storage.js';
 import { recruitArrive } from './military.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
+import { physicianArrive, physicianAfterWait } from './disease.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
 /** Advance every walker by one tick. */
@@ -50,6 +51,7 @@ function stepWalker(game, w) {
       w.afterWait = null;
       if (what === 'shipLeave') shipLeave(game, w);
       else if (w.kind === 'criminal') criminalAfterWait(game, w, what);
+      else if (what === 'nextSick') physicianAfterWait(game, w);
       else afterWait(game, w, what);
     }
     return;
@@ -170,6 +172,9 @@ function onPathEnd(game, w) {
       break;
     case 'toFire':
       prefectArriveAtFire(game, w);
+      break;
+    case 'toSick':
+      physicianArrive(game, w);
       break;
     case 'toFort':
       recruitArrive(game, w);

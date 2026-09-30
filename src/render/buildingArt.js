@@ -101,7 +101,7 @@ function heightFor(key, size) {
  * @param {number} variant 0..3
  * @param {*} state      extra art state (tier, stage, filled...)
  */
-export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow = 0) {
+export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow = 0, sick = false) {
   const extra = heightFor(key, S);
   return {
     w: S * CONFIG.TILE_W,
@@ -114,12 +114,41 @@ export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow 
       setRoofSnow(snow);
       try {
         fn(ctx, S, variant, state, key);
+        if (sick) sickSign(ctx, S, extra);
       } finally {
         liveFlags = false;
         setRoofSnow(0);
       }
     },
   };
+}
+
+/**
+ * A sick home (sim/disease.js): the whole house drawn a little pale and
+ * sallow, and a pale cloth hung on a pole at its front corner, the old sign
+ * to keep away from a house with fever in it.
+ */
+function sickSign(ctx, S, extra) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop'; // tint only what the house drew
+  ctx.fillStyle = 'rgba(206,222,150,0.28)';
+  ctx.fillRect(-S * HALF_W - 2, -extra - 2, S * CONFIG.TILE_W + 4, extra + S * TH + 6);
+  ctx.restore();
+  const [x, y] = P(S - 0.12, S - 0.42);
+  ctx.fillStyle = COL.woodDark;
+  ctx.fillRect(x - 0.6, y - 15, 1.2, 15);
+  ctx.fillStyle = '#e9ecd2';
+  ctx.beginPath();
+  ctx.moveTo(x + 0.6, y - 15);
+  ctx.lineTo(x + 7, y - 14);
+  ctx.lineTo(x + 6.2, y - 9.5);
+  ctx.lineTo(x + 7.4, y - 7.5);
+  ctx.lineTo(x + 0.6, y - 8.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,130,70,0.8)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
 }
 
 // ---------------------------------------------------------------------------

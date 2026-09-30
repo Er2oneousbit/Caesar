@@ -15,6 +15,7 @@ import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
 import { commitCrime, crimeChance, criminalsAbout, unhappiestHomes, crimeEnabled } from '../sim/crime.js';
+import { outbreak, sickHomes, riskiestHomes, diseaseEnabled } from '../sim/disease.js';
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
 import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
@@ -37,6 +38,8 @@ export const CONSOLE_HELP = [
   ['crime <kind>', 'The home under the cursor (or the unhappiest) sends out a protester, a thief or a riot now'],
   ['riot', 'Same as crime riot'],
   ['unrest <n>', 'Set the mood of every home (0-100); they drift back toward their targets'],
+  ['health', 'Health report: city health, outbreaks this year, sick homes, the homes closest to an outbreak'],
+  ['sick [id | x y]', 'The home under the cursor (or #id, or at x,y; else the one at most risk) falls sick now'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
@@ -208,6 +211,18 @@ export class DebugConsole {
         for (const b of g.buildings.values()) if (b.house && b.house.pop > 0) { b.house.mood = Math.round(n); homes++; }
         return `${homes} homes now at mood ${Math.round(n)}.`;
       }
+      case 'health':
+        need();
+        return healthReport(g);
+      case 'sick': {
+        need();
+        const b = pickHome(app, g, args);
+        if (!b) return 'No one lives in the city yet (or no home there).';
+        const dead = outbreak(g, b, 'console');
+        app.renderer.camera.centerOnTile(b.x, b.y);
+        if (!dead) return `The home at ${b.x},${b.y} is already sick.`;
+        return b.house.sick > 0 ? `The home at ${b.x},${b.y} fell sick: ${dead} died, ${b.house.pop} sick for ${b.house.sick} days.` : `The home at ${b.x},${b.y} fell sick: all ${dead} died.`;
+      }
       case 'garrison':
       case 'harbor': {
         need();
@@ -369,6 +384,48 @@ function unhappiestHome(g) {
     if (!best || m < (best.house.mood ?? g.city.sentiment)) best = b;
   }
   return best;
+}
+
+/**
+ * The home the `sick` command means: `#id` or `id`, or `x y`, else the one
+ * under the cursor, else the occupied home with the highest disease risk.
+ */
+function pickHome(app, g, args) {
+  const occupied = (b) => (b && b.house && b.house.pop > 0 ? b : null);
+  if (args.length >= 2) {
+    const x = Number(args[0]);
+    const y = Number(args[1]);
+    if (!g.map.inBounds(x, y)) throw new Error('usage: sick [id | x y]');
+    return occupied(g.buildings.get(g.map.buildingAt(x, y)));
+  }
+  if (args.length === 1) return occupied(g.buildings.get(Number(String(args[0]).replace('#', ''))));
+  const here = homeAtCursor(app, g);
+  if (here) return here;
+  let best = null;
+  for (const b of g.buildings.values()) {
+    if (!occupied(b) || b.house.sick > 0) continue;
+    if (!best || (b.house.diseaseRisk || 0) > (best.house.diseaseRisk || 0)) best = b;
+  }
+  return best;
+}
+
+/** The `health` command's report. */
+function healthReport(g) {
+  const c = g.city;
+  const hc = c.health;
+  const y = hc.year;
+  const sick = sickHomes(g);
+  const on = diseaseEnabled(g)
+    ? `Disease is on (${g.difficulty.name}: x${g.difficulty.disease ?? 1}); none below ${CONFIG.DISEASE_MIN_POP} people (now ${c.population}).`
+    : 'There is no disease in this mission.';
+  return [
+    on,
+    `City health ${hc.value} (the homes' average ${hc.target}; it moves ${CONFIG.HEALTH_STEP} a month).`,
+    `This year: ${y.outbreaks} outbreaks (${y.spread} caught from a neighbor), ${y.deaths} died, ${y.cured} cured by physicians, ${y.recovered} recovered.`,
+    `Sick now: ${sick.length ? sick.map((b) => `#${b.id} at ${b.x},${b.y} (${b.house.sick} days)`).join(', ') : 'none'}.`,
+    'Closest to an outbreak:',
+    ...riskiestHomes(g).map((l) => `  ${l}`),
+  ].join('\n');
 }
 
 /** The `crime` command's report. */

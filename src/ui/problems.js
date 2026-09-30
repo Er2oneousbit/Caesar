@@ -4,7 +4,10 @@
  * What the Problems overlay shows: for each building, the one thing wrong
  * with it, or null.
  *
- *   homes      the first need that keeps a home from its next level, colored
+ *   homes      a sick home (sim/disease.js), then a home in unrest (mood under
+ *              UNREST_MOOD, or one that already sent out a criminal; only
+ *              where there is crime), each with a color of its own; then
+ *              the first need that keeps a home from its next level, colored
  *              by kind (water, food, temples...); a tall column when the home
  *              is falling back a level, a shorter one when it only cannot
  *              grow; an empty lot no settler can reach. A home already as
@@ -24,9 +27,17 @@ import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_BOTH_SHOWS, VENUE_SUPP
 import { FOOD_TYPES } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { buildingStatus, describeNeed } from './infoPanel.js';
+import { SICK_COLOR } from '../data/disease.js';
+import { crimeEnabled } from '../sim/crime.js';
+import { moodWord, moodReasonText, criminalText } from './crimeInfo.js';
+import { sickText } from './healthInfo.js';
 
 const BAD = '#d9534f';
 const WARN = '#f0ad4e';
+/** A home in unrest: a dark wine red, apart from the "not working" red. */
+export const UNREST_COLOR = '#8b1e3f';
+/** A home below this mood is in unrest (a thief may come from it: CONFIG.THIEF_MOOD is 35). */
+export const UNREST_MOOD = 30;
 
 /** Kinds of need a home can lack: color and legend label, by need key. */
 export const NEED_KINDS = Object.freeze({
@@ -46,6 +57,8 @@ export const NEED_KINDS = Object.freeze({
 
 /** The overlay's legend: [color, label] rows. */
 export const PROBLEM_LEGEND = Object.freeze([
+  [SICK_COLOR, 'Sick home'],
+  [UNREST_COLOR, 'Home in unrest'],
   ...[...new Map(Object.values(NEED_KINDS).map(([c, l]) => [l, c]))].map(([l, c]) => [c, `Home needs: ${l.toLowerCase()}`]),
   [BAD, 'Not working'],
   [WARN, 'Working badly'],
@@ -107,6 +120,10 @@ export function problemOf(game, b) {
       if (b.noEntryRoute) return { v: 0.55, color: BAD, text: 'Empty lot: its road does not reach the map entrance.' };
       return null;
     }
+    // Sickness and unrest come before what the home lacks to move up.
+    if (hs.sick > 0) return { v: 1, color: SICK_COLOR, text: `${HOUSE_TIERS[hs.tier].name}. ${sickText(hs)}` };
+    const unrest = unrestOf(game, b);
+    if (unrest) return unrest;
     const blocked = hs.blocked || [];
     if (!blocked.length || (hs.tier >= MAX_TIER && !hs.devolving)) return null;
     // Growing: only if the next level can be reached here at all.
@@ -125,4 +142,21 @@ export function problemOf(game, b) {
   if (s.level === 'bad') return { v: 1, color: BAD, text: `${b.def.name}: ${s.text}` };
   if (s.level === 'warn') return { v: 0.55, color: WARN, text: `${b.def.name}: ${s.text}` };
   return null;
+}
+
+/**
+ * A home in unrest (sim/mood.js, sim/crime.js): mood under UNREST_MOOD, or
+ * a criminal already sent out. Only where there is crime.
+ * @returns {{v:number, color:string, text:string}|null}
+ */
+export function unrestOf(game, b) {
+  const hs = b.house;
+  if (!hs || hs.pop <= 0 || hs.mood === null || hs.mood === undefined || !crimeEnabled(game)) return null;
+  if (!(hs.mood < UNREST_MOOD) && !(hs.criminal > 0)) return null;
+  const parts = [`${HOUSE_TIERS[hs.tier].name}, in unrest: mood ${hs.mood} (${moodWord(hs.mood).toLowerCase()}).`];
+  const why = hs.mood < 50 ? moodReasonText(hs) : null;
+  if (why) parts.push(why);
+  const done = criminalText(hs);
+  if (done) parts.push(done);
+  return { v: hs.criminal > 0 ? 1 : 0.8, color: UNREST_COLOR, text: parts.join(' ') };
 }

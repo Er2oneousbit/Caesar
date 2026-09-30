@@ -13,7 +13,8 @@
  *   column(b, game)  -> { v, color } or null: a column of its own color
  *                      (used instead of house/value)
  *   tip(game, b)     -> text for the tooltip over a building, or null
- *                      (the crime overlay's words live in ui/crimeInfo.js)
+ *                      (the crime overlay's words live in ui/crimeInfo.js,
+ *                      the health overlay's in ui/healthInfo.js)
  *   legend           -> [color, label] rows shown while the overlay is on
  *   walkers          -> walker types still drawn in this overlay
  * ----------------------------------------------------------------------------
@@ -25,6 +26,8 @@ import { FOOD_TYPES } from '../data/goods.js';
 import { educationTier } from '../sim/housing.js';
 import { problemOf, PROBLEM_LEGEND } from '../ui/problems.js';
 import { crimeBand, crimeTip } from '../ui/crimeInfo.js';
+import { healthColumn, healthTip } from '../ui/healthInfo.js';
+import { SICK_COLOR } from '../data/disease.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
@@ -112,10 +115,23 @@ export const OVERLAYS = [
     walkers: ['teacher', 'librarian', 'scholar'],
   },
   {
-    key: 'health', name: 'Health',
+    // Homes by disease risk (sim/disease.js), like the fire overlay; a sick
+    // home stands at full height in a color of its own.
+    key: 'health', name: 'Health', bad: true,
     show: is('barber', 'clinic', 'baths', 'hospital'),
-    house: (b) => ((b.house.barber > 0) + (b.house.clinic > 0) + (b.house.baths > 0)) / 3,
-    walkers: ['barber', 'physician', 'bather'],
+    column: (b) => {
+      const col = b.house ? healthColumn(b) : null;
+      if (!col) return null;
+      return { v: col.v, color: col.sick ? SICK_COLOR : columnColor(col.v, true) };
+    },
+    tip: healthTip,
+    legend: [
+      [SICK_COLOR, 'Sick home'],
+      [columnColor(0.9, true), 'Disease is close'],
+      [columnColor(0.5, true), 'Some risk of disease'],
+      [columnColor(0.1, true), 'Very low risk'],
+    ],
+    walkers: ['physician', 'barber', 'bather'],
   },
   {
     key: 'food', name: 'Food supply',

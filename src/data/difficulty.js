@@ -26,9 +26,11 @@
  *                    x CONFIG.THIEF_PEACE at once and, above 0, that month's gain
  *   protestPeaceEvery  every this many protests cost CONFIG.PROTEST_PEACE, then the
  *                    count starts again (0: protests never cost peace)
+ *   disease          how fast unhealthy homes build disease risk (sim/disease.js)
  *
- * Easy, Normal and Hard only use the first four levers plus raid size, crime
- * and crimePeace (and Easy a longer devolveDays); Insane pulls on all of them.
+ * Easy, Normal and Hard only use the first four levers plus raid size, crime,
+ * crimePeace and disease (and Easy a longer devolveDays); Insane pulls on all
+ * of them.
  *
  * Crime and peace (the owner's call): none on Easy, a little on Normal, some on
  * Hard, a lot on Insane. Protests only cost on Insane, and only every fifth:
@@ -53,7 +55,7 @@
 export const DIFFICULTY = Object.freeze({
   easy: Object.freeze({
     name: 'Easy',
-    desc: 'More money, faster growth, rare fires and collapses, homes slower to decline, less crime (and it costs no peace), smaller raids. Good for learning.',
+    desc: 'More money, faster growth, rare fires and collapses, homes slower to decline, less crime (and it costs no peace) and disease, smaller raids. Good for learning.',
     // risk 0.5: an unpatrolled building takes about a year to get dangerous
     // (0.7 still set off ~3 fires per young city; see the tuning notes above).
     funds: 1.5, risk: 0.5, production: 1.15, immigration: 1.25, mood: 0, winterGrowth: 1,
@@ -62,6 +64,7 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 6, // twice the grace: time for a market vendor or priest to come by
     crime: 0.5, // unrest seldom goes past a protest
     crimePeace: 0, protestPeaceEvery: 0,
+    disease: 0.5, // an outbreak is rare
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -72,20 +75,22 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 3,
     crime: 1,
     crimePeace: 1, protestPeaceEvery: 0,
+    disease: 1,
   }),
   hard: Object.freeze({
     name: 'Hard',
-    desc: 'Less money, slower growth, more fires, more crime (and it costs more peace) and bigger raids.',
+    desc: 'Less money, slower growth, more fires, more crime (and it costs more peace), more disease and bigger raids.',
     funds: 0.6, risk: 1.3, production: 0.9, immigration: 0.85, mood: 0, winterGrowth: 1,
     raidSize: 1.3, raidInterval: 1, enemy: 1,
     requestSize: 1, requestInterval: 1, requestTime: 1,
     devolveDays: 3,
     crime: 1.2,
     crimePeace: 2, protestPeaceEvery: 0,
+    disease: 1.3,
   }),
   insane: Object.freeze({
     name: 'Insane',
-    desc: 'For veterans. Scarce money, grumpy citizens, more fires, more crime that costs much more peace (even protests, now and then), slow farms and workshops, nothing grows on the farms in winter, '
+    desc: 'For veterans. Scarce money, grumpy citizens, more fires, more crime that costs much more peace (even protests, now and then), more disease, slow farms and workshops, nothing grows on the farms in winter, '
       + 'bigger and tougher raids that come more often, and an Emperor who demands 50% more, more often, with less time to deliver.',
     // winterGrowth 0: Dec-Feb farms keep their progress but add none (see sim/production.js).
     funds: 0.4, risk: 1.5, production: 0.8, immigration: 0.7, mood: -8, winterGrowth: 0,
@@ -94,6 +99,7 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 3,
     crime: 1.4,
     crimePeace: 3, protestPeaceEvery: 5,
+    disease: 1.5,
   }),
 });
 

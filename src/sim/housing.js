@@ -17,7 +17,7 @@
  *      a row it drops one level. Any other day resets the count.
  *   5. otherwise, with desirability at least its level's `up` and every need
  *      of the next level met, it moves up one level at once (never more than
- *      one a day). Reaching 11, 15 or 19 it first grows into a 2x2, 3x3 or
+ *      one a day). A sick home (sim/disease.js) does not move up. Reaching 11, 15 or 19 it first grows into a 2x2, 3x3 or
  *      4x4 footprint, taking over homes of its own level or lower (so four
  *      Apartment Houses can become one Tenement), then clear land, then
  *      gardens.
@@ -205,6 +205,11 @@ export function updateHouse(game, b) {
     return;
   }
   const next = checkTier(h.tier + 1, lv, 'enter');
+  if (h.sick > 0) {
+    // Sick (sim/disease.js): it does not move up until it is well again.
+    h.blocked = [{ key: 'sick', have: h.sick, need: 0 }, ...next.missing];
+    return;
+  }
   if (!next.ok) {
     h.blocked = next.missing;
     return;
@@ -332,10 +337,11 @@ function tryJoinBlock(game, b) {
   if (b.size !== 1 || h.merged || h.tier < 1 || h.tier > MAX_SMALL_TIER) return false;
   if (!blockTile(game, b.x, b.y)) return false;
   const { map, buildings } = game;
+  if (h.sick > 0) return false; // nobody joins a sick home
   const others = [];
   for (const [dx, dy] of [[1, 0], [0, 1], [1, 1]]) {
     const o = buildings.get(map.buildingAt(b.x + dx, b.y + dy));
-    if (!o || !o.house || o.size !== 1 || o.house.merged) return false;
+    if (!o || !o.house || o.size !== 1 || o.house.merged || o.house.sick > 0) return false;
     if ((o.house.tier || 1) !== h.tier) return false;
     others.push(o);
   }
@@ -379,10 +385,14 @@ function addStock(to, from, share) {
  * Families moving in together (sim/mood.js, sim/crime.js): the home keeps the
  * worst criminal flag of the two, so joining a block never wipes out a home's
  * record of trouble, and takes the other's mood if it had none of its own.
+ * Disease risk and sickness (sim/disease.js) come along too, the worse of the
+ * two (sick homes are never taken over, so this is only a safeguard).
  */
 function mergeTemper(h, oh) {
   if (!(oh.pop > 0)) return; // an empty lot brings no one
   h.criminal = Math.max(h.criminal || 0, oh.criminal || 0);
+  h.diseaseRisk = Math.max(h.diseaseRisk || 0, oh.diseaseRisk || 0);
+  h.sick = Math.max(h.sick || 0, oh.sick || 0);
   if (h.mood === null || h.mood === undefined) {
     h.mood = oh.mood ?? null;
     h.moodReason = oh.moodReason ?? null;
@@ -390,12 +400,14 @@ function mergeTemper(h, oh) {
   }
 }
 
-/** A split-off piece is the same families: it keeps their mood, trouble and hunger. */
+/** A split-off piece is the same families: it keeps their mood, trouble, hunger and sickness. */
 function copyTemper(h, from) {
   h.mood = from.mood ?? null;
   h.moodReason = from.moodReason ?? null;
   h.hungerStreak = from.hungerStreak || 0;
   h.criminal = from.criminal || 0;
+  h.diseaseRisk = from.diseaseRisk || 0;
+  h.sick = from.sick || 0;
 }
 
 /** Keep the longer of each service visit timer (a block has what its parts had). */
@@ -489,7 +501,7 @@ function tileTakeable(game, b, x, y, pass, map, buildings) {
   if (id) {
     const o = buildings.get(id);
     if (!o) return false;
-    if (o.house) return o.house.tier <= b.house.tier;
+    if (o.house) return o.house.tier <= b.house.tier && !(o.house.sick > 0); // nobody moves into a sick home
     return pass >= 2 && o.type === 'garden';
   }
   return pass >= 1 && isClearLand(game, i);
@@ -644,6 +656,8 @@ function makeVacant(game, b) {
   h.moodReason = null;
   h.hungerStreak = 0;
   h.criminal = 0;
+  h.diseaseRisk = 0;
+  h.sick = 0;
   if (size > 1) {
     const { x, y } = b;
     setFootprint(game, b, x, y, 1);

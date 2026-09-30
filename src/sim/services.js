@@ -18,6 +18,7 @@ import { WALKER_TYPES } from '../data/walkers.js';
 import { spawnWalker } from './entities.js';
 import { startRoaming } from './movement.js';
 import { vendorSupply } from './market.js';
+import { cureHome } from './disease.js';
 
 /** Apply a roamer's effect to every building within reach of its tile. */
 export function roamerVisit(game, w) {
@@ -59,9 +60,16 @@ function applyEffect(game, effect, w, origin, b) {
     case 'library':
     case 'academy':
     case 'barber':
-    case 'clinic':
     case 'baths':
       if (h) h[effect] = days;
+      break;
+    case 'clinic':
+      if (h) {
+        h.clinic = days;
+        // A physician passing by clears the home's disease risk and cures
+        // the sick (sim/disease.js), as a prefect clears fire risk.
+        if (h.pop > 0) cureHome(game, b);
+      }
       break;
     case 'venue':
       if (h && w.venue) {

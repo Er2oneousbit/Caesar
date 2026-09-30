@@ -28,6 +28,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 import { farmDormant, daysToNextMare } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
+import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -53,6 +54,7 @@ export function describeNeed(m) {
     case 'wine': return `Two sources of wine in the city (has ${m.have}): a working winery, and each open trade route that sells wine while wine is set to import.`;
     case 'des': return `Desirability ${m.need} (now ${m.have}). Gardens, statues, plazas, temples and grand homes help; humble homes, industry and storage hurt.`;
     case 'space': return `Room to grow into a ${m.need}×${m.need} home: homes of its level or lower, clear land or gardens beside it.`;
+    case 'sick': return `To be well again: ${m.have} day${m.have === 1 ? '' : 's'} of sickness left, or a physician's visit.`;
     default: return m.key;
   }
 }
@@ -295,6 +297,7 @@ export class InfoPanel {
         kv('Taxes', taxLine(g, hs)),
       ));
       parts.push(this.moodSection(g, hs));
+      parts.push(this.healthSection(g, b));
     }
     parts.push(this.risks(b));
     parts.push(this.demolishButton(g, b));
@@ -315,6 +318,23 @@ export class InfoPanel {
       criminalText(hs) ? h('div', { class: 'muted' }, criminalText(hs)) : null,
       kv('Police', hs.police > 0 ? `Patrolled (${hs.police} days left)` : 'None lately'),
       h('div', { class: 'muted' }, g.scenario.crime === false ? 'There is no crime in this province.' : 'A home below 50 may send a protester into the street; far below, a thief or a riot. A prefect passing by halves the chance.'));
+  }
+
+  /** A home's health score, what lowers it, its disease risk and sickness (sim/disease.js). */
+  healthSection(g, b) {
+    const hh = homeHealth(g, b);
+    if (!hh) return null;
+    const sick = sickText(b.house);
+    const none = noDiseaseText(g);
+    return h('div', { class: 'panel-sec' },
+      h('h5', {}, 'Health'),
+      sick ? h('div', { class: 'status bad' }, sick) : null,
+      kv('Health', `${hh.score} / 100, ${hh.word.toLowerCase()}`),
+      bar(hh.score, 100),
+      hh.lacks ? h('div', { class: 'muted' }, `Lowered by: ${hh.lacks}.`) : null,
+      sick ? null : kv('Disease risk', `${hh.riskWords} (${hh.risk})`),
+      sick ? null : bar(hh.risk, 100, 'risk'),
+      h('div', { class: 'muted' }, none || 'Crowded homes with poor health build disease risk; a passing physician clears it and cures the sick.'));
   }
 
   renderBuilding(g, b) {

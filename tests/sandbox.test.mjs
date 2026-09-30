@@ -58,7 +58,7 @@ test('difficulty: every level sets every lever, Normal is neutral, Insane is har
   assert.deepEqual(DIFFICULTY_ORDER, ['easy', 'normal', 'hard', 'insane']);
   // Levers where less is harder, and where more is harder.
   const lessIsHarder = ['funds', 'production', 'winterGrowth', 'immigration', 'mood', 'raidInterval', 'requestInterval', 'requestTime', 'devolveDays'];
-  const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize', 'crime', 'crimePeace'];
+  const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize', 'crime', 'crimePeace', 'disease'];
   for (let i = 1; i < DIFFICULTY_ORDER.length; i++) {
     const easier = DIFFICULTY[DIFFICULTY_ORDER[i - 1]];
     const harder = DIFFICULTY[DIFFICULTY_ORDER[i]];

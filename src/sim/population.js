@@ -99,6 +99,7 @@ export function updateImmigration(game) {
       continue;
     }
     b.noEntryRoute = false;
+    if (h.sick > 0) continue; // a sick home takes in no settlers (sim/disease.js)
     const free = houseCapacity(h.tier, b.size) - h.pop - h.incoming;
     if (free > 0) vacancies.push({ b, free });
   }
@@ -171,7 +172,8 @@ export function settlerArrive(game, w) {
       h.incoming = Math.max(0, h.incoming - w.reserve.people);
       w.reserve = null;
     }
-    const free = houseCapacity(h.tier, b.size) - h.pop;
+    // Fell sick while they were on the way (sim/disease.js): they look elsewhere.
+    const free = h.sick > 0 ? 0 : houseCapacity(h.tier, b.size) - h.pop;
     const n = Math.max(0, Math.min(free, w.people));
     if (h.pop <= 0 && n > 0) newHousehold(game, h); // an empty home: a fresh start (sim/mood.js)
     h.pop += n;
@@ -231,7 +233,7 @@ function homeAt(game, i, people) {
   if (!list) return 0;
   for (const id of list) {
     const b = game.buildings.get(id);
-    if (!b) continue;
+    if (!b || b.house.sick > 0) continue; // no newcomers in a sick home
     const free = houseCapacity(b.house.tier, b.size) - b.house.pop - b.house.incoming;
     if (free >= Math.min(people, 1)) return id;
   }

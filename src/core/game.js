@@ -9,15 +9,18 @@
  *   1. advance the calendar
  *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
- *      (spreads work evenly across the day instead of spiking at midnight)
+ *      (spreads work evenly across the day instead of spiking at midnight;
+ *      a home's disease risk comes after its fire risk)
  *      then criminals: prefects and soldiers catch them, prefects hunt
  *   4. on a new day:   labor, water, desirability, city stats, entertainment
  *                      base, wine sources, mid-month goods use, immigration,
- *                      fires, home moods (day 8), trade, raid progress
+ *                      fires, sick homes, home moods (day 8), trade, raid
+ *                      progress
  *   5. on a new month: consumption, finances, army pay, raid warnings,
- *                      city mood, home moods, religion, ratings, Emperor,
- *                      farm season notice
- *   6. on a new year:  tribute, ledger rollover, trade quotas, crime counts
+ *                      city mood, home moods, religion, ratings, city health,
+ *                      Emperor, farm season notice
+ *   6. on a new year:  tribute, ledger rollover, trade quotas, crime and
+ *                      disease counts
  *   7. on a new day, after all that: the crime roll
  * ----------------------------------------------------------------------------
  */
@@ -52,6 +55,7 @@ import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
 import { closeGoodsMonth } from '../sim/goodsLedger.js';
 import { updateHomeMoods } from '../sim/mood.js';
 import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../sim/crime.js';
+import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear } from '../sim/disease.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -106,6 +110,7 @@ export function newCityState(scenario, funds) {
     history: [],
     stats: { fires: 0, collapses: 0, evolutions: 0, devolutions: 0, immigrated: 0, emigrated: 0, peakPopulation: 0, requestsMet: 0, requestsFailed: 0 },
     crime: newCrimeState(), // this year's protesters, thieves, riots... (sim/crime.js)
+    health: newHealthState(), // city health and this year's outbreaks (sim/disease.js)
     flags: {},
     victory: false,
     defeat: false,
@@ -162,6 +167,7 @@ export class Game {
     this.wallHp ??= new Map(); // tile index -> remaining hp of a damaged wall/gate
     this.military ??= newMilitaryState(scenario, this.time, flags);
     this.city.crime ??= newCrimeState(); // saves from before crime (v4)
+    this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
     this.projectiles = []; // arrows and sling stones in flight (not saved)
     this.enemyField = null; // raider flow field (derived, see military.js)
     this.events.on('buildingRemoved', ({ building }) => {
@@ -262,6 +268,7 @@ export class Game {
       updateServiceSpawns(this, b);
       updateLaborAccess(this, b);
       updateRisk(this, b);
+      if (b.house && this.buildings.has(b.id)) updateDiseaseRisk(this, b);
     } catch (err) {
       this.log.error(`Building ${b.id} (${b.type}) update failed:`, err);
     }
@@ -285,6 +292,7 @@ export class Game {
     updateImmigration(this);
     updateEmigration(this);
     updateFires(this);
+    updateSickHomes(this);
     if (this.time.day === CONFIG.MOOD_MIDMONTH_DAY) updateHomeMoods(this); // day 0's runs in onMonth
     updateTrade(this);
     militaryDaily(this);
@@ -300,6 +308,7 @@ export class Game {
     updateReligion(this);
     updateRatings(this);
     this.city.crime.month = false; // the peace rating has read it
+    updateCityHealth(this);
     updateEmperor(this);
     farmSeasonNotice(this); // Insane: the farms stop in winter
     const c = this.city;
@@ -318,6 +327,7 @@ export class Game {
     yearlyEconomy(this);
     resetTradeYear(this);
     crimeNewYear(this);
+    healthNewYear(this);
     this.events.emit('year', this.time);
   }
 

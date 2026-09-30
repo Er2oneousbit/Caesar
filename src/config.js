@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.10.1',
-  SAVE_VERSION: 5, // v5: home mood and crime (v4 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 6, // v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -157,6 +157,44 @@ export const CONFIG = {
   HUNT_RANGE: 30, // prefects chase thieves and rioters this close (tiles, either axis)
   HUNT_EVERY: 10, // ticks between a roaming prefect's looks around
   HUNT_RETRY_TICKS: 160, // a criminal a prefect found no way to reach is left alone by him this long (8 days)
+
+  // --- Health and disease (sim/disease.js) ----------------------------------
+  // Every occupied home has a health score (0-100), from its level and what it
+  // has: health care, baths, a barber, fountain water and food. The poorer
+  // the score and the fuller the home, the faster it builds disease risk,
+  // which a physician's visit resets (as a prefect resets fire risk). City
+  // health is only shown: it feeds no rating and no migration.
+  DISEASE_MIN_POP: 200, // no disease in a smaller town (and city health stays at HEALTH_START)
+  HEALTH_START: 50, // city health of a new city
+  HEALTH_STEP: 2, // city health moves this much a month toward the homes' average score
+  HEALTH_LEVEL_MAX: 10, // a home's level adds its number, up to this
+  HEALTH_CARE_BOTH: 50, // a medicus visit and a hospital within reach
+  HEALTH_CARE_HOSPITAL: 40, // a hospital alone
+  HEALTH_CARE_MEDICUS: 30, // a medicus alone
+  HEALTH_BATHS: 15,
+  HEALTH_BARBER: 10,
+  HEALTH_FOUNTAIN: 10, // fountain water (a well does not count)
+  HEALTH_PER_FOOD: 10, // per kind of food in the pantry
+  HEALTH_HUNGRY_MAX: 40, // a home whose level eats and that has no food scores at most this
+  // Daily risk = DISEASE_RATE x (100 - score) / 100 x crowding x difficulty.disease
+  // x (0.6 to 1.4), halved within a staffed hospital's reach. Crowding is
+  // DISEASE_CROWD_BASE + min(DISEASE_CROWD_MAX, residents / DISEASE_CROWD_PEOPLE).
+  // At 0.5 a crowded home (40 people) scoring 20 that no physician visits
+  // reaches the threshold in about 10 months on Normal; one scoring 80
+  // (which takes health care) would need over 3 years, and gets visited.
+  DISEASE_RATE: 0.5,
+  DISEASE_CROWD_BASE: 0.5,
+  DISEASE_CROWD_PEOPLE: 40,
+  DISEASE_CROWD_MAX: 1.5,
+  DISEASE_THRESHOLD: 100, // from here, each day...
+  DISEASE_OUTBREAK_CHANCE: 0.25, // ...this chance that the home falls sick (as with fire)
+  DISEASE_DEATHS: 0.2, // share of a home's residents who die when it falls sick (at least 1)...
+  DISEASE_DEATHS_HOSPITAL: 0.1, // ...within a staffed hospital's reach
+  SICK_DAYS: 32, // a sick home recovers by itself after this many days (a physician cures it at once)
+  DISEASE_HEAT: 1, // disease risk a home beside a sick one gains per day, x difficulty.disease (once, however many sick homes it touches)
+  DISEASE_SPREAD_CHANCE: 0.005, // chance a day that it falls sick at once, x difficulty.disease (halved within a hospital's reach)
+  PHYSICIAN_ALERT_RADIUS: 24, // road tiles: a physician or a staffed medicus this close is sent to a sick home
+  PHYSICIAN_TREAT_TICKS: 20, // a physician stays a day with the sick, then looks for more
 
   // --- Water ---------------------------------------------------------------
   WELL_RADIUS: 2,

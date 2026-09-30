@@ -48,6 +48,9 @@ export function newHouseData(variant = 0) {
     moodReason: null, // what upsets it most (a key of MOOD_REASONS), or null
     hungerStreak: 0, // mood updates in a row with no food at all
     criminal: 0, // 0, or 1 once it sent out a protester, 2 a thief (cleared at mood 50+)
+    // Disease (sim/disease.js): risk builds like fire risk; a physician resets it.
+    diseaseRisk: 0,
+    sick: 0, // days left sick (0 = well): no moving up, no newcomers, it can spread next door
     devolveDays: 0, // consecutive bad days (the home falls a level after game.difficulty.devolveDays)
     merged: false, // true = a 2x2 block of four single-tile homes (levels 1-10)
     bornDay: -1, // day a split or break-up created this home: first checked the day after

@@ -35,6 +35,7 @@ Chosen in the Sandbox setup and in every campaign briefing (the menus remember y
 | Months to deliver a request | 12 | 12 | 12 | 9 |
 | Bad days in a row before a home falls back a level | 6 | 3 | 3 | 3 |
 | Daily chance an unhappy home breeds trouble (crime) | x0.5 | x1 | x1.2 | x1.4 |
+| Disease risk, and its spread to the homes next door | x0.5 | x1 | x1.3 | x1.5 |
 
 Insane is for veterans: staff the Prefecture and Engineer's Post first (labor priorities), because an unpatrolled building now burns or collapses in about two months instead of three, and plan for roughly twice Normal's army. In winter nothing grows on any farm (crops, pigs, and the Horse Ranch's foals and herd): fields keep their progress and grow again from Martius, workers stay on, and carts still haul the harvest already in store. Games start in Ianuarius, so the first harvest waits for spring; a message warns in October, and the city lives on its granaries (or imports) from December to Februarius. Size farms for about a third more than the city eats (a full Insane wheat farm grows about 576 units a year instead of 768) and keep roughly 0.75 units per citizen in store when winter comes. Winter also costs the Horse Ranch about a quarter of the year's foals and mares, so start it early. The headless simulator shows how a level plays out: `npm run sim -- --difficulty insane --raids occasional --garrison`.
 
@@ -94,7 +95,7 @@ Most services are delivered by walkers. A walker serves every building within **
 | Religion | Temples (2) | One per god: Jupiter, Ceres, Neptune, Mars, Vesta |
 | Food & goods | Market (5) | Up to two vendors on the streets; the buyer restocks from granaries/warehouses |
 | Education | School (10), Library (20), Academy (30) | Tiers: school or library, both, both and an academy |
-| Health | Barber (2), Medicus (5), Thermae (10, needs piped water), Valetudinarium (30, area 12 tiles) | Barber and baths are needs of their own; medicus and hospital make up medical care |
+| Health | Barber (2), Medicus (5), Thermae (10, needs piped water), Valetudinarium (30, area 12 tiles) | Barber and baths are needs of their own; medicus and hospital make up medical care. All of them raise a home's health score; a physician passing clears its disease risk and cures the sick, and a medicus sends one to an outbreak (see Health and disease) |
 | Entertainment | Theater 10 pts, Amphitheater 15 (20 with plays and gladiators booked), Colosseum 20 (30 with gladiators and beasts) | Each needs performers from a training building: Actor Troupe, Gladiator School, Menagerie |
 | Taxes | Forum (6), Senate (30) | Only visited homes pay tax |
 
@@ -133,7 +134,7 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 
 Workshops follow a **recipe**: most use 100 units of one raw material per 100-unit batch; the Fletcher needs both timber and iron and waits until it has both.
 
-**Finding what is wrong.** The **Problems** overlay (top bar) raises a column over every home that cannot move up, colored by the first thing it lacks (water, food, temples, entertainment, education, health, goods, desirability, room to grow), taller when the home is already falling back (a home already as good as the province allows, whose next level needs a building or a trade partner the mission does not have, shows none); empty lots no settler can reach and buildings that do not work are red, buildings that work badly (understaffed, short of goods, nowhere to deliver) amber. Point at a column for the reason; a legend lists the colors. The **Production** advisor shows, for each good, what was made, used (eaten, worked up, used by homes, spent on recruits, sent to the Emperor), imported and exported last month and what the storehouses hold; lists the buildings that are not working, grouped by reason, with a *Show* button that goes to each in turn; and names the bottlenecks: workshops waiting for a raw material (and what makes it or who sells it), buildings without workers, harvests with nowhere to go, goods used faster than they come in, homes short of food. The **Overview** tab charts population, treasury and mood month by month (up to 20 years).
+**Finding what is wrong.** The **Problems** overlay (top bar) raises a column over every sick home (pale green) and every home in unrest (wine red: mood under 30, or it has already sent out a protester or thief; only where there is crime), and then over every home that cannot move up, colored by the first thing it lacks (water, food, temples, entertainment, education, health, goods, desirability, room to grow), taller when the home is already falling back (a home already as good as the province allows, whose next level needs a building or a trade partner the mission does not have, shows none); empty lots no settler can reach and buildings that do not work are red, buildings that work badly (understaffed, short of goods, nowhere to deliver) amber. Point at a column for the reason; a legend lists the colors. The **Production** advisor shows, for each good, what was made, used (eaten, worked up, used by homes, spent on recruits, sent to the Emperor), imported and exported last month and what the storehouses hold; lists the buildings that are not working, grouped by reason, with a *Show* button that goes to each in turn; and names the bottlenecks: workshops waiting for a raw material (and what makes it or who sells it), buildings without workers, harvests with nowhere to go, goods used faster than they come in, homes short of food. The **Overview** tab charts population, treasury and mood month by month (up to 20 years).
 
 ## Money
 
@@ -195,7 +196,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 5: home mood and crime; version 4 saves still load, their homes starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 6: disease; version 5 saves still load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
 
 ## City mood (sentiment)
 
@@ -240,6 +241,28 @@ A new household starts at the city's mood. The panel and the crime overlay name 
 
 **The crime overlay** (top bar) raises a column over each occupied home by its mood, taller and redder for more crime (0: 10, 1-10: 8, 11-20: 6, 21-30: 4, 31-40: 2, 41-49: 1, 50+: none); a home that has already sent out a protester or thief stands at 8 or more. Prefectures, prefects and criminals stay in view; point at a home for its mood, its trouble and whether a prefect patrols it.
 
+## Health and disease
+
+Every occupied home has a **health score** (0-100, the house panel's *Health* section), from what it has:
+
+| Part | Points |
+|---|---|
+| Its level | its number, up to 10 |
+| Health care | a medicus visit and a hospital within 12 tiles 50, a hospital alone 40, a medicus alone 30 |
+| Baths / barber | 15 / 10 |
+| Fountain water | 10 (a well does not count) |
+| Food | 10 for each kind in the pantry |
+
+At most 100, and at most 40 for a home whose level eats and that has no food at all. For example a Domus (level 9) with a medicus, baths, a barber, a fountain and two kinds of food scores 9 + 30 + 15 + 10 + 10 + 20 = 94.
+
+**Disease risk** builds like fire risk, on each occupied home every day: 0.5 x (100 - score) / 100 x crowding x the difficulty's disease lever, give or take 40%, where crowding is 0.5 + residents / 40 (at most 2), and half that within a staffed hospital's reach. A physician passing within 2 tiles clears it. A crowded home of 40 scoring 20 that no physician visits reaches 100 in about 10 months on Normal; a home scoring 80 would take over three years, and has a medicus anyway. From 100 a home has a 25% chance a day to **fall sick**. There is no disease while the city has under 200 people, nor in the first two campaign missions.
+
+**A sick home.** When it falls sick a fifth of its residents die (a tenth within a hospital's reach), at least one; a home left empty becomes a vacant lot. The rest are sick for 32 days: the home cannot move up and takes in no settlers, and each day every occupied home touching it gains 1 disease risk and has a 0.5% chance to fall sick too (times the lever, halved within a hospital's reach), once a day however many sick homes it touches. A physician who passes cures it at once. A staffed Medicus within 24 road tiles sends one, the way prefectures send prefects to fires (a physician already on his rounds nearby is called over first); he stays a day, then sees to the next sick home nearby or goes back. Otherwise the home recovers by itself when its days run out. The first outbreak of a month has a message of its own; the month's others are summed up in one message at the start of the next.
+
+**City health** moves 2 points a month toward the residents' average score (weighted by residents). It stays at 50 while the city has under 200 people. It is shown, not a rating: it feeds no rating and not migration.
+
+**The Health overlay** (top bar) raises a column over each occupied home by its disease risk, like the fire overlay, and a pale green one at full height over each sick home. Medici, hospitals, baths and barbers stay in view, with their walkers; point at a home for its score, what lowers it (no medicus, no baths, well water only, no food...), its risk and the days its sickness has left. Citizens talk about it when a home is sick. Keeping a physician passing every street is the cure: in the balance sim's demo city, whose one Medicus covers most of its homes, an outbreak comes about once in five years on Normal (and hardly ever on Easy), while its basic version, with wells and no medicus, barber or baths, has over a hundred in three years.
+
 ## Fire and collapse
 
 Every building gains fire and collapse risk daily (houses by level, industry faster; x0.5 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread: each building beside the flames gains 5 fire risk a day and has a 2% chance a day to catch, once a day however many burning tiles it touches. An unguarded fire in a dense block usually takes a handful of homes; a prefect on the way usually stops it at one or two. Prefects within 24 road tiles are dispatched automatically.
@@ -273,7 +296,7 @@ A mission is won when every goal is met at the same time (checked monthly). You 
 
 ## The campaign
 
-Seven missions, each opening the next. The first two teach the basics and have no crime. The goals grow with the housing ladder: each mission's buildings let homes reach a certain level, and its culture and prosperity goals ask for a good share of what those buildings can give.
+Seven missions, each opening the next. The first two teach the basics and have no crime or disease. The goals grow with the housing ladder: each mission's buildings let homes reach a certain level, and its culture and prosperity goals ask for a good share of what those buildings can give.
 
 | Mission | Map | Population | Culture | Prosperity | Peace | Favor | Homes up to | First raid |
 |---|---|---|---|---|---|---|---|---|

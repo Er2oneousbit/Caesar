@@ -50,11 +50,14 @@ export const HOME_POS = Object.freeze([48, 22]);
 /**
  * Invasion settings. `first` = months until the first raid, `interval` = months
  * between raids, `base` = raiders in the first warband (grows with the city).
+ * The first raid leaves time to build a town and an army (an iron mine, a
+ * weaponsmith, a barracks and a fort) before it: 5 years with occasional
+ * raids, 3 with frequent ones (Insane: 25% sooner).
  */
 export const INVASION_PRESETS = Object.freeze({
   none: null,
-  occasional: { first: 30, interval: [24, 36], base: 5 },
-  frequent: { first: 18, interval: [12, 20], base: 7 },
+  occasional: { first: 60, interval: [24, 36], base: 5 },
+  frequent: { first: 36, interval: [12, 20], base: 7 },
 });
 
 const BASIC = ['house', 'road', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_jupiter', 'garden'];
@@ -113,7 +116,7 @@ export const SCENARIOS = Object.freeze([
     funds: 8000, startYear: -240,
     goals: { population: 2000, culture: 30, prosperity: 25, peace: 10, favor: 0 },
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
-    military: { first: 36, interval: [30, 40], base: 4 },
+    military: { first: 60, interval: [30, 40], base: 4 },
     hints: [
       'Bridges must start and end on land and run straight across water.',
       'Massilia trades by sea: build a Dock on the river bank. Tarraco and Lugdunum send caravans along the Imperial road.',
@@ -128,7 +131,7 @@ export const SCENARIOS = Object.freeze([
     funds: 9000, startYear: -225,
     goals: { population: 3000, culture: 40, prosperity: 35, peace: 20, favor: 40 },
     unlocks: 'all', partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
-    military: { first: 28, interval: [22, 32], base: 6 },
+    military: { first: 48, interval: [22, 32], base: 6 },
     hints: [
       'Villas need wine and three food types. Patricians do not work, but pay handsome taxes.',
       'Cavalry needs horses. Breed them at a Horse Ranch on meadow (the herd grows over time), or import them from Cirta by sea.',
@@ -141,7 +144,7 @@ export const SCENARIOS = Object.freeze([
     funds: 10000, startYear: -210,
     goals: { population: 2500, culture: 35, prosperity: 30, peace: 20, favor: 35 },
     unlocks: 'all', partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
-    military: { first: 24, interval: [20, 30], base: 6 },
+    military: { first: 42, interval: [20, 30], base: 6 },
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
   {
@@ -151,7 +154,7 @@ export const SCENARIOS = Object.freeze([
     funds: 12000, startYear: -190,
     goals: { population: 6000, culture: 60, prosperity: 55, peace: 40, favor: 55 },
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
-    military: { first: 20, interval: [14, 22], base: 8 },
+    military: { first: 36, interval: [14, 22], base: 8 },
     hints: ['Palatia need four gods, four health services and every entertainment venue.', 'Expect regular raids. Walls with gates, towers and a mixed army keep the capital safe.'],
   },
 ]);

@@ -20,7 +20,7 @@ import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { DIFFICULTY, DIFFICULTY_ORDER, difficultyOf } from '../src/data/difficulty.js';
-import { SCENARIOS, sandboxScenario, withDifficulty, findScenario } from '../src/data/scenarios.js';
+import { SCENARIOS, sandboxScenario, withDifficulty, findScenario, INVASION_PRESETS } from '../src/data/scenarios.js';
 import { UNIT_TYPES } from '../src/data/units.js';
 import { MAP_SIZES, MAP_SIZE_NOTES } from '../src/world/mapgen.js';
 import { raidSize, spawnUnit } from '../src/sim/military.js';
@@ -91,8 +91,9 @@ test('difficulty: starting funds scale in the sandbox and the campaign', () => {
 test('difficulty: Insane raids come sooner, bigger and tougher; soldiers are unchanged', () => {
   const normal = newGame({ invasions: 'occasional' });
   const insane = newGame({ invasions: 'occasional', difficulty: 'insane' });
-  assert.equal(normal.military.nextRaidMonth, 30);
-  assert.equal(insane.military.nextRaidMonth, Math.round(30 * DIFFICULTY.insane.raidInterval));
+  const first = INVASION_PRESETS.occasional.first;
+  assert.equal(normal.military.nextRaidMonth, first);
+  assert.equal(insane.military.nextRaidMonth, Math.round(first * DIFFICULTY.insane.raidInterval));
   normal.city.population = 900;
   insane.city.population = 900;
   assert.ok(raidSize(insane) > raidSize(normal), `${raidSize(insane)} vs ${raidSize(normal)} raiders`);
@@ -369,4 +370,17 @@ test('uber: settlers with a long walk ride in faster, with a pack mule', () => {
   for (const s of seen.near.filter((x) => x.len <= CONFIG.SETTLER_WALK_TILES)) {
     assert.ok(!s.mule && s.speed === CONFIG.WALKER_SPEED, 'short trips are on foot');
   }
+});
+
+test('raids leave time to build: no first raid inside 3 years on Normal, sandbox or campaign', () => {
+  const firsts = [
+    ...Object.entries(INVASION_PRESETS).filter(([, p]) => p).map(([k, p]) => [k, p.first]),
+    ...SCENARIOS.filter((s) => s.military).map((s) => [s.id, s.military.first]),
+  ];
+  assert.ok(firsts.length >= 6);
+  for (const [name, first] of firsts) assert.ok(first >= 36, `${name}: first raid after ${first} months`);
+  assert.equal(INVASION_PRESETS.occasional.first, 60, 'occasional: 5 years');
+  // The sandbox default (occasional) on Normal: no warning before year 5 (4 years 9 months).
+  const game = newGame({ invasions: 'occasional' });
+  assert.equal(game.military.nextRaidMonth, 60);
 });

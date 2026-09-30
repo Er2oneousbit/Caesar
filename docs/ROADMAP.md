@@ -20,6 +20,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.7.5)
+
+* **Raids come later**: the first raid waits 5 years with occasional raids (was 2.5) and 3 with frequent ones (was 1.5); campaign missions 4 to 7 wait 5, 4, 3.5 and 3 years (were 3, 2.3, 2 and 1.7); Insane still 25% sooner. No raid while the city has fewer than 300 people (was 120). There was no time to build a town and an army (an iron mine, a weaponsmith, a barracks and a fort) before the first warband: on Normal it arrived in the sandbox's third year
+* Measured (demo city without an army, 4 landscapes x 3 seeds x 4 difficulties, 8 years, occasional raids): raids per city on Normal 1.5 (was 2.1), buildings lost 11 (was 16), population after 8 years +22%; on Insane cities no longer collapse (238 people after 8 years, was 85)
+* 136 unit tests (+1)
+
 ## Done (v0.7.4)
 
 * **A timber yard needs woods**: at least 4 tiles of forest within 2 tiles, to be placed (the preview turns red and says so) and to keep working. A single lone tree used to count as forest, so a third of the spots it accepted were out in open country, and such a yard ran at full speed

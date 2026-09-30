@@ -49,7 +49,7 @@ const TOWER_DAMAGE = 12;
 const TOWER_COOLDOWN = 30; // ticks at full staff
 const RAID_MAX_DAYS = 80; // raiders give up and withdraw after this long
 const RAID_MAX_LOSSES = 10; // ...or after destroying this many buildings
-const RAID_MIN_POP = 120; // villages smaller than this are not worth raiding
+const RAID_MIN_POP = 300; // hamlets smaller than this are not worth raiding (the raid is put off)
 
 // ---------------------------------------------------------------------------
 // State

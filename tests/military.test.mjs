@@ -333,6 +333,9 @@ test('a save without military state gets a fresh one', () => {
 
 test('a province with frequent raids runs for two years without errors', () => {
   const game = newGame({ invasions: 'frequent', seed: 'raid-soak' });
+  // This soaks raids for errors, not their timing: bring the first one forward
+  // (frequent raids come after 3 years) so two years hold a few of them.
+  game.military.nextRaidMonth = 12;
   const res = buildDemoCity(game, { level: 2 });
   assert.ok(res.ok, res.reason);
   game.runDays(16 * 4);

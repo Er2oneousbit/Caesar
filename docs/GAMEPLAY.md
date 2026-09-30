@@ -142,7 +142,8 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
 * **Trade:** open a route once (Trade advisor), then a caravan or ship comes every 32-56 days. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
 * **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").
-* Construction needs money in the treasury; running wages into debt costs 3 favor a month.
+* Construction needs money in the treasury; running wages into debt costs 3 favor a month, and nothing can be built until you are out of it.
+* **Loans from Rome** (Finance advisor): Rome lends 2,000 Dn whenever no loan is being repaid, in debt or not, repaid automatically in equal monthly instalments over 24 months with interest over the whole term of 10% on Easy, 20% on Normal, 30% on Hard and 40% on Insane (2,200 to 2,800 Dn in all). Instalments are paid even from an empty treasury. The loan and its repayments have ledger lines of their own and do not count as profit or loss for prosperity.
 
 ## Trade
 

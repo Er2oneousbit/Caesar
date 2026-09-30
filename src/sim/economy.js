@@ -14,7 +14,9 @@
 import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 
-export const LEDGER_KEYS = ['taxes', 'exports', 'other', 'wages', 'imports', 'construction', 'tribute', 'festivals', 'gifts', 'military', 'plunder', 'stolen'];
+// 'loans' and 'repayments' (sim/loans.js) are shown but stay out of ledgerNet:
+// borrowed money is not profit.
+export const LEDGER_KEYS = ['taxes', 'exports', 'other', 'loans', 'wages', 'imports', 'construction', 'tribute', 'festivals', 'gifts', 'military', 'plunder', 'stolen', 'repayments'];
 
 export function newLedger() {
   const l = {};
@@ -76,7 +78,8 @@ export function monthlyEconomy(game) {
     c.ratings.favor = Math.max(0, c.ratings.favor - 3);
     if (!c.flags.debtWarned) {
       c.flags.debtWarned = true;
-      game.message('The treasury is in debt! The Emperor\'s favor will fall every month until you recover.', 'bad');
+      const offer = c.loan ? '' : ' Rome will lend you money: see the Finance advisor.';
+      game.message(`The treasury is in debt! The Emperor's favor will fall every month until you recover, and nothing can be built.${offer}`, 'bad');
     }
   } else {
     c.flags.debtWarned = false;

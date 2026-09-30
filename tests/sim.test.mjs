@@ -27,7 +27,9 @@ import { addBuilding } from '../src/sim/entities.js';
 import { checkTier, growHouse } from '../src/sim/housing.js';
 import { updateLabor } from '../src/sim/labor.js';
 import { updateWater } from '../src/sim/water.js';
-import { monthlyEconomy, houseMonthlyTax } from '../src/sim/economy.js';
+import { monthlyEconomy, houseMonthlyTax, ledgerNet } from '../src/sim/economy.js';
+import { loanTerms, takeLoan, repayLoan } from '../src/sim/loans.js';
+import { difficultyOf } from '../src/data/difficulty.js';
 import { openRoute, setTradeMode, tradeAt } from '../src/sim/trade.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { updateFires, igniteBuilding } from '../src/sim/risk.js';
@@ -542,4 +544,56 @@ test('a timber yard needs woods, not a lone tree: to be placed, and to keep work
   assert.ok(resourceAvailable(game, yard));
   map.terrain[map.idx(x - 1, y)] = Terrain.GRASS; // the woods are cut back to 3 trees
   assert.ok(!resourceAvailable(game, yard), 'stops when the woods are gone');
+});
+
+// ---------------------------------------------------------------------------
+// Loans from Rome (a way back for a city in debt, which cannot build)
+// ---------------------------------------------------------------------------
+
+function loanGame(difficulty = 'normal') {
+  const game = new Game({ scenario: sandboxScenario({ size: 64, seed: 'loan', difficulty }) });
+  game.difficulty = difficultyOf(difficulty);
+  return game;
+}
+
+test("a loan from Rome: 2,000 Dn now, repaid monthly over 24 months with the difficulty's interest", () => {
+  const totals = { easy: 2200, normal: 2400, hard: 2600, insane: 2800 };
+  for (const [key, total] of Object.entries(totals)) {
+    const game = loanGame(key);
+    const c = game.city;
+    const t = loanTerms(game);
+    assert.equal(t.total, total, `${key}: total`);
+    const before = c.treasury;
+    assert.ok(takeLoan(game).ok);
+    assert.equal(c.treasury, before + CONFIG.LOAN_AMOUNT);
+    assert.equal(takeLoan(game).ok, false, 'one loan at a time');
+    let months = 0;
+    while (c.loan && months < 100) { repayLoan(game); months++; }
+    assert.equal(months, CONFIG.LOAN_MONTHS, `${key}: paid off in ${CONFIG.LOAN_MONTHS} months`);
+    assert.equal(c.treasury, before + CONFIG.LOAN_AMOUNT - total, `${key}: exactly the total repaid (the last instalment is what is left)`);
+    assert.equal(c.finance.thisYear.repayments, total);
+    assert.ok(game.messages.some((m) => /repaid in full/.test(m.text)));
+    assert.ok(takeLoan(game).ok, 'and then Rome lends again');
+  }
+});
+
+test('a city in debt can borrow, and the loan is not counted as profit', () => {
+  const game = loanGame();
+  const c = game.city;
+  c.treasury = -150;
+  monthlyEconomy(game);
+  assert.ok(game.messages.some((m) => /Rome will lend you money/.test(m.text)), 'the debt message points to the loan');
+  const net = ledgerNet(c.finance.thisYear);
+  assert.ok(takeLoan(game).ok, 'in debt, Rome still lends');
+  assert.equal(c.treasury, -150 + CONFIG.LOAN_AMOUNT);
+  assert.equal(ledgerNet(c.finance.thisYear), net, 'borrowed money is not profit');
+  assert.ok(checkBuilding(game, 'forum', 30, 30).reason !== 'Not enough money', 'and the city can build again');
+});
+
+test('a loan being repaid survives save and load', () => {
+  const game = loanGame('hard');
+  takeLoan(game);
+  repayLoan(game);
+  const copy = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  assert.deepEqual(copy.city.loan, game.city.loan);
 });

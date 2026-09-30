@@ -26,6 +26,8 @@
  *                    x CONFIG.THIEF_PEACE at once and, above 0, that month's gain
  *   protestPeaceEvery  every this many protests cost CONFIG.PROTEST_PEACE, then the
  *                    count starts again (0: protests never cost peace)
+ *   loanInterest     what a loan from Rome costs, over its whole term (0.2: 20%;
+ *                    sim/loans.js)
  *
  * Easy, Normal and Hard only use the first four levers plus raid size, crime
  * and crimePeace (and Easy a longer devolveDays); Insane pulls on all of them.
@@ -62,6 +64,7 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 6, // twice the grace: time for a market vendor or priest to come by
     crime: 0.5, // unrest seldom goes past a protest
     crimePeace: 0, protestPeaceEvery: 0,
+    loanInterest: 0.1,
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -72,6 +75,7 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 3,
     crime: 1,
     crimePeace: 1, protestPeaceEvery: 0,
+    loanInterest: 0.2,
   }),
   hard: Object.freeze({
     name: 'Hard',
@@ -82,6 +86,7 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 3,
     crime: 1.2,
     crimePeace: 2, protestPeaceEvery: 0,
+    loanInterest: 0.3,
   }),
   insane: Object.freeze({
     name: 'Insane',
@@ -94,6 +99,7 @@ export const DIFFICULTY = Object.freeze({
     devolveDays: 3,
     crime: 1.4,
     crimePeace: 3, protestPeaceEvery: 5,
+    loanInterest: 0.4,
   }),
 });
 

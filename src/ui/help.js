@@ -125,7 +125,7 @@ function content(tab) {
           h('li', {}, h('b', {}, 'Riots '), `(${CONFIG.RIOT_MOOD} or less, while the city's mood is under ${CONFIG.RIOT_CITY_MOOD}): the rioters burn their own home and march on the finest building nearby, setting fire to what they pass. Peace falls (${peaceByLevel(CONFIG.RIOT_PEACE)}), but the anger is spent: every home's mood rises by ${CONFIG.RIOT_MOOD_BOOST}.`)),
         h('p', {}, `The angrier the city, the likelier trouble is. A prefect passing a home halves the chance for ${CONFIG.POLICE_DAYS} days, and prefects and soldiers catch the criminals they meet; prefects on patrol chase thieves and rioters within ${CONFIG.HUNT_RANGE} tiles. The Crime overlay shows which homes are close to trouble and why. The first two campaign missions have no crime.`),
         h('h4', {}, 'Ratings'),
-        h('p', {}, 'Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content. Favor is the Emperor\'s opinion: pay tribute, answer his requests, avoid debt.'),
+        h('p', {}, 'Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content. Favor is the Emperor\'s opinion: pay tribute, answer his requests, avoid debt. In debt nothing can be built; Rome lends money (Finance advisor), repaid monthly with interest.'),
       ];
     }
     case 'military':

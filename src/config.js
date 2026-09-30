@@ -92,6 +92,8 @@ export const CONFIG = {
   CLEAR_TREE_COST: 2,
   CLEAR_RUBBLE_COST: 2,
   DEBT_LIMIT: 0, // cannot start construction when treasury is below this
+  LOAN_AMOUNT: 2000, // Rome lends this much (sim/loans.js)...
+  LOAN_MONTHS: 24, // ...repaid monthly over this many months, with the difficulty's loanInterest
 
   // --- Risk ----------------------------------------------------------------
   FIRE_THRESHOLD: 100,

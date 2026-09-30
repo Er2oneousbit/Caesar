@@ -69,6 +69,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | "Could not save: storage is full" | Delete old slots in *Load game* (each shows its size), or export them to files first. |
 | Slow when zoomed far out | Switch off *Ambient effects* and *Weather* in *Settings*. |
 | Night too dark, or rain distracting | Switch off *Day and night* or *Weather* in *Settings* (both are purely visual). |
+| In debt and cannot build | Ask Rome for a loan in the Finance advisor (F2): the money comes at once and is repaid monthly with interest. |
 | Tax income is falling | Click a home: its tax line says whether a tax collector has registered it, and for how long. A lone Forum's collector can wander off along the Imperial road; a second Forum, or roadblocks at the ends of your blocks, keep collectors on your streets. |
 | Fountains or baths ran dry | A reservoir may have collapsed. Keep reservoirs and wells within 2 tiles of a road so engineers can repair them (the game warns when you place one too far). |
 | Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Dock on its bank. Use land routes on maps without one. |

@@ -43,6 +43,7 @@ import { updateWater } from '../sim/water.js';
 import { updateDesirability } from '../sim/desirability.js';
 import { computeCityStats, computeSentiment, updateImmigration, updateEmigration, indexHomesByRoad } from '../sim/population.js';
 import { monthlyEconomy, yearlyEconomy, newLedger } from '../sim/economy.js';
+import { repayLoan } from '../sim/loans.js';
 import { newGodState, updateReligion } from '../sim/religion.js';
 import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
@@ -76,6 +77,7 @@ export function newCityState(scenario, funds) {
     unemployed: 0,
     unemploymentRate: 0,
     laborPriority: [],
+    loan: null, // a loan from Rome being repaid: { left, monthly } (sim/loans.js)
     laborByCat: {},
     sentiment: 60,
     sentimentFactors: {},
@@ -294,6 +296,7 @@ export class Game {
   onMonth() {
     for (const b of this.buildings.values()) if (b.house) consumeHouse(this, b);
     monthlyEconomy(this);
+    repayLoan(this);
     militaryMonthly(this);
     computeSentiment(this);
     updateHomeMoods(this); // after the month's city mood, which every home starts from

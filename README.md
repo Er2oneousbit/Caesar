@@ -84,11 +84,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 
 ## Bug reports
 
-Found a bug? [Open an issue](https://github.com/Er2oneousbit/Caesar/issues/new/choose) with the bug report form. Steps to reproduce, your browser, and a save file or crash report help most.
-
-Security problems: please report them privately, as described in [SECURITY.md](SECURITY.md).
-
-**This project does not take contributions.** Pull requests are closed automatically, and feature requests are not taken as issues. See [CONTRIBUTING.md](CONTRIBUTING.md). Under the MIT license you are free to fork it and make your own version.
+Found a bug? [Open an issue](https://github.com/Er2oneousbit/Caesar/issues/new/choose) with the bug report form. Steps to reproduce, your browser, and a save file or crash report help most.  Under the MIT license you are free to fork it and make your own version.
 
 ## License and credits
 

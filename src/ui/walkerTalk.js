@@ -3,7 +3,8 @@
  * ----------------------------------------------------------------------------
  * Who a walker is, what it is doing and what it has to say, for the info
  * panel when a walker is clicked. Citizens talk about what troubles the city
- * most (hunger, no work, taxes, raiders, fires, sickness, an angry god), or about
+ * most (Caesar's legions, raiders, hunger, fires, sickness, troops away at a
+ * distant battle, no work, taxes, an angry god), or about
  * their work when nothing does; newcomers, emigrants, foreign traders and
  * the city's criminals (protesters say what upsets their home) have lines of
  * their own. Every line is written for Colonia.
@@ -37,6 +38,8 @@ const CITY_LINES = Object.freeze({
   taxes: ['The tax collector takes more every month.', 'Taxes like these would make a senator weep.'],
   wages: ['The pay is thin this year.', 'A day\'s work hardly buys a loaf.'],
   raid: ['Raiders are coming, they say. I am keeping my door barred.', 'Where are the soldiers when you need them?'],
+  legion: ['Caesar\'s own legions, marching on us! What has the governor done?', 'They say the Emperor\'s soldiers make for the governor\'s house first. I would not live next door.', 'Romans against Romans. My grandfather would weep.'],
+  troops: ['Caesar wants our soldiers for a war far away. Who will guard the walls?', 'My son marched off with the legion. Pray he comes home.'],
   fire: ['Did you see the smoke? I hope the prefects are quick.', 'Another fire! This city needs more prefects.'],
   sick: ['There is fever in the next street. I am keeping the children indoors.', 'A whole family down the road has taken ill. Where is the physician?', 'They say the sickness came from those crowded rooms by the market.'],
   debt: ['They say the treasury is empty. How does a city run out of money?'],
@@ -112,10 +115,12 @@ function workLines(game, w) {
 export function cityTrouble(game) {
   const c = game.city;
   const mil = game.military;
+  if (mil && mil.caesar && (mil.caesar.army || mil.caesar.countdown > 0)) return 'legion'; // (sim/legion.js)
   if (mil && (mil.active || mil.warned)) return 'raid';
   if (c.population > 60 && c.fedShare < 0.85) return 'hunger';
   if (game.fires && game.fires.size > 0) return 'fire';
   if (anySick(game)) return 'sick';
+  if (mil && mil.battle && mil.battle.sent && mil.battle.phase !== 'foreign') return 'troops'; // troops away at a distant battle
   if (c.unemploymentRate > 0.12) return 'work';
   if (c.taxRate > CONFIG.DEFAULT_TAX_RATE + 2) return 'taxes';
   if (c.wage < CONFIG.BASE_WAGE) return 'wages';

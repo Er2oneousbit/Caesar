@@ -30,7 +30,8 @@
  *                    fountain | well | decor | hospital | house | dock |
  *                    barracks | fort | tower | shipyard | wharf | part |
  *                    navalia | station | military_academy | portus |
- *                    residence (the governor's)
+ *                    residence (the governor's) | arch (a triumphal arch,
+ *                    built across a road)
  *   span           sections in a row along the map's x axis (the hippodrome:
  *                  3 of size x size). The first is the building itself, the
  *                  others are `part` buildings linked to it (sim/linked.js)
@@ -356,6 +357,16 @@ export const BUILDINGS = Object.freeze({
     name: 'Grand Statue', category: 'government', kind: 'decor', cost: 160, size: 3, needsRoad: false,
     des: [14, 2, -2, 7], fire: 0, damage: 0,
     desc: 'A towering tribute. Raises desirability across a wide area.',
+  }),
+  // The original's reward for a distant battle won (sim/battle.js): free, one
+  // for each victory, built across a straight road (the road runs on through
+  // its middle, sim/construction.js checkArch). Desirability rings of 18, 18,
+  // 15, 15, 12: the falling reading of the original's numbers, whose step
+  // was printed with a rising sign no other monument has.
+  triumphal_arch: B({
+    name: 'Triumphal Arch', category: 'government', kind: 'arch', cost: 0, size: 3, needsRoad: false,
+    des: [18, 2, -3, 5], fire: 0, damage: 0, hp: 1200,
+    desc: 'Granted by Caesar for a distant battle won: one arch for each victory, at no cost. Build it across a straight road, which runs on under it. Raises desirability over a wide area. A lost arch may be built again.',
   }),
 
   // --- Engineering & security --------------------------------------------

@@ -12,6 +12,7 @@ import { CATEGORIES, BUILDINGS, TOOLS, LABOR_CATEGORIES, buildingsInCategory } f
 import { iconCanvas } from './icons.js';
 import { Minimap } from '../render/minimap.js';
 import { planNoRoadWarning } from '../sim/construction.js';
+import { archesToBuild } from '../sim/battle.js';
 
 export class Sidebar {
   constructor(app, root) {
@@ -76,13 +77,16 @@ export class Sidebar {
   renderList() {
     const g = this.app.game;
     const cat = CATEGORIES.find((c) => c.key === this.category);
-    const items = buildingsInCategory(this.category);
+    // A triumphal arch shows only while one is there to build (one for each
+    // distant battle won, sim/battle.js), as the original's did.
+    const items = buildingsInCategory(this.category).filter(({ key, def }) => def.kind !== 'arch' || (g && g.isUnlocked(key)));
+    this.archSig = g ? archesToBuild(g) : 0;
     const current = this.app.input ? this.app.input.tool : null;
     mount(this.listEl,
       h('div', { class: 'build-cat-title' }, cat ? cat.name : ''),
       items.map(({ key, def }) => {
         const unlocked = !g || g.isUnlocked(key);
-        const cost = def.cost ? `${def.cost} Dn` : '';
+        const cost = def.kind === 'arch' ? `Free (${this.archSig})` : def.cost ? `${def.cost} Dn` : '';
         return h('button', {
           class: `build-item${current === key ? ' active' : ''}${unlocked ? '' : ' locked'}`,
           title: unlocked ? def.desc : 'Not available in this scenario',
@@ -139,5 +143,7 @@ export class Sidebar {
     if (!g) return;
     this.minimap.draw(g, this.app.renderer.camera, now);
     this.undoBtn.disabled = !this.app.canUndo();
+    // An arch earned or built: the Government list shows it, or stops showing it.
+    if (this.category === 'government' && archesToBuild(g) !== this.archSig) this.renderList();
   }
 }

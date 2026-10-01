@@ -31,6 +31,14 @@
  *                    (December to Februarius): 2 = half as many visits (sim/trade.js)
  *   loanInterest     what a loan from Rome costs, over its whole term (0.2: 20%;
  *                    sim/loans.js)
+ *   legionHalt,      favor bands for Caesar's legions on the map (sim/legion.js,
+ *   legionHome       in points, not multipliers): at legionHome or more they
+ *                    march home, at legionHalt or more (in the siege's first
+ *                    year) they halt where they stand, below it they attack.
+ *                    The original's bands came in the wrong order (high favor
+ *                    only halted them); these are the sane order, with the
+ *                    later community engine's numbers per level. The army's
+ *                    size scales with raidSize (CONFIG.LEGION_SIZES).
  *
  * Easy, Normal and Hard only use the first four levers plus raid size, crime,
  * crimePeace and disease (and Easy a longer devolveDays); Insane pulls on all
@@ -70,6 +78,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 0, protestPeaceEvery: 0,
     disease: 0.5, // an outbreak is rare
     loanInterest: 0.1,
+    legionHalt: 17, legionHome: 22,
     winterTrade: 1,
   }),
   normal: Object.freeze({
@@ -83,6 +92,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 1, protestPeaceEvery: 0,
     disease: 1,
     loanInterest: 0.2,
+    legionHalt: 18, legionHome: 24,
     winterTrade: 1,
   }),
   hard: Object.freeze({
@@ -96,6 +106,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 2, protestPeaceEvery: 0,
     disease: 1.3,
     loanInterest: 0.3,
+    legionHalt: 20, legionHome: 27,
     winterTrade: 1,
   }),
   insane: Object.freeze({
@@ -111,6 +122,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 3, protestPeaceEvery: 5,
     disease: 1.5,
     loanInterest: 0.4,
+    legionHalt: 22, legionHome: 30,
     winterTrade: 2, // winter roads and seas halve trade
   }),
 });

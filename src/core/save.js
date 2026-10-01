@@ -100,6 +100,18 @@
  *      neither rewards nor punishes it), and a gift still cooling down
  *      counts as one gift sent that many months ago, see
  *      upgradeGovernorV12().
+ *  14  Caesar's legions, distant battles and triumphal arches (favor 0 no
+ *      longer recalls the governor): military.caesar (sim/legion.js: the
+ *      legions' march, the army on the map, the count of attacks; imperial
+ *      legionaries are units with `legion` and `waitTicks`), military.battle
+ *      and military.battles (sim/battle.js: a call for troops, the troops
+ *      away and their records), each fort's and station's Empire service
+ *      switch (`service`), men and ships on their way out (`away`,
+ *      `awayTick`), city.archesEarned, and triumphal arches (`axis`). Older
+ *      saves load with no legions coming, no battle, no arches earned and
+ *      every switch off; the population peak the overrun rule reads
+ *      (city.stats.peakPopulation) starts again at today's population. See
+ *      upgradeEmpireV13().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -128,6 +140,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
+import { newCaesarState } from '../sim/legion.js';
 import { log } from './debug.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
@@ -413,6 +426,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 11) upgradeNavyV10(game);
   if (data.version < 12) upgradeTrainingV11(game);
   if (data.version < 13) upgradeGovernorV12(game);
+  if (data.version < 14) upgradeEmpireV13(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -611,6 +625,36 @@ export function upgradeGovernorV12(game) {
     }
   }
   delete c.giftCooldown;
+}
+
+/**
+ * A save before version 14 (before Caesar's legions, distant battles and
+ * triumphal arches): no legions on the road or on the map and no attack so
+ * far, no battle asked for, no arch earned, and every fort's and station's
+ * Empire service switch off with nobody away. A city that had fallen to
+ * favor 0 or below simply goes on (the recall is gone): the daily check
+ * sets Caesar's legions marching if its favor is still 10 or less. The
+ * population peak the overrun rule reads (city.stats.peakPopulation, kept
+ * for the advisors since the first saves) starts again at today's
+ * population: a city that had shrunk before the rule existed is not lost to
+ * the first raid after loading.
+ */
+export function upgradeEmpireV13(game) {
+  const m = game.military;
+  if (m) {
+    m.caesar = newCaesarState();
+    m.battle = null;
+    m.battles = { won: 0, lost: 0, lastEndMonth: -999 };
+  }
+  const c = game.city;
+  c.archesEarned = 0;
+  c.stats = c.stats || {};
+  c.stats.peakPopulation = c.population || 0;
+  for (const b of game.buildings.values()) if (b.def.kind === 'fort' || b.def.kind === 'station') b.service = false;
+  for (const u of game.units.values()) {
+    u.away = false;
+    u.awayTick = 0;
+  }
 }
 
 /**

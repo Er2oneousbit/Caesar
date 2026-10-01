@@ -62,7 +62,7 @@ const HEIGHT = {
   oracle: 56, school: 44, library: 52, academy: 60, theater: 40, amphitheater: 46, colosseum: 70,
   actor_troupe: 44, gladiator_school: 40, menagerie: 40, forum: 46, senate: 84, garden: 30,
   governor_house: 52, governor_villa: 66, governor_palace: 104,
-  statue_small: 40, statue_medium: 64, statue_large: 90, engineer_post: 44, prefecture: 40,
+  statue_small: 40, statue_medium: 64, statue_large: 90, triumphal_arch: 82, engineer_post: 44, prefecture: 40,
   clay_pit: 30, timber_yard: 34, iron_mine: 40, marble_quarry: 40, market: 36, granary: 50, warehouse: 40,
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
   shipyard: 36, wharf: 30, hippodrome: 46, hippodrome_part: 46, chariot_maker: 34, navalia: 42, naval_station: 58,
@@ -77,7 +77,7 @@ const HEIGHT = {
 const SHADOW = {
   well: 0.15, fountain: 0.2, reservoir: 0.25, garden: 0.15, plaza: 0, market: 0.3, horse_ranch: 0.25,
   clay_pit: 0.08, iron_mine: 0.45, marble_quarry: 0.35, dock: 0.35, statue_small: 0.35, statue_medium: 0.6,
-  statue_large: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
+  statue_large: 0.9, triumphal_arch: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
   warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
   prefecture: 0.45, shipyard: 0.3, wharf: 0.25, hippodrome: 0.35, hippodrome_part: 0.35, chariot_maker: 0.45,
   navalia: 0.4, naval_station: 0.55, portus: 0.3, military_academy: 0.5, governor_house: 0.55, governor_villa: 0.75, governor_palace: 1.0,
@@ -1718,6 +1718,91 @@ function grandStatue(ctx, S) {
 }
 
 /**
+ * A triumphal arch (3x3), built across a road (`axis` 0: the road runs along
+ * x, 1: along y). Two marble piers with engaged columns stand either side of
+ * the road, which runs on under the vault (the middle strip is left
+ * unpainted so the road shows through); over them the attic, its
+ * inscription in gold on the face the road comes out of, and on top a
+ * gilded team of horses with the victor in his chariot.
+ */
+function triumphalArchArt(ctx, S, variant, axis) {
+  const H = 34; // the opening's height (px)
+  const A = 15; // the attic
+  const a0 = 0.85; // the arch's depth along the road...
+  const a1 = S - 0.85;
+  const marble = COL.marble;
+  const stone = shade(COL.marble, -0.08);
+  // Everything is drawn in (along the road, across it) and turned by axis.
+  const bx = (p0, p1, c0, c1, z, h, color, o) => (axis === 0 ? box(ctx, p0, c0, p1 - p0, c1 - c0, z, h, color, o) : box(ctx, c0, p0, c1 - c0, p1 - p0, z, h, color, o));
+  const pt = (p, c, z) => (axis === 0 ? P(p, c, z) : P(c, p, z));
+  const flat = (p0, p1, c0, c1, color) => (axis === 0 ? quad(ctx, p0, c0, p1, c1, 0, color) : quad(ctx, c0, p0, c1, p1, 0, color));
+  // paving either side of the road (the road itself shows through)
+  flat(0.05, S - 0.05, 0.05, 1.0, COL.paving);
+  flat(0.05, S - 0.05, 2.0, S - 0.05, COL.paving);
+  // the piers: a plinth, then the marble, the far one first
+  for (const [c0, c1] of [[0.15, 1.0], [2.0, S - 0.15]]) {
+    bx(a0, a1, c0, c1, 0, 3, shade(COL.stone, -0.05), { plain: true });
+    bx(a0 + 0.05, a1 - 0.05, c0 + 0.05, c1, 3, H - 3, marble, { plain: true });
+    // two engaged columns on the face the road comes out of
+    const p = a1 - 0.02;
+    const cs = [c0 + 0.22, c1 - 0.18];
+    for (const c of cs) {
+      const [x, y] = pt(p, c, 3);
+      ctx.fillStyle = shade(marble, axis === 0 ? -0.12 : 0.04);
+      ctx.fillRect(x - 1.6, y - (H - 6), 3.2, H - 6);
+      ctx.fillStyle = 'rgba(80,70,60,0.25)';
+      ctx.fillRect(x + 0.6, y - (H - 6), 1, H - 6);
+      ctx.fillStyle = shade(COL.gold, -0.1);
+      ctx.fillRect(x - 2.2, y - (H - 5), 4.4, 1.6); // capital
+    }
+  }
+  // the entablature, the attic and its cornice, over both piers and the road
+  bx(a0, a1, 0.15, S - 0.15, H, 3, stone, { plain: true });
+  bx(a0 + 0.05, a1 - 0.05, 0.2, S - 0.2, H + 3, A, marble, { plain: true });
+  bx(a0, a1, 0.15, S - 0.15, H + 3 + A, 2.2, stone, { plain: true });
+  // the vault: the arch's curve on the face the road comes out of
+  const face = a1 - 0.05;
+  const face2 = axis === 0 ? shade(marble, -0.2) : marble; // that face's light (box: right faces are darker)
+  const curve = [pt(face, 1.0, H), pt(face, 2.0, H), pt(face, 2.0, H - 12)];
+  for (let k = 1; k < 12; k++) {
+    const t = k / 12; // across the opening, from its near side back to its far side
+    const c = 2.0 - t;
+    curve.push(pt(face, c, H - 12 + Math.sin(Math.PI * t) * 9));
+  }
+  curve.push(pt(face, 1.0, H - 12));
+  poly(ctx, curve, face2, shade(marble, -0.45), 0.6);
+  // the keystone, and the inscription on the attic in gold
+  {
+    const [x, y] = pt(face, 1.5, H - 2.5);
+    ctx.fillStyle = shade(COL.gold, -0.1);
+    ctx.fillRect(x - 1.4, y - 2.5, 2.8, 3);
+  }
+  ctx.strokeStyle = 'rgba(176,132,42,0.85)';
+  ctx.lineWidth = 0.8;
+  for (let k = 0; k < 3; k++) {
+    const z = H + 3 + A - 4 - k * 4;
+    const p = pt(face, 0.55 + k * 0.08, z);
+    const q = pt(face, S - 0.55 - k * 0.08, z);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
+  // the gilded team on top, facing the way the road runs on
+  const top = H + 3 + A + 2.2;
+  const dir = axis === 0 ? 1 : -1;
+  for (const c of [1.25, 1.75]) {
+    const [x, y] = pt(S / 2, c, top);
+    horse(ctx, x, y, 1.15, COL.gold, dir, 0.2, shade(COL.gold, -0.35));
+  }
+  const [cx, cy] = pt(S / 2 - 0.45, 1.5, top);
+  ctx.fillStyle = shade(COL.gold, -0.18);
+  ctx.fillRect(cx - 3, cy - 5, 6, 5); // the chariot
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(cx - 1.1, cy - 13, 2.2, 8); // the victor
+  ctx.beginPath(); ctx.arc(cx, cy - 14.3, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3f7a3a';
+  ctx.fillRect(cx - 1.6, cy - 16.2, 3.2, 0.9); // his laurel
+}
+
+/**
  * The iron mine: a rocky hillside with a timber-framed entrance, a winding
  * frame over the shaft, rails, an ore cart, and a heap of red iron ore.
  */
@@ -2705,6 +2790,7 @@ const ART = {
   statue_small: statueArt,
   statue_medium: statueArt,
   statue_large: statueArt,
+  triumphal_arch: triumphalArchArt,
   engineer_post: engineerArt,
   prefecture: prefectureArt,
   clay_pit: clayPitArt,
@@ -2751,6 +2837,7 @@ export function artState(b, resting = false) {
   if (kind === 'shipyard') return (b.waterSide ?? 1) + 4 * (b.spareId || !(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2);
   if (kind === 'wharf') return (b.waterSide ?? 1) + 4 * ((b.stock?.fish || 0) > 0 ? 1 : 0); // baskets of fish on the deck
   if (kind === 'part') return b.section || 0; // a hippodrome's stretch of track
+  if (kind === 'arch') return b.axis || 0; // the way the road runs under it
   if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20)) + (resting ? 5 : 0);
   // Water works and what runs on piped water (the baths) show it: a full
   // pool, or a dry one (the baths were always drawn full, even out of a

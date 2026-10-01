@@ -347,10 +347,16 @@ export function victoryMenu(app) {
   ], 'narrow');
 }
 
+/** The defeat screen's advice: soldiers and people, the overrun rule's two halves (not favor, which no longer ends a game). */
+export function defeatTip() {
+  return `Tip: a city is lost when its invaders outnumber its soldiers (plus ${CONFIG.OVERRUN_MARGIN}) after most of its people are gone. Keep forts manned and towers staffed before raiders or Caesar's legions come, keep the people fed and housed, and win back the Emperor's favor before his legions arrive.`;
+}
+
 export function defeatMenu(app, reason) {
-  return modal('Recalled to Rome', [
+  // The only defeat is a city overrun (sim/legion.js checkOverrun).
+  return modal('The city has fallen', [
     h('p', {}, reason || 'Your governorship has ended.'),
-    h('p', { class: 'muted' }, 'Tip: keep the treasury out of debt, fulfill the Emperor\'s requests and send gifts when favor runs low.'),
+    h('p', { class: 'muted' }, defeatTip()),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.showModal(loadMenu(app)) }, 'Load a save'),
     h('button', { class: 'btn', onclick: () => app.restart() }, 'Try again'),

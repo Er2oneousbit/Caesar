@@ -41,7 +41,8 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, UPTOWN_GOODS } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, UPTOWN_GOODS } from '../src/dev/demoCity.js';
+import { launchLegion, legionCount, soldierCount, isOverrun } from '../src/sim/legion.js';
 import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
@@ -90,6 +91,10 @@ Options:
   --sea-raids <s>   on | off: the Sea raids switch (default on: some raids come by sea where ships can sail)
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
   --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
+  --legion <m>      Caesar's legions arrive at the start of month m (the size of a first attack, or
+                    --legion-size n), with favor held at 5 so they attack; a Governor's House goes up
+                    with the city. Reports the fight: men killed, soldiers lost, buildings lost, the
+                    residence, and whether the city was overrun (a mission's loss)
   --json            print a JSON summary at the end
   --pace            print the campaign's pace (the fewest months each goal takes) and exit
   --capacity        print what each mission's buildings can employ (sim/capacity.js) and exit
@@ -98,7 +103,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false, salary: false, academy: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -124,6 +129,8 @@ function parse(argv) {
     else if (a === '--navy') o.navy = true;
     else if (a === '--salary') o.salary = true;
     else if (a === '--academy') o.academy = true;
+    else if (a === '--legion') o.legion = Number(next());
+    else if (a === '--legion-size') o.legionSize = Number(next());
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
     else if (a === '--caretaker') o.caretaker = true;
@@ -197,6 +204,10 @@ if (opts.garrison) {
   const gar = buildDemoGarrison(game, res.center, { stock: true, academy: opts.academy });
   console.log(`Garrison: ${gar.forts.length} forts, barracks ${gar.barracks ? 'yes' : 'no'}, ${gar.towers.length} towers, ${gar.wall} wall tiles${opts.academy ? `, academy ${gar.academy ? 'yes' : 'no'}` : ''}`);
 }
+// --legion: a residence for Caesar's men to go for (built after everything
+// else, so a run without the flag is laid out exactly as before).
+const residence = opts.legion ? buildDemoResidence(game, res.center) : null;
+if (opts.legion) console.log(`Legion: Caesar's legions arrive in month ${opts.legion}; Governor's House ${residence ? `at ${residence.x},${residence.y}` : 'not built'}`);
 const fishery = opts.fishing > 0 ? buildDemoFishery(game, res.center, { wharves: opts.fishing }) : null;
 if (opts.navy) {
   const nv = buildDemoNavy(game, res.center, { stock: true, portus: opts.academy });
@@ -304,7 +315,18 @@ const funds = scenario.funds; // what this difficulty starts a player with
 const built = SIM_MONEY - game.city.treasury;
 const money = { funds, built, need: built, needMonth: 0, debtMonth: null };
 const treasuryByMonth = [];
+// --legion: when they came, how long the fight took, and a lost mission.
+const legion = { arrived: null, size: 0, soldiersBefore: 0, shipsBefore: 0, overrunMonth: null, endedMonth: null };
+game.events.on('defeat', () => { legion.overrunMonth ??= game.time.totalMonths; });
 for (let m = 0; m < opts.years * 12; m++) {
+  if (opts.legion && m === opts.legion) {
+    game.city.ratings.favor = 5;
+    legion.soldiersBefore = soldierCount(game);
+    const army = launchLegion(game, opts.legionSize || 0);
+    legion.arrived = army ? m : null;
+    legion.size = army ? army.size : 0;
+  }
+  if (legion.arrived !== null && legion.endedMonth === null && !game.military.caesar.army) legion.endedMonth = m;
   if (opts.harbor && m === 6) buildHarbor();
   if (cloth && opts.clothOff && m === opts.clothOff) clothOff();
   runMonth();
@@ -329,6 +351,12 @@ console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math
 const ms = game.military.stats;
 console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
 if (ms.seaRaids || opts.navy) console.log(`Sea: raids by sea ${ms.seaRaids || 0}, raider ships sunk ${ms.shipsSunk || 0}, liburnians built ${ms.shipsBuilt || 0}, lost ${ms.shipsLost || 0}, afloat ${[...game.units.values()].filter((u) => u.type === 'liburnian').length}, fishing boats sunk ${ms.boatsSunk || 0}`);
+if (opts.legion) {
+  const cs = game.military.caesar;
+  const res2 = residence ? (game.buildings.has(residence.id) ? 'standing' : 'destroyed') : 'none';
+  const left = cs.army ? `${legionCount(game)} of ${cs.army.size} still in the province (${cs.army.retreating ? 'leaving' : cs.army.halted ? 'halted' : 'attacking'})` : `gone by month ${legion.endedMonth ?? '-'}`;
+  console.log(`Legion: ${legion.arrived === null ? 'could not get in' : `${legion.size} arrived in month ${legion.arrived} against ${legion.soldiersBefore} soldiers`}; ${left}; attacks ${cs.stats.attacks}, destroyed ${cs.stats.beaten}, marched home ${cs.stats.withdrew}, legionaries slain ${cs.stats.slain}; soldiers lost ${ms.soldiersLost}; buildings lost to them ${cs.stats.buildingsLost || 0}; residence ${res2}; overrun ${legion.overrunMonth === null ? (isOverrun(game) ? 'now (no goals in a sandbox: not a loss)' : 'never') : `in month ${legion.overrunMonth} (mission lost)`}; peak population ${c.stats.peakPopulation}, now ${c.population}`);
+}
 if (opts.academy) {
   const t = trainedTotals(game);
   console.log(`Training: soldiers trained ${t.soldiersTrained} of ${t.soldiers} (${ms.soldiersTrained || 0} at the academy so far), crews trained ${t.shipsTrained} of ${t.ships} (${ms.crewsTrained || 0} at the Portus so far)`);

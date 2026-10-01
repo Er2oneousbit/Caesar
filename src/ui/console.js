@@ -16,6 +16,9 @@ import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
 import { squadronCounts, shipStatus } from '../sim/navy.js';
+import { startMarch, launchLegion, legionCount, siegeOrder } from '../sim/legion.js';
+import { requestTroops, fightBattle, archesToBuild } from '../sim/battle.js';
+import { THREATENED_CITIES } from '../data/battles.js';
 import { commitCrime, crimeChance, criminalsAbout, unhappiestHomes, crimeEnabled } from '../sim/crime.js';
 import { outbreak, sickHomes, riskiestHomes, diseaseEnabled } from '../sim/disease.js';
 import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
@@ -53,6 +56,11 @@ export const CONSOLE_HELP = [
   ['academy', 'Build a Military Academy near the city, and a Portus by the first Naval Station if there is one (they train only at full staff)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
+  ['legion', 'Caesar\'s legions set out from Rome now (they arrive in 12 months)'],
+  ['legion now [n]', 'Caesar\'s legions (n men; default: the next attack\'s size) arrive at the map entrance now'],
+  ['battle [city] [n]', 'Caesar calls for troops now: city placentia | ariminum | saguntum | messana, enemy strength n'],
+  ['battle now', 'Fight the pending distant battle now'],
+  ['arch', 'Grant a triumphal arch to build, as for a distant battle won'],
   ['army', 'List forts, naval stations, soldiers, ships, barracks and navalia stock and the raid schedule'],
   ['win', 'Trigger victory'],
   ['stats', 'Print city statistics'],
@@ -319,6 +327,43 @@ export class DebugConsole {
         app.renderer.camera.centerOnTile(inv.origin.x, inv.origin.y);
         if (sea && !inv.sea) return `No landing could be found, so a raid of ${inv.size} came by land from ${inv.origin.x},${inv.origin.y}.`;
         return inv.sea ? `Raid of ${inv.size} by sea in ${inv.ships} ship${inv.ships === 1 ? '' : 's'}, landing at ${inv.origin.x},${inv.origin.y}.` : `Raid of ${inv.size} launched from ${inv.origin.x},${inv.origin.y}.`;
+      }
+      case 'legion': {
+        // Caesar's legions (sim/legion.js): set them marching, or bring them now.
+        need();
+        const cs = g.military.caesar;
+        if (cs.army) return `Caesar's legions are already in the province: ${legionCount(g)} of ${cs.army.size} left.`;
+        if (args[0] === 'now') {
+          const n = args[1] ? Math.max(1, Math.min(150, Number(args[1]) || 0)) : 0;
+          const army = launchLegion(g, n);
+          if (!army) return 'The legions could not get in: the map entrance is shut in.';
+          app.renderer.camera.centerOnTile(g.map.entry.x, g.map.entry.y);
+          return `${army.size} imperial legionaries arrive at the map entrance (attack ${cs.attacks}).`;
+        }
+        if (cs.countdown > 0) return `Caesar's legions (${cs.size}) are already marching: ${cs.countdown} days to go. "legion now" brings them at once.`;
+        startMarch(g);
+        return `Caesar's legions (${cs.size}) set out from Rome: they arrive in ${cs.countdown} days. Favor ${Math.floor(g.city.ratings.favor)}: ${siegeOrder(g.difficulty, g.city.ratings.favor, 1)} on arrival.`;
+      }
+      case 'battle': {
+        // Distant battles (sim/battle.js): a call for troops now, or its battle now.
+        need();
+        const b = g.military.battle;
+        if (args[0] === 'now') {
+          if (!b || b.phase !== 'pending') return 'No battle is pending. "battle [city] [strength]" asks for troops.';
+          fightBattle(g);
+          return `The battle at ${THREATENED_CITIES[b.city].name} is fought: ${b.outcome}.`;
+        }
+        if (b) return `A battle is already going on (${THREATENED_CITIES[b.city].name}, ${b.phase}). "battle now" fights it.`;
+        const city = THREATENED_CITIES[args[0]] ? args[0] : 'placentia';
+        const strength = Math.max(1, Number(args[1]) || Number(args[0]) || 16);
+        requestTroops(g, city, strength);
+        return `Caesar asks for troops for ${THREATENED_CITIES[city].name} against strength ${strength}; the battle in ${g.military.battle.due - g.time.totalMonths} months. Cities: ${Object.keys(THREATENED_CITIES).join(', ')}.`;
+      }
+      case 'arch': {
+        need();
+        g.city.archesEarned = (g.city.archesEarned || 0) + 1;
+        app.ui.sidebar?.renderList?.();
+        return `A triumphal arch to build (Government & Decor, across a straight road): ${archesToBuild(g)} now.`;
       }
       case 'army': {
         need();

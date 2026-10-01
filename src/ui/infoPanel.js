@@ -44,6 +44,8 @@ import { lacksRoad } from '../sim/roadAccess.js';
 import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
 import { rankLine } from './governorInfo.js';
+import { awayOf } from '../sim/battle.js';
+import { serviceButton, serviceNote } from './empireInfo.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -95,6 +97,9 @@ const RUIN_WORDS = {
   collapse: 'collapsed',
   raid: 'torn down by raiders',
   raidWall: 'broken down by raiders',
+  legionFire: 'burned by Caesar\'s legions',
+  legion: 'torn down by Caesar\'s legions',
+  legionWall: 'broken down by Caesar\'s legions',
 };
 
 /**
@@ -552,11 +557,13 @@ export class InfoPanel {
           kv('Training', trainedText(g, b)),
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding the fort'),
-          kv('Pay', `${fmt(unit.upkeep * n)} Dn / month`),
+          awayOf(g, b.id).length ? kv('Away', `${awayOf(g, b.id).length} at a distant battle (their places are kept)`) : null,
+          kv('Pay', `${fmt(unit.upkeep * (n + awayOf(g, b.id).length))} Dn / month`),
           h('div', { class: 'muted' }, unit.desc),
           h('div', { class: 'row', style: { marginTop: '6px' } },
             h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the map where they should stand', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
-            h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallFort(g, b.id); this.render(); } }, '↩ Recall'))));
+            h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallFort(g, b.id); this.render(); } }, '↩ Recall'),
+            serviceButton(g, b, () => this.render()))));
         break;
       }
       case 'dock': {
@@ -618,11 +625,14 @@ export class InfoPanel {
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding the water at ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding its berths'),
           kv('Guards', `raider ships within ${b.rally ? CONFIG.STATION_GUARD_DEPLOYED : CONFIG.STATION_GUARD} tiles (chases ${CONFIG.STATION_CHASE} more)`),
-          kv('Pay', `${fmt(unit.upkeep * n)} Dn / month`),
+          awayOf(g, b.id).length ? kv('Away', `${awayOf(g, b.id).length} at a distant battle (their berths are kept)`) : null,
+          kv('Pay', `${fmt(unit.upkeep * (n + awayOf(g, b.id).length))} Dn / month`),
           h('div', { class: 'muted' }, unit.desc),
           h('div', { class: 'row', style: { marginTop: '6px' } },
             h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the water where they should go', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
-            h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, '↩ Recall'))));
+            h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, '↩ Recall'),
+            serviceButton(g, b, () => this.render())),
+          serviceNote(g, b) ? h('div', { class: 'muted', style: { fontSize: '12px' } }, serviceNote(g, b)) : null));
         break;
       }
       case 'military_academy':
@@ -656,6 +666,14 @@ export class InfoPanel {
       case 'decor': {
         const [v, , , r] = def.des;
         parts.push(sec('Beauty', kv('Desirability', `+${v} fading over ${r} tiles`)));
+        break;
+      }
+      case 'arch': {
+        const [v, , , r] = def.des;
+        parts.push(sec('Triumph',
+          kv('Desirability', `+${v} fading over ${r} tiles`),
+          kv('Arches earned', `${g.city.archesEarned || 0} (one for each distant battle won)`),
+          h('div', { class: 'muted' }, 'Granted by Caesar for a victory far away. The road runs on under it. If it is lost, it may be built again.')));
         break;
       }
       case 'residence': {

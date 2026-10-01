@@ -12,11 +12,16 @@
  *   travelers   a caravan or ship in the partner's color, partway along its
  *               route; a scouted warband as a banner with its size (in a
  *               boat when it comes by sea, sim/navy.js, out on the sea)
+ *   armies      Caesar's legions as a purple standard on the road from Rome;
+ *               a city Caesar asked troops for (a small walled square), the
+ *               enemy's line of march to it with its banner, and the
+ *               province's troops (a red standard) on their way there or home
  *
  * Travelers are drawn from timers the sim already keeps, never simulated:
- * a route's `nextVisit` day (sim/trade.js) and the raid schedule
- * `nextRaidMonth` with the scouts' `warned` report (sim/military.js). Nothing
- * here changes game state, so the map is safe to draw paused or not.
+ * a route's `nextVisit` day (sim/trade.js), the raid schedule
+ * `nextRaidMonth` with the scouts' `warned` report (sim/military.js), the
+ * legions' countdown (sim/legion.js) and the battle's months (sim/battle.js).
+ * Nothing here changes game state, so the map is safe to draw paused or not.
  *
  * All shapes are drawn in a 100 x 60 "map unit" space and scaled to the
  * canvas. The coasts, rivers, mountains and route lanes are real geography
@@ -32,6 +37,9 @@ import {
 } from '../data/empireGeo.js';
 import { routeKind, FIRST_VISIT_DAYS } from '../sim/trade.js';
 import { enemyCount } from '../sim/military.js';
+import { legionSummary, legionCount } from '../sim/legion.js';
+import { battleSummary } from '../sim/battle.js';
+import { THREATENED_CITIES, marchLine, enemyLine } from '../data/battles.js';
 
 export { MAP_W, MAP_H };
 const W = MAP_W;
@@ -234,8 +242,75 @@ export function empireTravelers(game) {
     out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, pos: warbandPoint(w.dir, frac, !!w.sea) });
   }
   if (m && m.active) {
-    const n = enemyCount(game);
+    const n = enemyCount(game) - legionCount(game); // (Caesar's men are shown apart, below)
     if (n > 0) out.push({ kind: 'raid', size: n, pos: [HOME_POS[0] + 2.6, HOME_POS[1] - 2.4] });
+  }
+  out.push(...empireArmies(game));
+  return out;
+}
+
+/** Where Caesar's legions stop on their way from Rome: this far (map units) short of the province. */
+const LEGION_NEAR = 2.5;
+
+/** A point `frac` of the way along a polyline (by length). */
+export function linePoint(pts, frac) {
+  let len = 0;
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const want = clamp01(frac) * len;
+  let i = 1;
+  while (i < pts.length - 1 && cum[i] < want) i++;
+  const seg = cum[i] - cum[i - 1];
+  const u = seg > 0 ? (want - cum[i - 1]) / seg : 0;
+  return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u];
+}
+
+/** The way from Rome to just short of the province, for Caesar's legions. */
+function legionRoad() {
+  const d = Math.hypot(ROME_POS[0] - HOME_POS[0], ROME_POS[1] - HOME_POS[1]) || 1;
+  const k = LEGION_NEAR / d;
+  return [ROME_POS, [HOME_POS[0] + (ROME_POS[0] - HOME_POS[0]) * k, HOME_POS[1] + (ROME_POS[1] - HOME_POS[1]) * k]];
+}
+
+/**
+ * Armies on the empire map, from the sim's own counters (sim/legion.js,
+ * sim/battle.js), never simulated here:
+ *   { kind: 'legion', size, months, frac, pos }   Caesar's legions marching
+ *       from Rome (`here`: on the map now, `state` attack | halted | leaving)
+ *   { kind: 'enemy', city, name, enemyName, months, pos }   the enemy closing on
+ *       a threatened city (`months` until the battle)
+ *   { kind: 'troops', city, name, strength, months, home, pos }   the
+ *       province's troops on their way there (or `home`, coming back)
+ */
+export function empireArmies(game) {
+  const out = [];
+  const ls = legionSummary(game);
+  if (ls.state === 'marching') {
+    const days = ls.days - game.time.tick / CONFIG.TICKS_PER_DAY;
+    const frac = clamp01(1 - days / (game.military.caesar.marchDays || CONFIG.LEGION_MARCH_DAYS));
+    out.push({ kind: 'legion', size: ls.size, months: ls.months, frac, pos: linePoint(legionRoad(), frac) });
+  } else if (ls.state !== 'none') {
+    out.push({ kind: 'legion', here: true, state: ls.state, size: ls.men, pos: [HOME_POS[0] - 2.6, HOME_POS[1] + 3.6] }); // (below and left of the province: its name is above it, raiders to its right)
+  }
+  const bs = battleSummary(game);
+  if (!bs) return out;
+  const part = nowMonths(game) - game.time.totalMonths; // how far into this month
+  if (bs.phase === 'pending') {
+    const left = Math.max(0, bs.monthsLeft - part);
+    const toGo = Math.max(0, Math.min(bs.enemyMonths, left - 1));
+    out.push({ kind: 'enemy', city: bs.city, name: bs.name, enemyName: bs.enemyName, months: bs.monthsLeft, pos: linePoint(enemyLine(bs.city), 1 - toGo / bs.enemyMonths) });
+    if (bs.sent) {
+      // Glide toward next month's place: two months a month while farther off than the enemy.
+      const s = bs.sent;
+      const nextEnemy = Math.max(0, Math.min(bs.enemyMonths, bs.monthsLeft - 2));
+      const step = s.toGo <= 1 ? 0 : s.toGo - 1 > nextEnemy ? 2 : 1;
+      const toGoF = Math.max(1, s.toGo - part * step);
+      out.push({ kind: 'troops', city: bs.city, name: bs.name, strength: s.strength, months: s.toGo, pos: linePoint(smoothLine(marchLine(bs.city)), 1 - toGoF / s.march) });
+    }
+  } else if (bs.phase === 'returning') {
+    const total = game.military.battle.homeTotal || bs.homeIn || 1;
+    const frac = clamp01(1 - (bs.homeIn - part) / total);
+    out.push({ kind: 'troops', city: bs.city, name: bs.name, home: true, months: bs.homeIn, pos: linePoint(smoothLine(marchLine(bs.city)).reverse(), frac) });
   }
   return out;
 }
@@ -251,6 +326,12 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 export function travelerLabel(t) {
   if (t.kind === 'warband') return `Warband of ${t.size} ${t.sea ? 'by sea ' : ''}from the ${t.dir}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
   if (t.kind === 'raid') return `Raiders in the province: ${t.size} left`;
+  if (t.kind === 'legion') {
+    if (!t.here) return `Caesar's legions (${t.size} men) marching from Rome, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
+    return `Caesar's legions in the province: ${t.size} left${t.state === 'halted' ? ', halted' : t.state === 'leaving' ? ', marching home' : ''}`;
+  }
+  if (t.kind === 'enemy') return `The army of ${t.enemyName} marching on ${t.name}: the battle ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'this month'}`;
+  if (t.kind === 'troops') return t.home ? `Your troops coming home from ${t.name}: ${plural(Math.max(1, t.months), 'month')}` : `Your troops (strength ${t.strength}) on the way to ${t.name}: ${t.months <= 1 ? 'there' : `${plural(t.months, 'month')} away`}`;
   const what = `${t.name} ${t.kind}`;
   const when = t.days > 0 ? plural(t.days, 'day') : 'arriving';
   return t.onWay ? `${what}: ${when}` : `${what}: ${when} (sets out in ${plural(t.days - t.trip, 'day')})`;
@@ -262,7 +343,7 @@ export function travelerLabel(t) {
  */
 export function figureCenter(t, k = 1) {
   const [x, y] = t.pos;
-  if (t.kind === 'warband' || t.kind === 'raid') return [x + 0.15 * k, y - 2.1 * k];
+  if (t.kind === 'warband' || t.kind === 'raid' || t.kind === 'legion' || t.kind === 'enemy' || t.kind === 'troops') return [x + 0.15 * k, y - 2.1 * k];
   if (t.kind === 'ship') return [x, y - 0.8 * k];
   return [x, y - 0.4 * k];
 }
@@ -286,6 +367,8 @@ export function empireHitAt(game, travelers, mx, my, radius, k = 1) {
     if (d <= bestD) { bestD = d; best = hit; }
   };
   for (const id of Object.keys(game.city.trade.routes)) if (TRADE_PARTNERS[id]) consider(TRADE_PARTNERS[id].pos, { kind: 'city', id });
+  const b = game.military?.battle;
+  if (b && THREATENED_CITIES[b.city]) consider(THREATENED_CITIES[b.city].pos, { kind: 'battle', id: b.city });
   consider(ROME_POS, { kind: 'rome' });
   consider(HOME_POS, { kind: 'home' });
   for (const t of travelers) if (isDrawn(t)) consider(figureCenter(t, k), { kind: 'traveler', t }, radius * 0.25);
@@ -350,12 +433,23 @@ export function drawEmpire(ctx, game, opts = {}) {
     drawCity(ctx, p.pos, null, p.color, r.open, false, k);
   }
   drawCity(ctx, HOME_POS, null, '#a8322b', true, true, k);
+  // A distant battle (sim/battle.js): the threatened city, the enemy's line
+  // of march and the province's road to it.
+  const bs = battleSummary(game);
+  if (bs) {
+    const pp = pxPerUnit ? Math.max(0.22, Math.min(0.45, 1.6 / pxPerUnit)) : 0.4;
+    dashed(ctx, enemyLine(bs.city), 'rgba(122,31,26,0.75)', pp, [0.9, 0.7]);
+    if (bs.phase !== 'foreign') dashed(ctx, smoothLine(marchLine(bs.city)), bs.sea ? 'rgba(31,95,153,0.8)' : 'rgba(168,50,43,0.8)', pp, [0.4, 0.5]);
+    drawBattleCity(ctx, THREATENED_CITIES[bs.city].pos, bs.phase === 'foreign', k);
+  }
   // Names last, each where it clashes with no other name or marker (Italy
   // is crowded: Rome, Capua and the province sit close together).
   const names = [
     { text: game.city.name || 'Your province', pos: HOME_POS, r: 2 * k, bold: true, sides: ['above', 'right', 'left', 'below'] },
     { text: 'Rome', pos: ROME_POS, r: 1.2 * k, bold: true, sides: ['left', 'below', 'right', 'above'] },
     ...Object.keys(routes).filter((id) => TRADE_PARTNERS[id]).map((id) => ({ text: TRADE_PARTNERS[id].name, pos: TRADE_PARTNERS[id].pos, r: 1.1 * k, bold: false, sides: ['above', 'below', 'right', 'left'] })),
+    // (The threatened city's name on the side away from the enemy coming at it.)
+    ...(bs ? [{ text: bs.name, pos: THREATENED_CITIES[bs.city].pos, r: 1.2 * k, bold: false, sides: enemyLine(bs.city)[0][1] > THREATENED_CITIES[bs.city].pos[1] ? ['above', 'right', 'left', 'below'] : ['below', 'right', 'left', 'above'] }] : []),
   ];
   placeLabels(ctx, names, k);
   for (const t of travelers) {
@@ -365,11 +459,79 @@ export function drawEmpire(ctx, game, opts = {}) {
     else if (t.kind === 'ship') drawShip(ctx, x, y + Math.sin(time * 2 + x) * 0.15, t.color, k);
     else if (t.kind === 'warband') drawBanner(ctx, x, y, t.size, k, false, !!t.sea);
     else if (t.kind === 'raid') drawBanner(ctx, x, y, t.size, k, true);
+    else if (t.kind === 'enemy') drawBanner(ctx, x, y, null, k, false);
+    else if (t.kind === 'legion') drawStandard(ctx, x, y, t.size, k, LEGION_COLOR, !!t.here);
+    else if (t.kind === 'troops') drawStandard(ctx, x, y, t.home ? null : t.strength, k, '#a8322b', false);
   }
   if (hover) {
-    const pos = hover.kind === 'traveler' ? figureCenter(hover.t, k) : hover.kind === 'city' ? TRADE_PARTNERS[hover.id].pos : hover.kind === 'rome' ? ROME_POS : HOME_POS;
+    const pos = hover.kind === 'traveler' ? figureCenter(hover.t, k) : hover.kind === 'city' ? TRADE_PARTNERS[hover.id].pos : hover.kind === 'battle' ? THREATENED_CITIES[hover.id].pos : hover.kind === 'rome' ? ROME_POS : HOME_POS;
     ring(ctx, pos, 2.6 * k, 'rgba(42,36,28,0.55)', true);
   }
+}
+
+/** Caesar's color on the map: the purple of Rome's marker. */
+const LEGION_COLOR = '#6d2a6b';
+
+/** A dashed line through `pts`, about `w` map units wide. */
+function dashed(ctx, pts, color, w, dash) {
+  linePath(ctx, pts);
+  ctx.setLineDash(dash);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w;
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/**
+ * A city Caesar asked troops for: a small walled square, white with a red
+ * rim while it holds, dark in the enemy's hands.
+ */
+export function drawBattleCity(ctx, pos, lost, k = 1) {
+  const [x, y] = pos;
+  const s = 1 * k;
+  ctx.fillStyle = lost ? '#3a2a22' : '#f1ece2';
+  ctx.strokeStyle = lost ? '#1c140c' : '#a8322b';
+  ctx.lineWidth = 0.4;
+  ctx.fillRect(x - s, y - s, s * 2, s * 2);
+  ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+  // battlements
+  ctx.fillStyle = ctx.strokeStyle;
+  for (const dx of [-0.75, 0, 0.75]) ctx.fillRect(x + dx * s - 0.22 * s, y - s - 0.45 * s, 0.44 * s, 0.45 * s);
+}
+
+/**
+ * A Roman standard: a pole crowned with a gilded eagle, and a square cloth
+ * in `color` with a number on it (Caesar's legions: their men; your troops:
+ * their strength). `here`: in the province now (drawn a little larger).
+ */
+export function drawStandard(ctx, x, y, n, k = 1, color = LEGION_COLOR, here = false) {
+  ctx.save();
+  ctx.translate(x, y);
+  const s = k * (here ? 1.15 : 1);
+  ctx.scale(s, s);
+  ctx.fillStyle = '#3a2a1a';
+  ctx.fillRect(-0.12, -4.2, 0.25, 4.6); // pole
+  ctx.fillStyle = '#d6ab3c'; // the eagle: wings spread over the pole
+  ctx.beginPath();
+  ctx.moveTo(-1.3, -4.4); ctx.lineTo(0, -4.0); ctx.lineTo(1.3, -4.4); ctx.lineTo(0.5, -3.7); ctx.lineTo(-0.5, -3.7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); ctx.arc(0, -4.55, 0.35, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#1c140c';
+  ctx.lineWidth = 0.18;
+  ctx.fillRect(-1.6, -3.4, 3.2, 2.5);
+  ctx.strokeRect(-1.6, -3.4, 3.2, 2.5);
+  ctx.fillStyle = '#d6ab3c';
+  ctx.fillRect(-1.6, -1.05, 3.2, 0.25); // fringe
+  if (n !== undefined && n !== null) {
+    ctx.font = 'bold 1.6px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff4dc';
+    ctx.fillText(String(n), 0, -1.6);
+  }
+  ctx.restore();
 }
 
 /** A closed polygon as a path (appended to the current path). */

@@ -15,11 +15,13 @@
  *   4. on a new day:   labor, no-road notices, water, desirability, city
  *                      stats, entertainment base, wine sources, mid-month
  *                      goods use, immigration, fires, sick homes, home moods
- *                      (day 8), trade, raid progress
+ *                      (day 8), trade, raid progress, Caesar's legions (their
+ *                      march, the siege) and the check for a city overrun
  *   5. on a new month: consumption, finances, army pay, the governor's
  *                      salary, raid warnings, city mood, home moods,
- *                      religion, ratings, city health, Emperor (and the
- *                      count of recent gifts), farm season notice
+ *                      religion, ratings, city health, Emperor, distant
+ *                      battles, farm season notice, the count of recent
+ *                      gifts, the victory check
  *   6. on a new year:  tribute, ledger rollover, the salary's favor, trade
  *                      quotas, crime and disease counts
  *   7. on a new day, after all that: the crime roll
@@ -59,6 +61,8 @@ import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '..
 import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
 import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
+import { caesarDaily } from '../sim/legion.js';
+import { battleMonthly, archesToBuild } from '../sim/battle.js';
 import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
 import { closeGoodsMonth } from '../sim/goodsLedger.js';
 import { updateHomeMoods } from '../sim/mood.js';
@@ -109,6 +113,7 @@ export function newCityState(scenario, funds, savings = 0) {
     request: null,
     nextRequestMonth: CONFIG.FIRST_REQUEST_MONTHS[0], // set by scheduleNextRequest for a new game
     governor: newGovernorState(scenario, savings), // rank, salary, personal savings (sim/governor.js)
+    archesEarned: 0, // triumphal arches granted for distant battles won (sim/battle.js)
     gifts: newGiftState(), // gifts to the Emperor within the last year (sim/emperor.js)
     produced: {},
     foodFlow: { harvested: 0, stored: 0, toMarket: 0, sold: 0, eaten: 0, shortfall: 0 },
@@ -197,6 +202,9 @@ export class Game {
   /** Can the player build this building/tool in the current scenario? */
   isUnlocked(key) {
     if (key === 'clear') return true;
+    // A triumphal arch is never unlocked by a mission: Caesar grants one for
+    // each distant battle won (sim/battle.js), whatever the scenario allows.
+    if (BUILDINGS[key]?.kind === 'arch') return archesToBuild(this) > 0;
     if (this.flags.unlockall || this.scenario.unlocks === 'all') return true;
     return this.unlockedSet.has(key);
   }
@@ -321,6 +329,7 @@ export class Game {
     if (this.time.day === CONFIG.MOOD_MIDMONTH_DAY) updateHomeMoods(this); // day 0's runs in onMonth
     updateTrade(this);
     militaryDaily(this);
+    caesarDaily(this); // Caesar's legions, and the loss of a city overrun (sim/legion.js)
     this.events.emit('day', this.time);
   }
 
@@ -339,6 +348,7 @@ export class Game {
     this.city.crime.month = false; // the peace rating has read it
     updateCityHealth(this);
     updateEmperor(this);
+    battleMonthly(this); // Caesar's calls for troops and the distant battles (sim/battle.js)
     farmSeasonNotice(this); // Insane: the farms stop in winter
     const c = this.city;
     c.foodFlowLast = { ...c.foodFlow };

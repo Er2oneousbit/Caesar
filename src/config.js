@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.13.4',
-  SAVE_VERSION: 13, // v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v12 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 14, // v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v13 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -352,6 +352,49 @@ export const CONFIG = {
   REQUEST_MIN_POP: 500, // ...and not before the city has this many people (was 150, then 400)
   REQUEST_DEADLINE_MONTHS: 12,
   FAVOR_START: 50,
+
+  // --- Caesar's legions (sim/legion.js) -------------------------------------
+  // The original's teeth for a governor out of favor: no recall at 0, but an
+  // army. Checked daily: favor at LEGION_FAVOR or less, with no attack already
+  // coming or on the map, warns the governor and sets the legions marching.
+  LEGION_FAVOR: 10,
+  LEGION_MARCH_DAYS: 192, // 12 months on the road from Rome; recovering favor does not stop them, only what they do on arrival
+  // Men in the first, second, third and every later attack: the original's
+  // 32 / 64 / 96 / 144 halved for Colonia's 8-man forts, x the difficulty's
+  // raidSize, at most LEGION_MAX.
+  LEGION_SIZES: [16, 32, 48, 72],
+  LEGION_MAX: 75,
+  LEGION_HALT_DAYS: 192, // the middle favor band halts the army only in its siege's first year; after that it fights on
+  LEGION_RESPECT: 10, // favor when the army is destroyed (never when it marches home)
+  LEGION_CAMP_DAYS: 4, // an army with nothing it can reach for this long goes home
+  LEGION_MAX_DAYS: 384, // ...and any army after two years in the province, whatever holds it there
+  LEGION_BREAK_COST: 20, // how much the legions' route finding dislikes breaking through a building that is not their target (a wall: 14)
+  // The mission is lost when the city is overrun: more invaders (Caesar's
+  // men and raiders) than the province's soldiers plus OVERRUN_MARGIN, while
+  // the population is under OVERRUN_SHARE of its peak. The original's rule.
+  OVERRUN_MARGIN: 2,
+  OVERRUN_SHARE: 0.25,
+
+  // --- Distant battles (sim/battle.js; the cities: data/battles.js) ----------
+  // Caesar asks for troops; the battle is fought BATTLE_MONTHS later. Troops
+  // more than BATTLE_IN_TIME months away when it comes arrive too late.
+  BATTLE_MONTHS: 24,
+  BATTLE_IN_TIME: 2,
+  BATTLE_FAVOR: { won: 25, weak: -10, late: -25, none: -50 },
+  BATTLE_FOREIGN_MONTHS: 24, // a lost city is in enemy hands this long (no new request meanwhile)
+  // Losses on a win by the advantage 100 x (Rome - enemy) / Rome: [advantage
+  // up to, share lost]. The original's table; its 5% and 0% rows could never
+  // be reached (the advantage stays under 100 while the enemy has any
+  // strength), so they are left out.
+  BATTLE_LOSSES: [[9, 0.7], [24, 0.5], [49, 0.25], [74, 0.15], [Infinity, 0.1]],
+  BATTLE_MONTH_UNITS: 4, // map units of the empire map an army covers in a month (data/battles.js paths)
+  BATTLE_MIN_MONTHS: 3, // the shortest march to a threatened city
+  // The sandbox (raids on): from SANDBOX_BATTLE_FROM months, a request each
+  // month with SANDBOX_BATTLE_CHANCE (about one every three years), at least
+  // SANDBOX_BATTLE_GAP months after the last one ended.
+  SANDBOX_BATTLE_FROM: 24,
+  SANDBOX_BATTLE_CHANCE: 1 / 36,
+  SANDBOX_BATTLE_GAP: 12,
 };
 
 /** Derived constants (computed once, never edit these directly). */

@@ -111,14 +111,14 @@ export function goalStatus(game) {
   return rows;
 }
 
-/** Monthly: victory / defeat checks. */
+/**
+ * Monthly: the victory check. There is no defeat here: favor at 0 no longer
+ * recalls the governor. A city out of favor gets Caesar's legions, and a
+ * mission is lost only when its city is overrun (sim/legion.js).
+ */
 export function checkOutcome(game) {
   const c = game.city;
-  if (c.ratings.favor <= 0 && !c.defeat) {
-    c.defeat = true;
-    game.events.emit('defeat', { reason: 'The Emperor has lost all faith in you and sent a replacement governor.' });
-    return;
-  }
+  if (c.defeat) return;
   const rows = goalStatus(game);
   if (rows.length > 0 && !c.victory && rows.every((r) => r.ok)) {
     c.victory = true;

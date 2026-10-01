@@ -73,6 +73,17 @@ export const UNIT_TYPES = Object.freeze({
     speed: 0.075, cooldown: 28, siege: 4, ranged: true,
     desc: 'Hurls stones from behind the warband.',
   },
+  // --- Caesar's legions (sim/legion.js) -------------------------------------------
+  // The army Caesar sends against a governor whose favor collapsed. Stronger
+  // than the province's own legionary in the proportion the original's
+  // imperial legionary was to its own (about +30% attack, +2 defense, the same
+  // health). The difficulty's raid size scales how many come, never how hard
+  // each one hits (sim/military.js enemyPower).
+  imperial: {
+    name: 'Imperial Legionary', side: 'enemy', color: '#6d2a6b', hp: 110, attack: 18, defense: 11, range: 1.1, aggro: 6,
+    speed: 0.07, cooldown: 20, siege: 12,
+    desc: 'One of Caesar\'s own legionaries, sent to punish a governor who lost the Emperor\'s favor. Better armed than your soldiers.',
+  },
   // --- Ships (naval: they sail navigable water only, see sim/navy.js) ------------
   // A liburnian beats one raider ship; five raider ships beat one liburnian.
   //   ram  damage of a ram strike on a ship within RAM_REACH (every RAM_COOLDOWN ticks)

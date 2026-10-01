@@ -584,6 +584,15 @@ export function buildDemoGarrison(game, center, opts = {}) {
 }
 
 /**
+ * The governor's house near the city's middle (simulate.mjs --legion, tests:
+ * Caesar's legions go for it first). @returns {object|null} the house
+ */
+export function buildDemoResidence(game, center) {
+  if (!game.isUnlocked('governor_house')) return null;
+  return placeNear(game, 'governor_house', 3, center, 4, 26);
+}
+
+/**
  * A Military Academy near the city, joined by road to the network that
  * reaches the map entry (the console's `academy`, simulate.mjs --academy,
  * tests). @returns {object|null} the academy

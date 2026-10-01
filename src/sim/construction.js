@@ -36,6 +36,7 @@ import { dockBerth } from './trade.js';
 import { waterBeside } from './fishing.js';
 import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 import { residenceOf } from './governor.js';
+import { archesToBuild } from './battle.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -80,6 +81,7 @@ export function checkBuilding(game, type, x, y) {
   const def = BUILDINGS[type];
   const fail = (reason, cost = def ? def.cost : 0) => ({ ok: false, reason, cost, warnings: [] });
   if (!def) return fail('Unknown building');
+  if (def.kind === 'arch') return checkArch(game, type, x, y);
   if (!game.isUnlocked(type) || !def.category) return fail('Not available in this scenario');
   const { map } = game;
   const S = def.size;
@@ -178,6 +180,63 @@ export function checkBuilding(game, type, x, y) {
     out.warnings.push('No Chariot Maker yet: build one, connected by road, to start the races');
   }
   return out;
+}
+
+/**
+ * A triumphal arch with its top-left corner at (x, y): free, one for each
+ * distant battle won (sim/battle.js archesToBuild), and built across a
+ * straight road the way a gate is cut through a wall. Its middle row (the
+ * road runs along x, `axis` 0) or middle column (along y, `axis` 1) must be
+ * plain road from side to side, which it keeps; its other six tiles must be
+ * open land, with no road (an arch over a junction or a road two wide would
+ * cut the streets beside it). The Imperial road's entrance is never built
+ * over. @returns the checkBuilding result, with `axis`
+ */
+export function checkArch(game, type, x, y) {
+  const def = BUILDINGS[type];
+  const fail = (reason) => ({ ok: false, reason, cost: 0, warnings: [] });
+  if (archesToBuild(game) <= 0) return fail('No arch to build: Caesar grants one for each distant battle won');
+  const { map } = game;
+  const S = def.size;
+  const mid = Math.floor(S / 2);
+  const plainRoad = (tx, ty) => map.inBounds(tx, ty) && map.road[map.idx(tx, ty)] === Road.ROAD;
+  let alongX = true;
+  let alongY = true;
+  for (let d = 0; d < S; d++) {
+    if (!plainRoad(x + d, y + mid)) alongX = false;
+    if (!plainRoad(x + mid, y + d)) alongY = false;
+  }
+  if (!alongX && !alongY) return fail('Build it across a straight road: the road must run through its middle from one side to the other');
+  const axis = alongX ? 0 : 1;
+  let trees = 0;
+  let rubble = 0;
+  for (let dy = 0; dy < S; dy++) {
+    for (let dx = 0; dx < S; dx++) {
+      const tx = x + dx;
+      const ty = y + dy;
+      if (!map.inBounds(tx, ty)) return fail('Outside the map');
+      const i = map.idx(tx, ty);
+      const t = map.terrain[i];
+      const onRoad = axis === 0 ? dy === mid : dx === mid;
+      if (t === Terrain.WATER) return fail('Cannot build on water');
+      if (t === Terrain.ROCK) return fail('Cannot build on rocks');
+      if (map.building[i]) return fail('Something is already built here');
+      if (map.aqueduct[i]) return fail('An aqueduct is in the way');
+      if (map.wall[i]) return fail('A wall is in the way');
+      if (game.fires.has(i)) return fail('The ground is on fire!');
+      if (onRoad) {
+        if (map.roadblock[i]) return fail('A roadblock is in the way');
+        if (map.fixedRoad[i]) return fail('Not over the Imperial road\'s entrance');
+      } else {
+        if (map.road[i]) return fail('Only the road through its middle may cross it: no road beside it, and not at a crossroads');
+        if (t === Terrain.TREES) trees++;
+        if (map.rubble[i]) rubble++;
+      }
+    }
+  }
+  const cost = def.cost + trees * CONFIG.CLEAR_TREE_COST + rubble * CONFIG.CLEAR_RUBBLE_COST;
+  if (!canAfford(game, cost)) return fail('Not enough money');
+  return { ok: true, cost, warnings: [], trees, rubble, axis };
 }
 
 /** How many buildings of this type the city has. */
@@ -400,6 +459,7 @@ export function checkRoadblock(game, x, y) {
   if (map.road[i] === Road.BRIDGE) return fail('Not on a bridge');
   if (map.wall[i]) return fail('Not in a gate');
   if (map.aqueduct[i]) return fail('Not under an aqueduct');
+  if (map.building[i]) return fail('Not under a building (an arch keeps its road clear)');
   if (!canAfford(game, cost)) return fail('Not enough money');
   return { ok: true, cost };
 }
@@ -427,7 +487,7 @@ function planPlaza(game, x0, y0, x1, y1) {
   if (!game.isUnlocked('plaza')) return { tool: 'plaza', kind: 'area', items, cost: 0, count: 0, warnings: [], reason: 'Not available in this scenario' };
   for (const [x, y] of rectTiles(map, x0, y0, x1, y1)) {
     const i = map.idx(x, y);
-    if (map.road[i] !== Road.ROAD || map.wall[i]) continue; // only plain roads (not gates) can be paved
+    if (map.road[i] !== Road.ROAD || map.wall[i] || map.building[i]) continue; // only plain roads (not gates, nor the road under an arch) can be paved
     const ok = unit <= budget;
     if (ok) { budget -= unit; cost += unit; count++; }
     items.push({ x, y, size: 1, ok, reason: ok ? null : 'Not enough money', cost: unit });
@@ -655,6 +715,7 @@ export function applyPlan(game, plan) {
         }
       }
       const b = addBuilding(game, plan.tool, it.x, it.y);
+      if (chk.axis !== undefined) b.axis = chk.axis; // a triumphal arch: the way its road runs (art, sim/battle.js)
       if (b.def.placement === 'shore') dockBerth(game, b); // berth + which side faces the water (docks, the navalia, naval stations)
       if (b.def.placement === 'fishingShore') waterBeside(game, b); // slip or mooring + which side faces the water
       undo.ops.push({ op: 'building', id: b.id, tiles });

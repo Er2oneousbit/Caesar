@@ -44,6 +44,8 @@ import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 import { seaRaidPlan, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
 import { recruitDetour, recruitTrained, updateDrill, drillSpot, drilled, endDrill, abandonDrill } from './training.js';
+import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
+import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICKS } from './battle.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -93,6 +95,9 @@ export function newMilitaryState(scenario, time, flags = {}) {
     // choice for a new mission) wins over the scenario.
     seaRaids: flags.searaids === 'off' ? false : flags.searaids === 'on' ? true : scenario.seaRaids !== false,
     stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
+    caesar: newCaesarState(), // Caesar's legions (sim/legion.js)
+    battle: null, // a distant battle Caesar asked troops for (sim/battle.js)
+    battles: { won: 0, lost: 0, lastEndMonth: -999 },
   };
 }
 
@@ -168,7 +173,12 @@ export function removeUnit(game, u, cause = 'died') {
       game.events.emit('sound', { name: 'splash' });
     } else if (u.side === 'enemy') {
       st.enemiesKilled++;
-      if (mine) inv.killed++;
+      if (u.legion) {
+        // One of Caesar's men (sim/legion.js): his army's count, not a raid's.
+        const cs = game.military.caesar;
+        if (cs && cs.army && cs.army.id === u.legion) cs.army.killed++;
+        if (cs) cs.stats.slain++;
+      } else if (mine) inv.killed++;
     } else {
       st.soldiersLost++;
     }
@@ -393,7 +403,11 @@ function postOf(game, u, fort) {
 export function disbandFort(game, fort) {
   const men = unitsOfFort(game, fort.id);
   for (const u of men) removeUnit(game, u, 'disbanded');
-  if (men.length) game.message(`With the ${fort.def.name} gone, its ${men.length} soldier${men.length === 1 ? '' : 's'} disbanded.`, 'warn', fort.x, fort.y);
+  const away = dropAway(game, fort.id); // (at a distant battle: released there, sim/battle.js)
+  const parts = [];
+  if (men.length) parts.push(`its ${men.length} soldier${men.length === 1 ? '' : 's'} disbanded`);
+  if (away) parts.push(`the ${away} away at a distant battle ${away === 1 ? 'is' : 'are'} released from service and will not come back`);
+  if (parts.length) game.message(`With the ${fort.def.name} gone, ${parts.join(', and ')}.`, 'warn', fort.x, fort.y);
 }
 
 /** Send a fort's soldiers to a tile (they hold there and defend it). */
@@ -438,9 +452,10 @@ export function updateDemand(game) {
   updateNavalDemand(game); // the fleet's timber, iron and linen (sim/navy.js)
   const demand = { weapons: 0, arrows: 0, horses: 0 };
   const counts = garrisonCounts(game);
+  const away = awayCounts(game); // men at a distant battle keep their places (sim/battle.js)
   for (const f of game.buildings.values()) {
     if (f.def.kind !== 'fort') continue;
-    const room = FORT_CAPACITY - (counts.get(f.id) || 0) - (f.recruiting || 0);
+    const room = FORT_CAPACITY - (counts.get(f.id) || 0) - (away.get(f.id) || 0) - (f.recruiting || 0);
     if (room <= 0) continue;
     for (const [good, n] of Object.entries(RECRUIT_COST[f.def.unit] || {})) demand[good] = (demand[good] || 0) + n * room;
   }
@@ -479,12 +494,14 @@ export function updateBarracks(game, b) {
   if (b.trainProgress < 100) b.trainProgress = Math.min(100, b.trainProgress + (b.efficiency * 100) / TRAIN_DAYS);
   if (b.trainProgress < 100) { b.blocked = ''; return; }
 
-  // Forts that still have room, emptiest first.
+  // Forts that still have room, emptiest first. A fort whose men are away at
+  // a distant battle keeps their places for them (sim/battle.js).
   const counts = garrisonCounts(game);
+  const away = awayCounts(game);
   const forts = [];
   for (const f of game.buildings.values()) {
     if (f.def.kind !== 'fort' || f.efficiency <= 0 || f.accessRoad < 0) continue;
-    const have = (counts.get(f.id) || 0) + (f.recruiting || 0);
+    const have = (counts.get(f.id) || 0) + (away.get(f.id) || 0) + (f.recruiting || 0);
     if (have < FORT_CAPACITY) forts.push({ f, fill: have / FORT_CAPACITY });
   }
   if (!forts.length) { b.blocked = 'All staffed forts are fully manned.'; return; }
@@ -521,7 +538,8 @@ export function updateBarracks(game, b) {
 export function recruitArrive(game, w) {
   const fort = game.buildings.get(w.target);
   if (fort && fort.def.kind === 'fort') {
-    const used = new Set(unitsOfFort(game, fort.id).map((u) => u.slot));
+    // (The places of men away at a distant battle are kept for them.)
+    const used = new Set([...unitsOfFort(game, fort.id), ...awayOf(game, fort.id)].map((u) => u.slot));
     let slot = 0;
     while (used.has(slot)) slot++;
     if (slot < FORT_CAPACITY) {
@@ -546,16 +564,22 @@ export function buildingMaxHp(b) {
 /**
  * Raiders (or a raider ship's fire pot, `fromSea`) hurt a building; at 0 hit
  * points it burns or collapses. Fire pots alone never let a raid carry off
- * plunder: only raiders who reach the city on foot do.
+ * plunder: only raiders who reach the city on foot do. `legion`: Caesar's
+ * army struck it (sim/legion.js), which is no part of a raid.
  */
-export function damageBuilding(game, b, dmg, { fromSea = false } = {}) {
+export function damageBuilding(game, b, dmg, { fromSea = false, legion = null } = {}) {
   if (b.hp === undefined) b.hp = buildingMaxHp(b);
   b.hp -= dmg;
   b.lastRaided = game.time.totalDays;
-  const inv = game.military.active;
+  const inv = legion ? null : game.military.active;
   if (inv && !fromSea) inv.reached = true; // the warband made it to the city: plunder is possible
   if (b.hp > 0) return;
   if (inv) inv.buildingsLost++;
+  if (legion) {
+    legion.buildingsLost++;
+    const cs = game.military.caesar;
+    if (cs) cs.stats.buildingsLost = (cs.stats.buildingsLost || 0) + 1;
+  }
   game.military.stats.buildingsLost++;
   game.city.ratings.peace = Math.max(0, game.city.ratings.peace - 1);
   const now = game.time.totalDays;
@@ -563,11 +587,13 @@ export function damageBuilding(game, b, dmg, { fromSea = false } = {}) {
   if (loud) game.military.lastLossMessageDay = now;
   // Raiders torch most of what they break.
   // (A hippodrome's outer sections burn as the hippodrome does.)
-  if (game.rng.chance(0.6) && riskRates(mainOf(game, b)).fire > 0) igniteBuilding(game, b, loud ? 'raid' : 'raidQuiet');
-  else collapseBuilding(game, b, loud ? 'raid' : 'raidQuiet');
+  const who = legion ? 'legion' : 'raid';
+  if (game.rng.chance(0.6) && riskRates(mainOf(game, b)).fire > 0) igniteBuilding(game, b, loud ? who : `${who}Quiet`);
+  else collapseBuilding(game, b, loud ? who : `${who}Quiet`);
 }
 
-function damageWall(game, i, dmg) {
+/** Raiders (or, `legion`, Caesar's men) hit a wall or gate on tile i. */
+function damageWall(game, i, dmg, legion = false) {
   const map = game.map;
   const kind = map.wall[i];
   if (!kind) return;
@@ -577,13 +603,14 @@ function damageWall(game, i, dmg) {
   map.wall[i] = Wall.NONE;
   if (!map.road[i]) {
     map.rubble[i] = 1;
-    recordRuin(game, [i], 'Wall', 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
+    recordRuin(game, [i], 'Wall', legion ? 'legionWall' : 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
   }
   map.touch();
   const now = game.time.totalDays;
   if (now - game.military.lastWallMessageDay >= 5) {
     game.military.lastWallMessageDay = now;
-    game.message(kind === Wall.GATE ? 'Raiders have smashed a gate!' : 'Raiders have broken through a wall!', 'bad', map.xOf(i), map.yOf(i));
+    const who = legion ? 'Caesar\'s legions have' : 'Raiders have';
+    game.message(kind === Wall.GATE ? `${who} smashed a gate!` : `${who} broken through a wall!`, 'bad', map.xOf(i), map.yOf(i));
   }
   game.events.emit('collapse', { x: map.xOf(i), y: map.yOf(i), size: 1 });
 }
@@ -611,8 +638,10 @@ export function computeField(game) {
 /**
  * Raider travel cost from each tile to the nearest building for which
  * isSource(buildingId) is true (0 on those buildings, Infinity if cut off).
+ * Other buildings block the way, unless `breakCost` is given: then they can
+ * be broken through for that much more (Caesar's legions, sim/legion.js).
  */
-export function fillField(game, field, isSource) {
+export function fillField(game, field, isSource, breakCost = 0) {
   const map = game.map;
   const n = map.size;
   field.fill(Infinity);
@@ -631,12 +660,13 @@ export function fillField(game, field, isSource) {
       const ny = y + (k === 0 ? -1 : k === 2 ? 1 : 0);
       if (nx < 0 || ny < 0 || nx >= w || ny >= map.h) continue;
       const j = ny * w + nx;
-      if (map.building[j]) continue;
+      if (map.building[j] && !breakCost) continue;
       const t = map.terrain[j];
       if (t === Terrain.ROCK) continue;
       if (t === Terrain.WATER && map.road[j] !== Road.BRIDGE) continue;
       let c = t === Terrain.TREES ? 1.6 : 1;
       if (map.wall[j]) c += FIELD_WALL_COST;
+      if (map.building[j]) c += breakCost;
       const nd = d + c;
       if (nd < field[j]) { field[j] = nd; heap.push(nd, j); }
     }
@@ -647,9 +677,13 @@ export function fillField(game, field, isSource) {
 // Combat
 // ---------------------------------------------------------------------------
 
-/** Strength multiplier for a unit: raiders scale with difficulty, Rome's soldiers never do. */
+/**
+ * Strength multiplier for a unit: raiders scale with difficulty, Rome's
+ * soldiers never do, and neither do Caesar's (the difficulty sets how many
+ * he sends, sim/legion.js).
+ */
 export function enemyPower(game, u) {
-  return u.side === 'enemy' ? game.difficulty.enemy : 1;
+  return u.side === 'enemy' && !u.legion && u.type !== 'imperial' ? game.difficulty.enemy : 1;
 }
 
 /** One blow or missile: attack (+-25%) less half the target's defense, at least 2. `defense`: the target's now (unitDefense). */
@@ -837,6 +871,39 @@ function drillMarch(game, u, def) {
   return true;
 }
 
+/**
+ * A soldier sent to a distant battle (sim/battle.js) marches to the map exit
+ * over open land, as to his post, and leaves the province there. One who
+ * cannot get there in AWAY_MAX_TICKS (cut off by water, say) is taken to have
+ * found another way out.
+ */
+function marchOut(game, u) {
+  const ex = game.map.exit;
+  u.state = 'away';
+  u.target = 0;
+  const d = marchTo(game, u, ex.x + 0.5, ex.y + 0.5, UNIT_TYPES[u.type].speed);
+  if (d < 1.2 || game.time.totalTicks - (u.awayTick || 0) > AWAY_MAX_TICKS) leaveForBattle(game, u);
+}
+
+/**
+ * One tick of a long march over open land to (tx, ty): along an A* route
+ * where steering alone would not do, as a soldier marches to his post.
+ * (Soldiers leaving for a distant battle, Caesar's men going home.)
+ * @returns {number} the distance left before this tick's step
+ */
+export function marchTo(game, u, tx, ty, speed) {
+  if (u.noPath > 0) u.noPath--;
+  const d = Math.hypot(tx - u.x, ty - u.y);
+  if (u.path) { followUnitPath(game, u, speed); return d; }
+  if (d > 5 && u.stuck === 0 && !u.noPath) {
+    replan(game, u, tx, ty);
+    if (u.path) return d;
+  }
+  moveToward(game, u, tx, ty, speed);
+  if (u.stuck > 20) replan(game, u, tx, ty);
+  return d;
+}
+
 /** Plan an A* route, remembering failures for a while so we do not retry every tick. */
 function replan(game, u, x, y) {
   u.stuck = 0;
@@ -982,19 +1049,29 @@ export function updateMilitary(game) {
     const t = u.target ? game.units.get(u.target) : null;
     if (t) t.pressure++;
   }
-  if (enemies.length) {
+  let raiders = false;
+  let legionaries = false;
+  for (const e of enemies) if (e.legion) legionaries = true; else raiders = true;
+  if (raiders) {
     const stale = game.enemyFieldRev !== game.map.revision && game.time.totalTicks - (game.enemyFieldTick || 0) > 20;
     if (!game.enemyField || stale || game.time.totalTicks - (game.enemyFieldTick || 0) > 200) computeField(game);
   }
+  if (legionaries) refreshLegionField(game); // Caesar's men walk a field of their own (sim/legion.js)
+  // Soldiers on their way out to a distant battle (sim/battle.js) fight no
+  // one here, and no one picks a fight with them. (Liburnians sailing out are
+  // in `fleet`: sim/navy.js sends them on.)
+  const home = romans.some((u) => u.away) ? romans.filter((u) => !u.away) : romans;
   for (const u of romans) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
-    updateRoman(game, u, enemies);
+    if (u.away) marchOut(game, u);
+    else updateRoman(game, u, enemies);
   }
   for (const u of enemies) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
-    updateRaider(game, u, romans);
+    if (u.legion) updateLegionary(game, u, home);
+    else updateRaider(game, u, home);
   }
   if (fleet.length || pirates.length) updateNavy(game, fleet, pirates);
   updateTowers(game, enemies.filter((e) => game.units.has(e.id)));
@@ -1059,7 +1136,7 @@ export function raidSize(game) {
 /** Monthly: pay the army, warn about raids, launch them. */
 export function militaryMonthly(game) {
   const m = game.military;
-  let upkeep = 0;
+  let upkeep = awayUpkeep(game); // men and ships away at a distant battle are paid too (sim/battle.js)
   for (const u of game.units.values()) if (u.side === 'rome') upkeep += UNIT_TYPES[u.type].upkeep;
   if (upkeep > 0) transact(game, 'military', -upkeep);
   m.lastUpkeep = upkeep;
@@ -1189,7 +1266,7 @@ export function militaryDaily(game) {
     }
   }
   // Damaged buildings are patched up slowly once the fighting stops.
-  if (!inv) {
+  if (!inv && !m.caesar?.army) {
     for (const b of game.buildings.values()) {
       if (b.hp !== undefined && b.hp < buildingMaxHp(b) && game.time.totalDays - (b.lastRaided || 0) > 5) {
         b.hp = Math.min(buildingMaxHp(b), b.hp + buildingMaxHp(b) * 0.05);
@@ -1218,7 +1295,9 @@ function endInvasion(game, inv) {
     const [a, b] = s.interval;
     m.nextRaidMonth = game.time.totalMonths + game.rng.range(Math.max(4, Math.round(a * k)), Math.max(5, Math.round(b * k)));
   }
-  game.projectiles = [];
+  // The raid's missiles are done with; those at Caesar's men (sim/legion.js),
+  // still fighting, fly on.
+  game.projectiles = game.projectiles.filter((p) => !p.pot && game.units.get(p.target)?.legion);
 }
 
 /** Summary for the advisor and HUD. */
@@ -1226,13 +1305,24 @@ export function threatSummary(game) {
   const m = game.military;
   const enemies = enemyCount(game);
   const ships = raiderShipCount(game);
-  if (enemies > 0) return { level: 'attack', text: `${enemies} raiders in the province${ships ? ` (${ships} raider ship${ships === 1 ? '' : 's'} offshore)` : ''}`, enemies, ships };
+  const legion = legionCount(game); // Caesar's men (sim/legion.js)
+  const raiders = enemies - legion;
+  const caesar = legionSummary(game);
+  // Caesar's legions on the road, as a second line to whatever else is going on.
+  const marching = caesar.state === 'marching' ? `Caesar's legions (${caesar.size} men) arrive in ~${caesar.months} month${caesar.months === 1 ? '' : 's'}` : '';
+  if (enemies > 0) {
+    const who = [legion ? `${legion} of Caesar's legionaries` : '', raiders ? `${raiders} raiders` : ''].filter(Boolean).join(' and ');
+    return { level: 'attack', text: `${who} in the province${ships ? ` (${ships} raider ship${ships === 1 ? '' : 's'} offshore)` : ''}${marching ? `. ${marching}` : ''}`, enemies, ships, legion, label: `⚔ ${enemies}` };
+  }
   if (m.warned) {
     const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    return { level: 'warned', text: `About ${m.warned.size} raiders expected ${m.warned.sea ? 'by sea ' : ''}from the ${m.warned.dir} in ~${months} months`, enemies: 0, sea: !!m.warned.sea };
+    return { level: 'warned', text: `About ${m.warned.size} raiders expected ${m.warned.sea ? 'by sea ' : ''}from the ${m.warned.dir} in ~${months} months${marching ? `. ${marching}` : ''}`, enemies: 0, sea: !!m.warned.sea, label: '⚠ Raid' };
   }
+  if (marching) return { level: 'warned', text: marching, enemies: 0, legion: true, label: '⚠ Legions' };
   if (!m.settings) return { level: 'none', text: 'No raids in this province.', enemies: 0 };
   return { level: 'calm', text: 'No known threats.', enemies: 0 };
 }
 
 export { WALL_HP, TOWER_RANGE, TOWER_COOLDOWN };
+// For Caesar's legionaries (sim/legion.js), who move and fight as raiders do.
+export { moveToward as moveUnitToward, attackUnit as attackWith, damageWall as damageWallAt };

@@ -1173,6 +1173,116 @@ try {
   check('trade advisor draws the empire map', await page.isVisible('canvas.empire-map'));
   await page.keyboard.press('Escape');
 
+  // 5b3. Caesar's call for troops: the Imperial advisor switches the forts
+  //      to Empire service and sends them (after its own confirmation).
+  //      Then his legions: the top bar and the empire map name them. Then
+  //      an arch earned goes across a road.
+  await page.evaluate(() => window.colonia.ui.console.run('battle placentia 8'));
+  await page.keyboard.press('F2');
+  await page.click('.tab:has-text("Imperial")');
+  const callText = await page.textContent('.battle-card');
+  await page.evaluate(() => {
+    // Every fort on: each click redraws the card, so find the buttons afresh.
+    for (let k = 0; k < 12; k++) {
+      const off = [...document.querySelectorAll('.battle-card .service-btn')].find((b) => !b.classList.contains('active'));
+      if (!off) break;
+      off.click();
+    }
+  });
+  await page.click('.battle-card .send-troops');
+  await page.click('.modal-foot .btn:has-text("Send them")');
+  await page.waitForTimeout(200);
+  const sent = await page.evaluate(() => {
+    const g = window.colonia.game;
+    const b = g.military.battle;
+    return { sent: !!(b && b.sent), away: [...g.units.values()].filter((u) => u.away).length, strength: b && b.sent ? b.sent.strength : 0, kind: window.colonia.ui.modalKind, card: document.querySelector('.battle-card')?.textContent || '' };
+  });
+  check('the Imperial advisor shows Caesar\'s call for troops and sends the forts switched to Empire service', /Placentia/.test(callText) && sent.sent && sent.away > 0 && sent.strength > 0 && sent.kind === 'advisors' && /strength/.test(sent.card) && errors.length === 0, JSON.stringify({ call: callText.slice(0, 90), ...sent, card: sent.card.slice(0, 120) }));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.colonia.ui.console.run('legion now 3'));
+  await page.waitForTimeout(400);
+  const legionHud = await page.evaluate(() => { const el = document.querySelector('.hud-btn.threat'); return el ? { hidden: el.classList.contains('hidden'), text: el.textContent, title: el.title } : null; });
+  await page.keyboard.press('e');
+  await page.waitForSelector('canvas.empire-full', { timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const legionRows = await page.evaluate(() => [...document.querySelectorAll('.empire-side .empire-row')].map((e) => e.textContent));
+  check('Caesar\'s legions arrive: the top bar names them, and the empire map shows them with the troops on their way', !!legionHud && !legionHud.hidden && /Caesar's legionaries/.test(legionHud.title)
+    && legionRows.some((t) => /Caesar's legions in the province: 3 left/.test(t)) && legionRows.some((t) => /Your troops \(strength \d+\) on the way to Placentia/.test(t)), JSON.stringify({ legionHud, legionRows }));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    // Caesar's men gone again (as if destroyed), so the steps that follow see the city as it was.
+    const g = window.colonia.game;
+    for (const u of [...g.units.values()]) if (u.legion) g.units.delete(u.id);
+    g.military.caesar.army = null;
+  });
+  const archAt = await page.evaluate(() => {
+    const app = window.colonia;
+    const m = app.game.map;
+    app.ui.console.run('arch');
+    // A 5 x 3 patch of open land near the middle: a road along its middle row, the arch over it.
+    const c = { x: Math.floor(m.w / 2), y: Math.floor(m.h / 2) };
+    for (let r = 0; r < 30; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = c.x + dx;
+          const y = c.y + dy;
+          let ok = true;
+          for (let j = -1; j <= 1 && ok; j++) for (let i = -1; i <= 5 && ok; i++) if (!m.isFree(x + i, y + j) || m.terrain[m.idx(x + i, y + j)] === 2) ok = false;
+          if (ok) { app.renderer.camera.centerOnTile(x + 2, y); return { x, y }; }
+        }
+      }
+    }
+    return null;
+  });
+  let archPlaced = null;
+  let archListed = false;
+  let archTool = null;
+  if (archAt) {
+    await page.waitForTimeout(150);
+    await page.keyboard.press('r');
+    const a = await toScreen(archAt.x, archAt.y);
+    const b = await toScreen(archAt.x + 4, archAt.y);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.press('Escape');
+    // (Another category first: a second click on the open one folds its list away.)
+    await page.click('.cat-btn[title^="Roads"]');
+    await page.click('.cat-btn[title^="Government"]');
+    archListed = await page.isVisible('.build-item:has-text("Triumphal Arch")');
+    if (archListed) {
+      // Pointing at it first: its description fills the box under the list,
+      // which shifts the list's last items before the click lands.
+      await page.hover('.build-item:has-text("Triumphal Arch")');
+      await page.waitForTimeout(100);
+      await page.click('.build-item:has-text("Triumphal Arch")');
+    }
+    const p = await toScreen(archAt.x + 2, archAt.y);
+    await page.mouse.move(p.x - 4, p.y);
+    await page.mouse.move(p.x, p.y);
+    await page.waitForTimeout(100);
+    archTool = await page.evaluate(() => { const r = window.colonia.renderer; return { tool: window.colonia.input.tool, plan: r.plan ? { reason: r.plan.reason, count: r.plan.count, at: r.plan.items[0] && [r.plan.items[0].x, r.plan.items[0].y] } : null }; });
+    await page.mouse.click(p.x, p.y);
+    if (await page.evaluate(() => window.colonia.input.tool)) await page.keyboard.press('Escape');
+    await page.waitForTimeout(250); // (the build menu notices on its next frame)
+    archPlaced = await page.evaluate(({ x, y }) => {
+      const g = window.colonia.game;
+      const b = [...g.buildings.values()].find((o) => o.type === 'triumphal_arch');
+      return b ? { x: b.x, y: b.y, axis: b.axis, road: g.map.road[g.map.idx(x + 2, y)], listed: [...document.querySelectorAll('.build-item')].some((e) => /Triumphal Arch/.test(e.textContent)) } : null;
+    }, archAt);
+  }
+  // On failure: the road under the patch and the arch's plan there.
+  const archWhy = archPlaced ? null : await page.evaluate((s) => {
+    if (!s) return null;
+    const app = window.colonia;
+    const m = app.game.map;
+    const rows = [-1, 0, 1].map((j) => [-1, 0, 1, 2, 3, 4, 5].map((i) => m.road[m.idx(s.x + i, s.y + j)]).join(''));
+    return { rows, tool: app.input.tool, earned: app.game.city.archesEarned, modal: app.ui.modalKind, toasts: [...document.querySelectorAll('.toast')].slice(0, 3).map((e) => e.textContent) };
+  }, archAt);
+  check('an arch earned is in the build menu and goes across a road, which runs on under it; then it leaves the menu', archListed && !!archPlaced && archPlaced.x === archAt.x + 1 && archPlaced.y === archAt.y - 1 && archPlaced.axis === 0 && archPlaced.road === 1 && !archPlaced.listed && errors.length === 0, JSON.stringify({ archAt, archListed, archTool, archPlaced, archWhy }));
+
   // 5c. The world around the city: smooth zoom, night lights, weather, settings.
   await page.evaluate(() => { window.colonia.renderer.camera.zoomIndex = 2; });
   await page.mouse.move(640, 400);

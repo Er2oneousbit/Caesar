@@ -127,8 +127,8 @@ export class Hud {
     this.threat.classList.toggle('hidden', !show);
     if (show) {
       this.threat.classList.toggle('attack', t.level === 'attack');
-      this.threat.textContent = t.level === 'attack' ? `⚔ ${t.enemies}` : '⚠ Raid';
-      this.threat.title = `${t.text}. Click to ${t.level === 'attack' ? 'look at the raiders' : 'open the military advisor'}.`;
+      this.threat.textContent = t.label || (t.level === 'attack' ? `⚔ ${t.enemies}` : '⚠ Raid');
+      this.threat.title = `${t.text}. Click to ${t.level === 'attack' ? 'look at them' : 'open the military advisor'}.`;
     }
     this.fitSeason();
     const active = app.paused ? 0 : app.speedIndex;

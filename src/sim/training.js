@@ -235,7 +235,7 @@ export function updateDrill(game) {
     else if (b.def.kind === 'portus') ports = true;
   }
   if (!academies && !ports) return;
-  const raid = !!game.military.active;
+  const raid = !!game.military.active || !!game.military.caesar?.army; // (Caesar's legions too, sim/legion.js)
   const today = game.time.totalDays;
   const byPost = new Map(); // fort or station id -> its units
   for (const u of game.units.values()) {

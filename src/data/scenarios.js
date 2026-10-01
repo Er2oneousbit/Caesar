@@ -28,6 +28,13 @@
  *                                 The first two missions, as in the original,
  *                                 where a new player's one granary would burn
  *   military                      invasion settings (INVASION_PRESETS), or none
+ *   distantBattles                Caesar's requests for troops (sim/battle.js), from
+ *                                 mission 4, which has forts: each { year, city,
+ *                                 enemy } asks in the mission's year `year` (1 =
+ *                                 its first), in a month from Martius to October
+ *                                 drawn from the map's seed, for troops for `city`
+ *                                 (data/battles.js) against `enemy` strength; the
+ *                                 battle is fought BATTLE_MONTHS later
  *   seaRaids: false               every raid comes by land (missing = some come
  *                                 by sea where ships can sail; sim/navy.js)
  *   rank                          the governor's rank (data/ranks.js): one per
@@ -223,6 +230,7 @@ export const SCENARIOS = Object.freeze([
     rank: 3, // Architect (data/ranks.js)
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
     military: { first: 60, interval: [30, 40], base: 4 },
+    distantBattles: [{ year: 3, city: 'placentia', enemy: 16 }],
     hints: [
       'Bridges must start and end on land and run straight across water.',
       'Massilia trades by sea: build a Dock on the river bank. Tarraco and Lugdunum send caravans along the Imperial road.',
@@ -241,6 +249,7 @@ export const SCENARIOS = Object.freeze([
     rank: 4, // Quaestor (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME, partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
     military: { first: 48, interval: [22, 32], base: 6 },
+    distantBattles: [{ year: 3, city: 'saguntum', enemy: 28 }],
     hints: [
       'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity.',
       'From the Insula up homes need clothing. Alexandria\'s ships bring Egyptian linen for a Clothing Maker, and Corinthus buys clothing.',
@@ -258,6 +267,7 @@ export const SCENARIOS = Object.freeze([
     rank: 5, // Procurator (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME_AND_NAVY, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
     military: { first: 42, interval: [20, 30], base: 6 },
+    distantBattles: [{ year: 4, city: 'ariminum', enemy: 32 }],
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
   {
@@ -270,6 +280,7 @@ export const SCENARIOS = Object.freeze([
     rank: 6, // Aedile (data/ranks.js)
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
     military: { first: 36, interval: [14, 22], base: 8 },
+    distantBattles: [{ year: 3, city: 'messana', enemy: 40 }, { year: 9, city: 'placentia', enemy: 52 }],
     hints: [
       'Palatia need four gods, a Medicus and a Valetudinarium, wine from two sources (a staffed winery and an import route) and plenty of shows.',
       'A Senate adds to culture and prosperity. Expect regular raids: walls with gates, towers and a mixed army keep the capital safe.',

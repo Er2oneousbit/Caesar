@@ -431,7 +431,7 @@ test('save: the governor, his savings and his gifts survive a save', () => {
   assert.deepEqual(copy.city.gifts, game.city.gifts);
   assert.equal(residenceOf(copy).type, 'governor_villa');
   assert.equal(copy.scenario.rank, 3, 'a sandbox keeps its chosen rank');
-  assert.equal(CONFIG.SAVE_VERSION, 13);
+  assert.ok(CONFIG.SAVE_VERSION >= 13, 'the governor came in save version 13');
 });
 
 test('save: a real version 11 save (mission 3, a gift sent 2 months before) loads at the mission\'s rank with no savings', () => {

@@ -48,6 +48,8 @@ import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } fro
 import { setSalary, donate } from '../sim/governor.js';
 import { RANKS } from '../data/ranks.js';
 import { rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, salaryNow } from './governorInfo.js';
+import { battleSummary, sendTroops, sendBlocked, strengthOf, awayCounts } from '../sim/battle.js';
+import { legionText, battleLines, archLine, serviceButton } from './empireInfo.js';
 import { productionReport } from './production.js';
 import { homesWithFood } from '../sim/population.js';
 import { loanTerms, takeLoan } from '../sim/loans.js';
@@ -464,7 +466,7 @@ export class Advisors {
       h('div', { class: `status ${t.level === 'attack' ? 'bad' : t.level === 'warned' ? 'warn' : 'good'}` }, t.level === 'calm' ? 'Scouts see no warband near the province.' : t.text),
       m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Raiders come from the map edges${seaOk && m.seaRaids ? `, and about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids by sea` : ''}. Scouts warn about 3 months ahead; warbands grow with your city.`) : null,
       m.settings && seaOk ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `Sea raids: ${m.seaRaids ? 'on' : 'off'} (Settings).`) : null,
-      t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show me the raiders') : null,
+      t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, t.legion && t.enemies === t.legion ? 'Show me the legions' : 'Show me the raiders') : null,
       t.level === 'warned' ? h('button', { class: 'btn small', style: { marginTop: '6px' }, title: 'Where the warband is and the side it will enter by (E)', onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map') : null);
     const army = h('div', { class: 'card' },
       h('h4', {}, 'Army'),
@@ -488,11 +490,13 @@ export class Advisors {
       fleet.raiders ? h('div', { class: 'status bad' }, `${fleet.raiders} raider ship${fleet.raiders === 1 ? '' : 's'} in the province's waters.`) : null) : null;
     const stationRows = stations.map((b) => {
       const n = squadronCounts(g).get(b.id) || 0;
+      const gone = awayCounts(g).get(b.id) || 0;
       return h('tr', {},
         h('td', {}, h('span', { style: { color: UNIT_TYPES.liburnian.color, fontWeight: 700 } }, '⛵ '), b.def.name),
-        h('td', { class: 'r num' }, `${n}/${STATION_CAPACITY}`),
+        h('td', { class: 'r num' }, `${n}/${STATION_CAPACITY}${gone ? ` (${gone} away)` : ''}`),
         h('td', { class: 'r num' }, pct(b.efficiency)),
         h('td', {}, b.rally ? `Holding ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : 'At its berths'),
+        h('td', {}, serviceButton(g, b, () => this.render())),
         h('td', { class: 'r' },
           h('button', { class: 'btn small', onclick: () => { this.app.ui.closeModal(); this.app.renderer.camera.glideToTile(b.x + 1, b.y + 1); this.app.ui.info.showBuilding(b.id); } }, 'Show'),
           h('button', { class: 'btn small primary', disabled: n === 0, onclick: () => { this.app.ui.closeModal(); this.app.startDeploy(b.id); } }, 'Deploy'),
@@ -514,14 +518,16 @@ export class Advisors {
         h('td', { class: 'r num' }, formatAmount(good, barracks.reduce((s, b) => s + (b.stock[good] || 0), 0))),
         h('td', { class: 'r num' }, formatAmount(good, cityStock(g, good))),
         h('td', { class: 'muted' }, RECRUIT_SOURCE[good]))));
+    const away = awayCounts(g); // at a distant battle (sim/battle.js)
     const fortRows = forts.map((f) => {
       const unit = UNIT_TYPES[f.def.unit];
       const n = counts.get(f.id) || 0;
       return h('tr', {},
         h('td', {}, h('span', { style: { color: unit.color, fontWeight: 700 } }, '■ '), f.def.name),
-        h('td', { class: 'r num' }, `${n}/${FORT_CAPACITY}${f.recruiting ? ` (+${f.recruiting})` : ''}`),
+        h('td', { class: 'r num' }, `${n}/${FORT_CAPACITY}${f.recruiting ? ` (+${f.recruiting})` : ''}${away.get(f.id) ? ` (${away.get(f.id)} away)` : ''}`),
         h('td', { class: 'r num' }, pct(f.efficiency)),
         h('td', {}, f.rally ? `Holding ${Math.floor(f.rally.x)},${Math.floor(f.rally.y)}` : 'At the fort'),
+        h('td', {}, serviceButton(g, f, () => this.render())),
         h('td', { class: 'r' },
           h('button', { class: 'btn small', onclick: () => { this.app.ui.closeModal(); this.app.renderer.camera.glideToTile(f.x + 1, f.y + 1); this.app.ui.info.showBuilding(f.id); } }, 'Show'),
           h('button', { class: 'btn small primary', disabled: n === 0, onclick: () => { this.app.ui.closeModal(); this.app.startDeploy(f.id); } }, 'Deploy'),
@@ -531,7 +537,7 @@ export class Advisors {
       h('div', { class: 'grid2' }, threat, army, fleetCard),
       h('h4', {}, 'Forts'),
       forts.length
-        ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Fort'), h('th', { class: 'r' }, 'Soldiers'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', {}, '')), fortRows)
+        ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Fort'), h('th', { class: 'r' }, 'Soldiers'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', { title: 'Sent when Caesar calls for troops (Imperial advisor)' }, 'Distant battles'), h('th', {}, '')), fortRows)
         : h('div', { class: 'muted' }, 'No forts yet. Build a Barracks and at least one fort (Military menu). Garrisons guard the area around their fort; use Deploy to send them where raiders will come.'),
       h('h4', {}, 'Supplies'),
       supplies,
@@ -539,7 +545,7 @@ export class Advisors {
         'Each recruit needs equipment at the Barracks: a legionary 50 weapons (Weaponsmith: iron), an archer 50 arrows (Fletcher: timber + iron), a cavalryman one horse (Horse Ranch on meadow, or imported). Carts deliver them automatically while forts have empty places.'),
       showFleet ? h('h4', {}, 'Naval stations') : null,
       showFleet ? (stations.length
-        ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Station'), h('th', { class: 'r' }, 'Liburnians'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', {}, '')), stationRows)
+        ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Station'), h('th', { class: 'r' }, 'Liburnians'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', { title: 'Sent when Caesar calls for troops for a city by the sea (Imperial advisor)' }, 'Distant battles'), h('th', {}, '')), stationRows)
         : h('div', { class: 'muted' }, `No naval stations yet. Build a Navalia and a Naval Station on the shore (Military menu): the Navalia builds liburnians from ${Object.entries(CONFIG.LIBURNIAN_COST).map(([gd, n]) => `${n} ${GOODS[gd].name.toLowerCase()}`).join(', ')}, and each station berths ${STATION_CAPACITY} of them to fight raider ships.`)) : null,
       navalSupplies,
     ];
@@ -715,7 +721,7 @@ export class Advisors {
       row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. ${seatText} Build temples, schools, libraries and venues where people live.`),
       row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Senate. Changes slowly.'),
       row('peace', 'Peace', `Grows each month the city is content (mood ${CONFIG.PEACE_MOOD}+). No growth in a month when a thief is about (except on Easy); falls with low mood, thieves and riots (more on harder levels), raids and the wrath of Mars.`),
-      row('favor', 'Favor', 'The Emperor likes paid tributes, fulfilled requests and gifts. Debt and missed requests anger him. At 0 you are recalled!'),
+      row('favor', 'Favor', `The Emperor likes paid tributes, fulfilled requests, troops sent when he calls for them and gifts. Debt, missed requests and calls ignored anger him. At ${CONFIG.LEGION_FAVOR} or less he sends his legions against you (Imperial advisor).`),
     ];
   }
 
@@ -726,6 +732,8 @@ export class Advisors {
       h('div', { class: 'card' },
         kv('Emperor\'s favor', `${Math.round(c.ratings.favor)} / 100`), bar(c.ratings.favor, 100),
         h('div', { class: 'muted' }, 'Each year Rome collects a tribute based on your population.')),
+      this.legionCard(g),
+      this.battleCard(g),
       h('div', { class: 'card', style: { marginTop: '10px' } },
         h('h4', {}, 'Current request'),
         r ? [
@@ -749,6 +757,65 @@ export class Advisors {
         })),
         h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, giftNote(g))),
     ];
+  }
+
+  /** Imperial tab: Caesar's anger (sim/legion.js), worded by ui/empireInfo.js. */
+  legionCard(g) {
+    const t = legionText(g);
+    return h('div', { class: `card legion-card${t.level === 'none' ? '' : ` ${t.level}`}`, style: { marginTop: '10px' } },
+      h('h4', {}, 'Caesar\'s legions'),
+      h('div', { class: `status ${t.level === 'none' ? 'good' : t.level}` }, t.status),
+      h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, t.note),
+      t.show ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show me the legions') : null,
+      t.map ? h('button', { class: 'btn small', style: { marginTop: '6px' }, onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map') : null);
+  }
+
+  /**
+   * Imperial tab: Caesar's call for troops (sim/battle.js): the city, the
+   * enemy, the time left, the troops switched to Empire service and the
+   * button that sends them; then the march, the battle and the way home.
+   */
+  battleCard(g) {
+    const s = battleSummary(g);
+    const forts = [...g.buildings.values()].filter((b) => b.def.kind === 'fort' || (b.def.kind === 'station' && s && s.fleet));
+    const record = g.military.battles || { won: 0, lost: 0 };
+    const head = h('h4', {}, 'Calls for troops');
+    if (!s) {
+      return h('div', { class: 'card battle-card', style: { marginTop: '10px' } }, head,
+        h('div', { class: 'muted' }, 'Caesar has asked for no troops. When he does, switch forts (and, for a city by the sea, Naval Stations) to Empire service and send them from here.'),
+        kv('Battles won / lost', `${record.won} / ${record.lost}`),
+        archLine(g));
+    }
+    const lines = battleLines(g, s);
+    const send = () => {
+      const why = sendBlocked(g);
+      if (why) { this.app.ui.toastError(why); return; }
+      const ready = s.ready;
+      const what = `${ready.men} soldier${ready.men === 1 ? '' : 's'}${ready.ships ? ` and ${ready.ships} liburnian${ready.ships === 1 ? '' : 's'}` : ''}`;
+      this.app.ui.confirm(`${what} (strength ${ready.strength} against ${s.words}, about ${s.enemy}) will leave at once and cannot be called back. Their forts stay empty until they return.`, () => {
+        const res = sendTroops(g);
+        if (!res.ok) this.app.ui.toastError(res.reason);
+        this.app.ui.openAdvisors('imperial');
+      }, { title: `Send troops to ${s.name}?`, yes: 'Send them' });
+    };
+    const pending = s.phase === 'pending' && !s.sent;
+    return h('div', { class: 'card battle-card', style: { marginTop: '10px' } }, head,
+      lines.map((l) => h('div', { class: l.cls || '' }, l.text)),
+      pending && forts.length ? h('table', { class: 'tbl', style: { marginTop: '6px' } },
+        h('tr', {}, h('th', {}, 'Post'), h('th', { class: 'r' }, 'Men'), h('th', { class: 'r' }, 'Strength'), h('th', {}, 'Empire service')),
+        forts.map((b) => {
+          const men = [...g.units.values()].filter((u) => (u.fort || u.station) === b.id && !u.away);
+          return h('tr', {},
+            h('td', {}, b.def.name),
+            h('td', { class: 'r num' }, fmt(men.length)),
+            h('td', { class: 'r num' }, fmt(strengthOf(men))),
+            h('td', {}, serviceButton(g, b, () => this.render())));
+        })) : null,
+      pending && !forts.length ? h('div', { class: 'muted' }, 'You have no forts to send. Build a Barracks and a fort (Military menu).') : null,
+      pending ? h('button', { class: 'btn primary send-troops', style: { marginTop: '6px' }, disabled: !!sendBlocked(g), title: sendBlocked(g) || '', onclick: send }, `Send the troops (strength ${s.ready.strength})`) : null,
+      h('button', { class: 'btn small', style: { marginTop: '6px', marginLeft: '6px' }, onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map'),
+      kv('Battles won / lost', `${record.won} / ${record.lost}`),
+      archLine(g));
   }
 
   /**

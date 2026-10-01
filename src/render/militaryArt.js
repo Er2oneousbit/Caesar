@@ -192,14 +192,16 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
   ctx.lineTo(sx - 3.3 * k, bottom);
   ctx.closePath();
   ctx.fill();
-  if (u.type === 'legionary' || u.type === 'cavalry') {
+  // Caesar's own legionaries (sim/legion.js) are Romans too: armor and helmet, not a barbarian's hair.
+  const imperial = u.type === 'imperial';
+  if (u.type === 'legionary' || u.type === 'cavalry' || imperial) {
     // segmented iron armor over the tunic
     ctx.fillStyle = '#8a9099';
     ctx.fillRect(sx - 2.5 * k, top + 0.5 * k, 5 * k, 4 * k);
     ctx.fillStyle = 'rgba(40,40,50,0.4)';
     ctx.fillRect(sx - 2.5 * k, top + 2.2 * k, 5 * k, 0.6 * k);
   }
-  if (enemy && !def.mounted) {
+  if (enemy && !def.mounted && !imperial) {
     // checked trousers
     ctx.fillStyle = 'rgba(40,60,90,0.35)';
     ctx.fillRect(sx - 3 * k, bottom - 2 * k, 6 * k, 2 * k);
@@ -211,7 +213,7 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
   ctx.beginPath();
   ctx.arc(sx, hy, 2.4 * k, 0, Math.PI * 2);
   ctx.fill();
-  if (enemy) {
+  if (enemy && !imperial) {
     // wild hair and a beard
     ctx.fillStyle = BARB_HAIR[u.id % BARB_HAIR.length];
     ctx.beginPath();
@@ -230,8 +232,14 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
     ctx.beginPath();
     ctx.arc(sx, hy - 0.5 * k, 2.8 * k, Math.PI, 0);
     ctx.fill();
-    ctx.fillStyle = u.type === 'cavalry' ? '#d6ab3c' : '#c0392b';
-    ctx.fillRect(sx - 2.2 * k, hy - 4.6 * k, 4.4 * k, 1.3 * k);
+    // Crests: red for the province's legionaries, gold for its horsemen, a
+    // tall white plume over a gilded rim for Caesar's.
+    ctx.fillStyle = u.type === 'cavalry' ? '#d6ab3c' : imperial ? '#f1ece2' : '#c0392b';
+    if (imperial) {
+      ctx.fillRect(sx - 1.4 * k, hy - 6.2 * k, 2.8 * k, 3 * k);
+      ctx.fillStyle = '#d6ab3c';
+      ctx.fillRect(sx - 2.8 * k, hy - 0.9 * k, 5.6 * k, 0.8 * k);
+    } else ctx.fillRect(sx - 2.2 * k, hy - 4.6 * k, 4.4 * k, 1.3 * k);
   }
 
   drawWeapon(ctx, u, def, sx, top, k, face, striking, t);
@@ -242,7 +250,8 @@ function drawWeapon(ctx, u, def, sx, top, k, face, striking, t) {
   const hx = sx + face * 3.6 * k; // hand
   const hy = top + 3 * k;
   switch (u.type) {
-    case 'legionary': {
+    case 'legionary':
+    case 'imperial': {
       // tall curved shield (scutum) on the facing side, gladius thrust when striking
       ctx.fillStyle = def.color;
       ctx.fillRect(sx + face * 1.6 * k - (face < 0 ? 3.6 * k : 0), top - 0.5 * k, 3.6 * k, 9.5 * k);

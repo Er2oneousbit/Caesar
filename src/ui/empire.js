@@ -22,9 +22,10 @@ import { h, mount } from './dom.js';
 import { tradeRouteCard } from './advisors.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { routeKind } from '../sim/trade.js';
+import { battleSummary } from '../sim/battle.js';
 import {
   MAP_W, MAP_H, drawEmpire, empireTravelers, empireHitAt, travelerLabel, isDrawn, figureCenter, figureScale,
-  drawCaravan, drawShip, drawBanner, drawCity, drawRome, drawRoute,
+  drawCaravan, drawShip, drawBanner, drawCity, drawRome, drawRoute, drawStandard, drawBattleCity,
 } from './empireMap.js';
 
 /** How far (CSS px) from a city or traveler a pointer still counts as on it. */
@@ -179,7 +180,8 @@ export class EmpireView {
     if (hit.kind === 'city') this.select(hit.id);
     else if (hit.kind === 'traveler' && hit.t.id) this.select(hit.t.id);
     else if (hit.kind === 'traveler' && hit.t.kind === 'warband') this.goToEdge(hit.t);
-    else if (hit.kind === 'traveler' && hit.t.kind === 'raid') { this.app.ui.closeModal(); this.app.focusThreat(); }
+    else if (hit.kind === 'traveler' && (hit.t.kind === 'raid' || (hit.t.kind === 'legion' && hit.t.here))) { this.app.ui.closeModal(); this.app.focusThreat(); }
+    else if (hit.kind === 'battle' || (hit.kind === 'traveler' && ['legion', 'enemy', 'troops'].includes(hit.t.kind))) this.app.ui.openAdvisors('imperial');
   }
 
   select(id) {
@@ -216,9 +218,12 @@ export class EmpireView {
       text = travelerLabel(hit.t);
       const verb = this.pointerType && this.pointerType !== 'mouse' ? 'Tap again' : 'Click';
       if (hit.t.kind === 'warband') text += `. ${verb} to see the map edge it will enter by.`;
-      else if (hit.t.kind === 'raid') text += `. ${verb} to look at them.`;
+      else if (hit.t.kind === 'raid' || (hit.t.kind === 'legion' && hit.t.here)) text += `. ${verb} to look at them.`;
+      else if (hit.t.kind === 'legion' || hit.t.kind === 'enemy' || hit.t.kind === 'troops') text += `. ${verb} for the Imperial advisor.`;
     } else if (hit && hit.kind === 'city') {
       text = cityLine(g, hit.id);
+    } else if (hit && hit.kind === 'battle') {
+      text = battleLine(g);
     } else if (hit && hit.kind === 'home') {
       text = `${g.city.name || 'Your province'}: your province`;
     } else if (hit && hit.kind === 'rome') {
@@ -231,17 +236,22 @@ export class EmpireView {
   renderPanel(g) {
     if (!g) return;
     const trade = this.travelers.filter((t) => t.kind === 'caravan' || t.kind === 'ship');
-    const threats = this.travelers.filter((t) => t.kind === 'warband' || t.kind === 'raid');
+    const threats = this.travelers.filter((t) => ['warband', 'raid', 'legion', 'enemy', 'troops'].includes(t.kind));
     const anyOpen = Object.values(g.city.trade.routes).some((r) => r.open);
-    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea]), !!g.military.settings]), () => [
+    const imperial = () => this.app.ui.openAdvisors('imperial');
+    const figure = (t) => glyph((ctx) => (t.kind === 'legion' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#6d2a6b') : t.kind === 'troops' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b') : drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid', !!t.sea)), 5, 4.4);
+    const button = (t) => {
+      if (t.kind === 'warband') return h('button', { class: 'btn small', title: t.sea ? 'Close the map and look at the shore where it will land' : 'Close the map and look at the map edge it will enter by', onclick: () => this.goToEdge(t) }, t.sea ? 'Show the landing' : 'Show the edge');
+      if (t.kind === 'raid' || (t.kind === 'legion' && t.here)) return h('button', { class: 'btn small primary', onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show them');
+      return h('button', { class: 'btn small', title: 'Caesar\'s anger and his calls for troops', onclick: imperial }, 'Imperial advisor');
+    };
+    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea, t.state, t.home]), !!g.military.settings]), () => [
       h('h4', {}, 'Threats'),
       threats.length
         ? threats.map((t) => h('div', { class: 'empire-row' },
-          h('span', { class: 'empire-glyph' }, glyph((ctx) => drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid', !!t.sea), 5, 4.4)),
+          h('span', { class: 'empire-glyph' }, figure(t)),
           h('span', { style: { flex: 1 } }, travelerLabel(t)),
-          t.kind === 'warband'
-            ? h('button', { class: 'btn small', title: t.sea ? 'Close the map and look at the shore where it will land' : 'Close the map and look at the map edge it will enter by', onclick: () => this.goToEdge(t) }, t.sea ? 'Show the landing' : 'Show the edge')
-            : h('button', { class: 'btn small primary', onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show them')))
+          button(t)))
         : h('div', { class: 'muted' }, g.military.settings ? 'Scouts see no warband near the province. They warn about 3 months ahead.' : 'No raids in this province.'),
     ]);
     this.section('trade', this.tradeEl, JSON.stringify([trade.map((t) => [t.id, t.days, t.onWay]), anyOpen, this.selected]), () => {
@@ -278,6 +288,15 @@ function sameHit(a, b) {
   if (a.kind === 'city') return a.id === b.id;
   if (a.kind === 'traveler') return a.t.kind === b.t.kind && a.t.id === b.t.id;
   return true;
+}
+
+/** The threatened city of a distant battle, in a line (sim/battle.js). */
+function battleLine(g) {
+  const s = battleSummary(g);
+  if (!s) return '';
+  if (s.phase === 'foreign') return `${s.name}: in the hands of ${s.enemyName} (retaken in ${s.foreignLeft} months)`;
+  if (s.phase === 'returning') return `${s.name}: the battle is over; your troops are on their way home`;
+  return `${s.name}: threatened by ${s.words} of ${s.enemyName}, the battle in ${s.monthsLeft} month${s.monthsLeft === 1 ? '' : 's'}. Click for the Imperial advisor.`;
 }
 
 /** "Tarraco: land route, open" and the like. */
@@ -319,5 +338,8 @@ function legend() {
     row((ctx) => drawRoute(ctx, [[0.5, 2], [6.5, 2]], false, false, false), 'Faint and broken: not open yet', 7),
     row((ctx) => drawCaravan(ctx, 2.5, 2.6, TRADE_PARTNERS.tarraco.color), 'Caravan, in its city\'s color'),
     row((ctx) => drawShip(ctx, 2.5, 3, TRADE_PARTNERS.massilia.color), 'Ship, in its city\'s color'),
-    row((ctx) => drawBanner(ctx, 3.1, 3.8, null), 'Warband and its size'));
+    row((ctx) => drawBanner(ctx, 3.1, 3.8, null), 'Warband and its size'),
+    row((ctx) => drawStandard(ctx, 2.5, 4.4, null, 1, '#6d2a6b'), 'Caesar\'s legions, when he is angry'),
+    row((ctx) => drawBattleCity(ctx, [2.5, 2.3], false), 'A city Caesar asks troops for'),
+    row((ctx) => drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b'), 'Your troops sent to it'));
 }

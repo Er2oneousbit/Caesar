@@ -1571,6 +1571,9 @@ try {
   // with its table, nothing scrolls sideways, and the fourteen tabs leave the
   // page most of the window.
   await phone.keyboard.press('Escape');
+  // In a wide font as well (Verdana, about as wide as Linux's defaults):
+  // the Venues table fit here and ran 15 px over on the CI runner.
+  const wideFont = await phone.addStyleTag({ content: '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
   const phoneTabs = [];
   for (const tab of ['health', 'education', 'entertainment']) {
     phoneTabs.push(await phone.evaluate((t) => {
@@ -1582,6 +1585,7 @@ try {
     if (shots) await phone.screenshot({ path: path.join(shots, `smoke-phone-${tab}.png`) });
     await phone.keyboard.press('Escape');
   }
+  await wideFont.evaluate((el) => el.remove());
   check('phone: the Health, Education and Entertainment advisors open and fit the width', phoneTabs.every((t) => t.rows >= 3 && t.scrollW <= t.w && t.page <= 390 && t.tabsH < 120), JSON.stringify(phoneTabs));
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
   // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing

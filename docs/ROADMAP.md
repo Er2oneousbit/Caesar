@@ -15,6 +15,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.13.2)
+
+* **The Health, Education and Entertainment advisors fit a phone in any font**: with wider fonts (Linux's defaults, Verdana) the Entertainment advisor's Venues table ran 15 px past a 390 px screen and scrolled sideways. On narrow screens the coverage tables now tighten and their figures may wrap. The browser check measures the three tabs in Verdana too, so it catches this on any machine (it failed on the old styles)
+* On GitHub Actions a failed browser check, or a crash with the last check that passed, is written as an error annotation, public on the run's page, so a CI failure names itself (the run's log needs admin rights)
+
 ## Done (v0.13.1)
 
 * **The info panel keeps still while you aim**: its timed refresh (every 0.7 s) now rebuilds off-screen and swaps in only when something changed. Before, the whole panel was replaced each time, so on a slow machine a button (a storehouse's order) was never still long enough to click; the browser checks failed on the CI runner for that reason

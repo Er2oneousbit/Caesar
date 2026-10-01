@@ -114,7 +114,10 @@ export function spawnCaravan(game, partnerId) {
     return b && b.def.kind === 'warehouse' && b.efficiency > 0 && !b.emptying;
   });
   if (!found) {
-    warnOnce(game, 'noWarehouseWarned', `A caravan from ${TRADE_PARTNERS[partnerId].name} found no staffed warehouse connected to the road and turned back.`);
+    const emptying = [...buildings.values()].some((b) => b.def.kind === 'warehouse' && b.efficiency > 0 && b.emptying);
+    warnOnce(game, 'noWarehouseWarned', emptying
+      ? `A caravan from ${TRADE_PARTNERS[partnerId].name} found no staffed warehouse on the road taking goods (an emptying warehouse takes none) and turned back.`
+      : `A caravan from ${TRADE_PARTNERS[partnerId].name} found no staffed warehouse connected to the road and turned back.`);
     return;
   }
   const w = spawnWalker(game, 'caravan', entry, null, {

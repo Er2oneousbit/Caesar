@@ -607,6 +607,10 @@ test('a caravan passes over an emptying warehouse', () => {
   setEmptying(wh, true);
   spawnCaravan(game, 'tarraco');
   assert.equal(caravans().some((w) => w.target === wh.id), false, 'not while it is emptying');
+  // With no other warehouse, the warning says why, not "no staffed warehouse".
+  if (!caravans().length) {
+    assert.ok(game.messages.some((m) => /emptying warehouse takes none/.test(m.text)), game.messages.map((m) => m.text).join(' | '));
+  }
 });
 
 // ---------------------------------------------------------------------------

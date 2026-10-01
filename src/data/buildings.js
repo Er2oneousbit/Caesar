@@ -17,7 +17,8 @@
  *   fire, damage   risk points gained per day (0 = immune). 100 = disaster.
  *                  Immune to both: wells, fountains, reservoirs, warehouses,
  *                  the engineer's post, farms, gardens, statues and forts
- *                  (raiders and rioters can still destroy them).
+ *                  (raiders, rioters and an angered Mercury, who burns the
+ *                  fullest storehouse, can still destroy them).
  *   walker         roaming walker type spawned by the building
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'

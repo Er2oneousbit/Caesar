@@ -35,7 +35,7 @@ import { FOOD_TYPES } from '../data/goods.js';
 import { transact } from './economy.js';
 import { igniteBuilding, buildingLabel } from './risk.js';
 import { farmDormant } from './production.js';
-import { isStorage, storageUsed, storageAccepts, receiveGoods, takeGoods } from './storage.js';
+import { isStorage, storageUsed, storageRoom, storageAccepts, receiveGoods, takeGoods } from './storage.js';
 import { liftAllMoods } from './mood.js';
 import { diseaseActive, houseHealth } from './disease.js';
 import { logGoods } from './goodsLedger.js';
@@ -161,7 +161,10 @@ function blessMercury(game) {
     // Through the granary's own door: its room and what it accepts. A food
     // it refuses would only be carted away again. Foods the city does not
     // grow are given all the same: Mercury brings them from afar.
-    const n = receiveGoods(b, f, CONFIG.MERCURY_BLESS_FOOD);
+    // Never into room held for a cart on its way home (a Get cart's load,
+    // sim/storageOrders.js): filled by the gift, the granary threw the
+    // returning load away.
+    const n = receiveGoods(b, f, Math.min(CONFIG.MERCURY_BLESS_FOOD, storageRoom(b)));
     logGoods(game, f, 'imported', n);
     given += n;
   }

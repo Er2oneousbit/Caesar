@@ -43,7 +43,8 @@ import { recordingContext } from '../src/render/draw.js';
 import { GODS, GOD_KEYS } from '../src/data/gods.js';
 import { GOODS, GOOD_KEYS } from '../src/data/goods.js';
 import { BUILDINGS } from '../src/data/buildings.js';
-import { CARGO_ART, CARGO_STEPS, LED_GOODS, cargoArtOf, cargoLevel, cartCapacity, horsesLed, drawCargo } from '../src/render/cargoArt.js';
+import { CARGO_ART, CARGO_STEPS, LED_GOODS, cargoArtOf, cargoLevel, cartCapacity, isWagon, horsesLed, drawCargo } from '../src/render/cargoArt.js';
+import { WAREHOUSE_GET_LOAD, GRANARY_GET_LOAD } from '../src/sim/storageOrders.js';
 import { drawWalker } from '../src/render/walkerArt.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { GameMap, Terrain, WaterBits } from '../src/world/map.js';
@@ -709,12 +710,18 @@ function countingContext() {
 test('carts: what a cart holds follows who sent it', () => {
   assert.equal(cartCapacity(BUILDINGS.farm_wheat), CONFIG.FARM_CART_LOAD, 'a farm wagon hauls the harvest');
   assert.equal(cartCapacity(BUILDINGS.horse_ranch), CONFIG.FARM_CART_LOAD);
-  assert.equal(cartCapacity(BUILDINGS.warehouse), CONFIG.CART_CAPACITY, 'a warehouse sends one lot');
+  assert.equal(cartCapacity(BUILDINGS.warehouse), WAREHOUSE_GET_LOAD, 'a warehouse cart: up to a Get load (a routine lot shows part full)');
+  assert.equal(cartCapacity(BUILDINGS.granary), GRANARY_GET_LOAD, 'a granary cart: up to a Get load');
   assert.equal(cartCapacity(BUILDINGS.pottery_ws), CONFIG.CART_LOAD, 'workshops');
   assert.equal(cartCapacity(BUILDINGS.clay_pit), CONFIG.CART_LOAD, 'raw producers');
   assert.equal(cartCapacity(BUILDINGS.dock), CONFIG.CART_LOAD, 'dock carts');
   assert.equal(cartCapacity(null), CONFIG.CART_LOAD, 'sender gone: a hand cart');
-  assert.equal(cartCapacity(BUILDINGS.warehouse, 300), 300, 'never less than what is on board');
+  assert.equal(cartCapacity(BUILDINGS.pottery_ws, 300), 300, 'never less than what is on board');
+  // Only a farm's cart is an ox wagon, whatever the load: a granary's Get
+  // cart bringing 800 used to turn into a wagon on its way home.
+  assert.equal(isWagon(BUILDINGS.farm_wheat), true);
+  for (const k of ['granary', 'warehouse', 'pottery_ws', 'clay_pit', 'dock']) assert.equal(isWagon(BUILDINGS[k]), false, k);
+  assert.equal(isWagon(null), false);
 });
 
 test('carts: the load shows as 1 to 4 items, full when full', () => {

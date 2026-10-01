@@ -17,8 +17,7 @@ import { WALKER_TYPES } from '../data/walkers.js';
 import { GOODS } from '../data/goods.js';
 import { GODS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
-import { CONFIG } from '../config.js';
-import { cartCapacity, cargoLevel, horsesLed, drawCargo, LED_GOODS } from './cargoArt.js';
+import { cartCapacity, isWagon, cargoLevel, horsesLed, drawCargo, LED_GOODS } from './cargoArt.js';
 
 const SKIN = ['#e3b68c', '#c99a6b', '#a8784e', '#f0caa2', '#b98a5e'];
 const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
@@ -72,7 +71,7 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
   const loaded = !!(w.cargo && w.cargo.amount > 0);
   const leading = item === 'cart' && (loaded ? LED_GOODS.includes(w.cargo.good) : LED_GOODS.includes(origin?.produces));
   if (leading) drawLedHorses(ctx, sx, sy, k, face, dirY, phase, loaded ? horsesLed(w.cargo.amount) : 0, w.id);
-  else if (item === 'cart') drawCart(ctx, w, sx, sy, k, face, dirY, phase, cartCapacity(origin, w.cargo?.amount));
+  else if (item === 'cart') drawCart(ctx, w, sx, sy, k, face, dirY, phase, cartCapacity(origin, w.cargo?.amount), isWagon(origin));
   if (item === 'mule' && !riding) drawMule(ctx, sx + face * 8 * k, sy + dirY * 1.5 * k, k, face, phase, false, w.packs);
 
   // legs: striding, or astride the mule
@@ -265,13 +264,11 @@ function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0) {
 }
 
 /**
- * A two-wheeled hand cart pushed ahead of the carter or, for a cart that
- * holds FARM_CART_LOAD (a farm's), a longer four-wheeled wagon with an ox in
- * the shafts. The load sits on the bed (cargoArt.js); an empty cart shows
+ * A two-wheeled hand cart pushed ahead of the carter or, for a farm's
+ * (`wagon`), a longer four-wheeled wagon with an ox in the shafts. The load sits on the bed (cargoArt.js); an empty cart shows
  * the inside of its bed.
  */
-function drawCart(ctx, w, sx, sy, k, face, dirY, phase, cap) {
-  const wagon = cap >= CONFIG.FARM_CART_LOAD;
+function drawCart(ctx, w, sx, sy, k, face, dirY, phase, cap, wagon) {
   const hw = wagon ? 5.5 : 4; // half the bed's length
   const cx = sx + face * (hw + 4.5) * k; // the bed's back edge just past his hands
   const cy = sy + dirY * 1.5 * k;

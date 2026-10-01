@@ -20,24 +20,36 @@
 
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
+import { WAREHOUSE_GET_LOAD, GRANARY_GET_LOAD } from '../sim/storageOrders.js';
 
 /** Items a full cart shows. */
 export const CARGO_STEPS = 4;
 
 /**
  * How much a cart can carry, by the building that sent it: farm wagons haul
- * the whole harvest, a warehouse sends one lot at a time to a workshop or a
- * barracks, everyone else (quarries, workshops, docks) up to CART_LOAD. A
- * load bigger than that (it never is today) counts as full.
+ * the whole harvest; storage carts the most their orders move (a warehouse's
+ * Get load, a granary's; a routine lot or an Empty load shows part full);
+ * everyone else (quarries, workshops, docks) up to CART_LOAD. A bigger load
+ * counts as full.
  * @param {object|null} originDef  the sending building's def, null if gone
  * @param {number} [amount]        units on board
  */
 export function cartCapacity(originDef, amount = 0) {
   const kind = originDef?.kind;
   const cap = kind === 'farm' ? CONFIG.FARM_CART_LOAD
-    : kind === 'warehouse' ? CONFIG.CART_CAPACITY
-      : CONFIG.CART_LOAD;
+    : kind === 'warehouse' ? WAREHOUSE_GET_LOAD
+      : kind === 'granary' ? GRANARY_GET_LOAD
+        : CONFIG.CART_LOAD;
   return Math.max(cap, amount || 0);
+}
+
+/**
+ * Is this cart an ox wagon? Only a farm's: who sent it decides, not the
+ * size of the load (a granary's Get cart can bring 800 and is still pushed
+ * by hand; deciding by load turned it into a wagon halfway home).
+ */
+export function isWagon(originDef) {
+  return originDef?.kind === 'farm';
 }
 
 /**

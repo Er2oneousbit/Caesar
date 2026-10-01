@@ -10,8 +10,9 @@
  * plus one Empty switch: take nothing in, and send everything out.
  *
  * Refuse and Empty only stop deliveries in (sim/storage.js storageAccepts).
- * Whoever takes goods out ignores them: market buyers, exports, the Emperor,
- * and other storage's Get carts.
+ * Whoever takes goods out ignores them: market buyers, ships buying exports,
+ * the Emperor, and other storage's Get carts. (Caravans unload as well as
+ * buy, so they pass an emptying warehouse by: sim/trade.js spawnCaravan.)
  *
  * Each storage building sends one cart at a time, decided on its daily tick
  * when it is at least half staffed (ORDER_MIN_STAFF):

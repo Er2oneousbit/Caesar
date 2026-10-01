@@ -31,7 +31,9 @@ import { computeSentiment } from '../src/sim/population.js';
 import { cityMoodCause } from '../src/sim/mood.js';
 import { refreshDiseaseGate, houseHealth } from '../src/sim/disease.js';
 import { serializeGame, deserializeGame, upgradeGodsV6 } from '../src/core/save.js';
-import { newGame, findFree } from './helpers.mjs';
+import { newGame, findFree, build } from './helpers.mjs';
+import { updateWalkers } from '../src/sim/walkers.js';
+import { updateStorage, setOrder } from '../src/sim/storageOrders.js';
 
 log.level = 'error';
 
@@ -467,4 +469,32 @@ test('no source file names Jupiter or Vesta, except the save upgrade that rename
   const upgradeAt = save.findIndex((l) => l.startsWith('export function upgradeGodsV6'));
   const historyEnd = save.findIndex((l) => l.startsWith(' * Typed-array map layers'));
   for (const [i, l] of lines) assert.ok(i < historyEnd || (i > upgradeAt - 30 && i < upgradeAt), `save.js line ${i + 1}: ${l.trim()}`);
+});
+
+test("Mercury's blessing leaves the room held for a Get cart on its way home", () => {
+  // A granary fetching food has a cart out with room held at home; it is
+  // also the emptiest granary, so Mercury picks it. Filled by the gift, it
+  // used to throw the returning load away (800 wheat lost).
+  const game = newGame({ type: 'desert', size: 96, seed: 'orders' });
+  const spot = findFree(game, 48, 7);
+  const ry = spot.y + 3;
+  build(game, 'road', spot.x, ry, spot.x + 47, ry);
+  const place = (dx) => { const b = addBuilding(game, 'granary', spot.x + dx, ry - 3); b.efficiency = 1; for (const k of Object.keys(b.stock)) b.stock[k] = 0; return b; };
+  const A = place(0);
+  const B = place(40);
+  B.stock.wheat = 1500;
+  setOrder(A, 'wheat', 'get');
+  updateStorage(game, A);
+  assert.ok([...game.walkers.values()].some((w) => w.type === 'cart'), 'the Get cart is out');
+  const food = () => sumStock(A) + sumStock(B) + [...game.walkers.values()].reduce((s, w) => s + (w.cargo?.amount || 0), 0);
+  const s = game.city.gods.mercury;
+  s.mood = 100;
+  s.cooldown = 0;
+  updateReligion(game);
+  const blessed = food();
+  assert.ok(blessed > 1500, 'Mercury gave food');
+  for (let t = 0; t < CONFIG.TICKS_PER_DAY * 80 && [...game.walkers.values()].some((w) => w.type === 'cart'); t++) updateWalkers(game);
+  assert.ok(![...game.walkers.values()].some((w) => w.type === 'cart'), 'the cart came home');
+  assert.equal(food(), blessed, 'no food lost when the cart came home');
+  assert.ok(A.stock.wheat >= 800, 'the fetched wheat is in the granary');
 });

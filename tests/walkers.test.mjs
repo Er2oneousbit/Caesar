@@ -178,6 +178,16 @@ test('clicking picks the walker figure under the pointer', () => {
   r.buildingBoxes = [{ x: 21, y: 21, S: 1, H: 40 }];
   const f1 = screenOf(inFront);
   assert.equal(pick(f1.x, f1.y), 12, 'a walker in front of the building is clicked');
+  // Zoomed out a figure is a few pixels wide; its target stays about 22 x 36
+  // CSS px, so a click a little beside or above it still finds it.
+  r.buildingBoxes = [];
+  r.walkerSpots = walkers.map((w) => ({ id: w.id, ...walkerWorld(w, 0), ship: false }));
+  cam.zoomIndex = 0;
+  cam.centerOnTile(32, 32);
+  const z = screenOf(walkers[0], 0);
+  assert.equal(pick(z.x + 9, z.y - 4), 7, 'zoomed out: 9 px beside its feet');
+  assert.equal(pick(z.x, z.y - 28), 7, 'zoomed out: just above its head');
+  assert.equal(pick(z.x + 30, z.y), 0, 'but not 30 px away');
 });
 
 test('a walker says who it is, what it carries and what troubles the city', () => {

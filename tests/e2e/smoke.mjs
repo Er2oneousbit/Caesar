@@ -100,7 +100,9 @@ try {
     }
     return { far: Math.round(far), off, swing: app.menuOrbit.fit.scale, zoom: cam.zoomIndex };
   });
-  check('the menu backdrop tours its town and never shows the dark beyond the map', !!tour && tour.off === 0 && tour.far > 50 && tour.far <= 400, JSON.stringify(tour));
+  // The menu's map is random: on some the town sits so near the edge that the
+  // tour holds still rather than show the dark (swing 0). Otherwise it moves.
+  check('the menu backdrop tours its town and never shows the dark beyond the map', !!tour && tour.off === 0 && tour.far <= 400 && (tour.swing > 0 ? tour.far > 50 : tour.far === 0), JSON.stringify(tour));
   // 1b. The rest of the gesture never presses a menu button: the second click
   //     of a double-click on the gate, or a held Enter key (auto-repeat).
   {
@@ -599,6 +601,19 @@ try {
       await page.mouse.click(target.x, target.y, { button: 'right' });
       const closed = await page.evaluate(() => !window.colonia.renderer.follow && !window.colonia.renderer.selectedWalker);
       check('Follow keeps a walker in view; closing the panel lets go', following && closed, JSON.stringify({ following, closed }));
+      // The walker pressed on is the one clicked, even if it has walked on
+      // by the release (at 4x it covers half a tile in a click).
+      const fresh = await findWalker();
+      if (fresh) {
+        await page.mouse.move(fresh.x, fresh.y);
+        await page.mouse.down();
+        await page.evaluate(() => { const app = window.colonia; for (let k = 0; k < 12; k++) app.game.tick(); app.renderer.render(0, 0.016); });
+        await page.mouse.up();
+        await page.waitForTimeout(150);
+        const got = await page.evaluate(() => window.colonia.ui.info.target);
+        check('a walker pressed on is the one clicked, even if it walked on before the release', got?.kind === 'walker' && got.id === fresh.id, JSON.stringify({ got, want: fresh.id }));
+        await page.mouse.click(fresh.x, fresh.y, { button: 'right' });
+      }
     }
   }
 

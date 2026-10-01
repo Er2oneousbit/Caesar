@@ -1420,8 +1420,9 @@ export class Renderer {
 
   /**
    * The walker drawn at CSS pixel (sx, sy) of the screen, or 0: the figure
-   * nearest the point among those whose box (a little bigger than the figure,
-   * and never under about 12 CSS px across) holds it. Where a building stands
+   * nearest the point among those whose box holds it. The box is a little
+   * bigger than the figure and never under about 22 x 36 CSS px (the owner:
+   * people were hard to click; zoomed out a figure is a few pixels wide). Where a building stands
    * in front of a walker and covers the point, the building gets the click.
    */
   pickWalker(sx, sy) {
@@ -1441,9 +1442,9 @@ export class Renderer {
     let best = 0;
     let bestD = Infinity;
     for (const s of this.walkerSpots) {
-      const hw = s.ship ? Math.max(26, 12 * css) : Math.max(7, 6 * css);
-      const top = s.ship ? Math.max(40, 20 * css) : Math.max(22, 16 * css);
-      const bottom = Math.max(4, 3 * css);
+      const hw = s.ship ? Math.max(26, 12 * css) : Math.max(7, 11 * css);
+      const top = s.ship ? Math.max(40, 20 * css) : Math.max(24, 30 * css);
+      const bottom = Math.max(5, 6 * css);
       const dx = p.x - s.wx;
       const dy = p.y - s.wy;
       if (Math.abs(dx) > hw || dy < -top || dy > bottom) continue;

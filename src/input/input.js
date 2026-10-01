@@ -138,7 +138,11 @@ export class Input {
       this.drag = { x0: t.x, y0: t.y, x1: t.x, y1: t.y, id: e.pointerId };
       this.refreshPlan();
     } else {
-      this.press = { sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: false, id: e.pointerId };
+      // The walker under the pointer when the button goes down: by the
+      // release a walker has moved on (half a tile in a click at 4x), and
+      // picking it at the release point missed the one the player pressed on.
+      const walker = this.tool ? 0 : this.app.renderer.pickWalker(p.x, p.y);
+      this.press = { sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: false, id: e.pointerId, walker };
     }
   }
 
@@ -237,7 +241,7 @@ export class Input {
       }
       if (!press.moved) {
         const t = this.tileAt(p);
-        this.app.clickTile(t.x, t.y, p);
+        this.app.clickTile(t.x, t.y, p, press.walker);
       } else {
         this.release(e);
       }

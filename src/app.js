@@ -668,8 +668,10 @@ export class App {
     this.sfx.play('click');
     const alive = (id) => (id && g.walkers.has(id) ? id : 0);
     const r = this.renderer;
-    // A ship of war under the click (a liburnian or a raider ship) shows its panel.
-    const ship = screen ? r.pickShip(screen.x, screen.y) : 0;
+    // A ship of war under the click (a liburnian or a raider ship) shows its
+    // panel; a click on a building's tile is the building's (ships berth
+    // beside docks and stations, and their masts rise over them).
+    const ship = screen && !g.map.buildingAt(x, y) ? r.pickShip(screen.x, screen.y) : 0;
     if (ship && g.units.has(ship)) { this.ui.info.showUnit(ship); return; }
     const strict = alive(pressed?.strict) || (screen ? r.pickWalker(screen.x, screen.y, false) : 0);
     const onSomething = g.map.buildingAt(x, y) || g.map.roadblock[g.map.idx(x, y)];

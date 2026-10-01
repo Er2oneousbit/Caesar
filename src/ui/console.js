@@ -291,7 +291,7 @@ export class DebugConsole {
         need();
         if (g.military.active) return 'A raid is already under way.';
         const n = args[0] ? Math.max(1, Math.min(60, Number(args[0]) || 0)) : 0;
-        const sea = cmd === 'searaid';
+        const sea = cmd.toLowerCase() === 'searaid';
         if (sea && !g.military.seaRaids) return 'Sea raids are off in this city (Settings).';
         const inv = launchInvasion(g, null, n || undefined, { sea });
         app.renderer.camera.centerOnTile(inv.origin.x, inv.origin.y);

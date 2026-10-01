@@ -10,6 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { log } from '../src/core/debug.js';
+import { RNG } from '../src/core/rng.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame, upgradeNavyV10 } from '../src/core/save.js';
@@ -472,4 +473,66 @@ test('fishing and the fleet: a wharf\'s boat and a liburnian share the water; mi
   militaryDaily(game);
   assert.equal(game.military.active, inv, 'not over: its raiders are aboard');
   assert.equal(inv.campDays || 0, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Found in review
+// ---------------------------------------------------------------------------
+
+test('review: a squadron sent all over its river never rows onto land (a straight line across a bank\'s corner)', () => {
+  // River seed 'c': deploy 31 of this walk once put a liburnian on a grass
+  // corner, where it stayed for good (the straight line was sampled every
+  // 0.35 tiles, not walked tile by tile).
+  const game = newGame({ type: 'river', size: 64, seed: 'c' });
+  const res = buildDemoCity(game, { level: 2 });
+  game.runDays(48);
+  const nv = buildDemoNavy(game, res.center, { stock: true });
+  assert.ok(nv.ok);
+  runDays(game, 130);
+  const st = nv.station;
+  const { map } = game;
+  const body = waterOf(game, st);
+  const water = [];
+  for (let i = 0; i < map.size; i++) if (map.navBody[i] === body) water.push(i);
+  const rng = new RNG('wanderc');
+  assert.ok(squadron(game, st.id).length >= 2, 'ships to send');
+  for (let k = 0; k < 32; k++) {
+    const i = water[Math.floor(rng.next() * water.length)];
+    deployStation(game, st.id, map.xOf(i), map.yOf(i));
+    for (let t = 0; t < TPD * 40; t++) {
+      staff(game);
+      game.tick();
+      for (const u of squadron(game, st.id)) assert.ok(map.navBody[map.idx(Math.floor(u.x), Math.floor(u.y))] === body, `deploy ${k}: liburnian ${u.id} on land at ${u.x.toFixed(2)},${u.y.toFixed(2)}`);
+    }
+  }
+});
+
+test('review: a ship moved from a lost station takes a berth of its own there', () => {
+  const { game, center, station } = fleetCity();
+  const other = buildDemoNavy(game, center).station;
+  assert.ok(other && other.id !== station.id);
+  const at = (b) => { const i = shoreBerth(game, b); return [game.map.xOf(i) + 0.5, game.map.yOf(i) + 0.5]; };
+  for (let k = 0; k < 3; k++) spawnUnit(game, 'liburnian', ...at(other), { station: other.id, slot: k, state: 'sail' });
+  const moved = spawnUnit(game, 'liburnian', ...at(station), { station: station.id, slot: 3, state: 'sail' });
+  removeBuilding(game, station, 'demolish');
+  assert.equal(moved.station, other.id);
+  assert.deepEqual(squadron(game, other.id).map((u) => u.slot).sort(), [0, 1, 2, 3]);
+});
+
+test('review: a navalia takes no materials for stations on other water', () => {
+  const { game, station, navalia } = fleetCity({ stock: false });
+  updateNavalDemand(game);
+  assert.equal(navalia.fleetNeeds, true);
+  // Pretend the navalia's slip is on other water than the station's berths.
+  const slip = shoreBerth(game, navalia);
+  const orig = game.map.navBody[slip];
+  game.map.navBody[slip] = orig + 1000;
+  try {
+    updateNavalDemand(game);
+    assert.equal(navalia.fleetNeeds, false);
+    assert.equal(navalNeed(game, 'timber'), 0);
+    assert.notEqual(findDeliveryTarget(game, station.accessRoad, 'timber', 100)?.id, navalia.id);
+  } finally {
+    game.map.navBody[slip] = orig;
+  }
 });

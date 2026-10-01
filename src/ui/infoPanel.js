@@ -674,7 +674,6 @@ export class InfoPanel {
         })));
   }
 
-  /** A walker: who, from where, doing what, carrying what, and what it says. */
   /** A liburnian or a raider ship: its hull, what it is doing, its station or raid. */
   renderUnit(g) {
     const u = g.units.get(this.target.id);
@@ -697,6 +696,7 @@ export class InfoPanel {
         h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${u.id} at ${Math.floor(u.x)},${Math.floor(u.y)}`)));
   }
 
+  /** A walker: who, from where, doing what, carrying what, and what it says. */
   renderWalker(g) {
     const w = g.walkers.get(this.target.id);
     if (!w || w.dead) { this.close(); return; }

@@ -699,8 +699,65 @@ try {
           return { x, y, ax: x + off, ay: y + off };
         }
       }
-      return null;
+      // The menu's sandbox has a random seed: on some maps no free meadow
+      // touches a road. Then the free meadow nearest a road (walking over
+      // open land, at most 10 tiles) will do, and the test drags a road to
+      // it first (`link`: from a road tile to a tile beside the field).
+      if (!meadow) return null;
+      const free = (x, y) => {
+        for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) if (!m.inBounds(x + dx, y + dy) || !m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] !== 1) return false;
+        return true;
+      };
+      // Breadth first from every road tile over open land: how far, and from which road tile.
+      const dist = new Map();
+      const from = new Map();
+      const queue = [];
+      for (let i = 0; i < m.size; i++) if (m.road[i]) { dist.set(i, 0); from.set(i, i); queue.push(i); }
+      for (let q = 0; q < queue.length; q++) {
+        const i = queue[q];
+        if (dist.get(i) >= 10) continue;
+        const x = m.xOf(i); const y = m.yOf(i);
+        for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+          if (!m.inBounds(nx, ny)) continue;
+          const j = m.idx(nx, ny);
+          if (dist.has(j) || !m.isFree(nx, ny) || m.terrain[j] === 2) continue;
+          dist.set(j, dist.get(i) + 1); from.set(j, from.get(i)); queue.push(j);
+        }
+      }
+      let best = null;
+      for (let y = 1; y < m.h - size - 1; y++) {
+        for (let x = 1; x < m.w - size - 1; x++) {
+          if (!free(x, y)) continue;
+          for (let k = 0; k < size; k++) {
+            for (const [lx, ly] of [[x + k, y - 1], [x + k, y + size], [x - 1, y + k], [x + size, y + k]]) {
+              const d = dist.get(m.idx(lx, ly));
+              if (d === undefined || d === 0 || (best && d >= best.d)) continue;
+              const r = from.get(m.idx(lx, ly));
+              best = { d, x, y, link: { x: lx, y: ly, rx: m.xOf(r), ry: m.yOf(r) } };
+            }
+          }
+        }
+      }
+      if (!best) return null;
+      const off = Math.floor((size - 1) / 2);
+      app.renderer.camera.centerOnTile(Math.round((best.link.x + best.link.rx) / 2), Math.round((best.link.y + best.link.ry) / 2));
+      app.renderer.render(0, 0.016);
+      return { x: best.x, y: best.y, ax: best.x + off, ay: best.y + off, link: best.link };
     }, { size, meadow: key === 'farm_flax' });
+    if (at && at.link) {
+      // Drag a road from the road tile out to the field's edge, then look at the field.
+      await page.evaluate(() => window.colonia.ui.selectTool('road'));
+      await page.waitForTimeout(100);
+      const a = await toScreen(at.link.rx, at.link.ry);
+      const b = await toScreen(at.link.x, at.link.y);
+      await page.mouse.move(a.x, a.y);
+      await page.mouse.down();
+      await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 5 });
+      await page.mouse.move(b.x, b.y, { steps: 5 });
+      await page.mouse.up();
+      await page.keyboard.press('Escape');
+      await page.evaluate(({ ax, ay }) => { window.colonia.renderer.camera.centerOnTile(ax, ay); window.colonia.renderer.render(0, 0.016); }, at);
+    }
     await page.click(`.cat-btn[title^="${cat}"]`);
     const listed = await page.isVisible(`.build-item:has-text("${name}")`);
     if (listed) await page.click(`.build-item:has-text("${name}")`);

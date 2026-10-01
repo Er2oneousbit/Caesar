@@ -126,13 +126,42 @@ function nearestWater(map, x, y, body, r = 2) {
   return best;
 }
 
-/** Is the straight line between two points on water of `body` all the way? */
+/**
+ * Is the straight line between two points on water of `body` all the way?
+ * Every tile it crosses is checked (a grid walk, not samples, which could
+ * skip the corner of a bank and let a ship row onto land); where it passes
+ * exactly through a corner, both tiles beside it must be water.
+ */
 function clearWater(map, body, x0, y0, x1, y1) {
-  const d = Math.hypot(x1 - x0, y1 - y0);
-  const steps = Math.max(1, Math.ceil(d / 0.35));
-  for (let k = 1; k <= steps; k++) {
-    const f = k / steps;
-    if (map.navBody[tileAt(map, x0 + (x1 - x0) * f, y0 + (y1 - y0) * f)] !== body) return false;
+  const water = (x, y) => map.inBounds(x, y) && map.navBody[map.idx(x, y)] === body;
+  let x = Math.floor(x0);
+  let y = Math.floor(y0);
+  const xe = Math.floor(x1);
+  const ye = Math.floor(y1);
+  if (!water(x, y)) return false;
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const sx = Math.sign(dx);
+  const sy = Math.sign(dy);
+  const tdx = dx ? Math.abs(1 / dx) : Infinity;
+  const tdy = dy ? Math.abs(1 / dy) : Infinity;
+  let tx = dx > 0 ? (x + 1 - x0) / dx : dx < 0 ? (x0 - x) / -dx : Infinity;
+  let ty = dy > 0 ? (y + 1 - y0) / dy : dy < 0 ? (y0 - y) / -dy : Infinity;
+  for (let n = Math.abs(xe - x) + Math.abs(ye - y) + 2; n > 0 && (x !== xe || y !== ye); n--) {
+    if (Math.abs(tx - ty) < 1e-9) {
+      if (!water(x + sx, y) || !water(x, y + sy)) return false;
+      x += sx;
+      y += sy;
+      tx += tdx;
+      ty += tdy;
+    } else if (tx < ty) {
+      x += sx;
+      tx += tdx;
+    } else {
+      y += sy;
+      ty += tdy;
+    }
+    if (!water(x, y)) return false;
   }
   return true;
 }
@@ -185,7 +214,15 @@ function steer(game, u, tx, ty, speed) {
   const map = game.map;
   const here = tileAt(map, u.x, u.y);
   const body = map.navBody[here];
-  if (!body) { u.moving = false; return; }
+  if (!body || (u.body && body !== u.body)) {
+    // Off its water: back to the nearest tile of it (never frozen ashore).
+    const own = u.body || anyWaterBody(map, u);
+    const home = own ? nearestWater(map, Math.floor(u.x), Math.floor(u.y), own, 3) : -1;
+    u.path = null;
+    if (home >= 0) stepToward(u, map.xOf(home) + 0.5, map.yOf(home) + 0.5, speed);
+    else u.moving = false;
+    return;
+  }
   const goal = nearestWater(map, Math.floor(tx), Math.floor(ty), body, 3);
   if (goal < 0) { u.moving = false; return; }
   if (u.path) {
@@ -197,6 +234,20 @@ function steer(game, u, tx, ty, speed) {
   if (u.noPath > 0) { u.noPath--; u.moving = false; return; }
   if (!routeTo(game, u, goal)) { u.noPath = 40; u.moving = false; return; }
   followWaterPath(game, u, speed);
+}
+
+/** The navigable water nearest a ship that has lost track of its own (0: none within 3 tiles). */
+function anyWaterBody(map, u) {
+  const x0 = Math.floor(u.x);
+  const y0 = Math.floor(u.y);
+  for (let r = 1; r <= 3; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (map.inBounds(x0 + dx, y0 + dy) && map.navBody[map.idx(x0 + dx, y0 + dy)]) return map.navBody[map.idx(x0 + dx, y0 + dy)];
+      }
+    }
+  }
+  return 0;
 }
 
 /** Where a walker (a fishing boat) is now, in continuous tile coordinates. */
@@ -335,11 +386,11 @@ export function stationLost(game, st) {
   let moved = 0;
   let lost = 0;
   for (const u of ships) {
-    const body = game.map.navBody[tileAt(game.map, u.x, u.y)];
+    const body = u.body || game.map.navBody[tileAt(game.map, u.x, u.y)];
     const [dest] = stationsWithRoom(game, body, { staffed: false, except: st.id });
     if (dest) {
+      u.slot = freeSlot(game, dest.st); // (before it joins: its old slot is not taken there)
       u.station = dest.st.id;
-      u.slot = freeSlot(game, dest.st);
       u.path = null;
       u.target = 0;
       u.state = 'sail';
@@ -374,7 +425,7 @@ export function updateNavalia(game, b) {
   if (b.progress < 100 - 1e-6) return; // (30 steps of 100/30 add up to a hair under 100)
   for (const [g, n] of Object.entries(cost)) { b.stock[g] -= n; logGoods(game, g, 'used', n); }
   const map = game.map;
-  spawnUnit(game, 'liburnian', map.xOf(slip) + 0.5, map.yOf(slip) + 0.5, { station: dest.st.id, slot: freeSlot(game, dest.st), state: 'sail' });
+  spawnUnit(game, 'liburnian', map.xOf(slip) + 0.5, map.yOf(slip) + 0.5, { station: dest.st.id, slot: freeSlot(game, dest.st), state: 'sail', body: map.navBody[slip] });
   b.progress = 0;
   b.built = (b.built || 0) + 1;
   const st = game.military.stats;
@@ -389,16 +440,27 @@ export function updateNavalia(game, b) {
  */
 export function updateNavalDemand(game) {
   const need = { timber: 0, iron: 0, linen: 0 };
-  let yard = false;
-  let room = 0;
+  // Empty berths at staffed stations, by water: only a navalia on the same
+  // water can fill them (a navalia on other water must not hoard for them).
+  const yards = [];
+  const roomBy = new Map();
+  const counts = squadronCounts(game);
   for (const b of game.buildings.values()) {
-    if (b.def.kind === 'navalia') yard = true;
-    else if (b.def.kind === 'station' && b.efficiency > 0) room += STATION_CAPACITY;
+    if (b.def.kind === 'navalia') yards.push(b);
+    else if (b.def.kind === 'station' && b.efficiency > 0) {
+      const body = waterOf(game, b);
+      if (body) roomBy.set(body, (roomBy.get(body) || 0) + Math.max(0, STATION_CAPACITY - (counts.get(b.id) || 0)));
+    }
   }
-  if (yard && room > 0) {
-    for (const u of game.units.values()) if (u.station && game.buildings.get(u.station)?.efficiency > 0) room--;
-    for (const [g, n] of Object.entries(CONFIG.LIBURNIAN_COST)) need[g] = Math.max(0, room) * n;
+  const served = new Set();
+  for (const y of yards) {
+    const body = waterOf(game, y);
+    y.fleetNeeds = (roomBy.get(body) || 0) > 0; // (derived each day; navaliaHasRoom reads it)
+    if (y.fleetNeeds) served.add(body);
   }
+  let room = 0;
+  for (const body of served) room += roomBy.get(body);
+  for (const [g, n] of Object.entries(CONFIG.LIBURNIAN_COST)) need[g] = room * n;
   game.military.navalDemand = need;
   return need;
 }
@@ -418,9 +480,9 @@ export function navalNeed(game, good) {
   return Math.max(0, want - held);
 }
 
-/** Can this navalia take `amount` more of a good right now? */
+/** Can this navalia take `amount` more of a good right now (a staffed station on its water has an empty berth)? */
 export function navaliaHasRoom(b, good, amount) {
-  return b.def.kind === 'navalia' && b.efficiency > 0 && b.stock[good] !== undefined
+  return b.def.kind === 'navalia' && b.efficiency > 0 && b.fleetNeeds !== false && b.stock[good] !== undefined
     && b.stock[good] + b.incoming[good] + amount <= b.def.inputCap;
 }
 
@@ -524,7 +586,7 @@ export function launchSeaInvasion(game, size) {
     const moor = moors[s] ?? landing.water;
     const path = moor === landing.water ? first : waterPath(game, entry, moor);
     const u = spawnUnit(game, 'raider_ship', e.x + 0.5, e.y + 0.5, {
-      invasion: inv.id, state: 'sail', crew: crews[s], pots: CONFIG.RAID_SHIP_POTS,
+      invasion: inv.id, state: 'sail', crew: crews[s], pots: CONFIG.RAID_SHIP_POTS, body: map.navBody[entry],
       waitTicks: s * 30, // they come in a line, not all on one tile
     });
     u.path = path || first;
@@ -561,11 +623,18 @@ function shoreOk(game, x, y) {
   return map.terrain[i] !== Terrain.WATER && passable(game, 'enemy', i);
 }
 
-/** Put a ship's raiders ashore at the raid's landing (or, if that is now built on, the nearest open shore). */
+/**
+ * Put a ship's raiders ashore at the raid's landing (or, if that is now built
+ * on, the nearest open shore), each on open land within 2 tiles of it from
+ * which raiders can walk to a home (never across a creek, cut off).
+ */
 function landCrew(game, u, inv) {
   const map = game.map;
+  const field = new Float32Array(map.size);
+  fillField(game, field, (id) => !!game.buildings.get(id)?.house);
+  const ok = (x, y) => shoreOk(game, x, y) && Number.isFinite(field[map.idx(x, y)]);
   let spot = { x: inv.landing.x, y: inv.landing.y };
-  if (!shoreOk(game, spot.x, spot.y)) {
+  if (!ok(spot.x, spot.y)) {
     // Something was built there while they sailed: the nearest open shore
     // within 4 tiles of the ship, or a new landing altogether.
     spot = null;
@@ -574,7 +643,7 @@ function landCrew(game, u, inv) {
     let bestD = Infinity;
     for (let dy = -4; dy <= 4; dy++) {
       for (let dx = -4; dx <= 4; dx++) {
-        if (!shoreOk(game, ux + dx, uy + dy) || dx * dx + dy * dy >= bestD) continue;
+        if (dx * dx + dy * dy >= bestD || !ok(ux + dx, uy + dy)) continue;
         bestD = dx * dx + dy * dy;
         spot = { x: ux + dx, y: uy + dy };
       }
@@ -593,7 +662,7 @@ function landCrew(game, u, inv) {
     for (let t = 0; t < 8; t++) {
       const tx = spot.x + game.rng.range(-2, 2);
       const ty = spot.y + game.rng.range(-2, 2);
-      if (shoreOk(game, tx, ty)) { x = tx; y = ty; break; }
+      if (ok(tx, ty)) { x = tx; y = ty; break; }
     }
     spawnUnit(game, type, x + 0.5, y + 0.5, { invasion: inv.id, state: 'advance' });
   }

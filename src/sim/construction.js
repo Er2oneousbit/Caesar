@@ -35,6 +35,7 @@ import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
 import { waterBeside } from './fishing.js';
 import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
+import { residenceOf } from './governor.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -84,6 +85,10 @@ export function checkBuilding(game, type, x, y) {
   const S = def.size;
   const W = S * (def.span || 1); // a hippodrome: three sections in a row along x
   if (def.limit && countOf(game, type) >= def.limit) return fail(`Only ${def.limit === 1 ? 'one' : def.limit} ${def.name} in a city`);
+  // One residence at a time, whatever its size: a bigger one is built after
+  // the old one is demolished, never in place of it (the player chooses).
+  const home = def.kind === 'residence' ? residenceOf(game) : null;
+  if (home) return fail(`You already have a residence (${home.def.name}): only one may stand at a time. Demolish it first to build another.`);
   let trees = 0;
   let rubble = 0;
   let meadow = 0;

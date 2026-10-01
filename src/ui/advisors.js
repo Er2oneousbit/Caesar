@@ -20,7 +20,8 @@
  *              words: ui/coverageInfo.js)
  *   Religion   gods' moods and festivals
  *   Ratings    culture / prosperity / peace / favor explained
- *   Imperial   the Emperor's requests and gifts
+ *   Imperial   the Emperor's requests, the governor's rank, salary and
+ *              savings, gifts and donations (ui/governorInfo.js words them)
  *   Messages   the full message log
  * ----------------------------------------------------------------------------
  */
@@ -42,6 +43,9 @@ import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
 import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
+import { setSalary, donate } from '../sim/governor.js';
+import { RANKS } from '../data/ranks.js';
+import { rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, salaryNow } from './governorInfo.js';
 import { productionReport } from './production.js';
 import { homesWithFood } from '../sim/population.js';
 import { loanTerms, takeLoan } from '../sim/loans.js';
@@ -349,8 +353,8 @@ export class Advisors {
     const est = h('span', { class: 'num' }, `${fmt(estTax())} Dn / month`);
     const ly = c.finance.lastYear;
     const ty = c.finance.thisYear;
-    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Gifts & requests', military: 'Army pay', plunder: 'Lost to raiders', stolen: 'Stolen by thieves', loans: 'Loan from Rome', repayments: 'Loan repayments' };
-    const income = ['taxes', 'exports', 'other', 'loans'];
+    const labels = { taxes: 'Taxes', exports: 'Exports', other: 'Other income/costs', wages: 'Wages', imports: 'Imports', construction: 'Construction', tribute: 'Tribute to Rome', festivals: 'Festivals', gifts: 'Requests sent to Rome', salary: 'Governor\'s salary', donations: 'Governor\'s donations', military: 'Army pay', plunder: 'Lost to raiders', stolen: 'Stolen by thieves', loans: 'Loan from Rome', repayments: 'Loan repayments' };
+    const income = ['taxes', 'exports', 'other', 'loans', 'donations'];
     return [
       h('div', { class: 'grid2' },
         h('div', { class: 'card' },
@@ -366,6 +370,8 @@ export class Advisors {
           kv('Taxes last month', `${fmt(c.lastMonth?.taxes || 0)} Dn`),
           kv('Net this year', `${fmt(ledgerNet(ty))} Dn`),
           ly ? kv('Net last year', `${fmt(ledgerNet(ly))} Dn`) : null,
+          kv('Your salary', salaryNow(g)),
+          kv('Your savings', `${fmt(c.governor.savings)} Dn`),
           this.loanCard(g))),
       h('h4', {}, 'Ledger'),
       h('table', { class: 'tbl' },
@@ -726,14 +732,47 @@ export class Advisors {
             onclick: () => { const res = fulfillRequest(g); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('fanfare'); this.render(); },
           }, 'Send it to Rome'),
         ] : h('div', { class: 'muted' }, g.scenario.requests ? 'No requests at the moment.' : 'The Emperor makes no requests in this scenario.')),
-      h('div', { class: 'card', style: { marginTop: '10px' } },
-        h('h4', {}, 'Send a personal gift'),
-        c.giftCooldown > 0 ? h('div', { class: 'muted' }, `The Emperor was gifted recently. Wait ${c.giftCooldown} months.`) : null,
-        h('div', { class: 'row' }, GIFT_SIZES.map((gs, i) => h('button', {
-          class: 'btn small', disabled: c.giftCooldown > 0,
-          onclick: () => { const res = sendGift(g, i); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('coin'); this.render(); },
-        }, `${gs.name}: ${fmt(gs.cost)} Dn (+${gs.favor})`)))),
+      this.governorCard(g),
+      h('div', { class: 'card gift-card', style: { marginTop: '10px' } },
+        h('h4', {}, 'Send a gift to the Emperor (from your savings)'),
+        h('div', { class: 'row' }, GIFT_SIZES.map((gs, i) => {
+          const why = giftBlocked(g, i);
+          return h('button', {
+            class: 'btn small gift-btn', disabled: !!why, title: why || '',
+            onclick: () => { const res = sendGift(g, i); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('coin'); this.render(); },
+          }, giftLabel(g, i));
+        })),
+        h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, giftNote(g))),
     ];
+  }
+
+  /**
+   * Imperial tab: the governor's rank, his salary (any rank's rate, picked
+   * here) and what Rome will make of it, his savings and donations to the
+   * treasury (sim/governor.js).
+   */
+  governorCard(g) {
+    const gv = g.city.governor;
+    const won = g.city.victory;
+    const give = (n) => { const res = donate(g, n); if (!res.ok) this.app.ui.toastError(res.reason); else this.app.sfx.play('coin'); this.render(); };
+    const amounts = [100, 500].filter((n) => n < gv.savings);
+    return h('div', { class: 'card governor-card', style: { marginTop: '10px' } },
+      h('h4', {}, 'The governor'),
+      kv('Rank', rankLine(g)),
+      kv('Personal savings', `${fmt(gv.savings)} Dn`),
+      h('div', { class: 'field', style: { marginTop: '6px' } }, h('label', {}, 'Your salary, paid monthly from the treasury'),
+        h('select', {
+          class: 'salary-select', disabled: won,
+          onchange: (e) => { const res = setSalary(g, Number(e.target.value)); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
+        }, RANKS.map((r, i) => h('option', { value: i, selected: i === gv.salaryRank }, salaryOption(i, gv.rank))))),
+      kv('Paid this year', `${fmt(gv.paidThisYear)} Dn`),
+      h('div', { class: 'muted', style: { fontSize: '12.5px' } }, salaryOutlookText(g)),
+      h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, 'Rome judges the year\'s pay at New Year: above your rank\'s costs favor, below it earns a little. The salary is not paid while the treasury cannot cover it.'),
+      h('div', { class: 'row', style: { marginTop: '6px', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+        h('span', {}, 'Give to the city:'),
+        amounts.map((n) => h('button', { class: 'btn small donate-btn', onclick: () => give(n) }, `${fmt(n)} Dn`)),
+        h('button', { class: 'btn small donate-btn', disabled: gv.savings <= 0, onclick: () => give(gv.savings) }, `All (${fmt(gv.savings)} Dn)`)),
+      h('div', { class: 'muted', style: { fontSize: '12.5px' } }, 'Donations go into the treasury, on a ledger line of their own; they are not counted as the city\'s profit. Your savings go with you to your next mission.'));
   }
 
   tab_messages(g) {

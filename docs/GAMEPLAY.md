@@ -179,6 +179,7 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
 * **Trade:** open a route once (Trade advisor), then a caravan comes every 32-56 days and a ship every 64-96 (about the original's pace; on Insane both come half as often in winter). Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
 * **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").
+* **The governor's salary** (Imperial advisor): paid at each month's end, after wages, taxes and army pay, from the treasury into your personal savings (ledger row "Governor's salary", counted as spending). It is not paid in a month the treasury cannot cover it, so it never puts the city in debt, and it stops once a mission is won. See *The governor* below.
 * Construction needs money in the treasury; running wages into debt costs 3 favor a month, and nothing can be built until you are out of it.
 * **Loans from Rome** (Finance advisor): Rome lends 2,000 Dn whenever no loan is being repaid, in debt or not, repaid automatically in equal monthly instalments over 24 months with interest over the whole term of 10% on Easy, 20% on Normal, 30% on Hard and 40% on Insane (2,200 to 2,800 Dn in all). Instalments are paid each month before wages, even from an empty treasury (the debt that follows costs favor from that month). The loan and its repayments have ledger lines of their own and do not count as profit or loss for prosperity; borrowed money pays tribute and the Emperor's requests like any other, at the loan's interest.
 
@@ -384,9 +385,36 @@ Venus's part of the city mood shows in the Overview's mood breakdown as "Venus's
   | Riot | none | -5 | -10 | -15 |
   | Thief | none | -1, and no gain that month | -2, and no gain that month | -3, and no gain that month |
   | Protests | none | none | none | -1 for every fifth |
-* **Favor:** requests (+10 / -12), tribute, gifts, debt. Drifts toward 50. At 0 you are recalled (game over). The Emperor first asks in the city's fourth year (36-48 months in), once it has 500 people, then every 14-26 months for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
+* **Favor:** requests (+10 / -12), tribute, gifts, debt, the governor's salary at New Year. Drifts toward 50. At 0 you are recalled (game over). The Emperor first asks in the city's fourth year (36-48 months in), once it has 500 people, then every 14-26 months for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 
 A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards.
+
+## The governor
+
+**Rank.** Eleven ranks, each with the monthly salary Rome allows it:
+
+| Rank | Citizen | Clerk | Engineer | Architect | Quaestor | Procurator | Aedile | Praetor | Consul | Proconsul | Caesar |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Salary (Dn a month) | 0 | 2 | 5 | 8 | 12 | 20 | 30 | 40 | 60 | 80 | 100 |
+
+Each campaign mission is played at one rank: Citizen in mission 1, one step up each mission after, Aedile in mission 7 (the higher ranks wait for a longer campaign). The sandbox setup lets you pick a rank (Procurator unless you choose). The rank never changes during a mission; the victory screen names the next one.
+
+**Salary.** It starts at your rank's rate; the Imperial advisor lets you draw any rank's rate instead. It is paid at each month's end from the treasury into your personal savings, but only when the treasury can cover it. At New Year Rome looks at what you were actually paid over the year and finds the lowest rank whose year of pay covers it: each rank above your own costs 1 favor (a Quaestor paid an Aedile's 360 Dn loses 2), a year below your rank's pay earns +1 however far below (a Citizen, at 0, cannot earn it), and your own rank's pay changes nothing. Switching to a modest rate on the last day of the year does not help: it is the year's pay that counts. The Imperial advisor shows what you will have drawn by New Year at the current rate, and what Rome will make of it. (Favor drifts back toward 50, half a point a month, so the effect fades over the following months.)
+
+**Savings** are your own, and go with you: winning a mission carries them to the next one, and a mission played again starts from what it started with the time before. The first mission and the sandbox start with none. They are spent two ways (festivals stay paid from the treasury):
+
+* **Gifts to the Emperor** (Imperial advisor). Their price grows with your savings: a modest gift costs an eighth of your savings plus 20 Dn, a generous one a quarter plus 50, a lavish one half plus 100. Each further gift within a year of your last one pleases him less:
+
+  | Gift | 1st | 2nd | 3rd | 4th | 5th and later |
+  |---|---|---|---|---|---|
+  | Modest | +3 | +1 | 0 | 0 | 0 |
+  | Generous | +5 | +3 | +1 | 0 | 0 |
+  | Lavish | +10 | +5 | +3 | +1 | 0 |
+
+  His count starts again 12 months after your last gift. A gift that would please him no more cannot be sent. Example: with 400 Dn saved the gifts cost 70, 150 and 300; a lavish one leaves 100 and gives +10; a month later a modest one costs 32 and gives +1.
+* **Donations** to the treasury, any amount up to your savings. The ledger shows them on their own row ("Governor's donations"), and like a loan they do not count as profit for prosperity.
+
+**The residence.** The Governor's House (3x3, 150 Dn, desirability +12 falling by 2 every 2 tiles over 3), Villa (4x4, 400 Dn, +20, by 3 over 4) and Palace (5x5, 750 Dn, +28, by 4 over 5), under Government & Decor: the house from mission 1, the villa from mission 3, the palace from mission 5, all three in the sandbox. No workers and no road needed; they can burn or crack like other stone buildings (slowly). Only one may stand at a time: building another is refused until you demolish the one you have. It does nothing for your salary, savings or favor; it is the grandest decoration in the city, and rioters go for it before anything else.
 
 ## The campaign
 

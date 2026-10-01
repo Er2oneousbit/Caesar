@@ -12,7 +12,7 @@ import { CONFIG } from '../config.js';
 import { HOUSE_TIERS, MAX_TIER } from '../data/housing.js';
 import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, ENT_SEATS_MAX, ENT_BASE_MAX } from '../data/buildings.js';
 import { GOODS } from '../data/goods.js';
-import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { TRADE_PARTNERS, SCENARIOS } from '../data/scenarios.js';
 import { UNIT_TYPES, STATION_CAPACITY } from '../data/units.js';
 import { KEY_HELP } from '../input/input.js';
 import { tierNeeds } from './advisors.js';
@@ -20,6 +20,8 @@ import { CONSOLE_HELP } from './console.js';
 import { RAID_MIN_POP } from '../sim/military.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
+import { RANKS, TOP_RANK } from '../data/ranks.js';
+import { GIFT_SIZES } from '../sim/emperor.js';
 
 /** "Tarraco and Alexandria": the partners that sell (`side` 'sells') or buy (`side` 'buys') a good, from the data. */
 const partnersWho = (side, good) => {
@@ -158,6 +160,10 @@ function content(tab) {
         h('p', {}, `The Health, Education and Entertainment advisors (F2) show, for each kind of building, how many there are and how many have workers, the people its walkers reached (a hospital: the homes within ${CONFIG.HOSPITAL_RADIUS} tiles), and how many of the people whose homes need it to keep or reach their level have it, in words from None to Full. A building serves every home its walker passes, however many; venues are the exception, with seats that set the entertainment every home gets. Each advisor gives one line of advice on what holds homes back most; click a building's name to go to one. The Health advisor also shows city health, which moves ${CONFIG.HEALTH_STEP} points a month toward the homes' average score, and the year's outbreaks; the Overview has city health and crime at a glance.`),
         h('h4', {}, 'Ratings'),
         h('p', {}, 'Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content. Favor is the Emperor\'s opinion: pay tribute, answer his requests, avoid debt. In debt nothing can be built; Rome lends money (Finance advisor), repaid monthly with interest.'),
+        h('h4', {}, 'The governor: rank, salary, savings'),
+        h('p', {}, `You hold a rank, from ${RANKS[0].name} to ${RANKS[TOP_RANK].name}: each campaign mission is played one rank higher (${RANKS[0].name} in the first, ${RANKS[SCENARIOS.at(-1).rank].name} in the last), and the sandbox lets you pick one. Your rank sets the salary Rome expects you to draw: ${RANKS.map((r) => `${r.name} ${r.salary}`).join(', ')} Dn a month. In the Imperial advisor you can draw any of these rates. The salary is paid at each month's end from the treasury into your personal savings, but never when the treasury cannot cover it. At New Year Rome looks at what you drew over the year: more than your rank's pay costs a point of favor for every rank above it, less earns one point.`),
+        h('p', {}, `Your savings are your own and go with you from mission to mission. Spend them on gifts to the Emperor (Imperial advisor): a modest, generous or lavish gift costs ${GIFT_SIZES.map((g) => `1/${g.share} of your savings plus ${g.base} Dn`).join(', ')}, and pleases him by ${GIFT_SIZES.map((g) => `+${g.favor[0]}`).join(', ')} favor; each further gift within a year of your last pleases him less, and he counts afresh 12 months after the last. Or give them to the city: a donation goes into the treasury and is not counted as profit. Festivals are paid from the treasury.`),
+        h('p', {}, `Your residence: a Governor's House (${BUILDINGS.governor_house.cost} Dn, 3×3), Villa (${BUILDINGS.governor_villa.cost} Dn, 4×4) or Palace (${BUILDINGS.governor_palace.cost} Dn, 5×5), under Government & Decor. It needs no road and no workers, and makes the land around it very desirable (+${BUILDINGS.governor_house.des[0]}, +${BUILDINGS.governor_villa.des[0]}, +${BUILDINGS.governor_palace.des[0]} beside it). Only one may stand at a time: demolish it to build a bigger one. Rioters go for it before anything else.`),
       ];
     }
     case 'military':

@@ -42,6 +42,7 @@ import { rebuildPlan } from '../sim/construction.js';
 import { lacksRoad } from '../sim/roadAccess.js';
 import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
+import { rankLine } from './governorInfo.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -112,6 +113,8 @@ export function buildingStatus(game, b) {
   if (def.workers && b.efficiency <= 0) return { level: 'bad', text: 'No workers available. The city needs more people, or change labor priorities.' };
   if (def.needsPiped && !b.hasWater) return { level: 'bad', text: 'No piped water. It must sit inside a full reservoir\'s area.' };
   switch (def.kind) {
+    case 'residence':
+      return { level: 'good', text: 'The governor lives here.' };
     case 'reservoir':
       if (!b.hasWater) return { level: 'bad', text: 'Dry. Build next to a river/lake, or connect by aqueduct to a full reservoir.' };
       break;
@@ -635,6 +638,15 @@ export class InfoPanel {
       case 'decor': {
         const [v, , , r] = def.des;
         parts.push(sec('Beauty', kv('Desirability', `+${v} fading over ${r} tiles`)));
+        break;
+      }
+      case 'residence': {
+        const [v, , , r] = def.des;
+        parts.push(sec('The governor\'s home',
+          kv('Desirability', `+${v} fading over ${r} tiles`),
+          kv('Governor', rankLine(g)),
+          kv('Personal savings', `${fmt(g.city.governor.savings)} Dn`),
+          h('div', { class: 'muted' }, 'Only one residence may stand at a time. Rioters go for it before anything else. Your salary and gifts are in the Imperial advisor.')));
         break;
       }
       default:

@@ -82,6 +82,8 @@ Options:
   --cloth           also build the cloth industry: a flax farm, a linen maker, a clothing maker
   --cloth-off <m>   demolish the cloth industry after month m (homes lose their clothing)
   --caretaker       rebuild whatever burns or collapses, as a player would (npm run sweep)
+  --salary          the governor draws his rank's salary from the treasury (default: none, so the
+                    money and favor reported are the city's own)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --sea-raids <s>   on | off: the Sea raids switch (default on: some raids come by sea where ships can sail)
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
@@ -93,7 +95,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false, salary: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -117,6 +119,7 @@ function parse(argv) {
     else if (a === '--raids') o.raids = next();
     else if (a === '--sea-raids') o.seaRaids = next();
     else if (a === '--navy') o.navy = true;
+    else if (a === '--salary') o.salary = true;
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
     else if (a === '--caretaker') o.caretaker = true;
@@ -172,6 +175,13 @@ const SIM_MONEY = 20000;
 if (opts.seaRaids !== null && !['on', 'off'].includes(opts.seaRaids)) { console.error(`--sea-raids takes on or off
 ${HELP}`); process.exit(2); }
 const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids } });
+// The governor's salary (sim/governor.js) is his own, not the city's: it goes
+// into savings he can give back (donations) or spend on gifts. Unless asked,
+// the demo governor draws none and Rome judges none (he is a Citizen, whose
+// rate is 0), so the money and favor here are the city's alone and stay
+// comparable with runs from before the salary existed. With --salary he
+// draws his rank's rate: 20 Dn a month in the sandbox (a Procurator).
+if (!opts.salary) Object.assign(game.city.governor, { rank: 0, salaryRank: 0 });
 const messages = [];
 game.events.on('message', (m) => { messages.push(m); if (opts.verbose) console.log(`   [${m.level}] ${m.text}`); });
 let wonMonth = null; // a campaign mission: the month every goal was first met

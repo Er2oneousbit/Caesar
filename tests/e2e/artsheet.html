@@ -19,7 +19,7 @@
   homes), plus buildings with live details, and carts with every good,
   drawn straight from the procedural art (no game running). Handy for artists
   reviewing changes, and as a side-by-side reference when making replacement
-  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)  carts=1 (the carts only; scale=1 is the default zoom)
+  sprites. Query params: scale=2 (pixel scale, default 2)  governor=1 (the governor's residences only)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)  carts=1 (the carts only; scale=1 is the default zoom)
   water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
   cloth=1 (the cloth industry only: the flax farm as it grows and rests, the two workshops, the carts)
   navy=1 (the fleet only: the navalia and naval station on each side, liburnians and raider ships)
@@ -42,7 +42,8 @@
   const water = !!q.get('water');
   const cloth = !!q.get('cloth');
   const navy = !!q.get('navy');
-  const only = q.get('carts') || water || cloth || navy ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const governor = !!q.get('governor');
+  const only = q.get('carts') || water || cloth || navy || governor ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -92,6 +93,17 @@
       const S = { prefecture: 1, forum: 2, senate: 4, barracks: 3, fort_legion: 3, colosseum: 5 }[t];
       return [t, buildingSpec(t, S, 0, 0)];
     }));
+  }
+  if (!only || q.get('extras') || governor) {
+    // The governor's residences, each in two looks and under snow, beside the
+    // Senate and the homes' own palace for scale.
+    const res = [['governor_house', 3], ['governor_villa', 4], ['governor_palace', 5]];
+    section('The governor\'s residences: house, villa, palace (looks 0 and 4, then under snow)', [
+      ...res.flatMap(([k, S]) => [0, 4].map((v) => [`${k} ${v}`, buildingSpec(k, S, v, 0)])),
+      ...res.map(([k, S]) => [`${k} snow`, buildingSpec(k, S, 0, 0, false, 3)]),
+      ['senate', buildingSpec('senate', 4, 0, 0)],
+      ['Grand Palatium (home)', buildingSpec('house', 4, 0, 19)],
+    ]);
   }
   if (!only || q.get('extras') || cloth) {
     // The cloth industry: the flax field at each growth stage (blue from the

@@ -34,6 +34,7 @@ import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLas
 import { findScenario, sandboxScenario, withDifficulty, SCENARIOS } from './data/scenarios.js';
 import { DIFFICULTY, DIFFICULTY_ORDER } from './data/difficulty.js';
 import { farmSeasonNotice } from './sim/production.js';
+import { campaignSavings, storeCampaignSavings } from './sim/governor.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort, enemyCount } from './sim/military.js';
@@ -83,7 +84,9 @@ export class App {
     this.flags = flags;
     this.log = log;
     this.settings = readJson(`${CONFIG.STORAGE_PREFIX}settings`, DEFAULT_SETTINGS);
-    this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [], best: {} }); // best = { missionId: hardest difficulty won }
+    // best = { missionId: hardest difficulty won }; savings = { missionId: the
+    // governor's savings that mission starts with, stored when the one before it was won }
+    this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [], best: {}, savings: {} });
     this.sfx = new Sfx();
     this.music = new Music();
     this.musicOverride = null; // mood after victory/defeat
@@ -217,9 +220,14 @@ export class App {
   newScenario(id, difficulty = 'normal') {
     const scenario = withDifficulty(findScenario(id), difficulty);
     if (!scenario) { this.ui.toastError(`Unknown scenario ${id}`); return; }
-    this.startGame(new Game({ scenario, flags: this.newGameFlags() }));
+    this.startGame(new Game({ scenario, flags: this.newGameFlags(), savings: this.savedFor(id) }));
     for (const hint of scenario.hints || []) this.game.message(hint, 'info');
     farmSeasonNotice(this.game, true); // Insane: missions start in winter, when nothing grows
+  }
+
+  /** The savings a campaign mission starts with: what the governor had when he won the one before it (0 for the first, the sandbox, or one never reached). */
+  savedFor(id) {
+    return campaignSavings(this.progress.savings, id);
   }
 
   /** Start a sandbox game with the given settings. */
@@ -232,6 +240,7 @@ export class App {
       difficulty: opts.difficulty || 'normal',
       invasions: opts.invasions || 'occasional',
       seaRaids: opts.seaRaids !== false,
+      rank: opts.rank,
     });
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
@@ -244,7 +253,8 @@ export class App {
     const scenario = this.game.scenario;
     const seaRaids = this.game.military.seaRaids !== false; // the restarted city keeps its switch
     this.ui.closeModal();
-    this.startGame(new Game({ scenario, flags: { ...this.newGameFlags(seaRaids), seed: this.game.seed } }));
+    const savings = this.savedFor(scenario.id); // a mission starts again from what it started with
+    this.startGame(new Game({ scenario, flags: { ...this.newGameFlags(seaRaids), seed: this.game.seed }, savings }));
     farmSeasonNotice(this.game, true);
   }
 
@@ -312,6 +322,10 @@ export class App {
     const best = this.progress.best || (this.progress.best = {});
     const rank = (k) => DIFFICULTY_ORDER.indexOf(k);
     if (rank(this.game.difficultyKey) > rank(best[id] ?? '')) best[id] = this.game.difficultyKey;
+    // The governor's savings go with him to the next mission (sim/governor.js).
+    // Each mission keeps what it was started with, so replaying it later
+    // starts from the same savings, as the original's career did.
+    storeCampaignSavings(this.progress.savings ||= {}, id, this.game.city.governor.savings);
     writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
     this.sfx.play('victory');
     this.musicOverride = 'festival';

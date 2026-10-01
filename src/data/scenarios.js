@@ -30,6 +30,10 @@
  *   military                      invasion settings (INVASION_PRESETS), or none
  *   seaRaids: false               every raid comes by land (missing = some come
  *                                 by sea where ships can sail; sim/navy.js)
+ *   rank                          the governor's rank (data/ranks.js): one per
+ *                                 mission, Citizen in mission 1 and a step up
+ *                                 each mission after; the sandbox's is picked in
+ *                                 its setup. Sets the salary (sim/governor.js)
  *   difficulty                    key of data/difficulty.js (missing = normal;
  *                                 campaign missions get it from withDifficulty)
  *   hints: string[]               tips shown at start
@@ -40,6 +44,7 @@ import { CONFIG } from '../config.js';
 import { DIFFICULTY, difficultyOf } from './difficulty.js';
 import { at } from './empireGeo.js';
 import { BUILDINGS, TOOLS } from './buildings.js';
+import { SANDBOX_RANK, clampRank } from './ranks.js';
 
 /**
  * Trade partners.
@@ -127,9 +132,15 @@ export const INVASION_PRESETS = Object.freeze({
  * (4, the river; 5, the coast; 7, a lake at the map's edge) and the sandbox.
  */
 export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station']);
-const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum'];
+/*
+ * The governor's residences come with the career, as the original's bigger
+ * ones came with later missions: the house from the first mission, the
+ * villa from the third, the palace from the fifth (every building is open
+ * from there). No rank is asked for: the mission decides.
+ */
+const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum', 'governor_house'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
-const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school'];
+const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school', 'governor_villa'];
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock', 'farm_flax', 'linen_ws', 'clothing_ws',
   'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall', 'shipyard', 'wharf', ...NAVY_KEYS];
 /**
@@ -151,6 +162,7 @@ export const SCENARIOS = Object.freeze([
     funds: 6000, startYear: -280,
     goals: { population: 300, culture: 15, prosperity: 0, peace: 35, favor: 0 },
     paceYears: 1.25,
+    rank: 0, // Citizen (data/ranks.js)
     unlocks: BASIC, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
       'Build Housing Plots next to the Imperial Road (or any road connected to it). Settlers arrive from the map edge.',
@@ -170,6 +182,7 @@ export const SCENARIOS = Object.freeze([
     funds: 7000, startYear: -270,
     goals: { population: 450, culture: 35, prosperity: 20, peace: 45, favor: 0 },
     paceYears: 2.1,
+    rank: 1, // Clerk (data/ranks.js)
     unlocks: TIER2, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
       'A Reservoir placed next to water fills up. Fountains inside its piped area (10 tiles) supply homes within 4 tiles.',
@@ -186,6 +199,7 @@ export const SCENARIOS = Object.freeze([
     funds: 7000, startYear: -255,
     goals: { population: 3500, culture: 45, prosperity: 30, peace: 50, favor: 0 },
     paceYears: 3.6,
+    rank: 2, // Engineer (data/ranks.js)
     unlocks: TIER3, partners: ['tarraco', 'aquileia'], requests: true,
     hints: [
       'Clay Pits must be near water. Potters turn clay into pottery, which Merchant Houses and every home above them need, with Thermae nearby.',
@@ -202,6 +216,7 @@ export const SCENARIOS = Object.freeze([
     funds: 8000, startYear: -240,
     goals: { population: 5000, culture: 50, prosperity: 40, peace: 55, favor: 0 },
     paceYears: 5.7,
+    rank: 3, // Architect (data/ranks.js)
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
     military: { first: 60, interval: [30, 40], base: 4 },
     hints: [
@@ -219,6 +234,7 @@ export const SCENARIOS = Object.freeze([
     funds: 9000, startYear: -225,
     goals: { population: 6500, culture: 60, prosperity: 50, peace: 60, favor: 55 },
     paceYears: 7.8,
+    rank: 4, // Quaestor (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME, partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
     military: { first: 48, interval: [22, 32], base: 6 },
     hints: [
@@ -235,6 +251,7 @@ export const SCENARIOS = Object.freeze([
     funds: 10000, startYear: -210,
     goals: { population: 7000, culture: 60, prosperity: 55, peace: 65, favor: 60 },
     paceYears: 8.5,
+    rank: 5, // Procurator (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME_AND_NAVY, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
     military: { first: 42, interval: [20, 30], base: 6 },
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
@@ -246,6 +263,7 @@ export const SCENARIOS = Object.freeze([
     funds: 12000, startYear: -190,
     goals: { population: 12000, culture: 75, prosperity: 70, peace: 75, favor: 65 },
     paceYears: 15.4,
+    rank: 6, // Aedile (data/ranks.js)
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
     military: { first: 36, interval: [14, 22], base: 8 },
     hints: [
@@ -266,7 +284,7 @@ export function withDifficulty(scenario, difficulty = 'normal') {
 }
 
 /** Sandbox settings template. The New Game screen fills in the blanks. */
-export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true } = {}) {
+export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true, rank = SANDBOX_RANK } = {}) {
   return {
     id: 'sandbox', name: 'Sandbox', title: 'Free Build',
     intro: 'No goals, no deadlines. Build the city you want.',
@@ -279,6 +297,7 @@ export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', f
     invasions,
     seaRaids: seaRaids !== false, // some raids come by sea where ships can sail (sim/navy.js)
     difficulty,
+    rank: clampRank(rank), // the governor's rank, picked in the setup (data/ranks.js)
     hints: ['Tip: press F1 for help at any time.'],
   };
 }

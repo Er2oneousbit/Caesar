@@ -61,6 +61,7 @@ const HEIGHT = {
   house: 70, well: 24, fountain: 26, reservoir: 30, barber: 34, clinic: 34, baths: 50, hospital: 50,
   oracle: 56, school: 44, library: 52, academy: 60, theater: 40, amphitheater: 46, colosseum: 70,
   actor_troupe: 44, gladiator_school: 40, menagerie: 40, forum: 46, senate: 84, garden: 30,
+  governor_house: 52, governor_villa: 66, governor_palace: 104,
   statue_small: 40, statue_medium: 64, statue_large: 90, engineer_post: 44, prefecture: 40,
   clay_pit: 30, timber_yard: 34, iron_mine: 40, marble_quarry: 40, market: 36, granary: 50, warehouse: 40,
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
@@ -78,7 +79,7 @@ const SHADOW = {
   statue_large: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
   warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
   prefecture: 0.45, shipyard: 0.3, wharf: 0.25, hippodrome: 0.35, hippodrome_part: 0.35, chariot_maker: 0.45,
-  navalia: 0.4, naval_station: 0.55,
+  navalia: 0.4, naval_station: 0.55, governor_house: 0.55, governor_villa: 0.75, governor_palace: 1.0,
 };
 /** Shadow length per house level (tents are low, insulae tall, villas wide but low, palaces tall). */
 const HOUSE_SHADOW = [0, 0.18, 0.2, 0.22, 0.26, 0.3, 0.34, 0.45, 0.5, 0.5, 0.65, 0.95, 1.1, 0.5, 0.55, 0.55, 0.6, 0.65, 0.7, 0.85, 0.9];
@@ -177,6 +178,10 @@ const FLAG_SPECS = {
     { u: S - 0.4, v: 0.4, z: 36, h: 14, w: 6.5, ch: 4.5, color: '#6b3fa0' },
   ],
   colosseum: (S) => [-40, 0, 40].map((dx) => ({ x: dx, y: (S * TH) / 2 - 48, h: 12, w: 6.5, ch: 4, color: '#a8322b' })),
+  // The governor's banners (GOV.banner): at his gate, on his roof, on every wing of the palace.
+  governor_house: (S) => [S * 0.42 - 0.12, S * 0.42 + 1.02].map((u) => ({ u, v: S - 0.32, z: 7, h: 13, w: 5.5, ch: 7, color: GOV.banner })),
+  governor_villa: (S) => [1.1, S - 0.3].map((u) => ({ u, v: 0.85, z: 36, h: 14, w: 6.5, ch: 4.5, color: GOV.banner, swallow: true })),
+  governor_palace: (S) => [[0.82, 0.45], [S - 0.82, 0.45], [0.82, S - 1.25], [S - 0.82, S - 1.25]].map(([u, v]) => ({ u, v, z: 34, h: 15, w: 7, ch: 4.5, color: GOV.banner, swallow: true })),
   barracks: (S) => [{ u: S - 0.35, v: 0.3, z: 26, h: 14, w: 9.5, ch: 5.2, color: '#a8322b', swallow: true }],
   fort: (S, key) => [{ u: S * 0.5, v: S * 0.5, z: 0, h: 26, w: 9.5, ch: 5.2, color: UNIT_TYPES[BUILDINGS[key]?.unit]?.color || '#a8322b', swallow: true }],
 };
@@ -1275,6 +1280,214 @@ function senateArt(ctx, S) {
   // steps
   box(ctx, 0.9, S - 0.3, S - 1.8, 0.22, 0, 3, shade(COL.stone, 0.15));
   flagPoles(ctx, 'senate', S); // imperial purple on the roof corners
+}
+
+// ---------------------------------------------------------------------------
+// The governor's residences
+// ---------------------------------------------------------------------------
+
+/**
+ * The governor's colors: warm plaster for the house, white stucco for the
+ * villa, marble for the palace, with deep purple-red banners and gilding,
+ * so each reads at a glance as grander than the homes around it.
+ */
+const GOV = Object.freeze({ plaster: '#e9d3a6', stucco: '#f3ece0', roof: '#a9472f', banner: '#7a2848', door: '#4a2a22', glass: '#3c2f2a' });
+
+/** A small gilded ornament (an acroterion) at a gable's peak. */
+function gilt(ctx, u, v, z, s = 1) {
+  const [x, y] = P(u, v, z);
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(x - 1.2 * s, y - 4 * s, 2.4 * s, 4 * s);
+  ctx.beginPath(); ctx.arc(x, y - 4.6 * s, 1.4 * s, 0, Math.PI * 2); ctx.fill();
+}
+
+/**
+ * A temple-fronted porch on the +v (front-left) face: `n` columns along
+ * v = `vf` from u0 to u1, `h` px tall from z0, under a gable whose end
+ * faces the viewer (a pediment), crowned with gilt.
+ */
+function portico(ctx, u0, u1, vb, vf, z0, h, n, roof, r = 1.7) {
+  colonnade(ctx, u0 + 0.08, vf - 0.08, u1 - 0.08, vf - 0.08, n, z0, h, COL.marble, r);
+  box(ctx, u0, vb, u1 - u0, vf - vb, z0 + h, 3, COL.marble, { plain: true });
+  gableRoof(ctx, u0, vb, u1 - u0, vf - vb, z0 + h + 3, 7 + (u1 - u0) * 2, roof, 'v', 0.04);
+  gilt(ctx, (u0 + u1) / 2, vf + 0.04, z0 + h + 3 + 7 + (u1 - u0) * 2);
+}
+
+/** A gilded figure on a pedestal (statues flanking the palace steps). */
+function giltStatue(ctx, u, v, z = 0) {
+  const [x, y] = P(u, v, z);
+  ctx.fillStyle = COL.stone;
+  ctx.fillRect(x - 3, y - 5, 6, 5);
+  ctx.fillStyle = shade(COL.stone, 0.15);
+  ctx.fillRect(x - 3, y - 5, 2.4, 5);
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(x - 1.3, y - 13, 2.6, 8);
+  ctx.beginPath(); ctx.arc(x, y - 14.4, 1.7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade(COL.gold, -0.2);
+  ctx.fillRect(x + 1.3, y - 15, 0.8, 9); // a staff
+}
+
+/**
+ * The Governor's House (3x3): a town house round a court, the hall at the
+ * back two storeys high, a wing on the left, a short colonnade on the right,
+ * the rain pool in the middle of the court and, in the front wall, a gate
+ * with two columns and a pediment under the governor's banners.
+ */
+function governorHouseArt(ctx, S, variant) {
+  const wall = GOV.plaster;
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#7fa956');
+  quad(ctx, 0.18, 0.18, S - 0.18, S - 0.18, 0, '#d9ccad'); // the paved court
+  // the hall across the back
+  box(ctx, 0.2, 0.2, S - 0.4, 0.95, 0, 24, wall);
+  windows(ctx, 'right', 0.2, 0.2, S - 0.2, 1.15, 0, 2, 1, GOV.glass, { z: 5, h: 5, gap: 10, shutters: '#6b4a3a' });
+  windows(ctx, 'left', 0.2, 0.2, S - 0.2, 1.15, 0, 1, 4, GOV.glass, { z: 14, h: 5 });
+  door(ctx, 'left', 0.2, 0.2, S - 0.2, 1.15, 0, 0.62, GOV.door, 0.24, 9);
+  gableRoof(ctx, 0.2, 0.2, S - 0.4, 0.95, 24, 9, GOV.roof, 'u');
+  // the wing on the left
+  box(ctx, 0.2, 1.15, 0.8, S - 1.6, 0, 15, shade(wall, -0.04));
+  windows(ctx, 'right', 0.2, 1.15, 1.0, S - 0.45, 0, 1, 2, GOV.glass, { z: 5, h: 5 });
+  gableRoof(ctx, 0.2, 1.15, 0.8, S - 1.6, 15, 7, shade(GOV.roof, -0.05), 'v');
+  // the rain pool (impluvium), and a bay tree in a pot by it
+  const pu = S * 0.6;
+  const pv = S * 0.55;
+  quad(ctx, pu - 0.32, pv - 0.28, pu + 0.32, pv + 0.28, 0, '#e4dccb');
+  quad(ctx, pu - 0.25, pv - 0.21, pu + 0.25, pv + 0.21, 0.5, COL.water);
+  jar(ctx, pu + 0.5, pv - 0.35, '#a85a3a');
+  // a short colonnade along the right of the court
+  colonnade(ctx, S - 0.32, 1.35, S - 0.32, S - 0.75, 3, 0, 13, COL.marble, 1.3);
+  box(ctx, S - 0.42, 1.25, 0.2, S - 1.95, 13, 2, COL.marble, { plain: true });
+  // the front wall, and the gate in it
+  box(ctx, 0.2, S - 0.42, S - 0.4, 0.2, 0, 7, shade(wall, -0.06));
+  const g0 = S * 0.42;
+  const g1 = S * 0.42 + 0.9;
+  door(ctx, 'left', 0.2, S - 0.42, S - 0.2, S - 0.22, 0, (g0 + g1) / 2 / S, GOV.door, 0.36, 9);
+  portico(ctx, g0, g1, S - 0.5, S - 0.08, 0, 13, 2, GOV.roof, 1.5);
+  if ((variant >> 2) & 1) cypress(ctx, S - 0.2, S - 0.2, 0.65);
+  else tree(ctx, S - 0.22, S - 0.25, 0.5, '#4f8a3c', '#6b4a2a', variant);
+  cypress(ctx, 0.25, S - 0.2, 0.6);
+  flagPoles(ctx, 'governor_house', S);
+}
+
+/**
+ * The Governor's Villa (4x4): a two-storey house of white stucco with a
+ * tower room at its back corner, a pillared porch and pediment on its front,
+ * a wing on the left, and before it a walled garden with a long pool, a
+ * line of columns and cypresses.
+ */
+function governorVillaArt(ctx, S, variant) {
+  const wall = GOV.stucco;
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#7aa452');
+  quad(ctx, 1.2, 1.55, S - 0.2, S - 0.2, 0, '#8db35e'); // the garden
+  quad(ctx, S * 0.5 - 0.15, 1.55, S * 0.5 + 0.15, S - 0.05, 0, COL.paving); // its path
+  // the tower room at the back corner
+  box(ctx, 0.25, 0.25, 0.75, 0.75, 0, 40, shade(wall, -0.03));
+  windows(ctx, 'right', 0.25, 0.25, 1.0, 1.0, 0, 1, 1, GOV.glass, { z: 31, h: 5 });
+  hipRoof(ctx, 0.25, 0.25, 0.75, 0.75, 40, 10, GOV.roof);
+  gilt(ctx, 0.62, 0.62, 50);
+  // the house across the back
+  box(ctx, 1.0, 0.25, S - 1.25, 1.2, 0, 28, wall);
+  windows(ctx, 'right', 1.0, 0.25, S - 0.25, 1.45, 0, 2, 2, GOV.glass, { z: 5, h: 6, gap: 12, shutters: '#4f7a52' });
+  windows(ctx, 'left', 1.0, 0.25, S - 0.25, 1.45, 0, 1, 5, GOV.glass, { z: 18, h: 6, shutters: '#4f7a52' });
+  gableRoof(ctx, 1.0, 0.25, S - 1.25, 1.2, 28, 10, GOV.roof, 'u');
+  // the wing on the left, with a door to the garden
+  box(ctx, 0.25, 1.0, 0.85, S - 1.6, 0, 18, shade(wall, -0.05));
+  windows(ctx, 'right', 0.25, 1.0, 1.1, S - 0.6, 0, 1, 3, GOV.glass, { z: 6, h: 6 });
+  door(ctx, 'left', 0.25, 1.0, 1.1, S - 0.6, 0, 0.5, GOV.door, 0.24, 9);
+  gableRoof(ctx, 0.25, 1.0, 0.85, S - 1.6, 18, 8, shade(GOV.roof, -0.05), 'v');
+  // the porch on the front of the house
+  door(ctx, 'left', 1.0, 0.25, S - 0.25, 1.45, 0, 0.5, GOV.door, 0.3, 11);
+  portico(ctx, S * 0.5 - 0.62, S * 0.5 + 0.62, 1.45, 1.95, 0, 20, 4, GOV.roof, 1.6);
+  // the long pool, with columns along its far side
+  quad(ctx, 1.3, 2.25, S * 0.5 - 0.2, S - 0.4, 0, '#e4dccb');
+  quad(ctx, 1.37, 2.32, S * 0.5 - 0.27, S - 0.47, 0.5, COL.water);
+  colonnade(ctx, 1.22, 2.15, 1.22, S - 0.4, 4, 0, 12, COL.marble, 1.2);
+  // flower beds and a statue on the right of the path
+  quad(ctx, S * 0.5 + 0.3, 2.3, S - 0.45, 2.75, 0, '#5d8a3e');
+  for (let k = 0; k < 4; k++) {
+    const [x, y] = P(S * 0.5 + 0.4 + k * 0.24, 2.52);
+    ctx.fillStyle = (k + variant) % 2 ? '#d9534f' : '#f0c24a';
+    ctx.beginPath(); ctx.arc(x, y - 1.4, 1.5, 0, Math.PI * 2); ctx.fill();
+  }
+  giltStatue(ctx, S - 0.75, S - 0.9);
+  // cypresses at the front
+  cypress(ctx, S - 0.25, S - 0.25, 0.85);
+  cypress(ctx, 1.25, S - 0.2, 0.75);
+  if ((variant >> 2) & 1) cypress(ctx, S - 0.25, 1.75, 0.8);
+  else tree(ctx, S - 0.3, 1.8, 0.65, '#4f8a3c', '#6b4a2a', variant);
+  flagPoles(ctx, 'governor_villa', S);
+}
+
+/**
+ * The Governor's Palace (5x5): marble on a raised platform. A domed hall at
+ * the back with a six-columned porch and a gilded pediment, two long wings
+ * with colonnades facing the court, a fountain in the court, steps down to
+ * the street between gilded statues, banners on every wing.
+ */
+function governorPalaceArt(ctx, S, variant) {
+  const wall = COL.marble;
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#7fa956');
+  quad(ctx, 1.2, S - 1.05, S - 1.2, S - 0.05, 0, COL.paving); // the forecourt
+  // the platform
+  box(ctx, 0.25, 0.25, S - 0.5, S - 1.25, 0, 6, COL.stone);
+  quad(ctx, 0.3, 0.3, S - 0.3, S - 1.05, 6, '#e3dccd');
+  // the left wing
+  box(ctx, 0.35, 0.35, 0.95, S - 1.55, 6, 22, shade(wall, -0.04));
+  windows(ctx, 'right', 0.35, 0.35, 1.3, S - 1.2, 6, 1, 4, GOV.glass, { z: 14, h: 6 });
+  gableRoof(ctx, 0.35, 0.35, 0.95, S - 1.55, 28, 8, shade(GOV.roof, -0.05), 'v');
+  colonnade(ctx, 1.45, 2.0, 1.45, S - 1.35, 4, 6, 18, COL.marble, 1.5);
+  // the hall across the back
+  box(ctx, 1.3, 0.35, S - 2.6, 1.55, 6, 32, wall);
+  windows(ctx, 'left', 1.3, 0.35, S - 1.3, 1.9, 6, 1, 6, GOV.glass, { z: 26, h: 6 });
+  gableRoof(ctx, 1.3, 0.35, S - 2.6, 1.55, 38, 9, GOV.roof, 'u');
+  // the dome over the hall: a drum, the dome, a gilded lantern
+  const [dx, dy] = P(S * 0.5, 1.1, 50);
+  ctx.fillStyle = shade(wall, -0.08);
+  ctx.fillRect(dx - 22, dy - 8, 44, 10);
+  ctx.fillStyle = '#ece7db';
+  ctx.beginPath(); ctx.ellipse(dx, dy - 8, 24, 21, 0, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.ellipse(dx - 8, dy - 16, 7, 11, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#bdb4a3';
+  ctx.lineWidth = 0.8;
+  for (const k of [-0.5, 0, 0.5]) {
+    ctx.beginPath(); ctx.ellipse(dx, dy - 8, 24 * Math.abs(k) + 0.1, 21, 0, Math.PI, 0); ctx.stroke();
+  }
+  ctx.fillStyle = shade(COL.gold, -0.1);
+  ctx.fillRect(dx - 24, dy - 9, 48, 1.8); // gilded ring at the dome's foot
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(dx - 2, dy - 35, 4, 7);
+  ctx.beginPath(); ctx.arc(dx, dy - 36.5, 2.2, 0, Math.PI * 2); ctx.fill();
+  // the great porch before the hall
+  portico(ctx, S * 0.5 - 1.05, S * 0.5 + 1.05, 1.9, 2.45, 6, 26, 6, GOV.roof, 1.9);
+  // the right wing
+  box(ctx, S - 1.3, 0.35, 0.95, S - 1.55, 6, 22, shade(wall, -0.04));
+  windows(ctx, 'right', S - 1.3, 0.35, S - 0.35, S - 1.2, 6, 2, 4, GOV.glass, { z: 10, h: 5, gap: 9 });
+  windows(ctx, 'left', S - 1.3, 0.35, S - 0.35, S - 1.2, 6, 1, 2, GOV.glass, { z: 14, h: 6 });
+  gableRoof(ctx, S - 1.3, 0.35, 0.95, S - 1.55, 28, 8, shade(GOV.roof, -0.05), 'v');
+  colonnade(ctx, S - 1.45, 2.0, S - 1.45, S - 1.35, 4, 6, 18, COL.marble, 1.5);
+  // the fountain in the court
+  const fu = S * 0.5;
+  const fv = S - 1.75;
+  quad(ctx, fu - 0.45, fv - 0.35, fu + 0.45, fv + 0.35, 6.5, '#e4dccb');
+  quad(ctx, fu - 0.37, fv - 0.27, fu + 0.37, fv + 0.27, 7, COL.water);
+  const [fx, fy] = P(fu, fv, 7);
+  ctx.fillStyle = wall;
+  ctx.fillRect(fx - 1.5, fy - 8, 3, 8);
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(fx - 3.2, fy - 9, 6.4, 1.6);
+  // steps down from the platform, between gilded statues
+  box(ctx, S * 0.5 - 1.0, S - 1.0, 2.0, 0.22, 0, 4, shade(COL.stone, 0.12));
+  box(ctx, S * 0.5 - 1.1, S - 0.78, 2.2, 0.22, 0, 2, shade(COL.stone, 0.18));
+  giltStatue(ctx, S * 0.5 - 1.35, S - 0.75);
+  giltStatue(ctx, S * 0.5 + 1.35, S - 0.75);
+  // cypresses at the front corners, beds of flowers between them
+  for (const [u, v] of [[0.3, S - 0.3], [S - 0.3, S - 0.3], [S - 0.3, S - 1.4]]) cypress(ctx, u, v, 0.9);
+  for (let k = 0; k < 5; k++) {
+    const [x, y] = P(0.55 + k * 0.12, S - 0.55 + (k % 2) * 0.12);
+    ctx.fillStyle = (k + variant) % 3 ? '#4f7a3a' : '#d9534f';
+    ctx.beginPath(); ctx.arc(x, y - 1.5, 1.7, 0, Math.PI * 2); ctx.fill();
+  }
+  flagPoles(ctx, 'governor_palace', S);
 }
 
 function gardenArt(ctx, S, variant) {
@@ -2378,6 +2591,9 @@ const ART = {
   menagerie: menagerieArt,
   forum: forumArt,
   senate: senateArt,
+  governor_house: governorHouseArt,
+  governor_villa: governorVillaArt,
+  governor_palace: governorPalaceArt,
   garden: gardenArt,
   statue_small: statueArt,
   statue_medium: statueArt,

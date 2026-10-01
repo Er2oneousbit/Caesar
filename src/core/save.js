@@ -83,6 +83,16 @@
  *      the switch on (the default) and any raid the scouts already saw
  *      coming by land as it was; the raids after it may come by sea, see
  *      upgradeNavyV10().
+ *  13  the governor (sim/governor.js): city.governor holds his rank, the
+ *      salary he draws (salaryRank), his personal savings and the salary
+ *      paid this year; city.gifts counts his gifts to the Emperor within a
+ *      year, in place of city.giftCooldown. (12 is taken by another change
+ *      made at the same time.) Older saves load at the mission's rank (a
+ *      sandbox at the middle rank), drawing its salary, with no savings, as
+ *      if that salary had been paid since New Year (so the first New Year
+ *      neither rewards nor punishes it), and a gift still cooling down
+ *      counts as one gift sent that many months ago, see
+ *      upgradeGovernorV12().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -109,6 +119,8 @@ import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario, withDifficulty } from '../data/scenarios.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
+import { newGovernorState, salaryOf } from '../sim/governor.js';
+import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { log } from './debug.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
@@ -392,6 +404,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 9) upgradeFishV8(game);
   if (data.version < 10) upgradeClothV9(game);
   if (data.version < 11) upgradeNavyV10(game);
+  if (data.version < 13) upgradeGovernorV12(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -560,6 +573,36 @@ export function upgradeNavyV10(game) {
   m.navalDemand ??= { timber: 0, iron: 0, linen: 0 };
   const st = m.stats || (m.stats = {});
   for (const k of ['seaRaids', 'shipsSunk', 'shipsLost', 'shipsBuilt', 'boatsSunk']) st[k] ??= 0;
+}
+
+/** How long the Emperor waited between gifts before version 13 (months). */
+const OLD_GIFT_COOLDOWN = 6;
+
+/**
+ * A save before version 13 (before the governor's rank, salary and savings):
+ * the governor takes the mission's rank (a sandbox, which had none, the
+ * middle one) and draws its salary, with nothing saved. His salary counts as
+ * paid for the months of this year already gone, so the first New Year judges
+ * it at his rank and changes no favor. Gifts were paid from the treasury and
+ * then barred for six months: a gift still barred counts as one gift sent
+ * (6 - months left) months ago, so the next one within the year pleases the
+ * Emperor less, as the old wait meant.
+ */
+export function upgradeGovernorV12(game) {
+  const c = game.city;
+  if (!c.governor) {
+    c.governor = newGovernorState(game.scenario);
+    c.governor.paidThisYear = salaryOf(c.governor.rank) * game.time.month;
+  }
+  if (!c.gifts) {
+    c.gifts = newGiftState();
+    const left = Number(c.giftCooldown) || 0;
+    if (left > 0) {
+      c.gifts.recent = 1;
+      c.gifts.monthsSince = Math.max(0, Math.min(GIFT_MEMORY_MONTHS - 1, OLD_GIFT_COOLDOWN - left));
+    }
+  }
+  delete c.giftCooldown;
 }
 
 /**

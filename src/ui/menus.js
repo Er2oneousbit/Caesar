@@ -17,6 +17,8 @@ import { MAP_SIZES, MAP_SIZE_NOTES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
 import { goalStatus } from '../sim/ratings.js';
+import { RANKS, SANDBOX_RANK } from '../data/ranks.js';
+import { briefingGovernorLine, victoryGovernorLine, rankLine } from './governorInfo.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
 const SLOT_NAMES = { auto: 'Autosave', quick: 'Quicksave', slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3', slot4: 'Slot 4', slot5: 'Slot 5' };
@@ -130,6 +132,7 @@ export function briefing(app, s, onBegin = null) {
     h('h4', {}, 'Goals'),
     goals.length ? h('ul', {}, goals.map(([k, v]) => h('li', {}, `${k[0].toUpperCase()}${k.slice(1)}: ${fmt(v)}`))) : h('div', { class: 'muted' }, 'None: build as you like.'),
     fundsRow,
+    h('div', { class: 'row muted governor-line' }, onBegin || !app.game ? briefingGovernorLine(s, app.savedFor(s.id)) : `Rank: ${rankLine(app.game)}.`),
     onBegin
       ? difficultyField(diff, (k) => { diff = k; fundsRow.textContent = fundsText(); })
       : h('div', { class: 'row muted' }, `Difficulty: ${DIFFICULTY[diff].name}`),
@@ -158,6 +161,7 @@ export function sandboxMenu(app) {
     funds: 8000,
     invasions: 'occasional',
     seaRaids: app.settings.seaRaids !== false,
+    rank: SANDBOX_RANK,
   };
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
@@ -180,6 +184,10 @@ export function sandboxMenu(app) {
           [['none', 'Peaceful (no raids)'], ['occasional', 'Occasional raids'], ['frequent', 'Frequent raids']].map(([k, n]) => h('option', { value: k, selected: k === state.invasions }, n))),
         // From the game's own numbers (this said 120 people long after the minimum became 300).
         h('div', { class: 'muted', style: { fontSize: '12px' } }, `The first raid comes after about ${INVASION_PRESETS.occasional.first / 12} years (occasional) or ${INVASION_PRESETS.frequent.first / 12} (frequent), never before the city has ${RAID_MIN_POP} people, and scouts warn you about 3 months ahead.`)),
+      h('div', { class: 'field' }, h('label', {}, 'Your rank'),
+        h('select', { class: 'rank-select', onchange: (e) => { state.rank = Number(e.target.value); } },
+          RANKS.map((r, i) => h('option', { value: i, selected: i === state.rank }, `${r.name} (salary ${r.salary} Dn a month)`))),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Sets the salary Rome expects you to draw: more costs favor, less earns a little.')),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', checked: state.seaRaids, onchange: (e) => { state.seaRaids = e.target.checked; } }),
         h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP)))),
@@ -330,6 +338,7 @@ export function victoryMenu(app) {
   return modal('Victory!', [
     h('p', {}, `The Senate is delighted with ${g.city.name}. You have met every goal of this mission.`),
     h('table', { class: 'tbl' }, goalStatus(g).map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'r num ok' }, `${fmt(r.have)} / ${fmt(r.need)}`)))),
+    victoryGovernorLine(g) ? h('p', { class: 'governor-line' }, victoryGovernorLine(g)) : null,
     h('p', { class: 'muted' }, `Founded ${fmt(g.time.totalMonths / 12)} years ago · ${fmt(g.city.stats.fires)} fires · ${fmt(g.city.stats.collapses)} collapses`),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Keep building'),

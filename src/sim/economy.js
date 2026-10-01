@@ -15,8 +15,12 @@ import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 
 // 'loans' and 'repayments' (sim/loans.js) are shown but stay out of ledgerNet:
-// borrowed money is not profit.
-export const LEDGER_KEYS = ['taxes', 'exports', 'other', 'loans', 'wages', 'imports', 'construction', 'tribute', 'festivals', 'gifts', 'military', 'plunder', 'stolen', 'repayments'];
+// borrowed money is not profit. 'donations' (the governor's savings given to
+// the city, sim/governor.js) stay out too: a gift is not the city's profit.
+// 'salary' (the governor's, paid into his savings) is spending like any other.
+// 'gifts' is money sent for the Emperor's requests (the key is kept from when
+// gifts to him were paid from the treasury, so older ledgers read the same).
+export const LEDGER_KEYS = ['taxes', 'exports', 'other', 'loans', 'donations', 'wages', 'imports', 'construction', 'tribute', 'festivals', 'gifts', 'salary', 'military', 'plunder', 'stolen', 'repayments'];
 
 export function newLedger() {
   const l = {};
@@ -108,6 +112,6 @@ export function yearlyEconomy(game) {
 /** Net profit of a ledger (income minus spending). */
 export function ledgerNet(l) {
   if (!l) return 0;
-  // `|| 0`: ledgers from older saves have no military/plunder/stolen rows.
-  return (l.taxes + l.exports + l.other) - (l.wages + l.imports + l.construction + l.tribute + l.festivals + l.gifts + (l.military || 0) + (l.plunder || 0) + (l.stolen || 0));
+  // `|| 0`: ledgers from older saves have no military/plunder/stolen/salary rows.
+  return (l.taxes + l.exports + l.other) - (l.wages + l.imports + l.construction + l.tribute + l.festivals + l.gifts + (l.salary || 0) + (l.military || 0) + (l.plunder || 0) + (l.stolen || 0));
 }

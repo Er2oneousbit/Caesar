@@ -16,11 +16,12 @@
  *                      stats, entertainment base, wine sources, mid-month
  *                      goods use, immigration, fires, sick homes, home moods
  *                      (day 8), trade, raid progress
- *   5. on a new month: consumption, finances, army pay, raid warnings,
- *                      city mood, home moods, religion, ratings, city health,
- *                      Emperor, farm season notice
- *   6. on a new year:  tribute, ledger rollover, trade quotas, crime and
- *                      disease counts
+ *   5. on a new month: consumption, finances, army pay, the governor's
+ *                      salary, raid warnings, city mood, home moods,
+ *                      religion, ratings, city health, Emperor (and the
+ *                      count of recent gifts), farm season notice
+ *   6. on a new year:  tribute, ledger rollover, the salary's favor, trade
+ *                      quotas, crime and disease counts
  *   7. on a new day, after all that: the crime roll
  * ----------------------------------------------------------------------------
  */
@@ -54,7 +55,8 @@ import { GOD_KEYS } from '../data/gods.js';
 import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
 import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
-import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
+import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
+import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
 import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
 import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
@@ -67,7 +69,7 @@ import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, h
 export { DIFFICULTY } from '../data/difficulty.js';
 
 /** Fresh city-wide state for a new game. */
-export function newCityState(scenario, funds) {
+export function newCityState(scenario, funds, savings = 0) {
   return {
     name: scenario.name,
     treasury: funds,
@@ -106,7 +108,8 @@ export function newCityState(scenario, funds) {
     finance: { thisYear: newLedger(), lastYear: null },
     request: null,
     nextRequestMonth: CONFIG.FIRST_REQUEST_MONTHS[0], // set by scheduleNextRequest for a new game
-    giftCooldown: 0,
+    governor: newGovernorState(scenario, savings), // rank, salary, personal savings (sim/governor.js)
+    gifts: newGiftState(), // gifts to the Emperor within the last year (sim/emperor.js)
     produced: {},
     foodFlow: { harvested: 0, stored: 0, toMarket: 0, sold: 0, eaten: 0, shortfall: 0 },
     foodFlowLast: null,
@@ -131,8 +134,9 @@ export class Game {
    * @param {object} opts.scenario   scenario definition (data/scenarios.js)
    * @param {object} [opts.flags]    debug flags (core/debug.js)
    * @param {object} [opts.restore]  internal: prebuilt state from a save file
+   * @param {number} [opts.savings]  the governor's savings brought from the last mission
    */
-  constructor({ scenario, flags = {}, restore = null }) {
+  constructor({ scenario, flags = {}, restore = null, savings = 0 }) {
     if (!scenario) throw new Error('Game needs a scenario');
     this.flags = flags;
     this.log = log;
@@ -166,7 +170,7 @@ export class Game {
       this.nextBuildingId = 1;
       this.nextWalkerId = 1;
       this.nextMessageId = 1;
-      this.city = newCityState(scenario, flags.money ?? scenario.funds);
+      this.city = newCityState(scenario, flags.money ?? scenario.funds, savings);
       scheduleNextRequest(this, true);
     }
     // Military state. `??=` keeps what a save restored and fills in defaults
@@ -326,6 +330,7 @@ export class Game {
     repayLoan(this);
     monthlyEconomy(this);
     militaryMonthly(this);
+    paySalary(this); // last of the month's money, so it never puts the city in debt
     computeSentiment(this);
     updateHomeMoods(this); // after the month's city mood, which every home starts from
     updateReligion(this);
@@ -339,7 +344,7 @@ export class Game {
     for (const k in c.foodFlow) c.foodFlow[k] = 0;
     closeGoodsMonth(this);
     if (c.festivalCooldown > 0) c.festivalCooldown--;
-    if (c.giftCooldown > 0) c.giftCooldown--;
+    giftsMonth(this);
     c.history.push({ m: this.time.totalMonths, pop: c.population, treasury: Math.round(c.treasury), sentiment: c.sentiment });
     if (c.history.length > 240) c.history.shift();
     checkOutcome(this);
@@ -348,6 +353,7 @@ export class Game {
 
   onYear() {
     yearlyEconomy(this);
+    salaryNewYear(this); // the year's salary against the governor's rank
     resetTradeYear(this);
     crimeNewYear(this);
     healthNewYear(this);

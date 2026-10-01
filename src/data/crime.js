@@ -17,6 +17,7 @@
  * matches the first such entry, so list the richest first).
  */
 export const RIOT_TARGETS = Object.freeze([
+  { kind: 'residence' }, // the governor's own house, villa or palace
   { type: 'senate' },
   { homeMin: 13 }, // villas and palatia: the rich
   { type: 'hippodrome' },

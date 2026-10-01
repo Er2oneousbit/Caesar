@@ -838,6 +838,62 @@ try {
   }
   check('the Flax Farm, Linen Maker and Clothing Maker are in the build menu and can be placed', clothPlaced.every((c) => c.listed && c.tool === c.key && c.placed && c.placed.x === c.at.x && c.placed.y === c.at.y && c.placed.road) && errors.length === 0, JSON.stringify(clothPlaced));
 
+  // 5a2e. The governor: his house picked from the build menu and placed with
+  //       the mouse on open land (no road needed), then the Imperial advisor:
+  //       his rank and savings, a salary picked from the list, and a gift
+  //       paid from his savings.
+  const govAt = await page.evaluate(() => {
+    const app = window.colonia;
+    const m = app.game.map;
+    const home = [...app.game.buildings.values()].find((b) => b.house && b.house.pop > 0);
+    const fits = (x, y) => {
+      for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) if (!m.inBounds(x + dx, y + dy) || !m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] === 2) return false;
+      return true;
+    };
+    for (let r = 4; r < 60; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !fits(home.x + dx, home.y + dy)) continue;
+        app.renderer.camera.centerOnTile(home.x + dx + 1, home.y + dy + 1);
+        app.renderer.render(0, 0.016);
+        return { x: home.x + dx, y: home.y + dy };
+      }
+    }
+    return null;
+  });
+  await page.click('.cat-btn[title^="Government"]');
+  const govListed = await page.isVisible('.build-item:has-text("Governor\'s House")');
+  if (govListed) await page.click('.build-item:has-text("Governor\'s House")');
+  const govTool = await page.evaluate(() => window.colonia.input.tool);
+  if (govAt && govTool === 'governor_house') {
+    const p = await toScreen(govAt.x + 1, govAt.y + 1);
+    await page.mouse.move(p.x - 4, p.y);
+    await page.mouse.move(p.x, p.y);
+    await page.waitForTimeout(100);
+    await page.mouse.click(p.x, p.y);
+  }
+  if (await page.evaluate(() => window.colonia.input.tool)) await page.keyboard.press('Escape');
+  const govPlaced = await page.evaluate(() => {
+    const b = [...window.colonia.game.buildings.values()].find((x) => x.def.kind === 'residence');
+    return b ? { type: b.type, x: b.x, y: b.y } : null;
+  });
+  check('the Governor\'s House is in the build menu and can be placed with no road', govListed && govTool === 'governor_house' && govPlaced && govPlaced.x === govAt.x && govPlaced.y === govAt.y && errors.length === 0, JSON.stringify({ govListed, govTool, govAt, govPlaced }));
+  await page.keyboard.press('F2');
+  await page.click('.tab:has-text("Imperial")');
+  const govText = await page.textContent('.governor-card');
+  await page.selectOption('.salary-select', '6');
+  const salaryRank = await page.evaluate(() => window.colonia.game.city.governor.salaryRank);
+  const before = await page.evaluate(() => {
+    const g = window.colonia.game;
+    window.colonia.ui.console.run(`savings ${400 - g.city.governor.savings}`);
+    return { favor: g.city.ratings.favor, treasury: g.city.treasury };
+  });
+  await page.click('.tab:has-text("Imperial")'); // shown again with the new savings
+  const lavish = await page.textContent('.gift-btn:has-text("Lavish")');
+  await page.click('.gift-btn:has-text("Lavish")');
+  const after = await page.evaluate(() => ({ savings: window.colonia.game.city.governor.savings, favor: window.colonia.game.city.ratings.favor, treasury: window.colonia.game.city.treasury }));
+  check('the Imperial advisor shows the rank and savings, sets the salary and sends a gift from savings', /Procurator/.test(govText) && /Personal savings/.test(govText) && salaryRank === 6 && /300 Dn \(\+10 favor\)/.test(lavish) && after.savings === 100 && after.favor > before.favor && after.treasury === before.treasury && errors.length === 0, JSON.stringify({ govText: govText.slice(0, 120), salaryRank, lavish, before, after }));
+  await page.keyboard.press('Escape');
+
   // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
   //      the Production advisor and the trend charts.
   await page.selectOption('.hud-select', 'problems');

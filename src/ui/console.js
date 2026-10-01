@@ -27,6 +27,7 @@ import { log } from '../core/debug.js';
 export const CONSOLE_HELP = [
   ['help', 'List commands'],
   ['money <n>', 'Add n denarii (negative to remove)'],
+  ['savings <n>', 'Add n denarii to the governor\'s personal savings (negative to remove)'],
   ['freebuild on|off', 'Construction costs nothing'],
   ['speed <0-4>', 'Set game speed'],
   ['days <n>', 'Fast-forward n days instantly'],
@@ -137,6 +138,14 @@ export class DebugConsole {
         if (!Number.isFinite(n)) throw new Error('usage: money <n>');
         g.city.treasury += n;
         return `Treasury: ${Math.round(g.city.treasury)} Dn`;
+      }
+      case 'savings': {
+        need();
+        const n = Number(args[0]);
+        if (!Number.isFinite(n)) throw new Error('usage: savings <n>');
+        const gv = g.city.governor;
+        gv.savings = Math.max(0, Math.floor(gv.savings + n));
+        return `Savings: ${gv.savings} Dn`;
       }
       case 'freebuild':
         need();

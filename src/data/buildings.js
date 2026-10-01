@@ -29,7 +29,7 @@
  *                    market | venue | training | water | reservoir |
  *                    fountain | well | decor | hospital | house | dock |
  *                    barracks | fort | tower | shipyard | wharf | part |
- *                    navalia | station
+ *                    navalia | station | residence (the governor's)
  *   span           sections in a row along the map's x axis (the hippodrome:
  *                  3 of size x size). The first is the building itself, the
  *                  others are `part` buildings linked to it (sim/linked.js)
@@ -288,6 +288,25 @@ export const BUILDINGS = Object.freeze({
     name: 'Senate', category: 'government', cost: 400, size: 4, workers: 30, labor: 'govReligion',
     des: [8, 2, -2, 8], walker: 'taxman', spawnDays: 3,
     desc: 'The seat of local government. Collects taxes and boosts every rating.',
+  }),
+  // The governor's residences (sim/governor.js): decor, one at a time, and
+  // what rioters (and Caesar's legions) go for first. The original's costs
+  // and desirability; no workers, no road. Stone and well kept, so slower to
+  // burn or crack than a temple, but not immune as statues are.
+  governor_house: B({
+    name: 'Governor\'s House', category: 'government', kind: 'residence', cost: 150, size: 3, needsRoad: false,
+    des: [12, 2, -2, 3], fire: 0.5, damage: 0.5,
+    desc: 'Your own home in the province. Raises desirability nearby. Only one residence may stand at a time.',
+  }),
+  governor_villa: B({
+    name: 'Governor\'s Villa', category: 'government', kind: 'residence', cost: 400, size: 4, needsRoad: false,
+    des: [20, 2, -3, 4], fire: 0.5, damage: 0.5,
+    desc: 'A villa befitting a governor, with a colonnaded garden. Raises desirability over a wide area. Only one residence may stand at a time.',
+  }),
+  governor_palace: B({
+    name: 'Governor\'s Palace', category: 'government', kind: 'residence', cost: 750, size: 5, needsRoad: false,
+    des: [28, 2, -4, 5], fire: 0.5, damage: 0.5,
+    desc: 'A marble palace, among the most desirable buildings in the province. Only one residence may stand at a time.',
   }),
   garden: B({
     name: 'Garden', category: 'government', kind: 'decor', cost: 12, size: 1, needsRoad: false,

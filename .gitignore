@@ -19,6 +19,9 @@ CLAUDE.md
 # Claude Code's working copies for parallel agents (git worktrees)
 .claude/worktrees/
 
+# Saved games kept for debugging (exported save files; personal)
+/Debug Games/
+
 # Editors / OS
 .vscode/*
 !.vscode/extensions.json

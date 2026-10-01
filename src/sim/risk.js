@@ -53,9 +53,10 @@ export function updateRisk(game, b) {
 
 /**
  * Burn a building down: it becomes a burning ruin.
- * @param {'fire'|'lightning'|'raid'|'raidQuiet'|'riot'|'riotQuiet'} cause
+ * @param {'fire'|'wrath'|'raid'|'raidQuiet'|'riot'|'riotQuiet'} cause
  *        raidQuiet, riotQuiet = no message (raiders or a mob wrecking a whole
- *        street would otherwise flood the log)
+ *        street would otherwise flood the log); wrath = no message either,
+ *        the angry god's own message says where (sim/religion.js)
  */
 export function igniteBuilding(game, b, cause = 'fire') {
   const tiles = footprintTiles(game.map, b.x, b.y, b.size);
@@ -68,7 +69,7 @@ export function igniteBuilding(game, b, cause = 'fire') {
   }
   game.city.stats.fires++;
   const texts = {
-    lightning: `Lightning struck ${aLabel}! It is burning.`,
+    wrath: null,
     raid: `Raiders have set ${aLabel} on fire!`,
     raidQuiet: null,
     riot: `Rioters have set ${aLabel} on fire!`,

@@ -35,6 +35,13 @@
  *      to a sick home. Version 5 (and 4) saves load: no home is sick, every
  *      risk starts at 0 and city health at its starting value, see
  *      upgradeV5().
+ *   7  the original's five gods: Mercury and Venus took the places of two
+ *      gods of Colonia's own, Jupiter and Vesta. Each god has an `angered`
+ *      flag, and city.venusBoost is Venus's factor in the city mood. Older
+ *      saves load: upgradeV6() renames the old gods on the raw data before
+ *      anything is built from it (their temples, their moods, every home's
+ *      access to them, their priests), so no temple is dropped as an unknown
+ *      building and no home loses a god.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -258,6 +265,8 @@ export function deserializeGame(data, flags = {}) {
   if (data.version > CONFIG.SAVE_VERSION) throw new Error(`This save was made by a newer version of the game (save v${data.version}, game supports v${CONFIG.SAVE_VERSION}).`);
   if (data.version < MIN_SAVE_VERSION) throw new Error(`This save was made by an older version of Colonia (save v${data.version}) and cannot be loaded: homes now have 20 levels. Start a new city.`);
   assert(data.map && data.time && data.city && Array.isArray(data.buildings), 'missing sections');
+  // Renames on the raw data, before anything is built from it.
+  if (data.version < 7) data = upgradeV6(data);
 
   const scenario = data.scenario && data.scenario.map ? data.scenario : withDifficulty(findScenario(data.scenario?.id), data.difficulty);
   assert(scenario, `unknown scenario "${data.scenario?.id}"`);
@@ -366,6 +375,62 @@ function upgradeV5(game) {
     h.diseaseRisk = 0;
     h.sick = 0;
   }
+}
+
+/**
+ * The two gods of Colonia's own that saves before version 7 have, and the
+ * original's gods that took their places (the owner's call: their moods,
+ * temples and priests carry over).
+ */
+export const OLD_GODS = Object.freeze({ jupiter: 'mercury', vesta: 'venus' });
+
+/** A god key or a `temple_<god>` building type, renamed if it is an old one. */
+function newGodKey(k) {
+  return Object.hasOwn(OLD_GODS, k) ? OLD_GODS[k] : k;
+}
+function newTempleType(t) {
+  return typeof t === 'string' && t.startsWith('temple_') ? `temple_${newGodKey(t.slice(7))}` : t;
+}
+
+/** An object keyed by gods, with the old keys renamed (other keys kept as they are). */
+function renameGodKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[newGodKey(k)] = v;
+  return out;
+}
+
+/**
+ * A save before version 7 (Jupiter and Vesta): returns a copy of the raw data
+ * with the old gods renamed everywhere a god's key is stored. It must run
+ * before the Game and its buildings are built: the loader drops buildings of
+ * an unknown type, so the old temples would vanish and leave their tiles
+ * unclaimed. The parts it changes are copied; the caller's object is left
+ * alone. Old messages that name the old gods stay as they were (history),
+ * and fire risk from an old wrath plays out.
+ */
+export function upgradeV6(data) {
+  const out = { ...data };
+  // The gods' state: the old god's whole state (mood, festival boost,
+  // cooldown, temples) goes to its successor. Nobody is angered yet.
+  const city = { ...data.city };
+  const gods = renameGodKeys(city.gods || {});
+  for (const k in gods) gods[k] = { ...gods[k], angered: false };
+  city.gods = gods;
+  city.venusBoost = 0;
+  out.city = city;
+  // Temples, and every home's access to each god.
+  out.buildings = data.buildings.map((raw) => {
+    if (!raw || typeof raw !== 'object') return raw;
+    const b = { ...raw, type: newTempleType(raw.type) };
+    if (raw.house && typeof raw.house === 'object') b.house = { ...raw.house, religion: renameGodKeys(raw.house.religion) };
+    return b;
+  });
+  // Priests: their god colors their tunic and gives homes access.
+  if (Array.isArray(data.walkers)) out.walkers = data.walkers.map((w) => (w && w.god ? { ...w, god: newGodKey(w.god) } : w));
+  // A sandbox save carries its scenario in full, unlock list included.
+  if (data.scenario && Array.isArray(data.scenario.unlocks)) out.scenario = { ...data.scenario, unlocks: data.scenario.unlocks.map(newTempleType) };
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -33,11 +33,11 @@ import { skyAt, dayTime, DAY_TICKS } from '../src/render/lighting.js';
 import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf } from '../src/render/weather.js';
 import { groundColor } from '../src/render/terrainArt.js';
 import { GameTime } from '../src/sim/time.js';
-import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf, aqueductMaskAt } from '../src/render/renderer.js';
+import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf, aqueductMaskAt, altarFlameOffset } from '../src/render/renderer.js';
 import { aqueductSpec } from '../src/render/terrainArt.js';
-import { buildingSpec, TEMPLE_LOOKS } from '../src/render/buildingArt.js';
+import { buildingSpec, TEMPLE_LOOKS, templeAltar } from '../src/render/buildingArt.js';
 import { recordingContext } from '../src/render/draw.js';
-import { GOD_KEYS } from '../src/data/gods.js';
+import { GODS, GOD_KEYS } from '../src/data/gods.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { GameMap, Terrain, WaterBits } from '../src/world/map.js';
 
@@ -638,10 +638,37 @@ test('art: every aqueduct piece, every temple, statue and mine draws without err
   for (const [k, S] of [['statue_small', 1], ['statue_medium', 2], ['statue_large', 3], ['iron_mine', 2], ['marble_quarry', 2]]) draw(buildingSpec(k, S, 0, 0));
 });
 
-test('art: each god has a temple of its own look, the original five included', () => {
-  for (const g of [...GOD_KEYS, 'mercury', 'venus']) assert.ok(TEMPLE_LOOKS[g], `${g} has a temple look`);
+test('art: a temple\'s live altar flame burns on its altar, not over the god\'s piece', () => {
+  for (const S of [2, 3]) {
+    const [u, v] = templeAltar(S);
+    const [fx, fy] = altarFlameOffset(S);
+    assert.equal(fx, (u - v) * HALF_W, `size ${S}: over the altar`);
+    assert.equal(fy, (u + v) * HALF_H - 5, `size ${S}: its fire, 5 px up`);
+    // The god's piece stands at the front left, (0.24, S - 0.1): the flame
+    // used to burn there.
+    const pieceX = (0.24 - (S - 0.1)) * HALF_W;
+    assert.ok(Math.abs(fx - pieceX) > HALF_W, `size ${S}: well clear of the piece (${fx} vs ${pieceX})`);
+  }
+});
+
+test('art: each of the five gods has a temple of its own look, told apart at icon size', () => {
+  assert.deepEqual(Object.keys(TEMPLE_LOOKS), [...GOD_KEYS], 'a look for each god, and none for gods that are gone');
   const looks = Object.values(TEMPLE_LOOKS);
-  assert.equal(new Set(looks.map((l) => l.roof)).size, looks.length, 'every roof its own color');
   assert.equal(new Set(looks.map((l) => l.emblem)).size, looks.length, 'every god its own emblem');
   assert.equal(new Set(looks.map((l) => l.front)).size, looks.length, 'something of its own in front');
+  for (const g of GOD_KEYS) assert.equal(TEMPLE_LOOKS[g].field, GODS[g].color, `${g}: the pediment wears the god's color, as its priests do`);
+  // In the build menu's small icons the roof and the pediment are what tell
+  // temples apart: no two may be near the same color. (Jupiter's gilded roof
+  // and Ceres's ochre one, 25 apart, looked the same there.)
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const dist = (a, b) => Math.hypot(...rgb(a).map((v, i) => v - rgb(b)[i]));
+  for (const part of ['roof', 'field']) {
+    for (let i = 0; i < GOD_KEYS.length; i++) {
+      for (let j = i + 1; j < GOD_KEYS.length; j++) {
+        const [a, b] = [GOD_KEYS[i], GOD_KEYS[j]];
+        const d = dist(TEMPLE_LOOKS[a][part], TEMPLE_LOOKS[b][part]);
+        assert.ok(d >= 60, `${a} and ${b}: ${part} colors ${Math.round(d)} apart`);
+      }
+    }
+  }
 });

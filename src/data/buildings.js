@@ -161,30 +161,33 @@ export const BUILDINGS = Object.freeze({
   }),
 
   // --- Religion ------------------------------------------------------------
-  temple_jupiter: B({
-    name: 'Temple of Jupiter', category: 'religion', cost: 60, size: 2, workers: 2, labor: 'govReligion',
-    des: [4, 2, -1, 6], walker: 'priest', god: 'jupiter', spawnDays: 4, fire: 0.6,
-    desc: 'Honors the king of the gods. Priests bring religion to nearby homes.',
-  }),
+  // The original's five gods, in its order. The temples differ only in their
+  // god: the same cost, workers, desirability and priest round, as in the
+  // original.
   temple_ceres: B({
     name: 'Temple of Ceres', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
     des: [4, 2, -1, 6], walker: 'priest', god: 'ceres', spawnDays: 4, fire: 0.6,
-    desc: 'Honors the goddess of the harvest.',
+    desc: 'Honors the goddess of the harvest. Priests bring religion to nearby homes.',
   }),
   temple_neptune: B({
     name: 'Temple of Neptune', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
     des: [4, 2, -1, 6], walker: 'priest', god: 'neptune', spawnDays: 4, fire: 0.6,
     desc: 'Honors the god of the waters.',
   }),
+  temple_mercury: B({
+    name: 'Temple of Mercury', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'mercury', spawnDays: 4, fire: 0.6,
+    desc: 'Honors the god of trade and travellers, who watches over granaries and warehouses.',
+  }),
   temple_mars: B({
     name: 'Temple of Mars', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
     des: [4, 2, -1, 6], walker: 'priest', god: 'mars', spawnDays: 4, fire: 0.6,
     desc: 'Honors the god of war and protection.',
   }),
-  temple_vesta: B({
-    name: 'Temple of Vesta', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
-    des: [4, 2, -1, 6], walker: 'priest', god: 'vesta', spawnDays: 4, fire: 0.6,
-    desc: 'Tends the sacred hearth flame.',
+  temple_venus: B({
+    name: 'Temple of Venus', category: 'religion', cost: 50, size: 2, workers: 2, labor: 'govReligion',
+    des: [4, 2, -1, 6], walker: 'priest', god: 'venus', spawnDays: 4, fire: 0.6,
+    desc: 'Honors the goddess of love and beauty, who keeps the people content.',
   }),
   oracle: B({
     name: 'Oracle', category: 'religion', kind: 'decor', cost: 200, size: 2, workers: 0,

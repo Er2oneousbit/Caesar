@@ -18,6 +18,7 @@ import { tierNeeds } from './advisors.js';
 import { CONSOLE_HELP } from './console.js';
 import { RAID_MIN_POP } from '../sim/military.js';
 import { DIFFICULTY } from '../data/difficulty.js';
+import { GODS, GOD_KEYS } from '../data/gods.js';
 
 /** "none on Easy, 5 on Normal, 10 on Hard, 15 on Insane": crime's cost in peace by difficulty. */
 const peaceByLevel = (base) => Object.values(DIFFICULTY)
@@ -117,6 +118,9 @@ function content(tab) {
       };
       return [
         h('table', { class: 'tbl' }, ['well', 'fountain', 'reservoir', 'prefecture', 'engineer_post', 'market', 'granary', 'warehouse', 'dock', 'temple_ceres', 'school', 'library', 'academy', 'theater', 'actor_troupe', 'amphitheater', 'gladiator_school', 'colosseum', 'menagerie', 'barber', 'clinic', 'baths', 'hospital', 'forum', 'senate', 'garden', 'oracle'].map(row)),
+        h('h4', {}, 'Gods'),
+        h('p', {}, `Five gods watch over the city, each with a temple of its own. Each wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens; towns under 800 people are left alone. A content god (mood ${CONFIG.GOD_BLESS_MOOD} or more, which takes festivals or oracles) blesses the city; a neglected one (${CONFIG.GOD_WRATH_MOOD} or less) strikes. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}, and Mercury and Venus strike harder if angered again (not in the first two campaign missions). The Religion advisor shows each god's mood.`),
+        h('table', { class: 'tbl' }, GOD_KEYS.map((k) => h('tr', {}, h('td', {}, h('b', { style: { color: GODS[k].color } }, GODS[k].name)), h('td', { style: { fontSize: '12.5px' } }, `${GODS[k].domain}. Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`)))),
         h('h4', {}, 'Crime'),
         h('p', {}, `Every household has a mood of its own: the city's mood, lower for a hungry home, a squalid street or the poor living among villas, a little higher for plenty of food or no tax collector at the door. Click a home to see it (Mood and order). Once the city has ${CONFIG.CRIME_MIN_POP} people, an unhappy home can breed trouble:`),
         h('ul', {},

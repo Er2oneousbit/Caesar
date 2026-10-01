@@ -47,7 +47,8 @@ import { updateDesirability } from '../sim/desirability.js';
 import { computeCityStats, computeSentiment, updateImmigration, updateEmigration, indexHomesByRoad } from '../sim/population.js';
 import { monthlyEconomy, yearlyEconomy, newLedger } from '../sim/economy.js';
 import { repayLoan } from '../sim/loans.js';
-import { newGodState, updateReligion } from '../sim/religion.js';
+import { newGodState, newGodMood, updateReligion } from '../sim/religion.js';
+import { GOD_KEYS } from '../data/gods.js';
 import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
@@ -87,6 +88,7 @@ export function newCityState(scenario, funds) {
     sentimentFactors: {},
     festivalBoost: 0,
     festivalCooldown: 0,
+    venusBoost: 0, // Venus's blessing (+) or wrath (-) on the city mood, decaying (sim/religion.js)
     immigrationAcc: 0,
     vacancies: 0,
     goodsDemand: {},
@@ -170,6 +172,8 @@ export class Game {
     this.military ??= newMilitaryState(scenario, this.time, flags);
     this.city.crime ??= newCrimeState(); // saves from before crime (v4)
     this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
+    for (const g of GOD_KEYS) this.city.gods[g] ??= newGodMood(); // a god a save lacks starts afresh
+    this.city.venusBoost ??= 0;
     this.projectiles = []; // arrows and sling stones in flight (not saved)
     this.enemyField = null; // raider flow field (derived, see military.js)
     this.events.on('buildingRemoved', ({ building }) => {

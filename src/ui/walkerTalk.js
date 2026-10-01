@@ -78,6 +78,7 @@ function workLines(game, w) {
       return ['Bread! Olives! Pots and bowls!', 'Fresh from the granary, good people!'];
     }
     case 'cart':
+      if (w.state === 'collect') return ['Off to fetch more. They want it kept in stock here.', 'Empty there, full on the way back.'];
       if (w.cargo) return [`${amountText(w.cargo.good, w.cargo.amount)} on board. Mind the wheels!`, 'Heavy load, but it pays.'];
       return ['Back for the next load.'];
     case 'buyer': return w.load && Object.keys(w.load).length ? ['A full basket for the market. My back will not thank me.'] : ['The market needs stock. Off to the storehouse.'];
@@ -201,7 +202,8 @@ export function walkerDoing(game, w) {
     case 'treat': return 'Treating the sick';
     case 'extinguish': return 'Fighting a fire';
     case 'deliver': return `Taking goods to ${the(target)}`;
-    case 'fetch': return `Going to ${the(target)} for ${w.want ? GOODS[w.want].name.toLowerCase() : 'goods'}`;
+    case 'fetch':
+    case 'collect': return `Going to ${the(target)} for ${w.want ? GOODS[w.want].name.toLowerCase() : 'goods'}`;
     case 'toHouse': return `Moving into ${target ? `a ${nameOf(target)}` : 'a new home'}`;
     case 'seeking': return 'Looking for a home';
     case 'leaving':

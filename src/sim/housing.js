@@ -47,6 +47,7 @@ import { Terrain, WaterBits } from '../world/map.js';
 import { addBuilding, computeAccessRoad, killWalker, removeBuilding, sendHomeless, spawnWalker } from './entities.js';
 import { walkTo } from './movement.js';
 import { logGoods } from './goodsLedger.js';
+import { clearRuin } from './ruins.js';
 
 // ---------------------------------------------------------------------------
 // Measuring a home
@@ -450,6 +451,7 @@ function setFootprint(game, b, x, y, size) {
       const i = map.idx(x + dx, y + dy);
       map.building[i] = b.id;
       map.rubble[i] = 0;
+      clearRuin(game, i);
     }
   }
   b.rev = (b.rev || 0) + 1;

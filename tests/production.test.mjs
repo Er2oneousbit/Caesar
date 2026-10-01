@@ -98,7 +98,7 @@ test('the Problems overlay names what keeps each home and building back', () => 
   const spot = findFree(game, 3, 3);
   assert.ok(build(game, 'prefecture', spot.x + 1, spot.y + 1).ok);
   const pre = [...game.buildings.values()].find((b) => b.type === 'prefecture' && b.x === spot.x + 1 && b.y === spot.y + 1);
-  assert.match(problemOf(game, pre).text, /No road access/);
+  assert.match(problemOf(game, pre).text, /No road touches this building/);
   // The overlay draws the problem as its column, and the tooltip says it.
   const ov = overlayByKey('problems');
   assert.deepEqual(ov.column(pre, game), problemOf(game, pre));

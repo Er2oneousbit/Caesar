@@ -18,7 +18,8 @@ import { settlerArrive, seekHome } from './population.js';
 import { caravanArrive, shipArrive, shipLeave } from './trade.js';
 import { prefectArriveAtFire, afterWait } from './risk.js';
 import { performerArrive } from './entertainment.js';
-import { findDeliveryTarget, receiveGoods } from './storage.js';
+import { findDeliveryTarget, receiveGoods, isStorage } from './storage.js';
+import { collectArrive } from './storageOrders.js';
 import { recruitArrive } from './military.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
 import { physicianArrive, physicianAfterWait } from './disease.js';
@@ -155,6 +156,9 @@ function onPathEnd(game, w) {
     case 'fetch':
       buyerArrive(game, w);
       break;
+    case 'collect':
+      collectArrive(game, w);
+      break;
     case 'toHouse':
       settlerArrive(game, w);
       break;
@@ -196,12 +200,12 @@ function onPathEnd(game, w) {
   }
 }
 
-/** Walker is back at its building. Unload anything it carries. */
+/** Walker is back at its building. Unload anything it carries (its own goods: no orders apply). */
 function returnHome(game, w) {
   const origin = game.buildings.get(w.origin);
   if (origin) {
     if (w.type === 'buyer') buyerUnload(game, w);
-    if (w.cargo && w.cargo.amount > 0) receiveGoods(origin, w.cargo.good, w.cargo.amount);
+    if (w.cargo && w.cargo.amount > 0) receiveGoods(origin, w.cargo.good, w.cargo.amount, true);
   }
   killWalker(game, w);
 }
@@ -212,7 +216,10 @@ function cartArrive(game, w) {
   releaseReservation(game, w);
   if (target && w.cargo) {
     const n = receiveGoods(target, w.cargo.good, w.cargo.amount);
-    if (n > 0 && FOOD_TYPES.includes(w.cargo.good)) game.city.foodFlow.stored += n;
+    // Food counts as stored once, from the farm or dock; storage emptying
+    // into other storage only moves it.
+    const origin = game.buildings.get(w.origin);
+    if (n > 0 && FOOD_TYPES.includes(w.cargo.good) && !(origin && isStorage(origin))) game.city.foodFlow.stored += n;
     w.cargo.amount -= n;
     if (w.cargo.amount <= 0) w.cargo = null;
   }

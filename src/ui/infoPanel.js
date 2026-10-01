@@ -20,6 +20,8 @@ import { WALKER_TYPES, ROADBLOCK_GROUPS } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall, ROADBLOCK } from '../world/map.js';
 import { walkerInfo } from './walkerTalk.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
+import { cycleOrder, setEmptying, orderGoods } from '../sim/storageOrders.js';
+import { ORDER_LABELS, orderLines } from './storageInfo.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
@@ -29,6 +31,10 @@ import { removeBuilding } from '../sim/entities.js';
 import { farmDormant, daysToNextMare } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
+import { ruinAt } from '../sim/ruins.js';
+import { lacksRoad } from '../sim/roadAccess.js';
+import { withArticle } from '../sim/risk.js';
+import { MONTH_SHORT, formatYear } from '../sim/time.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -59,10 +65,30 @@ export function describeNeed(m) {
   }
 }
 
+/** How the panel words each cause of a ruin (sim/ruins.js RUIN_CAUSES). */
+const RUIN_WORDS = {
+  fire: 'burned down',
+  lightning: 'struck by lightning',
+  raidFire: 'burned by raiders',
+  riot: 'burned by rioters',
+  collapse: 'collapsed',
+  raid: 'torn down by raiders',
+  raidWall: 'broken down by raiders',
+};
+
+/**
+ * "Ruins of a Prefecture, burned down in Iul 280 BC." for a rubble record,
+ * or null for rubble without one (from a save before version 7).
+ */
+export function ruinText(rec) {
+  if (!rec) return null;
+  return `Ruins of ${withArticle(rec.what)}, ${RUIN_WORDS[rec.cause] || 'fallen'} in ${MONTH_SHORT[rec.month]} ${formatYear(rec.year)}.`;
+}
+
 /** Status line for any non-house building. */
 export function buildingStatus(game, b) {
   const def = b.def;
-  if (def.needsRoad && b.accessRoad < 0) return { level: 'bad', text: 'No road access. Build a road touching this building.' };
+  if (lacksRoad(b)) return { level: 'bad', text: 'No road touches this building, so it gets no workers and does nothing. Build a road along any of its edges (any side works; a corner does not).' };
   if (def.workers && b.laborAccess <= 0) return { level: 'bad', text: `Cannot find workers: no occupied housing within ${CONFIG.LABOR_RANGE} tiles along the roads.` };
   if (def.workers && b.efficiency <= 0) return { level: 'bad', text: 'No workers available. The city needs more people, or change labor priorities.' };
   if (def.needsPiped && !b.hasWater) return { level: 'bad', text: 'No piped water. It must sit inside a full reservoir\'s area.' };
@@ -149,6 +175,19 @@ export class InfoPanel {
     root.appendChild(this.el);
     this.target = null; // { kind: 'building', id } | { kind: 'tile', x, y } | { kind: 'walker', id }
     this.timer = 0;
+    // A pointer held down in the panel (a press on a button, say): the timed
+    // rebuild waits, or it would replace the button between press and
+    // release and the click would be lost. It runs on the next frame after
+    // the release instead, once the click has landed.
+    this.pressed = false;
+    this.el.addEventListener('pointerdown', () => { this.pressed = true; });
+    const release = () => {
+      if (!this.pressed) return;
+      this.pressed = false;
+      this.timer = Math.max(this.timer, 0.7); // the frame after the click event
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
   }
 
   get open() { return !this.el.classList.contains('hidden'); }
@@ -195,6 +234,7 @@ export class InfoPanel {
     if (!this.open) return;
     this.timer += dt;
     if (this.timer < 0.7) return;
+    if (this.pressed) return; // a press in progress: rebuild after the release
     this.timer = 0;
     // Do not rebuild while the user is interacting with a control inside.
     if (this.el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
@@ -470,24 +510,41 @@ export class InfoPanel {
     mount(this.el, parts);
   }
 
+  /**
+   * Stock, and the orders: one button per good that cycles Accept, Refuse,
+   * Get (sim/storageOrders.js), the Empty switch, and what they are doing.
+   */
   storageSection(g, b) {
     const cap = storageCapacity(b);
     const used = storageUsed(b);
-    const keys = b.def.kind === 'granary' ? FOOD_TYPES : Object.keys(b.stock);
+    const granary = b.def.kind === 'granary';
+    const cycle = (k) => { cycleOrder(b, k); this.render(); };
     return h('div', { class: 'panel-sec' },
       h('h5', {}, 'Storage'),
       kv('Used', `${fmt(used)} / ${fmt(cap)}`), bar(used, cap),
+      orderLines(g, b).map((line) => h('div', { class: `status ${line.level}`, style: { marginTop: '6px' } }, line.text)),
+      h('div', { class: 'row', style: { marginTop: '6px', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        h('button', {
+          class: `btn small empty-btn${b.emptying ? ' active' : ''}`,
+          title: b.emptying ? 'Take deliveries again' : 'Take nothing in and send everything stored here elsewhere, one cart at a time',
+          onclick: () => { setEmptying(b, !b.emptying); this.render(); },
+        }, b.emptying ? 'Stop emptying' : `Empty the ${granary ? 'granary' : 'warehouse'}`),
+        h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Click an order to change it: Accept, Refuse, Get.')),
       h('table', { class: 'tbl', style: { marginTop: '6px' } },
-        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Stored'), h('th', { class: 'r' }, 'Accept')),
-        keys.map((k) => h('tr', {},
-          h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
-          h('td', { class: 'r num' }, fmt(b.stock[k])),
-          h('td', { class: 'r' }, h('input', {
-            type: 'checkbox',
-            checked: !!b.accept[k],
-            title: 'Accept deliveries of this good',
-            onchange: (e) => { b.accept[k] = e.target.checked; },
-          }))))));
+        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Stored'), h('th', { class: 'r' }, 'Orders')),
+        orderGoods(b).map((k) => {
+          const state = b.orders[k] || 'accept';
+          const label = ORDER_LABELS[state];
+          return h('tr', {},
+            h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
+            h('td', { class: 'r num' }, fmt(b.stock[k])),
+            h('td', { class: 'r' }, h('button', {
+              class: `btn small order-btn ${state}`,
+              'data-good': k,
+              title: label.title,
+              onclick: () => cycle(k),
+            }, label.label)));
+        })));
   }
 
   /** A walker: who, from where, doing what, carrying what, and what it says. */
@@ -553,7 +610,7 @@ export class InfoPanel {
     if (map.fixedRoad[i]) notes.push('The Imperial road connects the city to the rest of the Empire.');
     if (x === map.entry.x && y === map.entry.y) notes.push('Map entrance (green pennants): settlers and trade caravans arrive here.');
     if (x === map.exit.x && y === map.exit.y) notes.push('Map exit (red pennants): people leaving the city, and trade caravans heading home, go this way.');
-    if (map.rubble[i]) notes.push('Rubble from a disaster. Clear it before building.');
+    if (map.rubble[i]) notes.push(`${ruinText(ruinAt(g, i)) || 'Rubble from a disaster.'} Clear it before building.`);
     if (g.fires.has(i)) notes.push('Burning! Prefects are on their way.');
     const wall = map.wall[i];
     if (wall) notes.push(wall === Wall.GATE ? 'A gate: citizens pass freely, raiders must break it down.' : 'A wall: raiders must break through it (or find a way around).');

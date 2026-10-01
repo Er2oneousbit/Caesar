@@ -233,6 +233,72 @@ try {
     check('clicking a house opens the info panel', await page.isVisible('#info-panel'));
   }
 
+  // 3b. No road, made obvious: a Prefecture placed where no road touches it.
+  //     The ghost turns orange with the edge tiles a road would serve picked
+  //     out and the warning by the cursor; once built, a red sign floats over
+  //     it (counted by the renderer, and red pixels where it says it drew).
+  //     Undone afterwards, so the demo city below has its land.
+  const lone = await page.evaluate(() => {
+    const app = window.colonia;
+    const m = app.game.map;
+    const c = app.renderer.camera.screenToTile(app.canvas.width / app.renderer.camera.dpr / 2, app.canvas.height / app.renderer.camera.dpr / 2);
+    // Two tiles side by side (x and x + 3), each with nothing but open land within 3 tiles.
+    const open = (x, y) => {
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (!m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] === 2) return false;
+      return true;
+    };
+    for (let r = 0; r < 30; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = Math.round(c.x) + dx; const y = Math.round(c.y) + dy;
+        if (open(x, y) && open(x + 3, y)) { app.renderer.camera.centerOnTile(x + 1, y); return { x, y }; }
+      }
+    }
+    return null;
+  });
+  check('found open land away from roads for the no-road test', !!lone);
+  if (lone) {
+    await page.evaluate(() => window.colonia.ui.selectTool('prefecture'));
+    await page.waitForTimeout(100);
+    const lp = await toScreen(lone.x, lone.y);
+    await page.mouse.move(lp.x - 6, lp.y);
+    await page.mouse.move(lp.x, lp.y);
+    await page.waitForTimeout(200);
+    const ghost = await page.evaluate(() => {
+      const t = document.getElementById('tooltip');
+      const st = window.colonia.renderer.stats;
+      return { noRoad: st.ghostNoRoad, edges: st.roadEdges, tip: !t.classList.contains('hidden') && t.classList.contains('warn'), text: t.textContent, side: !!document.querySelector('#tool-info .err') };
+    });
+    check('placing with no road: orange ghost, the 4 edge tiles picked out, the warning by the cursor and in the sidebar', ghost.noRoad && ghost.edges === 4 && ghost.tip && /No road touches it/.test(ghost.text) && ghost.side, JSON.stringify(ghost));
+    await page.mouse.click(lp.x, lp.y);
+    const lp2 = await toScreen(lone.x + 3, lone.y);
+    await page.mouse.move(lp2.x, lp2.y, { steps: 3 }); // the ghost beside it, for the screenshot
+    await page.waitForTimeout(200);
+    const sign = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      const b = [...app.game.buildings.values()].find((v) => v.type === 'prefecture' && v.x === x && v.y === y);
+      if (!b) return { placed: false };
+      const r = app.renderer;
+      const spot = r.noRoadSpots.find((s) => s.id === b.id);
+      if (!spot) return { placed: true, count: r.stats.noRoad, spot: null };
+      // Red pixels in the sign's disc, read back from the canvas.
+      const ctx = app.canvas.getContext('2d');
+      const n = Math.ceil(spot.r);
+      const px = ctx.getImageData(Math.round(spot.x - n), Math.round(spot.y - n), 2 * n, 2 * n).data;
+      let red = 0;
+      for (let q = 0; q < px.length; q += 4) if (px[q] > 170 && px[q + 1] < 90 && px[q + 2] < 90) red++;
+      return { placed: true, count: r.stats.noRoad, spot: true, red, of: px.length / 4 };
+    }, lone);
+    check('a building with no road gets the red no-road sign over it', sign.placed && sign.count >= 1 && sign.spot && sign.red > sign.of * 0.15, JSON.stringify(sign));
+    if (shots) await page.screenshot({ path: path.join(shots, 'smoke-noroad.png') });
+    await page.keyboard.press('Escape');
+    const gone = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      app.undo();
+      return ![...app.game.buildings.values()].some((v) => v.type === 'prefecture' && v.x === x && v.y === y);
+    }, lone);
+    check('the lone prefecture is undone again', gone);
+  }
+
   // 4. Menus and advisors via keyboard
   await page.keyboard.press('F2');
   check('F2 opens advisors', await page.isVisible('text=Advisors'));
@@ -276,6 +342,47 @@ try {
     return { ok: true, heads };
   });
   check('the info panel names all 20 housing levels', ladder.ok && ladder.heads.length === 20 && ladder.heads[0] === 'Tent' && ladder.heads[19] === 'Imperial Palatium' && new Set(ladder.heads).size === 20 && errors.length === 0, JSON.stringify(ladder.heads));
+  // 5. (cont.) Storage orders: a granary's or warehouse's panel has a button
+  //     per good that cycles Accept, Refuse, Get, and an Empty switch
+  //     (sim/storageOrders.js). This map's demo city has a granary but no
+  //     warehouse; the phone check below uses a warehouse.
+  const store = await page.evaluate(() => {
+    const app = window.colonia;
+    const all = [...app.game.buildings.values()];
+    const b = all.find((x) => x.type === 'warehouse') || all.find((x) => x.type === 'granary');
+    if (!b) return null;
+    app.ui.info.showBuilding(b.id);
+    return { id: b.id, good: b.type === 'warehouse' ? 'wine' : 'wheat', name: b.type };
+  });
+  check('demo city has a granary or warehouse', !!store);
+  if (store) {
+    const order = () => page.evaluate(({ id, good }) => window.colonia.game.buildings.get(id).orders[good], store);
+    const seen = [await order()];
+    for (let k = 0; k < 3; k++) {
+      await page.click(`#info-panel .order-btn[data-good="${store.good}"]`);
+      seen.push(await order());
+    }
+    // A slow press: the panel's timed rebuild (every 0.7 s) must wait for the
+    // release, or the button is replaced under the pointer and the click lost.
+    const box = await page.locator(`#info-panel .order-btn[data-good="${store.good}"]`).boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(900);
+    await page.mouse.up();
+    const slow = await order();
+    for (let k = 0; k < 2; k++) await page.click(`#info-panel .order-btn[data-good="${store.good}"]`); // back to Accept
+    check('a slow press on an order button is not lost to the panel refreshing', slow === 'refuse' && (await order()) === 'accept', `after the slow press: ${slow}`);
+    const label = await page.textContent(`#info-panel .order-btn[data-good="${store.good}"]`);
+    await page.click(`#info-panel button:has-text("Empty the ${store.name}")`);
+    const emptying = await page.evaluate(({ id }) => window.colonia.game.buildings.get(id).emptying, store);
+    const says = await page.textContent('#info-panel');
+    await page.click('#info-panel button:has-text("Stop emptying")');
+    const stopped = await page.evaluate(({ id }) => !window.colonia.game.buildings.get(id).emptying, store);
+    await page.evaluate(() => window.colonia.ui.info.close());
+    check(`a ${store.name}'s order cycles Accept, Refuse, Get in its panel, and Empty switches on and off`,
+      seen.join() === 'accept,refuse,get,accept' && label === 'Accept' && emptying && /Emptying/.test(says) && stopped && errors.length === 0,
+      JSON.stringify({ seen, label, emptying, stopped }));
+  }
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Population")');
   const rows = await page.evaluate(() => [...document.querySelectorAll('.modal tr')].filter((tr) => /^\d+\. /.test(tr.textContent)).length);
@@ -936,7 +1043,7 @@ try {
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];
   phone.on('pageerror', (e) => perrors.push(e.message));
-  await phone.goto(`${url}?skipmenu=1&map=small`);
+  await phone.goto(`${url}?skipmenu=1&map=small&seed=phone`); // a map where the demo city gets a warehouse
   await phone.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   const layout = await phone.evaluate(() => {
     const sb = document.getElementById('sidebar').getBoundingClientRect();
@@ -945,6 +1052,24 @@ try {
   check('phone: no horizontal scroll', layout.scrollW <= layout.w, `${layout.scrollW} <= ${layout.w}`);
   check('phone: build menu docked at the bottom', layout.sbTop > 400, `top ${Math.round(layout.sbTop)}`);
   if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone.png') });
+  // The warehouse panel fits a phone: no sideways scroll inside it, and a tap cycles an order.
+  const phoneWh = await phone.evaluate(() => {
+    const app = window.colonia;
+    app.ui.console.run('demo 2');
+    const wh = [...app.game.buildings.values()].find((b) => b.type === 'warehouse');
+    if (!wh) return null;
+    app.ui.info.showBuilding(wh.id);
+    const panel = document.getElementById('info-panel');
+    return { id: wh.id, scrollW: panel.scrollWidth, w: panel.clientWidth };
+  });
+  if (phoneWh) {
+    await phone.tap('#info-panel .order-btn[data-good="oil"]');
+    const oil = await phone.evaluate((id) => window.colonia.game.buildings.get(id).orders.oil, phoneWh.id);
+    if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone-warehouse.png') });
+    check('phone: the warehouse panel fits, and a tap cycles an order', phoneWh.scrollW <= phoneWh.w && oil === 'refuse', JSON.stringify({ ...phoneWh, oil }));
+  } else {
+    check('phone: demo city has a warehouse', false);
+  }
   // The Empire map on a phone: the compass opens it, the map fits the width
   // with the panel below it, and nothing scrolls sideways.
   await phone.tap('#hud-empire');

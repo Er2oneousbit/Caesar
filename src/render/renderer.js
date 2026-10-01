@@ -16,6 +16,11 @@
  * big buildings with a simple depth sort.
  *
  *   3. Tool previews (ghost building, green/red tiles), hover and selection.
+ *      A building placed where no road would touch it is drawn in the
+ *      warning color, with the edge tiles where a road would serve it
+ *      picked out. Just before this pass, a red "no road" sign floats over
+ *      every building that has no road to use (drawn over the night and the
+ *      weather, at a size that stays readable when zoomed far out).
  *      Water buildings show their supply area: the one being placed or the
  *      one clicked in dark blue, existing coverage of that kind in pale blue.
  *   4. Particles (dust, smoke).
@@ -52,7 +57,8 @@ import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor } from './buildingArt.js';
-import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H } from './liveArt.js';
+import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
+import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
 import { drawWalker } from './walkerArt.js';
 import { Effects, drawFlames, drawSpray, drawGlint } from './effects.js';
 import { Ambient } from './ambient.js';
@@ -70,6 +76,31 @@ const K_UNIT = 5;
 const K_PROJ = 6;
 const K_FLAG = 7;
 const K_GATE = 8; // the gateway at the map entrance / exit
+
+/** The build ghost on a spot with no road it could use: the warning color. */
+const NO_ROAD_FILL = 'rgba(245,140,30,0.55)';
+const NO_ROAD_TINT = 'rgba(255,120,20,0.42)';
+/** Edge tiles where a road would serve the building being placed. */
+const ROAD_EDGE_FILL = 'rgba(255,226,120,0.34)';
+const ROAD_EDGE_LINE = 'rgba(255,214,80,0.95)';
+
+/**
+ * A sprite spec drawn as `spec` and then washed over in `color`, only where
+ * the art itself drew (the ghost of a building with no road in reach).
+ */
+export function tintedSpec(spec, color) {
+  return {
+    ...spec,
+    draw(ctx) {
+      spec.draw(ctx);
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = color;
+      ctx.fillRect(-spec.ax, -spec.ay, spec.w, spec.h);
+      ctx.restore();
+    },
+  };
+}
 
 /**
  * Where a map gate's pillars stand: the world offset (px) from the road tile's
@@ -289,10 +320,12 @@ export class Renderer {
     this.follow = null; // { id } of a walker the view follows (until the map is moved)
     this.walkerSpots = []; // where each walker was drawn this frame, for clicks (pickWalker)
     this.buildingBoxes = []; // footprint and height of each building drawn this frame (pickWalker)
+    this.noRoadMarks = []; // buildings in view with no road to use, and their height (the red sign)
+    this.noRoadSpots = []; // where those signs were drawn this frame (device px)
     this.deployFort = 0; // fort id while the player picks a deployment tile
     this.time = 0;
     this.frame = 0;
-    this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null, waterHint: null };
+    this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null, waterHint: null, noRoad: 0, ghostNoRoad: false, roadEdges: 0 };
     this.viewTiles = null; // visible tile range of the last frame {tx0, tx1, ty0, ty1}
     this.stripCache = new WeakMap();
     this.unsub = [];
@@ -446,6 +479,7 @@ export class Renderer {
     const glints = motion && cam.zoom >= 1 && env.sun > 0.5 && env.overcast < 0.5;
     const visibleBuildings = [];
     this.buildingBoxes = [];
+    this.noRoadMarks = [];
     const waterFrame = Math.floor(this.time * 2.5) % 4;
 
     const items = [];
@@ -672,6 +706,9 @@ export class Renderer {
     if (this.weatherOn && motion && (env.rain > 0.01 || env.snow > 0.01 || this.weather.flash > 0.01 || this.weather.drops.length || this.weather.flakes.length)) {
       this.weather.draw(ctx, cam.viewW, cam.viewH, cam.dpr, dt, this.time);
     }
+
+    // --- no-road signs: over the night and the weather, so always readable --
+    this.drawNoRoadMarks();
 
     // --- pass 3: previews, hover, selection --------------------------------
     this.drawToolPreview();
@@ -964,6 +1001,7 @@ export class Renderer {
     const depths = this.stripsFor(b);
     const front = Math.max(...depths);
     if (overlayOn && ov.show && !ov.show(b)) {
+      if (lacksRoad(b)) this.noRoadMarks.push({ b, H: 0 });
       // Flat footprint + optional info column.
       const color = b.house ? 'rgba(214,190,140,0.9)' : 'rgba(150,145,135,0.85)';
       items.push({ d: front - 0.5, kind: K_EXTRA, b, flat: color, wx, wy });
@@ -989,6 +1027,7 @@ export class Renderer {
     const snow = this.pal.snow;
     const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick), this.snowPrev === null ? null : key + this.snowPrev);
     if (spr && spr.s) this.buildingBoxes.push({ x: b.x, y: b.y, S: b.size, H: spr.ay / spr.s });
+    if (lacksRoad(b)) this.noRoadMarks.push({ b, H: spr && spr.s ? spr.ay / spr.s : 0 });
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).
     let alpha;
@@ -1432,9 +1471,41 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * The red "no road" sign over every building in view that needs a road
+   * and has none it can use (sim/roadAccess.js lacksRoad). It floats just
+   * above the art (`H`, the sprite's height over the footprint's top
+   * corner; 0 for an overlay's flat footprint) and never shrinks below
+   * its zoom-1 size (about 20 CSS px across), so it shows at every zoom.
+   */
+  drawNoRoadMarks() {
+    const marks = this.noRoadMarks;
+    this.stats.noRoad = marks.length;
+    this.noRoadSpots = []; // where each sign's disc was drawn (device px), for the browser smoke test
+    if (!marks.length) return;
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const s = Math.max(k, cam.dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (const { b, H } of marks) {
+      const S = b.size;
+      const cx = b.x + S / 2;
+      const cy = b.y + S / 2;
+      // The tail's tip just over the roof (H is the art's headroom, flag poles included).
+      const top = H > 0 ? (b.x + b.y) * HALF_H - H * 0.55 : (cx + cy) * HALF_H;
+      const bob = this.motionOn ? Math.sin(this.time * 3 + b.id) * 1.2 * s : 0;
+      const sx = Math.round(((cx - cy) * HALF_W - cam.x) * k);
+      const sy = Math.round((top - cam.y) * k + bob);
+      drawNoRoadSign(ctx, sx, sy, s);
+      this.noRoadSpots.push({ id: b.id, x: sx, y: sy - (NO_ROAD_SIGN_R + 4) * s, r: NO_ROAD_SIGN_R * s });
+    }
+  }
+
   /** Construction previews: water hints, ghost building, tile markers, coverage radius. */
   drawToolPreview() {
     const { game, plan } = this;
+    this.stats.ghostNoRoad = false; // exposed for the browser smoke test
+    this.stats.roadEdges = 0;
     const map = game.map;
     const def = plan ? BUILDINGS[plan.tool] : null;
     const water = def ? WATER_AREA[def.kind] : null;
@@ -1470,8 +1541,21 @@ export class Renderer {
         }
       }
     }
+    // No road would touch a single building placed here: pick out the edge
+    // tiles where one would (a corner does not count; homes, which take a
+    // road within 2 tiles, are placed by area and only get the color).
+    this.stats.ghostNoRoad = plan.items.some((it) => it.ok && it.noRoad);
+    if (plan.kind === 'building' && plan.items.length === 1 && plan.items[0].ok && plan.items[0].noRoad) {
+      const it = plan.items[0];
+      for (const e of accessEdgeTiles(game, it.x, it.y, it.size)) {
+        if (!e.open) continue;
+        this.fillDiamond((e.x - e.y) * HALF_W, (e.x + e.y) * HALF_H, ROAD_EDGE_FILL);
+        this.outlineFootprint(e.x, e.y, 1, ROAD_EDGE_LINE, 1.4);
+        this.stats.roadEdges++;
+      }
+    }
     for (const it of plan.items) {
-      const color = it.ok ? (plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : 'rgba(80,220,90,0.38)') : 'rgba(230,40,40,0.5)';
+      const color = !it.ok ? 'rgba(230,40,40,0.5)' : plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : it.noRoad ? NO_ROAD_FILL : 'rgba(80,220,90,0.38)';
       const wx = (it.x - it.y) * HALF_W;
       const wy = (it.x + it.y) * HALF_H;
       if (plan.tool === 'roadblock' && it.ok) {
@@ -1482,8 +1566,12 @@ export class Renderer {
         this.ctx.globalAlpha = 1;
       } else if (def && plan.kind === 'building' && it.ok) {
         // Same sprite (and cache key) as a placed building of variant 0: live flags.
+        // With no road in reach it is washed over in the warning color
+        // (its own key, before the snow suffix that must stay last).
         const snow = this.pal.snow;
-        const spr = this.sprites.get(`b:${plan.tool}:${it.size}:0:0${this.snowKey}`, () => buildingSpec(plan.tool, it.size, 0, 0, true, snow));
+        const spr = it.noRoad
+          ? this.sprites.get(`b:${plan.tool}:${it.size}:0:0:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(plan.tool, it.size, 0, 0, true, snow), NO_ROAD_TINT))
+          : this.sprites.get(`b:${plan.tool}:${it.size}:0:0${this.snowKey}`, () => buildingSpec(plan.tool, it.size, 0, 0, true, snow));
         this.fillDiamond(wx, wy, color, it.size);
         this.ctx.globalAlpha = 0.72;
         this.blit(spr, wx, wy);

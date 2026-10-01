@@ -16,6 +16,7 @@ import { GOD_KEYS } from '../data/gods.js';
 import { FOOD_TYPES, HOUSE_GOODS, GOOD_KEYS, emptyStock } from '../data/goods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { HERD_START } from '../data/units.js';
+import { clearRuin } from './ruins.js';
 
 // ---------------------------------------------------------------------------
 // Buildings
@@ -85,11 +86,13 @@ export class Building {
     this.spawnTimer = 1; // days until the next walker spawn
     this.walkers = []; // ids of walkers that belong to this building and are out
     this.accessRoad = -1; // tile index of the road used to enter/leave, -1 = none
+    this.noRoadDays = 0; // days in a row without a road it can use (sim/roadAccess.js)
+    this.noRoadWarned = false; // the "no road touching it" message was shown (once per building)
     this.progress = 0; // production / growth progress 0..100
     this.phase = id % CONFIG.TICKS_PER_DAY; // which tick of the day this building updates on
     this.stock = null; // goods held (storage, markets, producers)
     this.incoming = null; // goods reserved by carts on their way here
-    this.accept = null; // storage accept flags
+    this.orders = null; // storage: per good 'accept' | 'refuse' | 'get' (sim/storageOrders.js)
     this.house = null;
     this.hasWater = false; // reservoirs, fountains, baths
     this.shows = null; // venues: days of performances booked by type
@@ -112,13 +115,17 @@ function initKind(b, def) {
     case 'granary':
       b.stock = emptyStock(FOOD_TYPES);
       b.incoming = emptyStock(FOOD_TYPES);
-      b.accept = Object.fromEntries(FOOD_TYPES.map((k) => [k, true]));
+      b.orders = Object.fromEntries(FOOD_TYPES.map((k) => [k, 'accept']));
+      b.emptying = false; // the Empty switch: send everything elsewhere, take nothing in
+      b.orderNote = null; // what the last Get or Empty check found, for the info panel
       break;
     case 'warehouse':
       b.stock = emptyStock(GOOD_KEYS);
       b.incoming = emptyStock(GOOD_KEYS);
       // Warehouses accept everything except food by default (food goes to granaries).
-      b.accept = Object.fromEntries(GOOD_KEYS.map((k) => [k, !FOOD_TYPES.includes(k)]));
+      b.orders = Object.fromEntries(GOOD_KEYS.map((k) => [k, FOOD_TYPES.includes(k) ? 'refuse' : 'accept']));
+      b.emptying = false;
+      b.orderNote = null;
       break;
     case 'market':
       b.stock = emptyStock([...FOOD_TYPES, ...HOUSE_GOODS]);
@@ -239,6 +246,7 @@ export function addBuilding(game, type, x, y, size, { quiet = false } = {}) {
   for (const i of footprintTiles(map, x, y, b.size)) {
     map.building[i] = id;
     map.rubble[i] = 0;
+    clearRuin(game, i);
   }
   // Farms: fertility is the share of meadow under the field.
   if (b.def.kind === 'farm') {

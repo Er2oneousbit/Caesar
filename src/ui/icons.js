@@ -32,6 +32,7 @@ function specsFor(key) {
     case 'wharf': return [buildingSpec('wharf', 2, 0, 1 + 4)];
     case 'navalia': return [buildingSpec('navalia', 3, 0, 1 + 4 * 2)];
     case 'naval_station': return [buildingSpec('naval_station', 3, 0, 1)];
+    case 'portus': return [buildingSpec('portus', 3, 0, 1)];
     case 'hippodrome': {
       // All three sections, each a tile-row of 5 further along x.
       const parts = [0, 1, 2].map((s) => buildingSpec(s ? 'hippodrome_part' : 'hippodrome', 5, 0, s));

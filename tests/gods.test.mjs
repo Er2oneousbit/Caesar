@@ -88,12 +88,20 @@ const sumStock = (b) => Object.values(b.stock).reduce((a, n) => a + n, 0);
 // The gods, their temples and where they are unlocked
 // ---------------------------------------------------------------------------
 
-test('the five gods: the original\'s order, a temple each, all at the same cost', () => {
+test('the five gods: the original\'s order, a small and a large temple each, all of a size at the same cost', () => {
   assert.deepEqual([...GOD_KEYS], ['ceres', 'neptune', 'mercury', 'mars', 'venus']);
   const temples = Object.keys(BUILDINGS).filter((k) => BUILDINGS[k].god);
-  assert.deepEqual(temples, GOD_KEYS.map((g) => `temple_${g}`), 'one temple per god, in the build menu in the gods\' order');
+  assert.deepEqual(temples, [...GOD_KEYS.map((g) => `temple_${g}`), ...GOD_KEYS.map((g) => `temple_large_${g}`)],
+    'a small temple and a large one per god, in the build menu in the gods\' order');
   for (const k of temples) {
     const d = BUILDINGS[k];
+    if (k.startsWith('temple_large_')) {
+      // The original's large temple: 3x3, 150 Dn, 5 workers, +14 (14, 14, 12, 12, 10), the same priest.
+      assert.equal(d.cost, 150, `${k} costs 150`);
+      assert.deepEqual([d.size, d.workers, d.spawnDays, d.walker, d.templeWeight, d.fire], [3, 5, 4, 'priest', 2, 0.6], `${k}: the same large temple as the others`);
+      assert.deepEqual(d.des, [14, 2, -2, 5]);
+      continue;
+    }
     assert.equal(d.cost, 50, `${k} costs 50`);
     assert.deepEqual([d.size, d.workers, d.spawnDays, d.walker], [2, 2, 4, 'priest'], `${k}: the same temple as the others`);
     assert.deepEqual(d.des, [4, 2, -1, 6]);

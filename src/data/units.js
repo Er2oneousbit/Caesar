@@ -18,6 +18,22 @@
  *   upkeep    Dn per month to keep one soldier (Roman units only). Kept low:
  *             forts and the barracks already cost wages for their staff.
  *   color     tunic/banner color (forts fly their soldiers' color)
+ *
+ * Training (a Military Academy for soldiers, the Portus for liburnian crews;
+ * sim/training.js). A trained man or crew keeps its hp and attack, as in the
+ * original, and gains:
+ *   trainedDefense   defense added at all times
+ *   holdDefense      defense added while holding position: standing his ground
+ *                    (at his post, or standing to fight a raider in reach), not
+ *                    running after one or marching. The original's close order.
+ *   holdMissile      share of a missile's damage taken while holding position
+ *                    (the original's close order took 1 damage a missile)
+ *   trainedRam       ram damage of a trained crew
+ *   trainedSpeed     speed of a trained crew (they row in time)
+ *   strength,        what one counts for in a distant battle, untrained and
+ *   trainedStrength  trained (battleStrength in sim/training.js): the
+ *                    original's legionary 2 or 3 and auxiliary 1 or 2, and a
+ *                    liburnian 4 or 6 (Colonia's own)
  * ----------------------------------------------------------------------------
  */
 
@@ -26,16 +42,19 @@ export const UNIT_TYPES = Object.freeze({
   legionary: {
     name: 'Legionary', side: 'rome', color: '#a8322b', hp: 110, attack: 14, defense: 9, range: 1.1, aggro: 8,
     speed: 0.075, cooldown: 20, upkeep: 2, fort: 'fort_legion',
+    holdDefense: 4, holdMissile: 0.25, strength: 2, trainedStrength: 3,
     desc: 'Heavy infantry with a large shield. Holds the line against anything. Each recruit needs weapons.',
   },
   archer: {
     name: 'Archer', side: 'rome', color: '#3f7a3a', hp: 60, attack: 10, defense: 3, range: 6.5, aggro: 9,
     speed: 0.075, cooldown: 30, upkeep: 2, fort: 'fort_archer', ranged: true,
+    trainedDefense: 2, strength: 1, trainedStrength: 2,
     desc: 'Auxiliary bowmen. Fragile up close, deadly from a distance. Each recruit needs arrows from a Fletcher.',
   },
   cavalry: {
     name: 'Cavalryman', side: 'rome', color: '#c9962e', hp: 120, attack: 15, defense: 6, range: 1.2, aggro: 12,
     speed: 0.13, cooldown: 18, upkeep: 3, fort: 'fort_cavalry', mounted: true,
+    trainedDefense: 2, strength: 1, trainedStrength: 2,
     desc: 'Fast horsemen who hunt down raiders before they reach the city. Each recruit needs a horse.',
   },
   // --- Raiders ------------------------------------------------------------------
@@ -61,6 +80,7 @@ export const UNIT_TYPES = Object.freeze({
   liburnian: {
     name: 'Liburnian', side: 'rome', color: '#a8322b', hp: 180, attack: 13, defense: 6, range: 4.5, aggro: 10,
     speed: 0.12, cooldown: 30, upkeep: 4, naval: true, ranged: true, ram: 45,
+    trainedRam: 55, trainedSpeed: 0.135, trainedDefense: 3, strength: 4, trainedStrength: 6,
     desc: 'A light warship of the provincial fleet: two banks of oars, a bronze ram. Its marines shoot raider ships, and it rams those it reaches. Built at a Navalia from timber, iron and linen; berths at a Naval Station.',
   },
   raider_ship: {

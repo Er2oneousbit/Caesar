@@ -34,6 +34,8 @@ import { GOODS, GOOD_KEYS, RECRUIT_SOURCE, formatAmount } from '../data/goods.js
 import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
 import { threatSummary, garrisonCounts, recallFort } from '../sim/military.js';
 import { squadronCounts, recallStation, fleetSummary, navalNeed } from '../sim/navy.js';
+import { trainedTotals } from '../sim/training.js';
+import { templeCount } from './trainingInfo.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
@@ -453,6 +455,7 @@ export class Advisors {
     for (const u of g.units.values()) if (u.side === 'rome' && !UNIT_TYPES[u.type].naval) { soldiers++; pay += UNIT_TYPES[u.type].upkeep; }
     const st = m.stats;
     const fleet = fleetSummary(g);
+    const trained = trainedTotals(g);
     const stations = all.filter((b) => b.def.kind === 'station');
     const yards = all.filter((b) => b.def.kind === 'navalia');
     const seaOk = !!g.map.seaEntry;
@@ -466,6 +469,7 @@ export class Advisors {
     const army = h('div', { class: 'card' },
       h('h4', {}, 'Army'),
       kv('Soldiers', fmt(soldiers)),
+      soldiers ? kv('Trained (Military Academy)', `${fmt(trained.soldiersTrained)} of ${fmt(trained.soldiers)}`) : null,
       kv('Army pay', `${fmt(pay)} Dn / month`),
       kv('Forts / barracks / towers', `${forts.length} / ${barracks.length} / ${towers.length}`),
       kv('Record', `${st.repelled} of ${st.raids} raids repelled`),
@@ -476,6 +480,7 @@ export class Advisors {
     const fleetCard = showFleet ? h('div', { class: 'card' },
       h('h4', {}, 'Fleet'),
       kv('Liburnians', `${fmt(fleet.ships)} (${fmt(fleet.atSea)} at sea)`),
+      fleet.ships ? kv('Trained crews (Portus)', `${fmt(trained.shipsTrained)} of ${fmt(trained.ships)}`) : null,
       kv('Fleet pay', `${fmt(fleet.pay)} Dn / month`),
       kv('Navalia / stations', `${yards.length} / ${stations.length}`),
       kv('Raider ships sunk / liburnians lost', `${fmt(st.shipsSunk || 0)} / ${fmt(st.shipsLost || 0)}`),
@@ -677,13 +682,13 @@ export class Advisors {
   tab_religion(g) {
     const c = g.city;
     return [
-      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens. Once the city passes 800 people, gods without any temple grow angry. Festivals and oracles can lift moods high enough for blessings. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}.`),
+      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens; a large temple counts as two. Once the city passes 800 people, gods without any temple grow angry. Festivals and oracles can lift moods high enough for blessings. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}.`),
       GOD_KEYS.map((k) => {
         const s = c.gods[k];
         return h('div', { class: 'card', style: { marginTop: '8px' } },
           h('div', { class: 'row' }, h('h4', { style: { flex: 1, color: GODS[k].color } }, GODS[k].name), h('span', { class: 'muted' }, GODS[k].domain)),
           kv('Mood', `${Math.round(s.mood)} / 100`), bar(s.mood, 100),
-          kv('Staffed temples', `${s.temples}`),
+          kv('Staffed temples', templeCount(g, k).text),
           s.angered ? h('div', { class: 'status bad', style: { fontSize: '12px' } }, `Angered: until ${GODS[k].name}'s mood is back above ${CONFIG.GOD_CALM_MOOD}, another wrath strikes ${GODS[k].harderWrath && g.scenario.majorWrath !== false ? 'harder' : 'again'}.`) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, `Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`),
           h('div', { class: 'row', style: { marginTop: '6px' } },

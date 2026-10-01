@@ -99,7 +99,10 @@ function workLines(game, w) {
       return ['Back for the next load.'];
     case 'buyer': return w.load && Object.keys(w.load).length ? ['A full basket for the market. My back will not thank me.'] : ['The market needs stock. Off to the storehouse.'];
     case 'performer': return w.venue === 'hippodrome' ? ['Fresh horses for the races. Make way!'] : ['Off to the stage. The show must go on.'];
-    case 'recruit': return ['Off to the fort. Rome needs me.', 'Twenty years of service, and then a farm of my own.'];
+    case 'recruit':
+      if (w.state === 'toAcademy') return ['First the drill yard, then the fort.', 'They say the academy makes a soldier of a farm boy.'];
+      if (w.trained) return ['Close order, shields up: let them throw their stones.', 'Twenty years of service, and then a farm of my own.'];
+      return ['Off to the fort. Rome needs me.', 'Twenty years of service, and then a farm of my own.'];
     case 'homeless': return ['Our home is gone. Is there a roof anywhere?', 'We lost everything. We need a place to stay.'];
     default: return CITY_LINES.fine;
   }
@@ -242,7 +245,8 @@ export function walkerDoing(game, w) {
       if (w.type === 'ship') return 'Sailing home';
       return 'Leaving the city';
     case 'toVenue': return `On the way to perform at ${the(target)}`;
-    case 'toFort': return `Marching to ${the(target)}`;
+    case 'toAcademy': return `Marching to ${the(game.buildings.get(w.academy))} to be trained, then to ${the(target)}`;
+    case 'toFort': return `Marching to ${the(target)}${w.trained ? ', trained at the Military Academy' : ''}`;
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;
     case 'spare': return 'Waiting by the shipyard for a wharf';

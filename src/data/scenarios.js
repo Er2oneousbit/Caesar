@@ -45,6 +45,7 @@ import { DIFFICULTY, difficultyOf } from './difficulty.js';
 import { at } from './empireGeo.js';
 import { BUILDINGS, TOOLS } from './buildings.js';
 import { SANDBOX_RANK, clampRank } from './ranks.js';
+import { GOD_KEYS } from './gods.js';
 
 /**
  * Trade partners.
@@ -131,7 +132,7 @@ export const INVASION_PRESETS = Object.freeze({
  * The fleet (sim/navy.js): the missions with raids and water ships can sail
  * (4, the river; 5, the coast; 7, a lake at the map's edge) and the sandbox.
  */
-export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station']);
+export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
 /*
  * The governor's residences come with the career, as the original's bigger
  * ones came with later missions: the house from the first mission, the
@@ -140,9 +141,12 @@ export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station']);
  */
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum', 'governor_house'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
-const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school', 'governor_villa'];
+/** The large temples (one per god) come with the third mission, the first to ask for Domus and bigger homes. */
+export const LARGE_TEMPLE_KEYS = Object.freeze(GOD_KEYS.map((g) => `temple_large_${g}`));
+const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school', 'governor_villa', ...LARGE_TEMPLE_KEYS];
+/** The Military Academy comes with the first forts (mission 4); the Portus with the fleet (NAVY_KEYS). */
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock', 'farm_flax', 'linen_ws', 'clothing_ws',
-  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall', 'shipyard', 'wharf', ...NAVY_KEYS];
+  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'military_academy', 'tower', 'wall', 'shipyard', 'wharf', ...NAVY_KEYS];
 /**
  * Missions 5 and 6: every building and tool but the hippodrome and its
  * chariot maker, which wait for the last mission's great city (only it asks

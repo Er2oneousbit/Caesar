@@ -28,6 +28,7 @@
  *   npm run sim -- --size 96 --level 3 --uptown --cloth --years 5   (Insulae, with clothing from the cloth industry)
  *   npm run sim -- --size 96 --level 3 --uptown --cloth --cloth-off 36 --years 5   (and when it stops)
  *   npm run sim -- --type coast --raids frequent --garrison --navy --years 8   (sea raids against a fleet)
+ *   npm run sim -- --type coast --raids frequent --garrison --navy --academy --years 8   (and training)
  *
  * Campaign runs build every building unless --unlocks is given (then only
  * what the mission unlocks), so their numbers stay comparable with earlier
@@ -41,6 +42,7 @@ import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
 import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, UPTOWN_GOODS } from '../src/dev/demoCity.js';
+import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
@@ -87,6 +89,7 @@ Options:
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --sea-raids <s>   on | off: the Sea raids switch (default on: some raids come by sea where ships can sail)
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
+  --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
   --json            print a JSON summary at the end
   --pace            print the campaign's pace (the fewest months each goal takes) and exit
   --capacity        print what each mission's buildings can employ (sim/capacity.js) and exit
@@ -95,7 +98,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false, salary: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false, salary: false, academy: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -120,6 +123,7 @@ function parse(argv) {
     else if (a === '--sea-raids') o.seaRaids = next();
     else if (a === '--navy') o.navy = true;
     else if (a === '--salary') o.salary = true;
+    else if (a === '--academy') o.academy = true;
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
     else if (a === '--caretaker') o.caretaker = true;
@@ -190,13 +194,13 @@ game.events.on('victory', () => { wonMonth ??= game.time.totalMonths; });
 const res = buildDemoCity(game, { level: opts.level, homes: opts.homes });
 if (!res.ok) { console.error(`Demo city failed: ${res.reason}`); process.exit(1); }
 if (opts.garrison) {
-  const gar = buildDemoGarrison(game, res.center, { stock: true });
-  console.log(`Garrison: ${gar.forts.length} forts, barracks ${gar.barracks ? 'yes' : 'no'}, ${gar.towers.length} towers, ${gar.wall} wall tiles`);
+  const gar = buildDemoGarrison(game, res.center, { stock: true, academy: opts.academy });
+  console.log(`Garrison: ${gar.forts.length} forts, barracks ${gar.barracks ? 'yes' : 'no'}, ${gar.towers.length} towers, ${gar.wall} wall tiles${opts.academy ? `, academy ${gar.academy ? 'yes' : 'no'}` : ''}`);
 }
 const fishery = opts.fishing > 0 ? buildDemoFishery(game, res.center, { wharves: opts.fishing }) : null;
 if (opts.navy) {
-  const nv = buildDemoNavy(game, res.center, { stock: true });
-  console.log(`Navy: naval station ${nv.station ? 'yes' : 'no'}, navalia ${nv.navalia ? 'yes' : 'no'}`);
+  const nv = buildDemoNavy(game, res.center, { stock: true, portus: opts.academy });
+  console.log(`Navy: naval station ${nv.station ? 'yes' : 'no'}, navalia ${nv.navalia ? 'yes' : 'no'}${opts.academy ? `, portus ${nv.portus ? 'yes' : 'no'}` : ''}`);
 }
 if (fishery) console.log(`Fishery: shipyard ${fishery.shipyard ? 'yes' : 'no'}, ${fishery.wharves.length} wharves, granary ${fishery.granary ? 'yes' : 'no'}; ${game.map.fishingGrounds.length} fishing grounds on the map`);
 if (opts.venues) {
@@ -325,6 +329,10 @@ console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math
 const ms = game.military.stats;
 console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
 if (ms.seaRaids || opts.navy) console.log(`Sea: raids by sea ${ms.seaRaids || 0}, raider ships sunk ${ms.shipsSunk || 0}, liburnians built ${ms.shipsBuilt || 0}, lost ${ms.shipsLost || 0}, afloat ${[...game.units.values()].filter((u) => u.type === 'liburnian').length}, fishing boats sunk ${ms.boatsSunk || 0}`);
+if (opts.academy) {
+  const t = trainedTotals(game);
+  console.log(`Training: soldiers trained ${t.soldiersTrained} of ${t.soldiers} (${ms.soldiersTrained || 0} at the academy so far), crews trained ${t.shipsTrained} of ${t.ships} (${ms.crewsTrained || 0} at the Portus so far)`);
+}
 const cr = c.crime.total;
 console.log(`Crime: protesters ${cr.protesters}, thieves ${cr.thieves} (${cr.caught} criminals caught), thefts ${cr.thefts}, stolen ${cr.stolen} Dn and ${cr.looted} goods, riots ${cr.riots}, burned by rioters ${cr.riotBurned}; lowest home mood ${lowestMood(game)}`);
 const hs = c.health.total;

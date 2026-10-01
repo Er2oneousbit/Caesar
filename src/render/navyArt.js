@@ -1,7 +1,7 @@
 /**
  * navyArt.js
  * ----------------------------------------------------------------------------
- * Procedural art for the fleet's two buildings (all original):
+ * Procedural art for the fleet's three buildings (all original):
  *
  *   Navalia        the naval dockyard: an open slipway running down into the
  *                  water, with a liburnian's hull on it while one is built (the
@@ -12,8 +12,12 @@
  *   Naval Station  a stone quay with two short moles for the berths, stone
  *                  bollards along its edge, the crews' hall, racks of spare
  *                  oars and a stone watch post flying Rome's red.
+ *   Portus         a training harbor: a stone-lined basin between two moles
+ *                  with a practice liburnian in it, and on dry land rows of
+ *                  rowing benches with the stroke master's drum, the crews'
+ *                  hall and a pennant.
  *
- * Both stand on the bank with one edge facing the water, like the dock and
+ * All three stand on the bank with one edge facing the water, like the dock and
  * the fishing buildings: designed with the water on the +u edge and turned
  * into place by `side` (0 = -v, 1 = +u, 2 = +v, 3 = -u; sim/trade.js
  * dockBerth). Painter's order: back (small u+v after turning) first.
@@ -264,4 +268,126 @@ export function stationArt(ctx, S, variant, state = 1) {
     } });
   }
   paint(items);
+}
+
+// ---------------------------------------------------------------------------
+// Portus
+// ---------------------------------------------------------------------------
+
+const BASIN = '#4f8fb8';
+
+/**
+ * The Portus (Colonia's own): a sheltered basin cut into the bank and opening
+ * on the water between two stone moles, a practice liburnian moored in it
+ * with its oars run out; on the dry land behind, rows of rowing benches with
+ * their oars across them and the stroke master's drum on a step, where crews
+ * learn to pull in time before they ever put to sea (as Rome's first fleet
+ * did in 260 BC); the crews' hall and a pennant post. state = side.
+ */
+export function portusArt(ctx, S, variant, state = 1) {
+  const side = state % 4;
+  const T = turner(S, side);
+  const Q = (u, v, z = 0) => P(...T(u, v), z);
+  const at = (u, v) => { const [a, b] = T(u, v); return a + b; };
+  quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#bfb194'); // the yard
+  // the basin: stone-lined, cut from the bank to the water's edge
+  const rim = turnedRect(T, 1.25, 0.55, S - 1.23, S - 1.1);
+  quad(ctx, rim[0], rim[1], rim[0] + rim[2], rim[1] + rim[3], 0, STONE_DARK);
+  const pool = turnedRect(T, 1.37, 0.67, S - 1.35, S - 1.34);
+  quad(ctx, pool[0], pool[1], pool[0] + pool[2], pool[1] + pool[3], 0, BASIN);
+  // ripples
+  ctx.strokeStyle = 'rgba(235,245,250,0.45)';
+  ctx.lineWidth = 0.6;
+  for (const [u, v] of [[1.7, 0.95], [2.3, 1.9], [2.6, 1.15]]) {
+    const [x, y] = Q(u, v);
+    ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.stroke();
+  }
+  const items = [];
+  // the two moles that shelter the mouth
+  for (const v of [0.35, S - 0.6]) {
+    const mole = turnedRect(T, 1.25, v, S - 1.15, 0.25);
+    items.push({ d: mole[0] + mole[1] + 0.3, draw: () => box(ctx, mole[0], mole[1], mole[2], mole[3], 0, 3, STONE, { plain: true }) });
+  }
+  // the practice ship in the basin, oars run out on both sides
+  items.push({ d: at(2.1, 1.5) + 0.2, draw: () => practiceShip(ctx, Q, at) });
+  // rowing benches on dry land: four rows, an oar across each
+  for (let k = 0; k < 4; k++) {
+    const u = 0.2 + k * 0.2;
+    const bench = turnedRect(T, u, 0.75, 0.12, 1.5);
+    items.push({ d: bench[0] + bench[1] + 0.1, draw: () => {
+      box(ctx, bench[0], bench[1], bench[2], bench[3], 0, 3, WOOD, { plain: true });
+      ctx.strokeStyle = WOOD_PALE;
+      ctx.lineWidth = 0.9;
+      for (const v of [0.95, 1.4, 1.85]) {
+        const a = Q(u - 0.06, v, 4.5);
+        const b = Q(u + 0.17, v, 4.5);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+        ctx.fillStyle = WOOD_PALE; // the blade
+        ctx.fillRect(b[0] - 0.9, b[1] - 0.6, 1.8, 1.4);
+      }
+    } });
+  }
+  // the stroke master's drum on its step, at the head of the benches
+  items.push({ d: at(1.1, 1.5) + 0.2, draw: () => {
+    const step = turnedRect(T, 1.0, 1.32, 0.18, 0.36);
+    box(ctx, step[0], step[1], step[2], step[3], 0, 3, STONE, { plain: true });
+    const [x, y] = Q(1.09, 1.5, 3);
+    ctx.fillStyle = '#7a4a2a';
+    ctx.fillRect(x - 2.6, y - 4.5, 5.2, 4.5);
+    ctx.fillStyle = '#e8dcc0';
+    ctx.beginPath(); ctx.ellipse(x, y - 4.5, 2.6, 1.1, 0, 0, Math.PI * 2); ctx.fill();
+  } });
+  // the crews' hall at the back corner, and the pennant post
+  const hall = turnedRect(T, 0.1, 2.3, 1.05, 0.6);
+  items.push({ d: hall[0] + hall[1] + 0.2, draw: () => {
+    box(ctx, hall[0], hall[1], hall[2], hall[3], 0, 12, '#e2d6b8');
+    gableRoof(ctx, hall[0], hall[1], hall[2], hall[3], 12, 6, TERRA, hall[2] >= hall[3] ? 'u' : 'v');
+  } });
+  items.push({ d: at(0.3, 0.3), draw: () => {
+    const [px, py] = Q(0.3, 0.3);
+    post(ctx, px, py, 24, 1.2);
+    ctx.fillStyle = ROME_RED;
+    ctx.beginPath();
+    ctx.moveTo(px + 0.5, py - 24);
+    ctx.lineTo(px + 9, py - 22.5);
+    ctx.lineTo(px + 0.5, py - 19.5);
+    ctx.closePath();
+    ctx.fill();
+  } });
+  paint(items);
+}
+
+/** A small liburnian moored in the basin, bow to the water, oars run out. */
+function practiceShip(ctx, Q, at) {
+  const U0 = 1.6;
+  const U1 = 2.75;
+  const V = 1.5;
+  const half = (u) => 0.22 * Math.sin(Math.PI * Math.min(1, (u - U0 + 0.15) / (U1 - U0 + 0.15)));
+  const us = [];
+  for (let u = U0; u <= U1 + 1e-9; u += (U1 - U0) / 8) us.push(u);
+  // oars first (they lie on the water), both sides
+  ctx.strokeStyle = WOOD_PALE;
+  ctx.lineWidth = 0.7;
+  for (const s of [-1, 1]) {
+    for (const u of us.slice(1, -1)) {
+      const a = Q(u, V + s * half(u), 3);
+      const b = Q(u - 0.05, V + s * (half(u) + 0.3), 0.3);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+  }
+  const sides = at(2, V - 0.3) < at(2, V + 0.3) ? [-1, 1] : [1, -1];
+  for (const s of sides) {
+    const top = us.map((u) => Q(u, V + s * half(u), 4));
+    const keel = us.map((u) => Q(u, V, 0.5)).reverse();
+    const near = s === sides[1];
+    poly(ctx, [...top, ...keel], near ? '#6e4a2c' : '#5a3a22', shade(WOOD_DARK, -0.2), 0.5);
+    if (!near) continue;
+    ctx.strokeStyle = ROME_RED; // the red band under the rail
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    us.forEach((u, i) => { const p = Q(u, V + s * half(u) * 0.97, 3.2); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+    ctx.stroke();
+  }
+  // the bronze ram at the bow, toward the open water
+  poly(ctx, [Q(U1 - 0.04, V, 2.2), Q(U1 + 0.22, V, 1.2), Q(U1 - 0.04, V, 0.4)], BRONZE, shade(BRONZE, -0.3), 0.5);
 }

@@ -25,7 +25,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { GODS } from '../data/gods.js';
 import { P, poly, quad, ground, box, gableRoof, hipRoof, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
 import { shipyardArt, wharfArt } from './waterArt.js';
-import { navaliaArt, stationArt } from './navyArt.js';
+import { navaliaArt, stationArt, portusArt } from './navyArt.js';
 import { hippodromeArt, chariotMakerArt } from './hippodromeArt.js';
 
 const TH = CONFIG.TILE_H;
@@ -66,6 +66,7 @@ const HEIGHT = {
   clay_pit: 30, timber_yard: 34, iron_mine: 40, marble_quarry: 40, market: 36, granary: 50, warehouse: 40,
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
   shipyard: 36, wharf: 30, hippodrome: 46, hippodrome_part: 46, chariot_maker: 34, navalia: 42, naval_station: 58,
+  portus: 40, military_academy: 48,
 };
 
 /**
@@ -79,7 +80,7 @@ const SHADOW = {
   statue_large: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
   warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
   prefecture: 0.45, shipyard: 0.3, wharf: 0.25, hippodrome: 0.35, hippodrome_part: 0.35, chariot_maker: 0.45,
-  navalia: 0.4, naval_station: 0.55, governor_house: 0.55, governor_villa: 0.75, governor_palace: 1.0,
+  navalia: 0.4, naval_station: 0.55, portus: 0.3, military_academy: 0.5, governor_house: 0.55, governor_villa: 0.75, governor_palace: 1.0,
 };
 /** Shadow length per house level (tents are low, insulae tall, villas wide but low, palaces tall). */
 const HOUSE_SHADOW = [0, 0.18, 0.2, 0.22, 0.26, 0.3, 0.34, 0.45, 0.5, 0.5, 0.65, 0.95, 1.1, 0.5, 0.55, 0.55, 0.6, 0.65, 0.7, 0.85, 0.9];
@@ -95,6 +96,7 @@ export function shadowLength(b) {
 }
 
 function heightFor(key, size) {
+  if (key.startsWith('temple_large_')) return 84;
   if (key.startsWith('temple_')) return 56;
   if (key.startsWith('farm_')) return 34;
   if (key.endsWith('_ws')) return 50;
@@ -183,6 +185,7 @@ const FLAG_SPECS = {
   governor_villa: (S) => [1.1, S - 0.3].map((u) => ({ u, v: 0.85, z: 36, h: 14, w: 6.5, ch: 4.5, color: GOV.banner, swallow: true })),
   governor_palace: (S) => [[0.82, 0.45], [S - 0.82, 0.45], [0.82, S - 1.25], [S - 0.82, S - 1.25]].map(([u, v]) => ({ u, v, z: 34, h: 15, w: 7, ch: 4.5, color: GOV.banner, swallow: true })),
   barracks: (S) => [{ u: S - 0.35, v: 0.3, z: 26, h: 14, w: 9.5, ch: 5.2, color: '#a8322b', swallow: true }],
+  military_academy: (S) => [{ u: S - 0.42, v: 1.32, z: 5, h: 20, w: 9.5, ch: 5.2, color: '#a8322b', swallow: true }], // on the instructor's tribunal
   fort: (S, key) => [{ u: S * 0.5, v: S * 0.5, z: 0, h: 26, w: 9.5, ch: 5.2, color: UNIT_TYPES[BUILDINGS[key]?.unit]?.color || '#a8322b', swallow: true }],
 };
 
@@ -894,7 +897,8 @@ export function templeAltar(S) {
 }
 
 function templeArt(ctx, S, variant, state, key) {
-  const look = TEMPLE_LOOKS[key.replace('temple_', '')] || TEMPLE_LOOKS.ceres;
+  const look = TEMPLE_LOOKS[BUILDINGS[key]?.god] || TEMPLE_LOOKS.ceres;
+  if (key.startsWith('temple_large_')) { largeTempleArt(ctx, S, look); return; }
   const top = 19;
   quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#d8cfbb');
   box(ctx, 0.12, 0.12, S - 0.24, S - 0.24, 0, 5, COL.stone);
@@ -914,6 +918,58 @@ function templeArt(ctx, S, variant, state, key) {
   emblem(ctx, look.emblem, ex, ey);
   // the god's piece at the front left, an altar with its fire at the front right
   frontPiece(ctx, look.front, 0.24, S - 0.1);
+  altar(ctx, ...templeAltar(S));
+}
+
+/**
+ * A large temple (3x3): the small temple made grand, in the same god's roof,
+ * walls, emblem and piece, so the two sizes read as one god's. A walled
+ * precinct with cypresses, a tall podium with a flight of steps, columns all
+ * along the front and the side, a deeper pediment with the god's emblem and
+ * gilded figures on its corners, the god's piece and the altar in front.
+ */
+function largeTempleArt(ctx, S, look) {
+  const pz = 8; // podium
+  const top = 27; // columns
+  quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#ddd4c0'); // the precinct's paving
+  // the precinct wall along the back edges, and its cypresses
+  box(ctx, 0.02, 0.02, S - 0.04, 0.1, 0, 4, shade(COL.stone, 0.12), { plain: true });
+  box(ctx, 0.02, 0.12, 0.1, S - 0.14, 0, 4, shade(COL.stone, 0.12), { plain: true });
+  cypress(ctx, 0.24, 0.24, 0.85);
+  cypress(ctx, S - 0.22, 0.24, 0.75);
+  cypress(ctx, 0.24, S - 0.22, 0.75);
+  // the podium, and its steps down to the front
+  box(ctx, 0.45, 0.4, S - 0.85, S - 0.95, 0, pz, COL.stone);
+  for (let k = 0; k < 3; k++) box(ctx, 0.8, S - 0.55 + k * 0.13, S - 1.6, 0.13, 0, pz * (3 - k) / 3, shade(COL.stone, 0.06 + k * 0.04), { plain: true });
+  // the cella
+  box(ctx, 0.75, 0.6, S - 1.45, S - 1.75, pz, top, look.wall);
+  door(ctx, 'left', 0.75, 0.6, S - 0.7, S - 1.15, pz, 0.5, '#5a4a3a', 0.3, 15);
+  // columns all along the side, then the front
+  colonnade(ctx, S - 0.55, 0.55, S - 0.55, S - 1.0, 5, pz, top, COL.marble, 1.9);
+  colonnade(ctx, 0.6, S - 0.7, S - 0.55, S - 0.7, 6, pz, top, COL.marble, 1.9);
+  // the roof, pediment to the viewer, in the god's colors
+  const z = pz + top;
+  gableRoof(ctx, 0.5, 0.45, S - 0.95, S - 0.9, z, 14, look.roof, 'v', 0.06);
+  const fv = S - 0.45; // the roof's front edge
+  const mid = 0.5 + (S - 0.95) / 2;
+  poly(ctx, [P(0.56, fv, z + 1), P(S - 0.51, fv, z + 1), P(mid, fv, z + 12)], look.field, shade(look.field, -0.4), 0.6);
+  // a gilded band under the pediment
+  ctx.strokeStyle = COL.gold;
+  ctx.lineWidth = 1;
+  const [b0x, b0y] = P(0.56, fv, z);
+  const [b1x, b1y] = P(S - 0.51, fv, z);
+  ctx.beginPath(); ctx.moveTo(b0x, b0y); ctx.lineTo(b1x, b1y); ctx.stroke();
+  const [ex, ey] = P(mid, fv, z + 4.6);
+  emblem(ctx, look.emblem, ex, ey);
+  // gilded figures on the pediment's peak and corners
+  ctx.fillStyle = COL.gold;
+  for (const [u, dz, r] of [[mid, 12, 1.8], [0.56, 1, 1.3], [S - 0.51, 1, 1.3]]) {
+    const [x, y] = P(u, fv, z + dz);
+    ctx.fillRect(x - r / 2, y - r * 2.2, r, r * 2.2);
+    ctx.beginPath(); ctx.arc(x, y - r * 2.6, r * 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+  // the god's piece at the front left, the altar with its fire at the front right
+  frontPiece(ctx, look.front, 0.36, S - 0.12);
   altar(ctx, ...templeAltar(S));
 }
 
@@ -2352,6 +2408,57 @@ function barracksArt(ctx, S) {
 }
 
 /**
+ * Military Academy: a sanded drill yard with the ranks' lines raked into it,
+ * a colonnaded hall along the back, training posts (the pali recruits strike
+ * with wooden swords) with a wicker shield hung on one, a rack of practice
+ * javelins, and the instructor's stone tribunal flying the standard.
+ */
+function militaryAcademyArt(ctx, S) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#cdb88c'); // the sanded yard
+  // the ranks' lines raked in the sand
+  ctx.strokeStyle = 'rgba(120,96,60,0.35)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  for (const v of [1.45, 1.85, 2.25, 2.65]) {
+    const [ax, ay] = P(0.25, v);
+    const [bx, by] = P(S - 0.9, v);
+    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+  }
+  ctx.stroke();
+  // the hall along the back, its colonnade facing the yard
+  box(ctx, 0.1, 0.1, S - 0.2, 0.62, 0, 17, '#ddd0b2');
+  windows(ctx, 'right', 0.1, 0.1, S - 0.1, 0.72, 0, 1, 2, '#3f3126', { z: 8, h: 4 });
+  colonnade(ctx, 0.2, 0.98, S - 0.2, 0.98, 7, 0, 17, COL.marble, 1.5);
+  gableRoof(ctx, 0.06, 0.06, S - 0.12, 0.98, 17, 9, COL.terra, 'u', 0.04);
+  // the instructor's tribunal at the right of the yard, the standard on it
+  box(ctx, S - 0.62, 1.12, 0.42, 0.42, 0, 5, shade(COL.stone, 0.08));
+  flagPoles(ctx, 'military_academy', S);
+  // training posts in rows, a wicker shield hung on the first
+  for (const [u, v] of [[0.55, 1.65], [1.05, 1.65], [0.55, 2.3], [1.05, 2.3], [1.55, 2.3]]) {
+    const [x, y] = P(u, v);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(x + 2, y, 3, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL.woodDark;
+    ctx.fillRect(x - 1.1, y - 13, 2.2, 13);
+  }
+  const [sx, sy] = P(0.55, 1.65, 7);
+  ctx.fillStyle = '#b89a5a';
+  ctx.beginPath(); ctx.ellipse(sx + 2.2, sy, 2.6, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#7a6236';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.ellipse(sx + 2.2, sy, 1.5, 2.4, 0, 0, Math.PI * 2); ctx.stroke();
+  // the rack of practice javelins at the front right
+  const [rx, ry] = P(S - 0.25, 2.35);
+  ctx.fillStyle = COL.wood;
+  ctx.fillRect(rx - 6, ry - 8, 12, 1.4);
+  ctx.strokeStyle = '#c8b48a';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  for (let k = 0; k < 5; k++) { ctx.moveTo(rx - 5 + k * 2.5, ry); ctx.lineTo(rx - 5 + k * 2.5, ry - 16); }
+  ctx.stroke();
+}
+
+/**
  * Walled camp (castra): corner towers, a gate facing the viewer, and inside
  * tents (legion, archers) or a stable (cavalry). Flies its soldiers' color.
  */
@@ -2618,6 +2725,8 @@ const ART = {
   wharf: wharfArt,
   navalia: navaliaArt,
   naval_station: stationArt,
+  portus: portusArt,
+  military_academy: militaryAcademyArt,
   hippodrome: hippodromeArt,
   hippodrome_part: hippodromeArt,
   chariot_maker: chariotMakerArt,
@@ -2635,7 +2744,7 @@ export function artState(b, resting = false) {
   const kind = b.def.kind;
   if (b.house) return b.house.tier;
   if (b.herd !== undefined) return b.herd; // horse ranch: one sprite per herd size
-  if (kind === 'dock' || kind === 'station') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
+  if (kind === 'dock' || kind === 'station' || kind === 'portus') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
   // Navalia: the water's edge, and the liburnian on the slip (0 none, 1 keel and frames, 2 planked).
   if (kind === 'navalia') return (b.waterSide ?? 1) + 4 * (!(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2);
   // Shipyard: the water's edge, and the boat on the slip (0 none, 1 ribs, 2 planked; none while its spare waits on the water).

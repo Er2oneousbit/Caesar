@@ -21,7 +21,7 @@
 
 import { planAction, applyPlan, undoLast } from '../sim/construction.js';
 import { removeBuilding } from '../sim/entities.js';
-import { openRoute, setTradeMode } from '../sim/trade.js';
+import { openRoute, setTradeMode, dockBerth } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { Terrain, WaterBits } from '../world/map.js';
 import { CONFIG } from '../config.js';
@@ -552,8 +552,9 @@ function placeNear(game, type, size, center, minD, maxD, meadowOnly = false) {
  * { militaryFirst: true } military labor also goes first in the Labor
  * advisor, as a governor raising an army might set it (the console
  * showcase); the simulation leaves priorities alone, since a small city
- * that staffs its army first loses its prefects, engineers and farms.
- * @returns {{ok:boolean, barracks?:object, forts:object[], ranch?:object, wall:number}}
+ * that staffs its army first loses its prefects, engineers and farms. With
+ * { academy: true } a Military Academy goes up too, after everything else.
+ * @returns {{ok:boolean, barracks?:object, forts:object[], ranch?:object, wall:number, academy?:object}}
  */
 export function buildDemoGarrison(game, center, opts = {}) {
   const forts = [];
@@ -577,7 +578,38 @@ export function buildDemoGarrison(game, center, opts = {}) {
     barracks.stock.horses = 400;
   }
   if (opts.militaryFirst && barracks && !game.city.laborPriority.includes('military')) game.city.laborPriority.unshift('military');
-  return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall };
+  // Placed last, so a garrison without it is laid out exactly as before.
+  const academy = opts.academy ? buildDemoAcademy(game, center) : null;
+  return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall, academy };
+}
+
+/**
+ * A Military Academy near the city, joined by road to the network that
+ * reaches the map entry (the console's `academy`, simulate.mjs --academy,
+ * tests). @returns {object|null} the academy
+ */
+export function buildDemoAcademy(game, center) {
+  if (!game.isUnlocked('military_academy')) return null;
+  return placeNear(game, 'military_academy', 3, center, 8, 34);
+}
+
+/**
+ * A Portus on the shore of a naval station's water, near the station, joined
+ * by road to the city's streets. @returns {object|null} the Portus
+ */
+export function buildDemoPortus(game, station) {
+  const { map } = game;
+  if (!station || !game.isUnlocked('portus')) return null;
+  const berth = dockBerth(game, station);
+  const body = berth >= 0 ? map.navBody[berth] : 0;
+  if (!body) return null;
+  const onWater = (x, y) => {
+    const i = map.navigableBeside(x, y, 3);
+    return i >= 0 && map.navBody[i] === body;
+  };
+  const portus = placeJoined(game, 'portus', 3, station, 30, onWater);
+  if (portus) guard(game, portus.x, portus.y);
+  return portus;
 }
 
 /** A wall across the Imperial road ~12 tiles from the center, with a gate on the road. */
@@ -911,7 +943,8 @@ export function buildDemoHarbor(game, center) {
  * nearest the city, joined by road to its streets, with a prefect and an
  * engineer. With { stock: true } the Navalia gets the timber, iron and linen
  * for a whole squadron (four liburnians) up front, so ships come quickly.
- * @returns {{ok:boolean, station?:object, navalia?:object}}
+ * With { portus: true } a Portus goes up on the same water too.
+ * @returns {{ok:boolean, station?:object, navalia?:object, portus?:object}}
  */
 export function buildDemoNavy(game, center, opts = {}) {
   const { map } = game;
@@ -929,5 +962,6 @@ export function buildDemoNavy(game, center, opts = {}) {
     guard(game, navalia.x, navalia.y);
     if (opts.stock) for (const [g, n] of Object.entries(CONFIG.LIBURNIAN_COST)) navalia.stock[g] = n * 4;
   }
-  return { ok: !!navalia, station, navalia };
+  const portus = opts.portus ? buildDemoPortus(game, station) : null; // (last: the rest is laid out as without it)
+  return { ok: !!navalia, station, navalia, portus };
 }

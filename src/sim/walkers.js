@@ -21,6 +21,7 @@ import { performerArrive } from './entertainment.js';
 import { findDeliveryTarget, findDeliveryFit, receiveGoods, isStorage } from './storage.js';
 import { collectArrive } from './storageOrders.js';
 import { recruitArrive } from './military.js';
+import { recruitAtAcademy } from './training.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
 import { physicianArrive, physicianAfterWait } from './disease.js';
 import { boatArrive, boatAfterWait } from './fishing.js';
@@ -188,6 +189,9 @@ function onPathEnd(game, w) {
       break;
     case 'toSick':
       physicianArrive(game, w);
+      break;
+    case 'toAcademy':
+      recruitAtAcademy(game, w); // trained, on to his fort
       break;
     case 'toFort':
       recruitArrive(game, w);

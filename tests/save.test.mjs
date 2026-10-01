@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
-import { serializeGame, deserializeGame, MIN_SAVE_VERSION, packBits, unpackBits, encodeLayer, decodeLayer, encodeBytes, decodeBytes, encodePath, decodePath } from '../src/core/save.js';
+import { serializeGame, deserializeGame, saveFileName, MIN_SAVE_VERSION, packBits, unpackBits, encodeLayer, decodeLayer, encodeBytes, decodeBytes, encodePath, decodePath } from '../src/core/save.js';
 import { MAP_SIZES } from '../src/world/mapgen.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { newGame } from './helpers.mjs';
@@ -157,4 +157,12 @@ test('save: an Uber city saves small and loads back the same', () => {
 test('save: base64 helpers round-trip large arrays', () => {
   const big = noise(200000, 11); // bigger than the 32 KB chunk used to build the string
   assert.deepEqual(Array.from(decodeBytes(encodeBytes(big))), Array.from(big));
+});
+
+test('save files are named after the slot, the city and the year', () => {
+  assert.equal(saveFileName({ slot: 'slot1', city: 'Aquae Clarae', year: -279 }), 'colonia-slot1-aquae-clarae-279bc.json');
+  assert.equal(saveFileName({ city: 'Aquae Clarae', year: -279 }), 'colonia-aquae-clarae-279bc.json', 'the game being played: no slot');
+  assert.equal(saveFileName({ slot: 'quick', city: 'Nova  Roma!', year: 12 }), 'colonia-quick-nova-roma-12ad.json');
+  assert.equal(saveFileName({ slot: 'slot2' }), 'colonia-slot2.json', 'a damaged save: just its slot');
+  assert.equal(saveFileName({}), 'colonia-colonia.json');
 });

@@ -563,19 +563,62 @@ export function canDownloadFiles() {
   return !(typeof window !== 'undefined' && window.__COLONIA_EMBED__);
 }
 
-/** Offer the save as a downloadable .json file. */
-export function exportToFile(game, extra) {
-  const data = serializeGame(game, extra);
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+/**
+ * A save file's name: colonia-[slot-]city-year.json, e.g.
+ * colonia-slot1-aquae-clarae-279bc.json. Any part may be missing.
+ */
+export function saveFileName({ slot = null, city = null, year = null } = {}) {
+  const part = (s) => String(s).replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  const bits = ['colonia'];
+  if (slot) bits.push(part(slot));
+  bits.push(city ? part(city) || 'city' : slot ? null : 'colonia');
+  if (Number.isFinite(year)) bits.push(year < 0 ? `${-year}bc` : `${year}ad`);
+  return `${bits.filter(Boolean).join('-')}.json`;
+}
+
+/** Hand the browser a text file to download. */
+function downloadText(text, name) {
+  const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const safe = (game.city.name || 'colonia').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   a.href = url;
-  a.download = `colonia-${safe}-${game.time.year < 0 ? `${-game.time.year}bc` : `${game.time.year}ad`}.json`;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** Offer the game being played as a downloadable .json file. */
+export function exportToFile(game, extra) {
+  const data = serializeGame(game, extra);
+  downloadText(JSON.stringify(data), saveFileName({ city: game.city.name, year: game.time.year }));
+}
+
+/**
+ * Offer one save slot as a .json file, without loading it: the slot's text
+ * exactly as stored, so a save from an older version (or one that no longer
+ * loads) can still be kept or sent with a bug report.
+ * @returns {string} the file name
+ */
+export function exportSlotToFile(slot) {
+  let text = null;
+  try {
+    text = localStorage.getItem(slotKey(slot));
+  } catch (err) {
+    throw new Error('Browser storage is not available');
+  }
+  if (!text) throw new Error('That save slot is empty');
+  let meta = null;
+  let year = null;
+  try {
+    const data = JSON.parse(text);
+    meta = data.meta || null;
+    year = data.time ? data.time.year : null;
+  } catch { /* a damaged save still downloads, named after its slot */ }
+  const name = saveFileName({ slot, city: meta && meta.city, year });
+  downloadText(text, name);
+  return name;
 }
 
 /** Read a save from a File object (file input). */

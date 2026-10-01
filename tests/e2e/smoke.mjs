@@ -1004,6 +1004,20 @@ try {
   await page.keyboard.press('Escape');
   await page.click('text=Save game');
   check('save menu shows localStorage usage', await page.isVisible('text=Stored in this browser (localStorage)'));
+  // Each saved slot exports on its own, without loading it: the file is the
+  // slot's text exactly as stored, named after the slot, city and year.
+  const [dl] = await Promise.all([
+    page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
+    page.click('.modal .card:has-text("Quicksave") .slot-export'),
+  ]);
+  let slotFile = null;
+  if (dl) {
+    const p = await dl.path();
+    const text = p ? fs.readFileSync(p, 'utf8') : '';
+    const stored = await page.evaluate(() => localStorage.getItem('colonia.save.quick'));
+    slotFile = { name: dl.suggestedFilename(), same: text === stored };
+  }
+  check('a save slot exports to a file of its own', !!slotFile && /^colonia-quick-.+-\d+(bc|ad)\.json$/.test(slotFile.name) && slotFile.same, JSON.stringify(slotFile));
   await page.keyboard.press('Escape');
 
   // 6. In-game confirm dialog: restart the map from the pause menu

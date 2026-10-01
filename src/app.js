@@ -19,7 +19,7 @@
 import { CONFIG } from './config.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
-import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile, serializeGame, canDownloadFiles } from './core/save.js';
+import { saveToSlot, readSlot, deserializeGame, exportToFile, exportSlotToFile, importFromFile, serializeGame, canDownloadFiles } from './core/save.js';
 import { Renderer } from './render/renderer.js';
 import { OVERLAYS } from './render/overlays.js';
 import { UI } from './ui/ui.js';
@@ -494,6 +494,16 @@ export class App {
     if (!this.game) return;
     try {
       exportToFile(this.game, { camera: this.renderer.camera.serialize() });
+    } catch (err) {
+      this.ui.toastError(`Export failed: ${err.message}`);
+    }
+  }
+
+  /** Download one save slot as a file, without loading it. */
+  exportSlot(slot) {
+    try {
+      const name = exportSlotToFile(slot);
+      this.ui.messages.push({ text: `Exported ${name} to your downloads.`, level: 'good', date: '' });
     } catch (err) {
       this.ui.toastError(`Export failed: ${err.message}`);
     }

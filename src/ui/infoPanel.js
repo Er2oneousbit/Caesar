@@ -30,7 +30,8 @@ import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
 import { dockBerth, dockUsed } from '../sim/trade.js';
 import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat } from '../sim/fishing.js';
-import { squadronCounts, recallStation, waterOf, shipStatus } from '../sim/navy.js';
+import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
+import { trainedText, trainingNote, schoolStatus } from './trainingInfo.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
@@ -134,6 +135,9 @@ export function buildingStatus(game, b) {
     case 'navalia':
       if (b.blocked) return { level: 'warn', text: b.blocked };
       break;
+    case 'military_academy':
+    case 'portus':
+      return schoolStatus(game, b);
     case 'station': {
       if (!waterOf(game, b)) return { level: 'bad', text: 'Not beside water that ships can sail.' };
       const n = squadronCounts(game).get(b.id) || 0;
@@ -542,6 +546,8 @@ export class InfoPanel {
         parts.push(sec('Garrison',
           kv(`${unit.name}s`, `${n} / ${FORT_CAPACITY}`), bar(n, FORT_CAPACITY),
           b.recruiting ? kv('Recruits on the way', `${b.recruiting}`) : null,
+          kv('Training', trainedText(g, b)),
+          h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding the fort'),
           kv('Pay', `${fmt(unit.upkeep * n)} Dn / month`),
           h('div', { class: 'muted' }, unit.desc),
@@ -605,6 +611,8 @@ export class InfoPanel {
         const n = squadronCounts(g).get(b.id) || 0;
         parts.push(sec('Squadron',
           kv('Liburnians', `${n} / ${STATION_CAPACITY}`), bar(n, STATION_CAPACITY),
+          kv('Crews', trainedText(g, b)),
+          h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding the water at ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding its berths'),
           kv('Guards', `raider ships within ${b.rally ? CONFIG.STATION_GUARD_DEPLOYED : CONFIG.STATION_GUARD} tiles (chases ${CONFIG.STATION_CHASE} more)`),
           kv('Pay', `${fmt(unit.upkeep * n)} Dn / month`),
@@ -614,6 +622,16 @@ export class InfoPanel {
             h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, '↩ Recall'))));
         break;
       }
+      case 'military_academy':
+        parts.push(sec('Drill yard',
+          kv('Soldiers trained here', fmt(b.trainedHere || 0)),
+          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Barracks marches first to the academy nearest his fort, then on to it; soldiers resting in a fort come over one at a time (never while deployed or while raiders are about). Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
+        break;
+      case 'portus':
+        parts.push(sec('Training harbor',
+          kv('Crews trained here', fmt(b.trainedHere || 0)),
+          h('div', { class: 'muted' }, `Only a fully staffed Portus (${def.workers} workers) trains a crew. A new liburnian rows past the Portus nearest its station on the same water first, then to its berth; ships at their berths come over one at a time. A trained crew rows faster (${(UNIT_TYPES.liburnian.trainedSpeed * CONFIG.TICKS_PER_DAY).toFixed(1)} tiles a day to ${(UNIT_TYPES.liburnian.speed * CONFIG.TICKS_PER_DAY).toFixed(1)}), rams harder (${UNIT_TYPES.liburnian.trainedRam} to ${UNIT_TYPES.liburnian.ram}) and is harder to hit (+${UNIT_TYPES.liburnian.trainedDefense} defense). Rome's first war fleet, in 260 BC, learned to row on benches on dry land while its ships were built.`)));
+        break;
       case 'tower':
         parts.push(sec('Watchtower',
           kv('Range', `${TOWER_RANGE} tiles`),
@@ -707,7 +725,8 @@ export class InfoPanel {
       kv('Hull', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
       kv('Doing', shipStatus(g, u)),
       ours ? kv('Station', st ? `${st.def.name} at ${st.x}, ${st.y}` : 'None') : null,
-      ours ? kv('Arms', `arrows (range ${def.range} tiles) and a bronze ram (${def.ram} damage)`) : null,
+      ours ? kv('Crew', u.trained ? 'Trained at the Portus: faster, harder rams, harder to hit' : 'Untrained') : null,
+      ours ? kv('Arms', `arrows (range ${def.range} tiles) and a bronze ram (${ramOf(u, def)} damage)`) : null,
       ours ? kv('Pay', `${def.upkeep} Dn / month`) : null,
       !ours ? kv('Raiders aboard', fmt((u.crew || []).length)) : null,
       !ours ? kv('Fire pots left', `${fmt(u.pots || 0)} of ${CONFIG.RAID_SHIP_POTS}`) : null,

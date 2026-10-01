@@ -4,7 +4,10 @@
  * The gods' moods (0-100), updated monthly.
  *
  * Each god expects enough temples for its share of the population
- * (PEOPLE_PER_TEMPLE per temple). Festivals and oracles lift every mood.
+ * (PEOPLE_PER_TEMPLE per temple; a large temple counts as two, as the
+ * original counted 1,500 people of coverage to a small temple's 750). Homes
+ * still count distinct gods, whatever the size of the temple whose priest
+ * passed. Festivals and oracles lift every mood.
  * Very happy gods bless the city; angry gods punish it.
  *
  * Two levels of wrath (the original's minor and major curse): a god that
@@ -61,7 +64,8 @@ export function updateReligion(game) {
   let oracles = 0;
   for (const g of GOD_KEYS) temples[g] = 0;
   for (const b of game.buildings.values()) {
-    if (b.def.god && b.efficiency > 0) temples[b.def.god]++;
+    // A large temple counts as two (data/buildings.js templeWeight).
+    if (b.def.god && b.efficiency > 0) temples[b.def.god] += b.def.templeWeight || 1;
     if (b.type === 'oracle') oracles++;
   }
   const wanted = Math.max(1, pop / GOD_KEYS.length);

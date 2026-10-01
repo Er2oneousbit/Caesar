@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
-import { sandboxScenario, SCENARIOS } from '../src/data/scenarios.js';
+import { sandboxScenario, SCENARIOS, NAVY_KEYS } from '../src/data/scenarios.js';
 import { FOOD_TYPES, LAND_FOODS, GOODS } from '../src/data/goods.js';
 import { BUILDINGS } from '../src/data/buildings.js';
 import { GameMap, Terrain } from '../src/world/map.js';
@@ -434,7 +434,7 @@ test('unlocks: shipyard and wharf from mission 4; missions 5 and 6 have all but 
     // Nothing else they had under 'all' is lost: every building and tool
     // (mission 6's desert has no water a ship can sail, so no fleet there:
     // tests/navy.test.mjs).
-    const navy = id === 'c6' ? ['navalia', 'naval_station'] : [];
+    const navy = id === 'c6' ? [...NAVY_KEYS] : [];
     const lost = [...Object.keys(BUILDINGS)].filter((k) => !['hippodrome', 'hippodrome_part', 'chariot_maker', ...navy].includes(k) && !byId[id].unlocks.includes(k));
     assert.deepEqual(lost, [], `${id}: every other building`);
     for (const t of ['road', 'plaza', 'bridge', 'roadblock', 'aqueduct', 'wall', 'clear']) assert.ok(byId[id].unlocks.includes(t), `${id}: ${t}`);

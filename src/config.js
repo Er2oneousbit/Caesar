@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.13.4',
-  SAVE_VERSION: 11, // v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v10 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 12, // v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v11 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -325,6 +325,15 @@ export const CONFIG = {
   STATION_GUARD: 12, // a squadron at its berth fights raider ships this close to it (tiles)...
   STATION_GUARD_DEPLOYED: 8, // ...deployed, this close to its rally point...
   STATION_CHASE: 4, // ...and chases one at most this much farther
+
+  // Training at a Military Academy or the Portus (sim/training.js). Men and
+  // ships at rest go one at a time per fort or station (a fort is never
+  // emptied for the drill yard); a trip not done in DRILL_MAX_DAYS (no way
+  // there, say) is given up, and that fort or station waits DRILL_RETRY_DAYS
+  // before sending anyone again.
+  DRILL_PER_POST: 1,
+  DRILL_MAX_DAYS: 40,
+  DRILL_RETRY_DAYS: 30,
 
   // --- Ratings ------------------------------------------------------------
   // Culture and prosperity move toward what the city deserves by at most

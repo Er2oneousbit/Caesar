@@ -43,6 +43,7 @@ import { igniteBuilding, collapseBuilding, riskRates } from './risk.js';
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 import { seaRaidPlan, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
+import { recruitDetour, recruitTrained, updateDrill, drillSpot, drilled, endDrill, abandonDrill } from './training.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -124,6 +125,10 @@ export class Unit {
     this.px = x; // position at the start of the tick (render interpolation)
     this.py = y;
     this.walked = 0; // tiles walked, modulo STRIDE_WRAP (drives the leg animation)
+    this.trained = false; // Roman: trained at a Military Academy or the Portus (sim/training.js)
+    this.drill = 0; // Roman: id of the academy or Portus he is on his way to, 0 = none
+    this.drillDay = 0; // ...the day he set out
+    this.drillDays = 0; // ...and how long the trip may take (sim/training.js startDrill)
   }
 }
 
@@ -396,7 +401,7 @@ export function deployFort(game, fortId, tx, ty) {
   const fort = game.buildings.get(fortId);
   if (!fort || fort.def.kind !== 'fort') return false;
   fort.rally = { x: tx + 0.5, y: ty + 0.5 };
-  for (const u of unitsOfFort(game, fortId)) { u.path = null; u.target = 0; u.state = 'march'; }
+  for (const u of unitsOfFort(game, fortId)) { endDrill(u); u.target = 0; u.state = 'march'; } // (a man at the drill yard comes too)
   return true;
 }
 
@@ -493,10 +498,15 @@ export function updateBarracks(game, b) {
     if (!path) continue;
     for (const [good, n] of Object.entries(cost)) b.stock[good] -= n;
     f.recruiting = (f.recruiting || 0) + 1;
-    const w = spawnWalker(game, 'recruit', b.accessRoad, b, { target: f.id, state: 'toFort', reserve: { id: f.id, recruit: 1 }, unitType: f.def.unit });
+    // A fully staffed Military Academy: he is trained there first (sim/training.js).
+    const detour = recruitDetour(game, b, f);
+    const w = spawnWalker(game, 'recruit', b.accessRoad, b, {
+      target: f.id, state: detour ? 'toAcademy' : 'toFort', academy: detour ? detour.academy.id : 0, trained: false,
+      reserve: { id: f.id, recruit: 1 }, unitType: f.def.unit,
+    });
     if (!w) { f.recruiting--; for (const [good, n] of Object.entries(cost)) b.stock[good] += n; return; }
     for (const [good, n] of Object.entries(cost)) logGoods(game, good, 'used', n);
-    followPath(game, w, path);
+    followPath(game, w, detour ? detour.path : path);
     b.trainProgress = 0;
     b.blocked = '';
     game.military.stats.trained++;
@@ -516,7 +526,8 @@ export function recruitArrive(game, w) {
     while (used.has(slot)) slot++;
     if (slot < FORT_CAPACITY) {
       // The recruit steps off the road as a soldier and marches to his post.
-      spawnUnit(game, fort.def.unit, w.x + 0.5, w.y + 0.5, { fort: fort.id, slot, state: 'march' });
+      spawnUnit(game, fort.def.unit, w.x + 0.5, w.y + 0.5, { fort: fort.id, slot, state: 'march', trained: !!w.trained });
+      if (w.trained) recruitTrained(game, w);
       game.events.emit('sound', { name: 'recruit' });
     }
   }
@@ -641,9 +652,49 @@ export function enemyPower(game, u) {
   return u.side === 'enemy' ? game.difficulty.enemy : 1;
 }
 
-export function rollDamage(game, attDef, tgtDef, power = 1) {
-  const raw = attDef.attack * power * (0.75 + game.rng.next() * 0.5) - tgtDef.defense * 0.5;
+/** One blow or missile: attack (+-25%) less half the target's defense, at least 2. `defense`: the target's now (unitDefense). */
+export function rollDamage(game, attDef, tgtDef, power = 1, defense = tgtDef.defense) {
+  const raw = attDef.attack * power * (0.75 + game.rng.next() * 0.5) - defense * 0.5;
   return Math.max(2, raw);
+}
+
+/**
+ * Is a Roman soldier holding position: standing his ground, at his post (by
+ * the fort, or where it was deployed) or standing to fight a raider in reach,
+ * and not running after one, marching or on his way to the drill yard? A
+ * trained legionary holding position is in close order. (Colonia's soldiers
+ * go out to meet raiders inside their guard area rather than wait in line, so
+ * standing still is the test, not the spot: a test of "at his post" alone
+ * gave a garrison that charges no close order at all.)
+ */
+export function holdingPosition(game, u) {
+  if (u.moving || u.drill || !u.fort) return false;
+  if (u.state === 'idle') return true;
+  if (u.state !== 'engage') return false;
+  // Standing to fight means his raider is in reach: one blocked from reaching
+  // his raider also stands still, but is no formation.
+  const t = u.target ? game.units.get(u.target) : null;
+  return !!t && Math.hypot(t.x - u.x, t.y - u.y) <= UNIT_TYPES[u.type].range;
+}
+
+/**
+ * A unit's defense right now: its type's, plus what training gives
+ * (data/units.js): trainedDefense always, holdDefense while holding
+ * position. Untrained units (and every raider) have their type's.
+ */
+export function unitDefense(game, u) {
+  const def = UNIT_TYPES[u.type];
+  if (!u.trained) return def.defense;
+  let d = def.defense + (def.trainedDefense || 0);
+  if (def.holdDefense && holdingPosition(game, u)) d += def.holdDefense;
+  return d;
+}
+
+/** A missile's damage on arrival: a trained legionary holding position takes only holdMissile of it. */
+export function missileDamage(game, target, dmg) {
+  if (!target.trained) return dmg;
+  const share = UNIT_TYPES[target.type].holdMissile;
+  return share && holdingPosition(game, target) ? dmg * share : dmg;
 }
 
 export function hurt(game, target, dmg) {
@@ -658,7 +709,7 @@ function attackUnit(game, u, def, target) {
   u.cooldown = def.cooldown;
   const sdx = (target.x - u.x) - (target.y - u.y);
   if (Math.abs(sdx) > 0.01) u.facing = sdx > 0 ? 1 : -1;
-  const dmg = rollDamage(game, def, UNIT_TYPES[target.type], enemyPower(game, u));
+  const dmg = rollDamage(game, def, UNIT_TYPES[target.type], enemyPower(game, u), unitDefense(game, target));
   if (def.ranged) {
     game.projectiles.push({ x: u.x, y: u.y, z: 10, target: target.id, damage: dmg, speed: 0.4, kind: u.side === 'enemy' ? 'stone' : 'arrow', life: 60 });
     game.events.emit('sound', { name: 'arrow' });
@@ -746,7 +797,8 @@ function updateRoman(game, u, enemies) {
     }
     return;
   }
-  // No enemy: go to (or stay at) the post.
+  // No enemy: on his way to the drill yard (sim/training.js), or to (or at) his post.
+  if (u.drill && drillMarch(game, u, def)) return;
   const d = Math.hypot(post.x - u.x, post.y - u.y);
   // Close enough, or as close as the terrain allows (post slot blocked).
   if (d < 0.15 || (d < 1.2 && u.stuck > 10)) { u.state = 'idle'; u.moving = false; u.path = null; u.stuck = 0; return; }
@@ -758,6 +810,31 @@ function updateRoman(game, u, enemies) {
   }
   moveToward(game, u, post.x, post.y, def.speed);
   if (u.stuck > 20) replan(game, u, post.x, post.y);
+}
+
+/**
+ * A soldier sent to the Military Academy marches there over open land, as to
+ * his post, and is trained on reaching its road; then he marches home. No
+ * route there: the trip is given up. @returns {boolean} true while still going
+ */
+function drillMarch(game, u, def) {
+  const academy = game.buildings.get(u.drill);
+  // Gone, or no road left beside it (nowhere to drill): the trip is off.
+  if (!academy || academy.def.kind !== 'military_academy' || academy.accessRoad < 0) { endDrill(u); return false; }
+  const spot = drillSpot(game, academy);
+  const d = Math.hypot(spot.x - u.x, spot.y - u.y);
+  if (d < 0.3 || (d < 1.5 && u.stuck > 10)) { u.stuck = 0; drilled(game, u, academy); return false; }
+  u.state = 'drill';
+  if (u.path) { followUnitPath(game, u, def.speed); return true; }
+  if (d > 5 && u.stuck === 0 && !u.noPath) {
+    replan(game, u, spot.x, spot.y);
+    if (u.path) return true;
+    abandonDrill(game, u);
+    return false;
+  }
+  moveToward(game, u, spot.x, spot.y, def.speed);
+  if (u.stuck > 20) replan(game, u, spot.x, spot.y);
+  return true;
 }
 
 /** Plan an A* route, remembering failures for a while so we do not retry every tick. */
@@ -859,7 +936,7 @@ function updateProjectiles(game) {
     const dy = t.y - p.y;
     const d = Math.hypot(dx, dy);
     if (d <= p.speed || --p.life <= 0) {
-      if (d <= 1) hurt(game, t, p.damage);
+      if (d <= 1) hurt(game, t, missileDamage(game, t, p.damage)); // (close order: judged as it lands)
       continue;
     }
     p.vx = (dx / d) * p.speed; // kept for the renderer (arrow direction)
@@ -1070,6 +1147,7 @@ export function launchInvasion(game, origin, size, { sea = false } = {}) {
 export function militaryDaily(game) {
   const m = game.military;
   updateDemand(game);
+  updateDrill(game); // men and ships at rest take turns at the academy or Portus (sim/training.js)
   const inv = m.active;
   if (inv) {
     // Alive: raiders ashore, and those still aboard their ships (a raid by

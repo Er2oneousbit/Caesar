@@ -640,13 +640,16 @@ test('aqueducts: a reservoir beside one is marked, so the channel steps down to 
   assert.equal(mask >> 4, 2, 'the east one is a reservoir');
 });
 
-test('art: every aqueduct piece, every temple, statue and mine draws without error', () => {
+test('art: every aqueduct piece, every temple (small and large), statue and mine, the Military Academy and the Portus draw without error', () => {
   const draw = (spec) => { const { ctx } = recordingContext(); spec.draw(ctx); };
   for (let mask = 0; mask < 256; mask++) {
     if ((mask >> 4) & ~(mask & 15)) continue; // a reservoir bit is always also a connection
     for (const filled of [false, true]) for (const road of [false, true]) draw(aqueductSpec(mask, filled, road));
   }
   for (const g of Object.keys(TEMPLE_LOOKS)) draw(buildingSpec(`temple_${g}`, 2, 0, 0));
+  for (const g of Object.keys(TEMPLE_LOOKS)) draw(buildingSpec(`temple_large_${g}`, 3, 0, 0));
+  draw(buildingSpec('military_academy', 3, 0, 0));
+  for (let side = 0; side < 4; side++) draw(buildingSpec('portus', 3, 0, side)); // (each edge to the water)
   for (const [k, S] of [['statue_small', 1], ['statue_medium', 2], ['statue_large', 3], ['iron_mine', 2], ['marble_quarry', 2]]) draw(buildingSpec(k, S, 0, 0));
 });
 
@@ -660,6 +663,27 @@ test('art: a temple\'s live altar flame burns on its altar, not over the god\'s 
     // used to burn there.
     const pieceX = (0.24 - (S - 0.1)) * HALF_W;
     assert.ok(Math.abs(fx - pieceX) > HALF_W, `size ${S}: well clear of the piece (${fx} vs ${pieceX})`);
+  }
+});
+
+test('art: a large temple wears its own god\'s colors, as the small one does, and is taller', () => {
+  /** Every fillStyle a drawing sets. */
+  const fills = (spec) => {
+    const seen = new Set();
+    const { ctx } = recordingContext();
+    const proxy = new Proxy(ctx, {
+      set: (t, k, v) => { if (k === 'fillStyle') seen.add(v); t[k] = v; return true; },
+      get: (t, k) => (typeof t[k] === 'function' ? t[k].bind(t) : t[k]),
+    });
+    spec.draw(proxy);
+    return seen;
+  };
+  for (const g of GOD_KEYS) {
+    const large = fills(buildingSpec(`temple_large_${g}`, 3, 0, 0));
+    const small = fills(buildingSpec(`temple_${g}`, 2, 0, 0));
+    assert.ok(large.has(TEMPLE_LOOKS[g].field) && small.has(TEMPLE_LOOKS[g].field), `${g}: its pediment color`);
+    for (const o of GOD_KEYS) if (o !== g) assert.equal(large.has(TEMPLE_LOOKS[o].field), false, `${g}: none of ${o}'s`);
+    assert.ok(buildingSpec(`temple_large_${g}`, 3).h > buildingSpec(`temple_${g}`, 2).h, `${g}: grander`);
   }
 });
 

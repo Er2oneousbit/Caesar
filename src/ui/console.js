@@ -10,7 +10,7 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy, buildDemoAcademy, buildDemoPortus } from '../dev/demoCity.js';
 import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
@@ -49,6 +49,7 @@ export const CONSOLE_HELP = [
   ['hippodrome', 'Build a hippodrome and a chariot maker beside the city'],
   ['cloth', 'Build the cloth industry beside the city: a flax farm, a linen maker, a clothing maker and a warehouse'],
   ['navy', 'Build a naval station and a navalia on the shore, stocked for a squadron of liburnians (river/coast maps)'],
+  ['academy', 'Build a Military Academy near the city, and a Portus by the first Naval Station if there is one (they train only at full staff)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
   ['army', 'List forts, naval stations, soldiers, ships, barracks and navalia stock and the raid schedule'],
@@ -285,6 +286,18 @@ export class DebugConsole {
         if (res.station) app.renderer.camera.centerOnTile(res.station.x, res.station.y);
         if (res.ok) return `Fleet built: a Naval Station and a Navalia stocked for ${STATION_CAPACITY} liburnians (one every ${CONFIG.NAVALIA_BUILD_DAYS} days at full staff; military labor may need to go first).`;
         return res.station ? 'A Naval Station was built, but no room for a Navalia on its water.' : 'No shore near the city that ships can reach (try a river or coast map), or the fleet is locked in this mission.';
+      }
+      case 'academy': {
+        need();
+        const center = cityCenter(g);
+        if (!center) return 'Build some homes first (try: demo 2).';
+        const academy = buildDemoAcademy(g, center);
+        const station = [...g.buildings.values()].find((b) => b.def.kind === 'station');
+        const portus = station ? buildDemoPortus(g, station) : null;
+        const shown = academy || portus;
+        if (shown) app.renderer.camera.centerOnTile(shown.x, shown.y);
+        const parts = [academy ? `a Military Academy at ${academy.x},${academy.y}` : null, portus ? `a Portus at ${portus.x},${portus.y}` : null].filter(Boolean);
+        return parts.length ? `Built ${parts.join(' and ')}. They train only at full staff (military labor may need to go first).` : 'No room for a Military Academy near the city, or it is locked in this mission.';
       }
       case 'invade':
       case 'searaid': {

@@ -276,7 +276,8 @@ export class Game {
         case 'venue': updateVenue(this, b); break;
         case 'barracks': updateBarracks(this, b); break;
         case 'navalia': updateNavalia(this, b); break;
-        case 'station': shoreBerth(this, b); break; // (its berths, cached; the squadron sails in sim/navy.js)
+        case 'station':
+        case 'portus': shoreBerth(this, b); break; // (its berths, cached; the ships sail in sim/navy.js)
         case 'dock': updateDock(this, b); break;
         case 'shipyard': updateShipyard(this, b); break;
         case 'wharf': updateWharf(this, b); break;

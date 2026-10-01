@@ -83,6 +83,14 @@
  *      the switch on (the default) and any raid the scouts already saw
  *      coming by land as it was; the raids after it may come by sea, see
  *      upgradeNavyV10().
+ *  12  training (sim/training.js), and large temples: soldiers and
+ *      liburnians have a `trained` flag and, while on a trip to a Military
+ *      Academy or the Portus, `drill` (its id), `drillDay` and `drillDays`
+ *      (its time limit); a recruit walker may be on his way to an academy
+ *      (state 'toAcademy', `academy`, then `trainedAt`) and carries `trained`; academies and the Portus count `trainedHere`,
+ *      forts and stations hold `drillWait`. Large temples are new building
+ *      types and need nothing. Older saves load with every soldier, ship and
+ *      recruit untrained and nobody on a trip, see upgradeTrainingV11().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -392,6 +400,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 9) upgradeFishV8(game);
   if (data.version < 10) upgradeClothV9(game);
   if (data.version < 11) upgradeNavyV10(game);
+  if (data.version < 12) upgradeTrainingV11(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -560,6 +569,27 @@ export function upgradeNavyV10(game) {
   m.navalDemand ??= { timber: 0, iron: 0, linen: 0 };
   const st = m.stats || (m.stats = {});
   for (const k of ['seaRaids', 'shipsSunk', 'shipsLost', 'shipsBuilt', 'boatsSunk']) st[k] ??= 0;
+}
+
+/**
+ * A save before version 12 (before the Military Academy and the Portus):
+ * every soldier, liburnian and recruit on his way is untrained, and nobody is
+ * on a trip to be trained. (The Unit constructor's defaults already say so;
+ * this says it outright, whatever an old save held.)
+ */
+export function upgradeTrainingV11(game) {
+  for (const u of game.units.values()) {
+    if (u.side !== 'rome') continue;
+    u.trained = false;
+    u.drill = 0;
+    u.drillDay = 0;
+    u.drillDays = 0;
+  }
+  for (const w of game.walkers.values()) {
+    if (w.type !== 'recruit') continue;
+    w.trained = false;
+    w.academy = 0;
+  }
 }
 
 /**

@@ -29,7 +29,7 @@
  *                    market | venue | training | water | reservoir |
  *                    fountain | well | decor | hospital | house | dock |
  *                    barracks | fort | tower | shipyard | wharf | part |
- *                    navalia | station
+ *                    navalia | station | military_academy | portus
  *   span           sections in a row along the map's x axis (the hippodrome:
  *                  3 of size x size). The first is the building itself, the
  *                  others are `part` buildings linked to it (sim/linked.js)
@@ -41,6 +41,9 @@
  *                  for multi-input workshops (the Fletcher). Code reads recipe.
  *   productionDays days per 100-unit batch at full efficiency
  *   god            temple patron (temples only)
+ *   templeWeight   temples it counts as toward its god's "one staffed temple
+ *                  per PEOPLE_PER_TEMPLE" (default 1; a large temple 2, as the
+ *                  original counted 1,500 people of coverage to a small one's 750)
  *   venue          entertainment venue type (venues/training)
  *   needsPiped     requires piped water from a reservoir to operate
  *   inputs         goods a building accepts by cart for its own use
@@ -124,6 +127,25 @@ function B(def) {
   return Object.freeze(out);
 }
 
+/** The five gods' large temples (`temple_large_<god>`), in the gods' order. */
+function largeTemples() {
+  const out = {};
+  for (const [god, name, what] of [
+    ['ceres', 'Ceres', 'the goddess of the harvest'],
+    ['neptune', 'Neptune', 'the god of the waters'],
+    ['mercury', 'Mercury', 'the god of trade and travellers'],
+    ['mars', 'Mars', 'the god of war and protection'],
+    ['venus', 'Venus', 'the goddess of love and beauty'],
+  ]) {
+    out[`temple_large_${god}`] = B({
+      name: `Large Temple of ${name}`, category: 'religion', cost: 150, size: 3, workers: 5, labor: 'govReligion',
+      des: [14, 2, -2, 5], walker: 'priest', god, spawnDays: 4, fire: 0.6, templeWeight: 2,
+      desc: `A grand temple to ${what}. Its priests walk the same rounds as a small temple's, but ${name} counts it as two temples, and it is a fine neighbor.`,
+    });
+  }
+  return out;
+}
+
 export const BUILDINGS = Object.freeze({
   // --- Housing -------------------------------------------------------------
   house: B({
@@ -204,6 +226,12 @@ export const BUILDINGS = Object.freeze({
     des: [4, 2, -1, 6], walker: 'priest', god: 'venus', spawnDays: 4, fire: 0.6,
     desc: 'Honors the goddess of love and beauty, who keeps the people content.',
   }),
+  // Large temples (3x3), one per god as in the original: the same priest on
+  // the same round as a small temple, so no farther reach on the ground. What
+  // the size buys is coverage (a large temple counts as two temples toward its
+  // god, sim/religion.js) and desirability. They burn and collapse like the
+  // small ones, as in the original (Augustus makes them fire-proof).
+  ...largeTemples(),
   oracle: B({
     name: 'Oracle', category: 'religion', kind: 'decor', cost: 200, size: 2, workers: 0,
     des: [8, 1, -2, 6], fire: 0, damage: 0.5,
@@ -484,6 +512,13 @@ export const BUILDINGS = Object.freeze({
     des: [-6, 1, 1, 3], fire: 1, damage: 1, inputs: ['weapons', 'arrows', 'horses'], inputCap: 400,
     desc: 'Trains recruits and sends them to your forts. Legionaries need weapons, archers need arrows, cavalry need horses. Carts deliver them from workshops, ranches and warehouses.',
   }),
+  // The original's Military Academy (sim/training.js): only a fully staffed
+  // one trains anybody. No walker of its own, no goods, no fee.
+  military_academy: B({
+    name: 'Military Academy', category: 'military', kind: 'military_academy', cost: 1000, size: 3, workers: 20, labor: 'military',
+    des: [-3, 1, 1, 3], fire: 1, damage: 1,
+    desc: 'A drill yard where soldiers learn to fight in close order. Only a fully staffed academy trains anyone. Each new recruit marches here first (the academy nearest his fort), then on to his fort, and soldiers resting in a fort come over one at a time. Trained legionaries holding their ground take a quarter of a missile\'s damage and defend better; trained archers and cavalry defend a little better.',
+  }),
   fort_legion: B({
     name: 'Legion Fort', category: 'military', kind: 'fort', unit: 'legionary', cost: 300, size: 3, workers: 8, labor: 'military',
     des: [-8, 1, 2, 4], fire: 0, damage: 0, hp: 700,
@@ -512,6 +547,15 @@ export const BUILDINGS = Object.freeze({
     name: 'Navalia', category: 'military', kind: 'navalia', cost: 400, size: 3, workers: 12, labor: 'military',
     des: [-6, 1, 1, 3], fire: 1.2, damage: 1, placement: 'shore', inputs: ['timber', 'iron', 'linen'], inputCap: 400,
     desc: 'The naval dockyard. Builds liburnians, light warships, from 300 timber, 100 iron and 100 linen each (carts bring them while a staffed Naval Station has an empty berth), and sends each to the emptiest station on its water. Build it on the bank of a river or sea that ships can sail.',
+  }),
+  // The Portus (Colonia's own, like the fleet): the fleet's academy, after the
+  // harbor Agrippa cut near Naples to train his crews. Rome's first war fleet,
+  // in 260 BC, learned to row on benches on dry land while its ships were
+  // built. Only a fully staffed one trains a crew (sim/training.js).
+  portus: B({
+    name: 'Portus', category: 'military', kind: 'portus', cost: 600, size: 3, workers: 12, labor: 'military',
+    des: [-4, 1, 1, 3], fire: 1, damage: 1, placement: 'shore',
+    desc: 'A sheltered training harbor where liburnian crews learn to row in time, as Rome\'s first war fleet learned on benches on dry land while its ships were built. Only a fully staffed Portus trains a crew. Each new liburnian rows past it first (the Portus nearest its station, on the same water), then to its berth, and ships resting at a station come over one at a time. A trained crew rows faster, rams harder and is harder to hit. Build it on the bank of the water your Naval Stations stand by.',
   }),
   naval_station: B({
     name: 'Naval Station', category: 'military', kind: 'station', cost: 500, size: 3, workers: 10, labor: 'military',

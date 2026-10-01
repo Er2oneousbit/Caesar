@@ -49,7 +49,8 @@ import { UNIT_TYPES, STATION_CAPACITY, RAM_REACH, RAM_COOLDOWN } from '../data/u
 import { GOODS } from '../data/goods.js';
 import { Terrain } from '../world/map.js';
 import { RNG } from '../core/rng.js';
-import { spawnUnit, removeUnit, passable, fillField, computeField, damageBuilding, enemyPower, rollDamage, hurt, screenDirection, warbandType } from './military.js';
+import { spawnUnit, removeUnit, passable, fillField, computeField, damageBuilding, enemyPower, rollDamage, hurt, screenDirection, warbandType, unitDefense } from './military.js';
+import { portusFor, startDrill, endDrill, drilled } from './training.js';
 import { dockBerth } from './trade.js';
 import { killWalker, STRIDE_WRAP } from './entities.js';
 import { riskRates } from './risk.js';
@@ -261,7 +262,7 @@ function shoot(game, u, def, target) {
   u.cooldown = def.cooldown;
   const sdx = (target.x - u.x) - (target.y - u.y);
   if (Math.abs(sdx) > 0.01) u.facing = sdx > 0 ? 1 : -1;
-  const dmg = rollDamage(game, def, UNIT_TYPES[target.type], enemyPower(game, u));
+  const dmg = rollDamage(game, def, UNIT_TYPES[target.type], enemyPower(game, u), unitDefense(game, target));
   game.projectiles.push({ x: u.x, y: u.y, z: 14, target: target.id, damage: dmg, speed: 0.4, kind: 'arrow', life: 60 });
   game.events.emit('sound', { name: 'arrow' });
 }
@@ -362,7 +363,7 @@ export function deployStation(game, stationId, tx, ty) {
   const i = nearestWater(game.map, tx, ty, body, 2);
   if (i < 0) return false;
   st.rally = { x: game.map.xOf(i) + 0.5, y: game.map.yOf(i) + 0.5 };
-  for (const u of squadron(game, stationId)) { u.path = null; u.target = 0; u.state = 'sail'; }
+  for (const u of squadron(game, stationId)) { endDrill(u); u.target = 0; u.state = 'sail'; } // (a ship on its way to the Portus comes too)
   return true;
 }
 
@@ -425,12 +426,15 @@ export function updateNavalia(game, b) {
   if (b.progress < 100 - 1e-6) return; // (30 steps of 100/30 add up to a hair under 100)
   for (const [g, n] of Object.entries(cost)) { b.stock[g] -= n; logGoods(game, g, 'used', n); }
   const map = game.map;
-  spawnUnit(game, 'liburnian', map.xOf(slip) + 0.5, map.yOf(slip) + 0.5, { station: dest.st.id, slot: freeSlot(game, dest.st), state: 'sail', body: map.navBody[slip] });
+  const ship = spawnUnit(game, 'liburnian', map.xOf(slip) + 0.5, map.yOf(slip) + 0.5, { station: dest.st.id, slot: freeSlot(game, dest.st), state: 'sail', body: map.navBody[slip] });
+  // A training Portus on its water: the new crew rows past it first (sim/training.js), unless raiders are about or its station is deployed.
+  const school = game.military.active || dest.st.rally ? null : portusFor(game, dest.st);
+  if (school) startDrill(game, ship, school);
   b.progress = 0;
   b.built = (b.built || 0) + 1;
   const st = game.military.stats;
   st.shipsBuilt = (st.shipsBuilt || 0) + 1;
-  game.message('A liburnian is launched at the Navalia and rows to its Naval Station.', 'good', b.x, b.y);
+  game.message(school ? 'A liburnian is launched at the Navalia. Its crew rows to the Portus to train, then on to its Naval Station.' : 'A liburnian is launched at the Navalia and rows to its Naval Station.', 'good', b.x, b.y);
   game.events.emit('sound', { name: 'recruit' });
 }
 
@@ -738,19 +742,20 @@ function updateLiburnian(game, u, pirates) {
     u.state = 'engage';
     const d = dist(u, target);
     if (d <= RAM_REACH && !(u.ramCooldown > 0)) {
-      // The ram: a heavy blow to a ship it reaches.
+      // The ram: a heavy blow to a ship it reaches (harder from a trained crew).
       u.ramCooldown = RAM_COOLDOWN;
       u.strikeTick = game.time.totalTicks;
-      hurt(game, target, def.ram * (0.8 + game.rng.next() * 0.4));
+      hurt(game, target, ramOf(u, def) * (0.8 + game.rng.next() * 0.4));
       game.events.emit('sound', { name: 'clash' });
     }
     if (game.units.has(target.id) && d <= def.range && u.cooldown <= 0) shoot(game, u, def, target);
     // Close in to ram, each from its own side (its personal offset), so a
     // squadron surrounds a ship rather than piling onto one spot.
-    if (d > 0.9) steer(game, u, target.x + u.ox * 2.4, target.y + u.oy * 2.4, def.speed);
+    if (d > 0.9) steer(game, u, target.x + u.ox * 2.4, target.y + u.oy * 2.4, shipSpeed(u, def));
     else u.moving = false;
     return;
   }
+  if (u.drill && rowToPortus(game, u, def)) return;
   const spot = stationSpots(game, st)[(u.slot || 0) % STATION_CAPACITY];
   if (dist(u, spot) < 0.08) {
     u.state = st.rally ? 'holding' : 'berthed';
@@ -759,7 +764,34 @@ function updateLiburnian(game, u, pirates) {
     return;
   }
   u.state = 'sail';
-  steer(game, u, spot.x, spot.y, def.speed);
+  steer(game, u, spot.x, spot.y, shipSpeed(u, def));
+}
+
+/** A liburnian's speed: a trained crew rows in time, and faster. */
+export function shipSpeed(u, def = UNIT_TYPES[u.type]) {
+  return u.trained && def.trainedSpeed ? def.trainedSpeed : def.speed;
+}
+
+/** A liburnian's ram damage before its +-20%: harder from a trained crew. */
+export function ramOf(u, def = UNIT_TYPES[u.type]) {
+  return u.trained && def.trainedRam ? def.trainedRam : def.ram;
+}
+
+/**
+ * A liburnian sent to the Portus (new from the Navalia, or at rest; see
+ * sim/training.js) rows to its berth and is trained on reaching it, then rows
+ * on to its station. A Portus gone, or on other water: the trip is off.
+ * @returns {boolean} true while still going
+ */
+function rowToPortus(game, u, def) {
+  const p = game.buildings.get(u.drill);
+  const berth = p && p.def.kind === 'portus' ? shoreBerth(game, p) : -1;
+  if (berth < 0 || game.map.navBody[berth] !== u.body) { endDrill(u); return false; }
+  const spot = { x: game.map.xOf(berth) + 0.5, y: game.map.yOf(berth) + 0.5 };
+  if (dist(u, spot) < 0.3) { drilled(game, u, p); return false; }
+  u.state = 'drill';
+  steer(game, u, spot.x, spot.y, shipSpeed(u, def));
+  return true;
 }
 
 function updateRaiderShip(game, u, fleet) {
@@ -918,6 +950,7 @@ export function shipStatus(game, u) {
   switch (u.state) {
     case 'engage': return 'Fighting a raider ship';
     case 'berthed': return 'At its berth';
+    case 'drill': return 'Rowing to the Portus to train its crew';
     case 'holding': return st && st.rally ? `Holding the water at ${Math.floor(st.rally.x)}, ${Math.floor(st.rally.y)}` : 'Holding its place';
     default: return st && st.rally ? 'Rowing to where it was sent' : 'Rowing to its berth';
   }

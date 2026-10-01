@@ -617,8 +617,12 @@ test('water hints: housing shows well and fountain water, piped-water buildings 
     assert.equal(waterHintOf(WaterBits.PIPED, layers), 0);
     assert.equal(waterHintOf(WaterBits.WELL | WaterBits.FOUNTAIN, layers), -1);
   }
-  // The same faint blue under houses (well water) and piped-water buildings.
-  assert.equal(waterHintLayers('fountain')[0].style, house[0].style);
+  // The piped area is teal, never one of the blues of the water homes get:
+  // placing a fountain shows it under the fountains' reach, and in the same
+  // pale blue the two could not be told apart.
+  const piped = waterHintLayers('fountain')[0].style;
+  for (const l of house) assert.notEqual(piped.fill, l.style.fill, l.key);
+  assert.equal(waterHintLayers('baths')[0].style, piped);
   // Wells and reservoirs show their own coverage while placed; others nothing.
   for (const tool of ['well', 'reservoir', 'road', 'prefecture', null]) assert.deepEqual(waterHintLayers(tool), [], String(tool));
 });

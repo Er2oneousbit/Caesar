@@ -8,12 +8,23 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **The Emperor's world** (the empire map came in v0.12.0): the Emperor's legions, requests for troops, distant battles and triumphal arches.
-2. **Classic content still missing**: military academy, large temples, and the governor's residence with salary and rank (the hippodrome and fishing came in v0.13.0).
-3. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1 and 2, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`. **The rule: a mission's goals must fit its jobs.** Its population goal is at most what a sensibly built city of its buildings employs at 10% unemployment (`src/sim/capacity.js`, `npm run sim -- --capacity`), and its map must house and feed that many; `tests/campaign.test.mjs` holds every mission to it (missions 3 to 7 are listed exceptions until the late missions get their jobs, below). Populations in the tens of thousands need the jobs for them first.
-4. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
+1. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). The Emperor's wars and the classic content it waited for came in v0.14.0; each new mission gets its `paceYears` from `npm run sim -- --pace`. **The rule: a mission's goals must fit its jobs.** Its population goal is at most what a sensibly built city of its buildings employs at 10% unemployment (`src/sim/capacity.js`, `npm run sim -- --capacity`), and its map must house and feed that many; `tests/campaign.test.mjs` holds every mission to it (missions 3 to 7 are listed exceptions until the late missions get their jobs, below). Populations in the tens of thousands need the jobs for them first.
+2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.14.0)
+
+* **Caesar's legions** (parity #1): favor at 0 no longer recalls the governor. At favor 10 or less Caesar warns and, 12 months later, sends his legions (16, 32, 48, then 72 imperial legionaries, times the raid lever, at most 75), shown marching from Rome on the empire map. They go for the governor's residence, then the best homes. Favor recovering past the difficulty's band sends them home, a middle band halts them, and only destroying them earns +10. A mission is lost only when the city is overrun: the legions and raiders outnumber its soldiers by more than 2 while it holds under a quarter of its peak population. A walled-in map entrance does not keep them out, a legionary leaves alone a soldier he cannot reach, and any army goes home after two years
+* **Distant battles** (parity #1): Caesar asks for troops in missions 4 to 7, and now and then in a sandbox with raids on (only a city with soldiers, or ships for a city by the sea, is asked). Forts and Naval Stations have an Empire service switch; liburnians can go when the threatened city lies on a sea route (Colonia's own). The battle weighs every man and ship sent (a trained one counts more) against the enemy: a win is +25 favor and the right to a triumphal arch, too weak -10 and every man lost, too late -25, nobody sent -50. Four new cities to defend on the empire map: Placentia, Ariminum, Saguntum and Messana
+* **Triumphal arches** (parity #16): free, 3x3, across a road, one per battle won; very desirable
+* **The governor** (parity #6): eleven ranks from Citizen to Caesar, one per campaign mission for now (the sandbox picks one); a monthly salary, set in the Imperial advisor, paid from the treasury into personal savings that go with you from mission to mission. Paying yourself above your rank costs favor at New Year, judged on what was actually paid, and what was drawn above it in the year of victory is taken back. Gifts to Caesar now come from your savings, priced by them, each further one within a year pleasing him less; donations from savings go to the treasury. Three residences (Praetorium, Praetorium Maius, Regia), one at a time, the rioters' first target
+* **Military Academy and Portus** (parity #17): recruits pass through the academy on their way to their fort, and soldiers at rest take turns; a trained legionary holding his ground takes a quarter of missile damage and gains defense, and counts more in a distant battle. The Portus (Colonia's own, after Agrippa's training harbor) does the same for liburnian crews: faster, ramming 55 instead of 45, better defended
+* **Large temples** (parity #18): a 3x3 Templum for each god, counted as two temples
+* **Latin names**: every building shows its Latin name (Castra, Horreum, Balneae, Excubitorium...), with the English name under it in the build menu and beside it in the inspect panel; the manual has a table of them
+* Fixed: the box under the build menu grew with a hovered item's description and pushed the last item of a scrolled list out from under the pointer, so a click on it missed
+* Headless sim: Easy, Normal, Hard and Insane identical to v0.13.4 apart from building names in messages (the demo city never lets favor fall, sends no troops and builds none of the new buildings)
+* 537 unit tests, 123 browser checks
 
 ## Done (v0.13.4)
 
@@ -314,17 +325,12 @@ Fixes from a review of v0.6:
 
 ## Caesar III parity: what the original had that Colonia does not (yet)
 
-Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0).
+Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0).
 
-* **#1** **The Emperor's legions** marching on a governor whose favor collapses, which gives the favor rating real teeth; distant battles the Emperor asks you to send troops to.
-* **#6** **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary), and the **rank ladder** from Citizen to Caesar.
 * **#7** **Map rotation** (view the city from 4 angles).
 * **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
 * **#9** **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 * **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
-* **#16** **Triumphal arches**, awarded for battles won.
-* **#17** **Military academy**: trains soldiers who fight better. With it, Colonia's own naval counterpart (not in the original, which had no war at sea): the **Portus**, a sheltered training harbor after the one Agrippa cut near Naples to train his crews, where liburnian crews learn to row in time (Rome's first war fleet, in 260 BC, trained its rowers on benches on dry land while the ships were built) and come out faster and harder-hitting.
-* **#18** **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
 * **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
 * **#21** **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.

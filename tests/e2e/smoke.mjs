@@ -44,10 +44,24 @@ function loadPlaywright() {
 const { chromium } = loadPlaywright();
 const url = pathToFileURL(file).href;
 const results = [];
+// On GitHub Actions a failure is also written as an annotation (public on
+// the run's page and through the API, unlike the log), so it names itself.
+const inCI = !!process.env.GITHUB_ACTIONS;
+const annotate = (title, text) => { if (inCI) console.log(`::error title=${title}::${String(text).replace(/\s+/g, ' ').slice(0, 900)}`); };
+const lastCheck = () => (results.length ? results[results.length - 1].name : 'start');
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+  if (!ok) annotate('Smoke check failed', `${name}${detail ? ` (${detail})` : ''}`);
 };
+// A step that throws (a timeout, a missing element) ends the run: say where.
+for (const ev of ['uncaughtException', 'unhandledRejection']) {
+  process.on(ev, (err) => {
+    annotate('Smoke test crashed', `${err && err.message} (after "${lastCheck()}")`);
+    console.error(err);
+    process.exit(1);
+  });
+}
 // Network failures for optional web fonts are not game errors.
 const ignorable = (t) => /fonts\.(googleapis|gstatic)|ERR_CERT|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|Failed to load resource/i.test(t);
 

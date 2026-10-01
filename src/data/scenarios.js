@@ -22,6 +22,11 @@
  *   requests: boolean             Emperor makes requests
  *   crime, disease: false         none of it in this mission (the first two,
  *                                 which teach the basics); missing = on
+ *   majorWrath: false             a god angered again before it calms strikes
+ *                                 only as hard as the first time (Mercury does
+ *                                 not burn the storehouse; sim/religion.js).
+ *                                 The first two missions, as in the original,
+ *                                 where a new player's one granary would burn
  *   difficulty                    key of data/difficulty.js (missing = normal;
  *                                 campaign missions get it from withDifficulty)
  *   hints: string[]               tips shown at start
@@ -80,7 +85,7 @@ export const INVASION_PRESETS = Object.freeze({
  * of work) and held under the capacity model's sensible ceiling by a test
  * (sim/capacity.js, `npm run sim -- --capacity`). Missions 3 to 7 keep their
  * goals for now, though their buildings cannot yet employ those populations:
- * see the ROADMAP's playtest notes ("The late missions need more jobs").
+ * see the ROADMAP note "The late missions need more jobs".
  *
  * Length: each mission's goals are set so the fastest possible city takes the
  * mission's paceYears (sim/pace.js). In missions 1 and 2 peace sets it (a
@@ -92,8 +97,8 @@ export const INVASION_PRESETS = Object.freeze({
  * amphitheater for its Domus: a theater alone gives a home at most 16
  * entertainment (10 for a visit, 6 from the seat base), and a Domus needs 20.
  */
-const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_jupiter', 'garden', 'forum'];
-const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_vesta', 'statue_small', 'plaza'];
+const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum'];
+const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school'];
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',
   'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall'];
@@ -106,7 +111,7 @@ export const SCENARIOS = Object.freeze([
     funds: 6000, startYear: -280,
     goals: { population: 300, culture: 15, prosperity: 0, peace: 35, favor: 0 },
     paceYears: 1.25,
-    unlocks: BASIC, partners: [], requests: false, crime: false, disease: false,
+    unlocks: BASIC, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
       'Build Housing Plots next to the Imperial Road (or any road connected to it). Settlers arrive from the map edge.',
       'Place a Well within 2 tiles of homes so tents can become Family Tents.',
@@ -125,13 +130,13 @@ export const SCENARIOS = Object.freeze([
     funds: 7000, startYear: -270,
     goals: { population: 450, culture: 35, prosperity: 20, peace: 45, favor: 0 },
     paceYears: 2.1,
-    unlocks: TIER2, partners: [], requests: false, crime: false, disease: false,
+    unlocks: TIER2, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
       'A Reservoir placed next to water fills up. Fountains inside its piped area (10 tiles) supply homes within 4 tiles.',
       'Aqueducts connect a full reservoir to other reservoirs farther inland.',
       'Cottages need a fountain; above them homes want entertainment, then a school. A Theater needs actors: build an Actor Troupe nearby.',
       'Prosperity grows with better homes, a profit, work for everyone and fair wages.',
-      'Work is still scarce here: about 500 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
+      'Work is still scarce here: about 450 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
     ],
   },
   {

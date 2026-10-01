@@ -184,6 +184,12 @@ export function sandboxMenu(app) {
 // Save / load
 // ---------------------------------------------------------------------------
 
+/** Download this slot as a .json file, without loading it (none where downloads are blocked). */
+function slotExportButton(app, slot) {
+  if (!canDownloadFiles()) return null;
+  return h('button', { class: 'btn small slot-export', title: `Export ${SLOT_NAMES[slot] || slot} to a file`, onclick: () => app.exportSlot(slot) }, '💾');
+}
+
 function slotRow(app, slot, meta, actions) {
   const kb = Math.ceil(slotSize(slot) / 1024);
   return h('div', { class: 'card row', style: { marginBottom: '6px' } },
@@ -215,6 +221,7 @@ export function loadMenu(app) {
     const s = byName[slot];
     return slotRow(app, slot, s?.meta, s ? [
       s.corrupt ? h('span', { class: 'no' }, 'Corrupt') : h('button', { class: 'btn small primary', onclick: () => app.loadSlot(slot) }, 'Load'),
+      slotExportButton(app, slot),
       h('button', { class: 'btn small danger', title: 'Delete this save', onclick: () => app.ui.confirm(`Delete ${SLOT_NAMES[slot]}? This cannot be undone.`, () => { deleteSlot(slot); app.ui.showModal(loadMenu(app)); }, { yes: 'Delete', danger: true }) }, '🗑'),
     ] : null);
   });
@@ -229,9 +236,10 @@ export function saveMenu(app) {
   const slots = listSlots(SAVE_SLOTS);
   const byName = Object.fromEntries(slots.map((s) => [s.slot, s]));
   const rows = SAVE_SLOTS.filter((s) => s !== 'auto').map((slot) => slotRow(app, slot, byName[slot]?.meta,
-    h('button', { class: 'btn small primary', onclick: () => { const doSave = () => { app.saveSlot(slot); app.ui.closeModal(); }; if (!byName[slot]) doSave(); else app.ui.confirm(`Overwrite ${SLOT_NAMES[slot]}?`, doSave, { yes: 'Overwrite' }); } }, 'Save here')));
+    [byName[slot] ? slotExportButton(app, slot) : null,
+      h('button', { class: 'btn small primary', onclick: () => { const doSave = () => { app.saveSlot(slot); app.ui.closeModal(); }; if (!byName[slot]) doSave(); else app.ui.confirm(`Overwrite ${SLOT_NAMES[slot]}?`, doSave, { yes: 'Overwrite' }); } }, 'Save here')]));
   return modal('Save game', [rows, storageNote()], [
-    canDownloadFiles() ? h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export to file') : null,
+    canDownloadFiles() ? h('button', { class: 'btn', onclick: () => app.exportSave() }, '💾 Export current game') : null,
     h('button', { class: 'btn', onclick: () => app.copySave() }, '📋 Copy save data'),
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
   ], 'narrow', () => app.ui.closeModal());

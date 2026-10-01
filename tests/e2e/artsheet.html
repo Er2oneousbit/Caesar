@@ -76,9 +76,9 @@
   if (!only || q.get('extras')) {
     // Four single-tile homes of one level that joined into a 2x2 block.
     section('Blocks: four single-tile homes joined into one 2x2 home', [1, 4, 7, 10].map((t) => [`${HOUSE_TIERS[t].name}`, buildingSpec('house', 2, t, t)]));
-    // Every god's temple (Mercury's and Venus's are drawn ahead of the switch
-    // to the original's five gods), the statues and the mines.
-    section('Temples', ['jupiter', 'ceres', 'neptune', 'mars', 'vesta', 'mercury', 'venus'].map((g) => [g, buildingSpec(`temple_${g}`, 2, 0, 0)]));
+    // Every god's temple, in the gods' order (data/gods.js), the statues and
+    // the mines.
+    section('Temples', ['ceres', 'neptune', 'mercury', 'mars', 'venus'].map((g) => [g, buildingSpec(`temple_${g}`, 2, 0, 0)]));
     section('Statues and mines', [['statue_small', 1], ['statue_medium', 2], ['statue_large', 3], ['iron_mine', 2], ['marble_quarry', 2]].map(([k, S]) => [k, buildingSpec(k, S, 0, 0)]));
     section('Buildings with flags (still pictures get painted cloth)', ['prefecture', 'forum', 'senate', 'barracks', 'fort_legion', 'colosseum'].map((t) => {
       const S = { prefecture: 1, forum: 2, senate: 4, barracks: 3, fort_legion: 3, colosseum: 5 }[t];

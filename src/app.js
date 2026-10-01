@@ -19,7 +19,7 @@
 import { CONFIG } from './config.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
-import { saveToSlot, readSlot, deserializeGame, exportToFile, importFromFile, serializeGame, canDownloadFiles } from './core/save.js';
+import { saveToSlot, readSlot, deserializeGame, exportToFile, exportSlotToFile, importFromFile, serializeGame, canDownloadFiles } from './core/save.js';
 import { Renderer } from './render/renderer.js';
 import { OVERLAYS } from './render/overlays.js';
 import { UI } from './ui/ui.js';
@@ -63,6 +63,10 @@ function readJson(key, fallback) {
 function writeJson(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage may be unavailable */ }
 }
+
+/** The menu background's tour: its reach from the town's middle (world px) and pace (radians a second). */
+const MENU_ORBIT = 320;
+const MENU_ORBIT_SPEED = 0.04;
 
 export class App {
   /**
@@ -420,6 +424,20 @@ export class App {
     this.startMenuBackground();
   }
 
+  /**
+   * The menu's slow tour of its town: a figure eight around the town's middle
+   * (MENU_ORBIT world px across and half that tall, a loop in about two and
+   * a half minutes). It used to pan one way for good, until the view stopped
+   * against the map's limits in an empty corner with the town out of sight.
+   */
+  menuDrift(dt) {
+    const o = this.menuOrbit;
+    if (!o) return;
+    o.t += dt;
+    const a = o.t * MENU_ORBIT_SPEED;
+    this.renderer.camera.setCenter(o.c.x + Math.sin(a) * MENU_ORBIT, o.c.y + Math.sin(2 * a) * MENU_ORBIT * 0.35);
+  }
+
   startMenuBackground() {
     try {
       const types = ['river', 'lakes', 'coast'];
@@ -433,6 +451,7 @@ export class App {
       this.renderer.camera.zoomIndex = 2;
       if (res.center) this.renderer.camera.centerOnTile(res.center.x, res.center.y);
       else this.renderer.camera.centerOnTile(32, 32);
+      this.menuOrbit = { c: this.renderer.camera.center(), t: 0 };
     } catch (err) {
       log.warn('Menu background failed (harmless):', err);
       this.menuGame = null;
@@ -475,6 +494,16 @@ export class App {
     if (!this.game) return;
     try {
       exportToFile(this.game, { camera: this.renderer.camera.serialize() });
+    } catch (err) {
+      this.ui.toastError(`Export failed: ${err.message}`);
+    }
+  }
+
+  /** Download one save slot as a file, without loading it. */
+  exportSlot(slot) {
+    try {
+      const name = exportSlotToFile(slot);
+      this.ui.messages.push({ text: `Exported ${name} to your downloads.`, level: 'good', date: '' });
     } catch (err) {
       this.ui.toastError(`Export failed: ${err.message}`);
     }
@@ -674,7 +703,7 @@ export class App {
         simMs = performance.now() - t0;
         alpha = this.acc;
       }
-      if (!this.game && this.menuGame) this.renderer.camera.panScreen(-dt * 12, -dt * 4);
+      if (!this.game && this.menuGame) this.menuDrift(dt);
       this.input.update(dt);
       this.renderer.render(alpha, dt);
       this.music.setMood(this.musicMood());

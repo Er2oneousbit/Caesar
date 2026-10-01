@@ -77,6 +77,21 @@ try {
   await page.waitForTimeout(450);
   const shown = await page.evaluate(() => ({ opacity: getComputedStyle(document.querySelector('#main-menu .menu-card')).opacity, inert: !!document.getElementById('main-menu').inert }));
   check('the menu card fades in and takes input after the gate', shown.opacity === '1' && !shown.inert, JSON.stringify(shown));
+  // 1a (cont.) The menu's backdrop tours its town and never drifts off it:
+  // ten minutes of drift later the view is still within its loop.
+  const tour = await page.evaluate(() => {
+    const app = window.colonia;
+    if (!app.menuOrbit) return null;
+    const c0 = app.menuOrbit.c;
+    let far = 0;
+    for (let k = 0; k < 600; k++) {
+      app.menuDrift(1);
+      const c = app.renderer.camera.center();
+      far = Math.max(far, Math.hypot(c.x - c0.x, c.y - c0.y));
+    }
+    return { far: Math.round(far) };
+  });
+  check('the menu backdrop tours its town and never drifts off the map', !!tour && tour.far > 50 && tour.far <= 400, JSON.stringify(tour));
   // 1b. The rest of the gesture never presses a menu button: the second click
   //     of a double-click on the gate, or a held Enter key (auto-repeat).
   {
@@ -989,6 +1004,20 @@ try {
   await page.keyboard.press('Escape');
   await page.click('text=Save game');
   check('save menu shows localStorage usage', await page.isVisible('text=Stored in this browser (localStorage)'));
+  // Each saved slot exports on its own, without loading it: the file is the
+  // slot's text exactly as stored, named after the slot, city and year.
+  const [dl] = await Promise.all([
+    page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
+    page.click('.modal .card:has-text("Quicksave") .slot-export'),
+  ]);
+  let slotFile = null;
+  if (dl) {
+    const p = await dl.path();
+    const text = p ? fs.readFileSync(p, 'utf8') : '';
+    const stored = await page.evaluate(() => localStorage.getItem('colonia.save.quick'));
+    slotFile = { name: dl.suggestedFilename(), same: text === stored };
+  }
+  check('a save slot exports to a file of its own', !!slotFile && /^colonia-quick-.+-\d+(bc|ad)\.json$/.test(slotFile.name) && slotFile.same, JSON.stringify(slotFile));
   await page.keyboard.press('Escape');
 
   // 6. In-game confirm dialog: restart the map from the pause menu

@@ -193,12 +193,12 @@ export function buildDemoCity(game, opts = {}) {
   const services = [
     ['well', 3, 0, 1], ['well', 10, 0, 1], ['well', 3, 3, 1], ['well', 11, 6, 1], ['well', 6, 9, 1], ['well', 13, 9, 1],
     ['prefecture', 7, 1, 1], ['engineer_post', 8, 1, 1], ['prefecture', 14, 4, 1], ['engineer_post', 5, 7, 1],
-    ['market', 5, 3, 2], ['temple_ceres', 12, 3, 2], ['temple_jupiter', 1, 6, 2],
+    ['market', 5, 3, 2], ['temple_ceres', 12, 3, 2], ['temple_mercury', 1, 6, 2],
   ];
   if (level >= 2) {
     services.push(
       ['school', 9, 6, 2], ['theater', 15, 6, 2], ['barber', 2, 9, 1], ['forum', 15, 9, 2], ['temple_mars', 9, 9, 2],
-      ['market', 5, 9, 2], ['temple_neptune', 12, 0, 2], ['temple_vesta', 1, 0, 2], ['clinic', 16, 3, 1],
+      ['market', 5, 9, 2], ['temple_neptune', 12, 0, 2], ['temple_venus', 1, 0, 2], ['clinic', 16, 3, 1],
     );
   }
   if (level >= 3) {

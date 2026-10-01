@@ -60,6 +60,7 @@ const MOOD_LABELS = {
   food: 'Food supply',
   housing: 'Housing quality',
   gods: 'The gods\' moods',
+  venus: 'Venus\'s blessing or wrath',
   festival: 'Recent festivals',
   newCity: 'New city optimism',
   difficulty: 'Difficulty',
@@ -455,13 +456,14 @@ export class Advisors {
   tab_religion(g) {
     const c = g.city;
     return [
-      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens. Once the city passes 800 people, gods without any temple grow angry. Festivals and oracles can lift moods high enough for blessings.`),
+      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens. Once the city passes 800 people, gods without any temple grow angry. Festivals and oracles can lift moods high enough for blessings. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}.`),
       GOD_KEYS.map((k) => {
         const s = c.gods[k];
         return h('div', { class: 'card', style: { marginTop: '8px' } },
           h('div', { class: 'row' }, h('h4', { style: { flex: 1, color: GODS[k].color } }, GODS[k].name), h('span', { class: 'muted' }, GODS[k].domain)),
           kv('Mood', `${Math.round(s.mood)} / 100`), bar(s.mood, 100),
           kv('Staffed temples', `${s.temples}`),
+          s.angered ? h('div', { class: 'status bad', style: { fontSize: '12px' } }, `Angered: until ${GODS[k].name}'s mood is back above ${CONFIG.GOD_CALM_MOOD}, another wrath strikes ${GODS[k].harderWrath && g.scenario.majorWrath !== false ? 'harder' : 'again'}.`) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, `Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`),
           h('div', { class: 'row', style: { marginTop: '6px' } },
             ['Small', 'Large', 'Grand'].map((name, size) => h('button', {

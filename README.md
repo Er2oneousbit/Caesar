@@ -15,7 +15,7 @@ Everything is original: the art is drawn in code, the sound and music are synthe
 
 Download **[`dist/colonia.html`](dist/colonia.html)** (the *Download raw file* button on that page) and open it in Chrome, Edge or Firefox. It is the whole game in one file: no install, no account, nothing to set up. It works offline.
 
-Saved games stay in your browser. Use *Save game → Export to file* to keep a backup or move a city to another computer.
+Saved games stay in your browser. To keep a backup or move a city to another computer, press 💾 beside any save in the Save or Load menu to download it as a file (or *Export current game* for the game you are playing).
 
 ## What's in it
 
@@ -23,6 +23,7 @@ Saved games stay in your browser. Use *Save game → Export to file* to keep a b
 * **A campaign** of seven missions, from a riverside village to a great capital (about half an hour for the first, a few hours for the last), and a **sandbox** with five landscapes, four map sizes (up to *Uber*, 256x256) and your choice of raids.
 * **Crime:** unhappy homes send out protesters, thieves who rob the Forum or a market, and in a city at the end of its patience, rioters who burn their way toward its finest buildings. Prefects patrol as police and chase criminals down. The Crime overlay shows where trouble is brewing and why.
 * **Disease:** crowded, unhealthy homes can fall sick, lose people and pass it next door. A Medicus sends physicians to cure them, and baths, barbers, fountains, food and a hospital keep it away. The Disease overlay shows which homes are at risk.
+* **The five gods of the original:** Ceres, Neptune, Mercury, Mars and Venus. Keep them content with temples and festivals and they bless the city (a bumper harvest, a trade windfall, food for the granaries, peace, a happier people); neglect them and they strike, and an angered Mercury or Venus strikes harder the second time.
 * **Four difficulties**, Easy to Insane.
 * **Trade** by land and sea with nine partner cities, and an empire map (E) that shows the caravans and ships on their way and the warbands your scouts have seen coming.
 * **Granary and warehouse orders:** per good, accept it, refuse it, or *get* it (the building's cart fetches it from other storage), and an *Empty* switch that sends everything elsewhere.

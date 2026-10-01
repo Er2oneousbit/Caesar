@@ -64,7 +64,7 @@ export function envyPenalty(game) {
 export function cityMoodCause(game) {
   const f = game.city.sentimentFactors || {};
   let worst = null;
-  for (const k of ['unemployment', 'food', 'taxes', 'wages', 'housing', 'gods', 'difficulty']) {
+  for (const k of ['unemployment', 'food', 'taxes', 'wages', 'housing', 'gods', 'venus', 'difficulty']) {
     if (f[k] < 0 && (worst === null || f[k] < f[worst])) worst = k;
   }
   return worst;

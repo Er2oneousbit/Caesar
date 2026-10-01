@@ -68,7 +68,7 @@ export function describeNeed(m) {
 /** How the panel words each cause of a ruin (sim/ruins.js RUIN_CAUSES). */
 const RUIN_WORDS = {
   fire: 'burned down',
-  lightning: 'struck by lightning',
+  wrath: 'burned by an angry god',
   raidFire: 'burned by raiders',
   riot: 'burned by rioters',
   collapse: 'collapsed',

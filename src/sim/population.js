@@ -9,8 +9,9 @@
  * entry point. Rate scales with sentiment.
  *
  * Sentiment (0-100) is recalculated monthly from taxes, wages, unemployment,
- * food supply, housing quality and the gods' moods. Below ~30 people stop
- * coming, below 25 they start leaving.
+ * food supply, housing quality, the gods' moods, festivals and Venus's
+ * blessing or wrath. Below ~30 people stop coming, below 25 they start
+ * leaving.
  * ----------------------------------------------------------------------------
  */
 
@@ -289,6 +290,9 @@ export function computeSentiment(game) {
   for (const g of GOD_KEYS) moodSum += c.gods[g].mood;
   f.gods = Math.max(-8, Math.min(6, (moodSum / GOD_KEYS.length - 50) * 0.15));
   f.festival = c.festivalBoost;
+  // Venus's blessing or wrath (sim/religion.js), decaying like the festival
+  // boost; listed only while it is felt.
+  if (c.venusBoost) f.venus = c.venusBoost;
   f.newCity = game.time.totalMonths < CONFIG.NEW_CITY_BONUS_MONTHS ? CONFIG.NEW_CITY_MOOD : 0;
   if (game.difficulty.mood) f.difficulty = game.difficulty.mood; // Insane: a hard-to-please populace
   let s = 0;
@@ -297,5 +301,7 @@ export function computeSentiment(game) {
   c.sentiment = Math.round(c.sentiment + (s - c.sentiment) * 0.5);
   c.sentimentFactors = f;
   c.festivalBoost *= 0.8;
+  // Under half a point it rounds to nothing in the advisor: drop it there.
+  c.venusBoost = Math.abs((c.venusBoost || 0) * CONFIG.VENUS_DECAY) < 0.5 ? 0 : c.venusBoost * CONFIG.VENUS_DECAY;
   return f;
 }

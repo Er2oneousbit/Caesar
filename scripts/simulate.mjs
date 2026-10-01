@@ -92,7 +92,11 @@ function parse(argv) {
     else if (a === '--caretaker') o.caretaker = true;
     else if (a === '--capacity') o.capacity = true;
     else if (a === '--unlocks') o.unlocks = true;
-    else if (a === '--homes') o.homes = Number(next());
+    else if (a === '--homes') {
+      // A count, or the whole site would be built without a word (NaN caps nothing).
+      o.homes = Number(next());
+      if (!Number.isFinite(o.homes) || o.homes < 0) { console.error(`--homes needs a number of plots\n${HELP}`); process.exit(2); }
+    }
     else { console.error(`Unknown option ${a}\n${HELP}`); process.exit(2); }
   }
   return o;

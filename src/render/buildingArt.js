@@ -22,7 +22,8 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
-import { P, poly, quad, ground, box, gableRoof, hipRoof, column, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
+import { GODS } from '../data/gods.js';
+import { P, poly, quad, ground, box, gableRoof, hipRoof, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
 
 const TH = CONFIG.TILE_H;
 
@@ -850,25 +851,30 @@ function hospitalArt(ctx, S) {
 
 /**
  * Each god's temple looks like its god, so they can be told apart at a
- * glance: roof and wall colors, the god's color and emblem on the pediment,
- * and something of the god's in front. Vesta's is round, as the real one in
- * the Forum was. Mercury and Venus are drawn already, for the switch to the
- * original game's five gods (see the roadmap).
+ * glance, in the build menu's small icons too: a roof color of its own, the
+ * god's color (GODS[g].color, which its priests wear) and emblem on the
+ * pediment, and something of the god's in front.
  */
 export const TEMPLE_LOOKS = {
-  jupiter: { roof: '#c9a24a', wall: COL.marble, field: '#5b4fb3', emblem: 'bolt', front: 'eagle', grand: true },
-  ceres: { roof: '#c98f3a', wall: '#efe3c4', field: '#c9a227', emblem: 'wheat', front: 'baskets' },
-  neptune: { roof: '#3f8f86', wall: '#e2ebe8', field: '#2f7fb8', emblem: 'trident', front: 'pool' },
-  mars: { roof: '#7a2a22', wall: '#dcc7b4', field: '#a8322b', emblem: 'shield', front: 'trophy' },
-  vesta: { roof: '#b0763a', wall: COL.marble, field: '#d9772b', emblem: 'flame', front: 'fire', round: true },
-  mercury: { roof: '#6d7480', wall: '#e8e2d4', field: '#3a8f84', emblem: 'caduceus', front: 'herm' },
-  venus: { roof: '#d9909c', wall: '#f5e8e8', field: '#c2507a', emblem: 'shell', front: 'roses' },
+  ceres: { roof: '#c98f3a', wall: '#efe3c4', field: GODS.ceres.color, emblem: 'wheat', front: 'baskets' },
+  neptune: { roof: '#3f8f86', wall: '#e2ebe8', field: GODS.neptune.color, emblem: 'trident', front: 'pool' },
+  mercury: { roof: '#b4b8c4', wall: '#e8e2d4', field: GODS.mercury.color, emblem: 'caduceus', front: 'herm' },
+  mars: { roof: '#7a2a22', wall: '#dcc7b4', field: GODS.mars.color, emblem: 'shield', front: 'trophy' },
+  venus: { roof: '#d9909c', wall: '#f5e8e8', field: GODS.venus.color, emblem: 'shell', front: 'roses' },
 };
+
+/**
+ * Where a temple's altar stands (footprint u, v): front right, the god's
+ * piece at the front left. The renderer's live flame (altarFlameOffset) and
+ * the night torch (lighting.js) sit on it.
+ */
+export function templeAltar(S) {
+  return [S - 0.24, S - 0.08];
+}
 
 function templeArt(ctx, S, variant, state, key) {
   const look = TEMPLE_LOOKS[key.replace('temple_', '')] || TEMPLE_LOOKS.ceres;
-  if (look.round) { roundTempleArt(ctx, S, look); return; }
-  const top = look.grand ? 22 : 19; // Jupiter's is the tallest
+  const top = 19;
   quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#d8cfbb');
   box(ctx, 0.12, 0.12, S - 0.24, S - 0.24, 0, 5, COL.stone);
   // steps at the front
@@ -877,7 +883,7 @@ function templeArt(ctx, S, variant, state, key) {
   box(ctx, 0.35, 0.25, S - 0.7, S - 0.95, 5, top, look.wall);
   door(ctx, 'left', 0.35, 0.25, S - 0.35, S - 0.7, 5, 0.5, '#5a4a3a', 0.22, 10);
   // front and side columns
-  colonnade(ctx, 0.3, S - 0.3, S - 0.3, S - 0.3, look.grand ? 6 : 5, 5, top, COL.marble, 1.7);
+  colonnade(ctx, 0.3, S - 0.3, S - 0.3, S - 0.3, 5, 5, top, COL.marble, 1.7);
   colonnade(ctx, S - 0.3, 0.3, S - 0.3, S - 0.55, 4, 5, top, COL.marble, 1.7);
   // roof with the pediment facing the viewer, in the god's colors
   gableRoof(ctx, 0.25, 0.2, S - 0.5, S - 0.4, 5 + top, 10, look.roof, 'v', 0.05);
@@ -887,78 +893,22 @@ function templeArt(ctx, S, variant, state, key) {
   emblem(ctx, look.emblem, ex, ey);
   // the god's piece at the front left, an altar with its fire at the front right
   frontPiece(ctx, look.front, 0.24, S - 0.1);
-  altar(ctx, S - 0.24, S - 0.08, false);
+  altar(ctx, ...templeAltar(S));
 }
 
-/** Vesta's round temple: a ring of columns around a round cella, a bronze dome. */
-function roundTempleArt(ctx, S, look) {
-  quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#d8cfbb');
-  const [cx, cy] = P(S / 2, S / 2);
-  const ell = (x, y, rx, ry, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
-  // round podium
-  ell(cx, cy, 27, 13.5, shade(COL.stone, -0.08));
-  ctx.fillRect(cx - 27, cy - 5, 54, 5);
-  ell(cx, cy - 5, 27, 13.5, shade(COL.stone, 0.12));
-  const base = cy - 5;
-  const H = 18;
-  const cols = [];
-  for (let k = 0; k < 12; k++) {
-    const a = (k / 12) * Math.PI * 2;
-    cols.push([Math.cos(a) * 21, Math.sin(a) * 10.5]);
-  }
-  cols.sort((a, b) => a[1] - b[1]);
-  const column = (dx, dy) => {
-    ctx.fillStyle = dy > 0 ? COL.marble : shade(COL.marble, -0.14);
-    ctx.fillRect(cx + dx - 1.5, base + dy - H, 3, H);
-  };
-  for (const [dx, dy] of cols) if (dy <= 0) column(dx, dy);
-  // round cella, lit from the left
-  const grad = ctx.createLinearGradient(cx - 13, 0, cx + 13, 0);
-  grad.addColorStop(0, shade(look.wall, 0.06));
-  grad.addColorStop(1, shade(look.wall, -0.2));
-  ctx.fillStyle = grad;
-  ctx.fillRect(cx - 13, base - H, 26, H);
-  ell(cx, base, 13, 6.5, shade(look.wall, -0.12));
-  ctx.fillStyle = '#4a3a2a';
-  ctx.fillRect(cx - 3, base - 10, 6, 10); // the door
-  for (const [dx, dy] of cols) if (dy > 0) column(dx, dy);
-  // entablature ring and bronze dome
-  ell(cx, base - H, 23, 11.5, shade(COL.marble, -0.05));
-  ctx.fillStyle = look.roof;
-  ctx.beginPath();
-  ctx.ellipse(cx, base - H - 1, 22, 15, 0, Math.PI, 0);
-  ctx.fill();
-  ctx.fillStyle = shade(look.roof, 0.22);
-  ctx.beginPath();
-  ctx.ellipse(cx - 6, base - H - 7, 7, 5, -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  // the eternal flame's vent at the top
-  ctx.fillStyle = COL.gold;
-  ctx.fillRect(cx - 1.2, base - H - 19, 2.4, 4);
-  emblem(ctx, 'flame', cx, base - H - 22);
-  // the sacred hearth in front
-  altar(ctx, S * 0.5, S - 0.06, true);
-}
-
-/** A small altar with its fire (a big one for Vesta's hearth). */
-function altar(ctx, u, v, big) {
+/** A small altar with its fire. */
+function altar(ctx, u, v) {
   const [x, y] = P(u, v);
   ctx.fillStyle = shade(COL.stone, 0.2);
-  ctx.fillRect(x - (big ? 4.5 : 3), y - (big ? 5 : 4), big ? 9 : 6, big ? 5 : 4);
+  ctx.fillRect(x - 3, y - 4, 6, 4);
   ctx.fillStyle = '#e8903a';
-  ctx.beginPath(); ctx.arc(x, y - (big ? 7.5 : 5.5), big ? 2.8 : 1.8, 0, Math.PI * 2); ctx.fill();
-  if (big) { ctx.fillStyle = '#f7d35a'; ctx.beginPath(); ctx.arc(x, y - 8.2, 1.4, 0, Math.PI * 2); ctx.fill(); }
+  ctx.beginPath(); ctx.arc(x, y - 5.5, 1.8, 0, Math.PI * 2); ctx.fill();
 }
 
 /** A god's emblem, about 7 px tall, centered at (x, y). */
 function emblem(ctx, kind, x, y) {
   ctx.lineCap = 'round';
   switch (kind) {
-    case 'bolt': // Jupiter's thunderbolt
-      ctx.strokeStyle = '#f3d56a';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath(); ctx.moveTo(x - 2.2, y - 3); ctx.lineTo(x + 0.8, y - 0.8); ctx.lineTo(x - 1, y + 0.2); ctx.lineTo(x + 2.2, y + 3); ctx.stroke();
-      break;
     case 'wheat': // Ceres: a sheaf
       ctx.strokeStyle = '#f5df8a';
       ctx.lineWidth = 0.7;
@@ -983,12 +933,6 @@ function emblem(ctx, kind, x, y) {
       ctx.beginPath(); ctx.arc(x, y, 2.7, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#7a5a2a';
       ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill();
-      break;
-    case 'flame': // Vesta
-      ctx.fillStyle = '#f08a2a';
-      ctx.beginPath(); ctx.moveTo(x, y - 3.5); ctx.quadraticCurveTo(x + 2.6, y, x, y + 2.5); ctx.quadraticCurveTo(x - 2.6, y, x, y - 3.5); ctx.fill();
-      ctx.fillStyle = '#f7d35a';
-      ctx.beginPath(); ctx.moveTo(x, y - 1); ctx.quadraticCurveTo(x + 1.2, y + 0.8, x, y + 2); ctx.quadraticCurveTo(x - 1.2, y + 0.8, x, y - 1); ctx.fill();
       break;
     case 'caduceus': // Mercury: a winged staff
       ctx.strokeStyle = '#f0d98a';
@@ -1020,16 +964,6 @@ function emblem(ctx, kind, x, y) {
 function frontPiece(ctx, kind, u, v) {
   const [x, y] = P(u, v);
   switch (kind) {
-    case 'eagle': { // Jupiter's eagle on a column
-      column(ctx, u, v, 0, 12, COL.marble, 1.4);
-      ctx.fillStyle = '#6b5226';
-      ctx.beginPath(); ctx.ellipse(x, y - 15, 1.6, 2.2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(x - 1, y - 16); ctx.lineTo(x - 5, y - 19); ctx.lineTo(x - 1.5, y - 14); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(x + 1, y - 16); ctx.lineTo(x + 5, y - 19); ctx.lineTo(x + 1.5, y - 14); ctx.fill();
-      ctx.fillStyle = COL.gold;
-      ctx.beginPath(); ctx.arc(x, y - 17.6, 1, 0, Math.PI * 2); ctx.fill();
-      break;
-    }
     case 'baskets': // Ceres: baskets of the harvest
       for (const [dx, dy] of [[-3, 0], [3, 1.5]]) {
         ctx.fillStyle = '#8a6030';

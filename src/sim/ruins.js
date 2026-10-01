@@ -26,14 +26,14 @@
 /**
  * Why a ruin fell (the info panel words each one, see ui/infoPanel.js).
  *   fire       burned down (its own fire risk, or flames from next door)
- *   lightning  struck by lightning (an angry god)
+ *   wrath      burned by an angry god (Mercury, angered again)
  *   raidFire   set on fire by raiders
  *   riot       set on fire by rioters
  *   collapse   fell down for want of repairs
  *   raid       torn down by raiders
  *   raidWall   a wall raiders broke through
  */
-export const RUIN_CAUSES = Object.freeze(['fire', 'lightning', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall']);
+export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall']);
 
 /** Remember what fell on these tiles (they hold rubble now). */
 export function recordRuin(game, tiles, what, cause) {

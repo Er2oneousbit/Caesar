@@ -92,11 +92,13 @@ test('each mission\'s goals are within reach of its buildings', () => {
 /**
  * Missions whose population goal is known to be more than their buildings can
  * employ, until the economy has the jobs for it: partners' yearly purchases
- * cap exports, and villa residents do not work. See the ROADMAP's playtest
- * notes, "The late missions need more jobs". Take a mission off this list
- * once its goal fits; a new mission must never be added to it.
+ * cap exports, and villa residents do not work. See the ROADMAP note "The
+ * late missions need more jobs". Take a mission off this list once its goal
+ * fits; a new mission must never be added to it (LEGACY_OVER holds the list
+ * to the missions that were over when the rule came in).
  */
 const KNOWN_OVER = ['c3', 'c4', 'c5', 'c6', 'c7'];
+const LEGACY_OVER = Object.freeze(['c3', 'c4', 'c5', 'c6', 'c7']);
 
 test('each mission\'s population goal fits the jobs its buildings give, and its map', () => {
   // Mission 1 asked for 1,200 people when a sensibly built town of Huts has
@@ -117,7 +119,7 @@ test('each mission\'s population goal fits the jobs its buildings give, and its 
     assert.ok(employsEnough(s, goal, SENSIBLE), `${s.id}: a city of ${goal} has the jobs`);
   }
   // Only the late missions: the rule holds for the first two and every new one.
-  assert.deepEqual(KNOWN_OVER, SCENARIOS.slice(2).map((s) => s.id));
+  assert.ok(KNOWN_OVER.every((id) => LEGACY_OVER.includes(id)), `KNOWN_OVER ${KNOWN_OVER} may only shrink`);
 });
 
 test('capacity model: a mission 1 town of Huts, worked through', () => {
@@ -127,7 +129,7 @@ test('capacity model: a mission 1 town of Huts, worked through', () => {
   // Lean, 200 people: 18 home tiles, eating 50 food a month (a wheat farm makes 80 to 92).
   const plan = planCity(c1, 200, LEAN);
   const count = Object.fromEntries(plan.items.map((it) => [it.key, it.count]));
-  assert.deepEqual(count, { prefecture: 2, engineer_post: 2, market: 1, forum: 1, farm_wheat: 1, granary: 1, temple_jupiter: 1, temple_ceres: 1 });
+  assert.deepEqual(count, { prefecture: 2, engineer_post: 2, market: 1, forum: 1, farm_wheat: 1, granary: 1, temple_mercury: 1, temple_ceres: 1 });
   // 2 x 6 + 2 x 5 + 5 + 6 + 10 + 12 + 2 + 2 = 59 jobs for a workforce of 64: 8% idle, fine.
   assert.equal(plan.jobs, 59);
   assert.ok(employsEnough(c1, 200, LEAN));
@@ -159,21 +161,28 @@ test('capacity model: shows, patricians, trade and winter fields', () => {
 
 test('mission 1, built only with its own buildings and sized to its jobs, is won', () => {
   // A town of 40 plots holds a little over the goal's people (some stay
-  // tents, with no well in reach). Its jobs keep everyone at work, so the mood
+  // tents, with no well in reach). The plot count is tuned: the goal is the
+  // sensible ceiling, so a few more plots push unemployment past 10% (44
+  // plots: 348 people, 14%). Its jobs keep everyone at work, so the mood
   // stays at PEACE_MOOD or more after the new city's first year and peace
   // reaches its goal. The whole demo site (about 600 people for the same
   // 100 jobs) stalls with half its workers idle.
   const s = findScenario('c1');
   const game = new Game({ scenario: s, flags: {} });
   let won = null;
-  game.events.on('victory', () => { won ??= game.time.totalMonths; });
+  game.events.on('victory', () => {
+    const c = game.city;
+    won ??= { month: game.time.totalMonths, population: c.population, unemployment: c.unemploymentRate, mood: c.sentiment };
+  });
   assert.ok(buildDemoCity(game, { level: 2, homes: 40 }).ok);
   game.runDays(24 * CONFIG.DAYS_PER_MONTH);
   const c = game.city;
-  assert.ok(c.population >= s.goals.population, `${c.population} people, goal ${s.goals.population}`);
-  assert.ok(c.unemploymentRate <= CONFIG.UNEMPLOYMENT_MOOD_FREE, `unemployment ${Math.round(c.unemploymentRate * 100)}%`);
-  assert.ok(c.sentiment >= CONFIG.PEACE_MOOD, `mood ${c.sentiment}`);
-  assert.ok(won !== null, `won (peace ${c.ratings.peace}, culture ${c.ratings.culture})`);
+  assert.ok(won !== null, `won (${c.population} people, peace ${c.ratings.peace}, culture ${c.ratings.culture})`);
+  assert.ok(won.population >= s.goals.population, `${won.population} people when won, goal ${s.goals.population}`);
+  assert.ok(won.unemployment <= CONFIG.UNEMPLOYMENT_MOOD_FREE, `unemployment ${Math.round(won.unemployment * 100)}% when won`);
+  assert.ok(won.mood >= CONFIG.PEACE_MOOD, `mood ${won.mood} when won`);
+  // And it stays so: a year on, still at work and content.
+  assert.ok(c.unemploymentRate <= CONFIG.UNEMPLOYMENT_MOOD_FREE && c.sentiment >= CONFIG.PEACE_MOOD, `month 24: unemployment ${Math.round(c.unemploymentRate * 100)}%, mood ${c.sentiment}`);
 });
 
 test('the pace model counts settlers at the game\'s own rate', () => {

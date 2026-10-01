@@ -26,15 +26,20 @@
  *              city eats. Few buildings, though not a strict floor: a walker
  *              starts each trip in a new direction and serves on the way home,
  *              so over the months a visit lasts one building can reach more.
- *   SENSIBLE   what the demo city (src/dev/demoCity.js), built like a careful
- *              player's town, has: about 2 home tiles per tile of roam (2
- *              prefectures, 2 engineers and 2 markets for its 130 or so home
- *              tiles) and 3 farms more than the town needs (it builds 4 where
- *              a mission 1 town of 300 needs 1: fields only partly on meadow,
- *              a harvest Ceres may blight, granaries to fill). Measured in
- *              mission 1 with `npm run sim -- --scenario c1 --unlocks --homes
- *              40`: 312 people, 95 to 100 jobs, 4% out of work; the profile
- *              gives 300. The campaign's goals are held to this one.
+ *   SENSIBLE   a careful player's town: 2 home tiles per tile of roam (in a
+ *              street, house, house grid each home lies beside a street, so a
+ *              street tile has 2 homes of its own; a chosen figure, not a
+ *              count: the demo city builds denser, about 1.2) and 3 farms more
+ *              than the town needs (the demo city builds 4 where a mission 1
+ *              town of 300 needs 1: fields only partly on meadow, a harvest
+ *              Ceres may blight, granaries to fill). Checked by play, not
+ *              derived: in mission 1, `npm run sim -- --scenario c1 --unlocks
+ *              --homes 40` had 312 people, 95 to 100 jobs and 4% out of work
+ *              (348 people on 44 plots: 14%), and the profile gives 300; in
+ *              mission 2 the demo city's whole site (`--level 3`) held 450 to
+ *              481 people at 4%, and the profile gives 450. The ceilings of
+ *              big cities lean on the 2: at 1.2 the late missions' would be
+ *              far higher. The campaign's goals are held to this profile.
  *
  * Both profiles share the rest:
  *

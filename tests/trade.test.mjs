@@ -224,3 +224,30 @@ test('every trade partner has a route type, map position and color', () => {
     assert.ok(Object.keys(p.sells).length && Object.keys(p.buys).length, `${id} trades something`);
   }
 });
+
+test('ships come at the original pace; on Insane, half as many traders in winter', async () => {
+  const { updateTrade } = await import('../src/sim/trade.js');
+  const { DIFFICULTY } = await import('../src/data/difficulty.js');
+  assert.ok(CONFIG.SHIP_INTERVAL_DAYS[0] >= 2 * CONFIG.CARAVAN_INTERVAL_DAYS[0] - 1, 'ships half as often as caravans');
+  // Every sea partner's yearly trade still fits in its visits (the fewest a year).
+  const visits = Math.floor((CONFIG.DAYS_PER_MONTH * 12) / CONFIG.SHIP_INTERVAL_DAYS[1]);
+  for (const [id, p] of Object.entries(TRADE_PARTNERS)) {
+    if (routeKind(id) !== 'sea') continue;
+    const most = Math.max(Object.values(p.buys).reduce((a, b) => a + b, 0), Object.values(p.sells).reduce((a, b) => a + b, 0));
+    assert.ok(visits * CONFIG.SHIP_MAX_TRADE >= most * 0.9, `${id}: ${most} a year in ${visits} ships of ${CONFIG.SHIP_MAX_TRADE}`);
+  }
+  assert.ok(CONFIG.DOCK_CAPACITY >= CONFIG.SHIP_MAX_TRADE, 'a dock holds a whole ship');
+  // Insane's winter: the wait runs at half speed; Normal's does not.
+  assert.equal(DIFFICULTY.insane.winterTrade, 2);
+  for (const [diff, slowed] of [['normal', false], ['insane', true]]) {
+    const game = newGame({ difficulty: diff });
+    const id = Object.keys(game.city.trade.routes).find((k) => routeKind(k) === 'land');
+    game.city.trade.routes[id].open = true;
+    game.time.month = 0; // Ianuarius
+    game.city.trade.routes[id].nextVisit = game.time.totalDays + 10;
+    const due = game.city.trade.routes[id].nextVisit;
+    for (let d = 0; d < 6; d++) { updateTrade(game); game.time.totalDays++; }
+    const pushed = game.city.trade.routes[id].nextVisit - due;
+    if (slowed) assert.equal(pushed, 3, 'six winter days count as three'); else assert.equal(pushed, 0);
+  }
+});

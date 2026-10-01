@@ -79,10 +79,17 @@ export function setTradeMode(game, good, mode, level) {
 /** Daily: send caravans and ships for open routes when due. */
 export function updateTrade(game) {
   const { routes } = game.city.trade;
+  // Insane's winter (winterTrade 2): the wait for the next trader runs at half
+  // speed, so half as many come from December to Februarius.
+  const slow = game.difficulty.winterTrade ?? 1;
+  const holdDay = slow > 1 && game.time.season() === 'winter' && game.time.totalDays % slow !== 0;
   for (const [id, r] of Object.entries(routes)) {
-    if (!r.open || game.time.totalDays < r.nextVisit) continue;
-    const [a, b] = CONFIG.CARAVAN_INTERVAL_DAYS;
-    if (routeKind(id) === 'sea') {
+    if (!r.open) continue;
+    if (holdDay && game.time.totalDays < r.nextVisit) r.nextVisit++;
+    if (game.time.totalDays < r.nextVisit) continue;
+    const sea = routeKind(id) === 'sea';
+    const [a, b] = sea ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
+    if (sea) {
       // A ship with nowhere to tie up tries again a few days later.
       r.nextVisit = game.time.totalDays + (spawnShip(game, id) ? game.rng.range(a, b) : 6);
     } else {

@@ -27,6 +27,8 @@
  *   protestPeaceEvery  every this many protests cost CONFIG.PROTEST_PEACE, then the
  *                    count starts again (0: protests never cost peace)
  *   disease          how fast unhealthy homes build disease risk (sim/disease.js)
+ *   winterTrade      how much longer caravans and ships take to come in winter
+ *                    (December to Februarius): 2 = half as many visits (sim/trade.js)
  *   loanInterest     what a loan from Rome costs, over its whole term (0.2: 20%;
  *                    sim/loans.js)
  *
@@ -68,6 +70,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 0, protestPeaceEvery: 0,
     disease: 0.5, // an outbreak is rare
     loanInterest: 0.1,
+    winterTrade: 1,
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -80,6 +83,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 1, protestPeaceEvery: 0,
     disease: 1,
     loanInterest: 0.2,
+    winterTrade: 1,
   }),
   hard: Object.freeze({
     name: 'Hard',
@@ -92,10 +96,11 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 2, protestPeaceEvery: 0,
     disease: 1.3,
     loanInterest: 0.3,
+    winterTrade: 1,
   }),
   insane: Object.freeze({
     name: 'Insane',
-    desc: 'For veterans. Scarce money, grumpy citizens, more fires, more crime that costs much more peace (even protests, now and then), more disease, slow farms and workshops, nothing grows on the farms in winter, '
+    desc: 'For veterans. Scarce money, grumpy citizens, more fires, more crime that costs much more peace (even protests, now and then), more disease, slow farms and workshops, nothing grows on the farms in winter and half as many traders come, '
       + 'bigger and tougher raids that come more often, and an Emperor who demands 50% more, more often, with less time to deliver.',
     // winterGrowth 0: Dec-Feb farms keep their progress but add none (see sim/production.js).
     funds: 0.4, risk: 1.5, production: 0.8, immigration: 0.7, mood: -8, winterGrowth: 0,
@@ -106,6 +111,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 3, protestPeaceEvery: 5,
     disease: 1.5,
     loanInterest: 0.4,
+    winterTrade: 2, // the owner's idea: winter roads and seas halve trade
   }),
 });
 

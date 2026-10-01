@@ -34,7 +34,7 @@ export const CONFIG = {
   // Real-time pace only: the balance is all per tick/day, so this sets how
   // fast everything looks. At 20 people walked 2 tiles a second (a jog for
   // their size); at 12 they walk 1.2 and a month takes about 27 s at 1x.
-  TICKS_PER_SECOND: 12,
+  TICKS_PER_SECOND: 8, // a year in 8 minutes at 1x (was 12: 5.3 minutes, and seasons flew by, the owner said); nothing in game time changes
   TICKS_PER_DAY: 20,
   DAYS_PER_MONTH: 16,
   MONTHS_PER_YEAR: 12,
@@ -43,7 +43,7 @@ export const CONFIG = {
   AUTOSAVE_EVERY_MONTHS: 3,
 
   // --- Walkers -------------------------------------------------------------
-  WALKER_SPEED: 0.1, // tiles per tick: 2 tiles a game day (1.2 tiles/s at 1x)
+  WALKER_SPEED: 0.1, // tiles per tick: 2 tiles a game day (0.8 tiles/s at 1x)
   CART_SPEED: 0.08,
   SERVICE_RADIUS: 2, // walkers serve buildings within this many tiles
   ACCESS_DAYS: 96, // how long a house "remembers" a service visit (six months)
@@ -267,12 +267,13 @@ export const CONFIG = {
   VENUS_WRATH_DISEASE: 80,
 
   // --- Trade ---------------------------------------------------------------
-  CARAVAN_INTERVAL_DAYS: [32, 56], // random range between visits per open route
+  CARAVAN_INTERVAL_DAYS: [32, 56], // random range between caravans per open land route (about the original's pace)
+  SHIP_INTERVAL_DAYS: [64, 96], // ...and between ships per sea route: about 2.4 a year, the original's (research: 2-2.8); was 32-56, twice as often
   CARAVAN_MAX_TRADE: 800, // units bought + sold per visit (each direction)
-  SHIP_MAX_TRADE: 1200, // ships carry more than caravans
+  SHIP_MAX_TRADE: 2400, // units each way per ship: twice the old 1,200, so half as many ships still carry a route's yearly trade (Corinthus buys 4,600 a year)
   SHIP_SPEED: 0.06, // tiles per tick
   SHIP_DOCK_TICKS: 120, // how long a ship stays tied up (loading/unloading)
-  DOCK_CAPACITY: 1600, // units of unloaded imports a dock can hold
+  DOCK_CAPACITY: 2400, // units of unloaded imports a dock can hold (a whole ship's load)
   DOCK_REACH: 60, // road tiles: warehouses this close to a dock sell exports to ships
 
   // --- Ratings ------------------------------------------------------------

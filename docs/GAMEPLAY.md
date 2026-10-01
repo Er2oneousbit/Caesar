@@ -4,7 +4,7 @@ The rules and numbers behind Colonia. Every number here comes from `src/config.j
 
 ## Time
 
-* A game day takes 1.67 seconds at 1x (12 simulation ticks a second, 20 a day); 16 days make a month (about 27 seconds) and 12 months a year (about 5 minutes at 1x).
+* A game day takes 2.5 seconds at 1x (8 simulation ticks a second, 20 a day); 16 days make a month (40 seconds), 3 months a season (2 minutes) and 12 months a year (8 minutes at 1x; it was 5.3 until v0.12.2, when seasons flew by). 2x, 4x and 8x run faster.
 * Speeds: 1x, 2x, 4x, 8x. People walk 2 tiles a game day, 1.2 tiles a second at 1x; their legs step with the ground they cover, so they match at every speed and stand still while paused. Carts roll a little slower, soldiers march at their own pace (table under *Military*).
 
 ## Map sizes
@@ -25,6 +25,7 @@ Chosen in the Sandbox setup and in every campaign briefing (the menus remember y
 | Fire and collapse risk | x0.5 | x1 | x1.3 | x1.5 |
 | Farm, raw material and workshop speed | x1.15 | x1 | x0.9 | x0.8 |
 | Farms grow in winter (December to Februarius) | yes | yes | yes | no |
+| Caravans and ships in winter | as usual | as usual | as usual | half as many |
 | Settlers per day | x1.25 | x1 | x0.85 | x0.7 |
 | City mood | | | | -8 |
 | Raiders per warband | x0.7 | x1 | x1.3 | x1.5 |
@@ -162,7 +163,7 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 * **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.
 * **Taxes:** at the default 7% rate each resident pays `5 x the level's tax` Dn per year (a Hut resident 10, a Domus resident 15, an Insula resident 25, an Imperial Palatium resident 80; see the housing table). A town of Cottages with most of its people registered and working about pays its wages; Huts do not, and better homes bring a profit. The rate scales this linearly. Only homes a tax collector visited in the last 48 days pay; a home's panel says whether it is registered and for how many more days, or why not (no Forum, a Forum without workers, or no collector lately), and the Finance tab counts the homes that are not. A lone Forum's collector can spend whole rounds on streets nobody lives on, such as the Imperial road, and the registrations he left behind run out: a second Forum, or roadblocks at the ends of a block, keep collectors on your streets.
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
-* **Trade:** open a route once (Trade advisor), then a caravan or ship comes every 32-56 days. Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
+* **Trade:** open a route once (Trade advisor), then a caravan comes every 32-56 days and a ship every 64-96 (about the original's pace; on Insane both come half as often in winter). Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
 * **Army pay:** 2-3 Dn per soldier per month (ledger row "Army pay"). Raiders who get away carry off up to 15% of the treasury ("Lost to raiders").
 * Construction needs money in the treasury; running wages into debt costs 3 favor a month, and nothing can be built until you are out of it.
 * **Loans from Rome** (Finance advisor): Rome lends 2,000 Dn whenever no loan is being repaid, in debt or not, repaid automatically in equal monthly instalments over 24 months with interest over the whole term of 10% on Easy, 20% on Normal, 30% on Hard and 40% on Insane (2,200 to 2,800 Dn in all). Instalments are paid each month before wages, even from an empty treasury (the debt that follows costs favor from that month). The loan and its repayments have ledger lines of their own and do not count as profit or loss for prosperity; borrowed money pays tribute and the Emperor's requests like any other, at the loan's interest.
@@ -174,12 +175,12 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 | Who comes | a caravan (with a mule: plain bales on the way in, what it bought from you on the way out) | a merchant ship, sail striped in the partner's color |
 | From | the Imperial road entrance | the map edge where the river/sea leaves the map |
 | To | the nearest staffed warehouse on the road network that is not emptying | a free, staffed **Dock** |
-| Per visit | up to 800 units each way | up to 1,200 units each way |
-| Imports go | straight into that warehouse, unless it refuses the good or is emptying | onto the dock's quay (1,600 units); dock workers cart them to warehouses, granaries or workshops that accept them |
+| Per visit | up to 800 units each way | up to 2,400 units each way |
+| Imports go | straight into that warehouse, unless it refuses the good or is emptying | onto the dock's quay (2,400 units); dock workers cart them to warehouses, granaries or workshops that accept them |
 | Exports come from | that warehouse | staffed warehouses within 60 road tiles of the dock |
 
 * A **Dock** (3x3, 10 workers, 120 Dn) must touch navigable water: water connected to the map edge through a body of at least 80 tiles. Rivers and coasts always qualify, big lakes touching the edge sometimes do, desert and plains maps usually do not. Ships sail under bridges.
-* One ship ties up at a dock at a time (6 game days, 10 seconds at 1x); more docks serve more routes at once.
+* One ship ties up at a dock at a time (6 game days, 15 seconds at 1x); more docks serve more routes at once.
 * Partners and routes (open cost in Dn):
 
 | Partner | Route | Sells | Buys |
@@ -359,7 +360,7 @@ Seven missions, each opening the next. The first two teach the basics and have n
 
 Mission 3 opens the Amphitheater and the Gladiator School for its Domus: a theater alone gives a home at most 16 entertainment (10 for a visit, 6 for the seats), and a Domus needs 20.
 
-**How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month. In the first two missions peace sets the length, from mission 3 on the population, so even a city that is always ready needs about 1.3 years for the first mission, 2.1, 3.6, 5.7, 7.8 and 8.5 for the next ones and 15 for the last (`npm run sim -- --pace` prints the table). A year is about 5.3 minutes at 1x; with the city to build first, that makes roughly half an hour for the first missions and a few hours for the last at normal speed.
+**How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month. In the first two missions peace sets the length, from mission 3 on the population, so even a city that is always ready needs about 1.3 years for the first mission, 2.1, 3.6, 5.7, 7.8 and 8.5 for the next ones and 15 for the last (`npm run sim -- --pace` prints the table). A year is 8 minutes at 1x; with the city to build first, that makes roughly 45 minutes for the first missions and a few hours for the last at normal speed.
 
 ## The world around the city (visual only)
 

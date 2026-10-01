@@ -14,7 +14,7 @@
  *                                 there, missions 3 to 7 excepted for now)
  *   paceYears                     the planned floor: the fewest game years the
  *                                 goals allow (sim/pace.js; a test holds the
- *                                 goals to it). A year is about 5.3 minutes at 1x
+ *                                 goals to it). A year is 8 minutes at 1x
  *   unlocks: 'all' | string[]     building keys + tool keys available
  *   partners: string[]            trade partner ids (see TRADE_PARTNERS). Only list
  *                                 sea partners on maps with navigable water

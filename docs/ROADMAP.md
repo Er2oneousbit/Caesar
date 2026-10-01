@@ -16,6 +16,25 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.12.2)
+
+The owner's playtests on Normal and Insane, a 5-year sandbox save among them:
+
+* **Dock trade as in the original** (the owner: "zip zoom outta there"): a ship ties up and waits while the Dock's workers carry its goods. A crane lands imports on the quay, 400 units every 3 days (paid as they land), and up to 3 dock workers (by staffing) cart them on, wherever any cart would take them, then fetch exports from warehouses within 60 road tiles and hand them aboard (paid on hand-over), 400 units a trip. The ship sails when both sides are done, after 48 days at most, or at once with nothing to trade. A full exchange takes about 18, 25 and 38 days with the warehouse 5, 10 and 15 road tiles off (the original's 23, 33 and 44). One Dock is now busy most of the year: a city trading with several sea partners does better with two (exports 4,309 Dn a year with one, 5,440 with two, in the harbor sim). The Dock's and the ship's panels show what is left to unload and load. None of the original's dock bugs (paid exports left behind, lost imports)
+* **Ships at the original's pace**: every 64 to 96 days per sea route (were 32 to 56, twice the original's), carrying up to 2,400 units each way (were 1,200); caravans unchanged. On **Insane** half as many caravans and ships come in winter (the owner's idea). A partner's distance changes nothing, as in the original; on the empire map a new route's first trader now sets out from its city instead of appearing halfway
+* **The empire map is the real Mediterranean**: Iberia, Gaul and the Alps, the Italian boot with Sicily, Sardinia and Corsica, Greece and the Aegean, Asia Minor, the Levant, Egypt and the Nile, North Africa, with rivers, mountains and region names; every city where it really is (Lugdunum up the Rhone, Corinthus on its isthmus), your province on the Etruscan coast; land routes over land, sea routes over water (tests hold both)
+* **A slower calendar**: a year takes 8 minutes at 1x (was 5.3), a season 2 minutes (the owner: seasons flew by). Nothing changes in game time; 2x-8x run faster
+* **Fire, collapse and disease at the original's pace**: every fire and collapse rate runs x0.62, the original's clock (an ordinary building left unserved on Normal lasts about 10 months); disease 0.5 -> 0.2 a day at most, and a sick home now adds 0.3 a day to its neighbors (was 1, five times a Family Tent's own: in the owner's save one outbreak set off whole blocks, about 30 a year among 31 homes; replayed, about 10)
+* **Later trouble**: the Emperor's first request comes 36 to 48 months in, from 500 people (was 14 to 26 months, from 150); a sandbox's first raid after 8 years with occasional raids and 5 with frequent ones (were 5 and 3). The sandbox setup said raiders need 120 people; it is 300
+* **Rubble has a Rebuild button**: the same building on the same spot (a home's plots as empty lots), at the usual price plus clearing, undone like any building
+* **Caravans and ships list their business**: on their way in, what they come to buy and sell; once traded, what they bought and sold here and the denarii each way
+* **People are easier to click**: the walker under the pointer is taken when the button goes down (a walker moved on before the release), with a bigger target on open ground; a building or roadblock under the click keeps it
+* **Baths without piped water look dry** (they were always drawn full)
+* **The demo city gives every building a road** (rock or water could break one of its fixed streets: 51 of 120 menu towns showed no-road signs, and the balance sim's cities had road-less fountains). Its money yardstick moved: mission 3's town now pays its fountain workers
+* Saves are version 8 (dock trade); version 7 to 4 saves load (a ship moored in a version 7 save sails on at once)
+* Measured against v0.12.1 (`npm run sim`, 3 years): Normal fires 1 -> 1, outbreaks 5 -> 0, peace 33 -> 36; Hard 618 -> 669 people, fires 5 -> 1; Insane 515 -> 620 people, fires 13 -> 3, margin -3,141 -> 384. The campaign's pace unchanged in years
+* 341 unit tests (+31), 100 browser checks
+
 ## Done (v0.12.1)
 
 * **The main menu never shows the dark beyond the map** (the owner: it opened with a lot of black on the screen). Its town was built on a 64-tile map, often near the edge, and the view centered on it; the menu map is now 96 tiles and its slow tour is fitted to the screen: the town in the middle where the map allows, else the tour moves inward (keeping the town in view) and swings less, and a screen bigger than the map zooms in, fitted again when the window changes size. Probed at 1920x1080, 1280x800, 2560x1440 and a phone over six random menu maps: no screen corner off the map in five minutes of drift

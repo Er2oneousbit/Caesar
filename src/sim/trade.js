@@ -8,11 +8,19 @@
  *     to the nearest staffed warehouse, sells the city its imports, buys its
  *     exports, then leaves by the exit.
  *   - Sea routes: a merchant ship sails in from the map edge (map.seaEntry)
- *     to a free, staffed Dock. It unloads imports INTO THE DOCK (dock workers
- *     then cart them to warehouses, workshops or granaries), buys exports from
- *     warehouses within DOCK_REACH road tiles of the dock, waits while it is
- *     loaded, then sails away. Ships need navigable water: a river, the coast
- *     or a big lake that reaches the map edge.
+ *     to a free, staffed Dock and moors there while goods move both ways:
+ *       - on mooring it fixes its manifest: what it will sell (imports) and
+ *         what it wants to buy (exports), with the same rules as a caravan;
+ *       - the dock's crane lands its imports on the quay, DOCK_LOAD every
+ *         DOCK_UNLOAD_DAYS, and the city pays as each lot lands;
+ *       - the dock's workers (1 to 3, by staffing) cart quay goods to where
+ *         any cart would take them, and fetch exports, DOCK_LOAD a trip, from
+ *         staffed warehouses within DOCK_REACH road tiles; the city is paid
+ *         when a lot is handed over to the ship;
+ *       - the ship casts off when both sides are done, after
+ *         SHIP_MAX_STAY_DAYS, or when its Dock is lost.
+ *     Ships need navigable water: a river, the coast or a big lake that
+ *     reaches the map edge.
  *   - Per good, the player chooses: none / import / export, plus a stock level:
  *       export: sell only while city stock is ABOVE the level
  *       import: buy only while city stock is BELOW the level
@@ -24,8 +32,8 @@ import { CONFIG } from '../config.js';
 import { GOODS, GOOD_KEYS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { spawnWalker, killWalker } from './entities.js';
-import { followPath, walkTo } from './movement.js';
-import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage } from './storage.js';
+import { followPath, walkTo, goHome } from './movement.js';
+import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage, receiveGoods, storageByRoad } from './storage.js';
 import { dispatchCart, cartsOut } from './production.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
@@ -248,57 +256,48 @@ function spawnShip(game, partnerId) {
   return true;
 }
 
-/** A ship reached its berth: trade, then wait while it is loaded. */
-export function shipArrive(game, w) {
-  const dock = game.buildings.get(w.target);
-  if (dock && dock.def.kind === 'dock') {
-    const out = tradeAtDock(game, w.partner, dock);
-    logTrade(game, w.partner, out, 'sea');
-    w.deal = dealOf(out);
-    game.events.emit('sound', { name: 'coin' });
-  }
-  w.state = 'docked';
-  w.waitTicks = CONFIG.SHIP_DOCK_TICKS;
-  w.afterWait = 'shipLeave';
+// ---------------------------------------------------------------------------
+// Sea: a ship at the dock
+// ---------------------------------------------------------------------------
+//
+// A moored ship keeps on its walker:
+//   unload     { good: units } still aboard to sell to the city (imports)
+//   wants      { good: units } it still wants to buy (exports)
+//   deal       what has changed hands so far (dealOf: sold, bought, earned, spent)
+//   mooredTick game.time.totalTicks when it tied up
+//   crane      ticks of crane work toward the next lot; craneIdle: ticks in a
+//              row its cargo could not land; craneTurn, wantTurn: whose turn
+//              among the goods (one good per lot, in turn); levelHeld: { good:
+//              day } goods the import level held back today
+//   wantsStuck nothing more can be fetched for it and no worker is out for
+//              it (worked out at the dock's daily tick and when a worker
+//              gets home)
+// A dock worker out on an export carries `claim` { ship, good, amount, wh,
+// picked }: the lot it is fetching, held against the ship's wants and, until
+// picked up, against the city's surplus (so several workers, of any dock,
+// never take a good below its export level) and the warehouse's stock.
+// Claims are read off the walkers (exportClaims), never kept as totals, so
+// a worker that vanishes takes its claim with it.
+
+/** Units in whole trade lots (100s), never below 0. */
+function lots(n) {
+  return n > 0 ? Math.floor(n / CONFIG.CART_CAPACITY) * CONFIG.CART_CAPACITY : 0; // (NaN: 0)
 }
 
-/** Loaded: sail back to open water and leave the map. */
-export function shipLeave(game, w) {
-  const { map } = game;
-  const dock = game.buildings.get(w.target);
-  if (dock && dock.shipId === w.id) dock.shipId = 0;
-  if (!map.seaEntry) { killWalker(game, w); return; }
-  const here = map.idx(w.x, w.y);
-  const path = shipPath(game, here, map.idx(map.seaEntry.x, map.seaEntry.y));
-  w.state = 'leaving';
-  if (path) followPath(game, w, path);
-  else killWalker(game, w);
+function isEmpty(o) {
+  if (!o) return true;
+  for (const k in o) if (o[k] > 0) return false;
+  return true;
 }
 
 /**
- * Warehouses a dock can reach by road (within DOCK_REACH tiles), nearest
- * first. Ships buy exports from these.
+ * Dock workers a Dock fields at its staffing, as in the original: 3 at 75%
+ * or more, 2 at 50% or more, 1 with any staff (of its 10 jobs: 8 or more,
+ * 5 to 7, 1 to 4).
  */
-function warehousesNear(game, dock) {
-  const { map, pf, buildings } = game;
-  if (dock.accessRoad < 0) return [];
-  const found = [];
-  const seen = new Set();
-  const w = map.w;
-  pf.bfsRoad(dock.accessRoad, (i) => {
-    const x = i % w;
-    const y = (i / w) | 0;
-    for (const [nx, ny] of [[x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y]]) {
-      if (!map.inBounds(nx, ny)) continue;
-      const id = map.building[map.idx(nx, ny)];
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const b = buildings.get(id);
-      if (b && b.def.kind === 'warehouse' && b.efficiency > 0) found.push(b);
-    }
-    return false; // keep searching: we want all of them
-  }, CONFIG.DOCK_REACH);
-  return found;
+export function dockWorkers(dock) {
+  const e = dock.efficiency;
+  return e >= 0.75 ? 3 : e >= 0.5 ? 2 : e > 0 ? 1 : 0;
 }
 
 /** Units currently held on a dock's quay. */
@@ -308,28 +307,529 @@ export function dockUsed(dock) {
   return n;
 }
 
-/** A ship trades at a dock: exports from nearby warehouses, imports onto the quay. */
-export function tradeAtDock(game, partnerId, dock) {
-  const out = { earned: 0, spent: 0, sold: {}, bought: {} };
+/** The ship moored at this dock now (not one on its way in or leaving), or null. */
+export function mooredShip(game, dock) {
+  const s = dock && dock.shipId ? game.walkers.get(dock.shipId) : null;
+  return s && s.state === 'docked' && s.target === dock.id ? s : null;
+}
+
+/** Ticks before a moored ship's stay limit. */
+export function stayTicksLeft(game, ship) {
+  return CONFIG.SHIP_MAX_STAY_DAYS * CONFIG.TICKS_PER_DAY - (game.time.totalTicks - (ship.mooredTick || 0));
+}
+
+/** Whole days a moored ship has been at the dock. */
+export function daysMoored(game, ship) {
+  return Math.floor((game.time.totalTicks - (ship.mooredTick || 0)) / CONFIG.TICKS_PER_DAY);
+}
+
+/** Ticks the crane takes to land `n` units. */
+function craneTicks(n) {
+  return Math.max(1, Math.round((n * CONFIG.DOCK_UNLOAD_DAYS * CONFIG.TICKS_PER_DAY) / CONFIG.DOCK_LOAD));
+}
+
+/**
+ * Ticks a cart needs to walk `tiles` road tiles, plus a few for the stops (a
+ * walker steps a tile in 1 / CART_SPEED ticks, arrives on the tick it gets
+ * there, and a path that ends where it stands takes one tick).
+ */
+function tripTicks(tiles) {
+  return Math.ceil(tiles / CONFIG.CART_SPEED) + 4;
+}
+
+/**
+ * Every dock worker's export claim, read off the walkers:
+ *   open    { good: units } claimed but not yet picked up (all ships)
+ *   byShip  Map(ship id -> { good: units }) on the way to that ship, picked up or not
+ *   atWh    Map(warehouse id -> { good: units }) still to be picked up there
+ *   byPartner Map(partner id -> { good: units }) on the way to its ships: what
+ *           its yearly quota will count when handed over
+ */
+export function exportClaims(game) {
+  const open = {};
+  const byShip = new Map();
+  const atWh = new Map();
+  const byPartner = new Map();
+  const add = (map, key, good, n) => {
+    let o = map.get(key);
+    if (!o) map.set(key, (o = {}));
+    o[good] = (o[good] || 0) + n;
+  };
+  for (const w of game.walkers.values()) {
+    const c = w.claim;
+    if (!c || w.dead) continue;
+    add(byShip, c.ship, c.good, c.amount);
+    if (c.partner) add(byPartner, c.partner, c.good, c.amount);
+    if (!c.picked) {
+      open[c.good] = (open[c.good] || 0) + c.amount;
+      add(atWh, c.wh, c.good, c.amount);
+    }
+  }
+  return { open, byShip, atWh, byPartner };
+}
+
+/** A partner's yearly quota left for a good it buys, less lots its ships' workers are bringing. */
+function exportQuotaLeft(game, partnerId, good, claims) {
+  const p = TRADE_PARTNERS[partnerId];
   const route = game.city.trade.routes[partnerId];
-  if (!TRADE_PARTNERS[partnerId] || !route) return out;
-  sellExports(game, partnerId, warehousesNear(game, dock), CONFIG.SHIP_MAX_TRADE, out);
-  buyImports(game, partnerId, CONFIG.SHIP_MAX_TRADE, out, () => Math.max(0, CONFIG.DOCK_CAPACITY - dockUsed(dock)), (good, n) => { dock.stock[good] += n; });
-  route.visits++;
+  if (!p || !route) return 0;
+  return (p.buys[good] || 0) - (route.sold[good] || 0) - (claims.byPartner.get(partnerId)?.[good] || 0);
+}
+
+/**
+ * Imports of a good already on their way into the city: what other moored
+ * ships still have aboard for it (but `exceptShip`), and what dock workers
+ * are carting from a quay to storage (off the quay, not yet in storage).
+ * Import levels count them, so ships at two docks, or a ship and a caravan,
+ * do not both fill the same shortfall.
+ */
+export function importsComing(game, good, exceptShip = 0, ships = true) {
+  let n = 0;
+  for (const w of game.walkers.values()) {
+    if (w.dead) continue;
+    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) n += w.unload?.[good] || 0;
+    // A dock worker's load of imports, to storage or back to the quay (not an export: that has a claim).
+    else if (w.type === 'cart' && !w.claim && (w.state === 'deliver' || w.state === 'return') && w.cargo?.good === good && game.buildings.get(w.origin)?.def.kind === 'dock') n += w.cargo.amount;
+  }
+  return n;
+}
+
+/**
+ * Staffed warehouses within DOCK_REACH road tiles of a dock, as
+ * Map(id -> road tiles from the dock): where its workers fetch exports.
+ */
+function exportSources(game, dock) {
+  const out = new Map();
+  if (dock.accessRoad < 0) return out;
+  for (const s of storageByRoad(game, dock.accessRoad, 'warehouse')) {
+    if (s.dist <= CONFIG.DOCK_REACH && s.b.efficiency > 0) out.set(s.b.id, s.dist);
+  }
   return out;
 }
 
-/** Daily: dock workers cart unloaded imports to where they are needed. */
+/**
+ * What a ship will trade, fixed when it ties up (amounts are not worked out
+ * again, so goods on the way never count twice; the rules that can change
+ * meanwhile are checked again lot by lot):
+ *   unload: per good the partner sells and you import, the least of its
+ *           quota left, the shortfall below your import level (less imports
+ *           already on their way: importsComing) and what is left of
+ *           SHIP_MAX_TRADE;
+ *   wants:  per good the partner buys and you export, the least of its quota
+ *           left (less lots its ships' workers are bringing), the surplus
+ *           above your export level (less lots other workers have claimed),
+ *           what is left of SHIP_MAX_TRADE, and what the quay and the
+ *           warehouses the dock's workers could fetch from in time hold.
+ * In whole lots of 100.
+ */
+export function shipManifest(game, partnerId, dock, exceptShip = 0) {
+  const p = TRADE_PARTNERS[partnerId];
+  const route = game.city.trade.routes[partnerId];
+  const settings = game.city.trade.settings;
+  const unload = {};
+  const wants = {};
+  if (!p || !route) return { unload, wants };
+  let budget = CONFIG.SHIP_MAX_TRADE;
+  for (const [good, cap] of Object.entries(p.sells)) {
+    const s = settings[good];
+    if (!s || s.mode !== 'import') continue;
+    const n = lots(Math.min(cap - (route.bought[good] || 0), s.level - cityStock(game, good) - importsComing(game, good, exceptShip), budget));
+    if (n > 0) { unload[good] = n; budget -= n; }
+  }
+  const claims = exportClaims(game);
+  // A fresh fetch from the dock must be back before the stay limit.
+  const far = CONFIG.SHIP_MAX_STAY_DAYS * CONFIG.TICKS_PER_DAY;
+  const sources = [...exportSources(game, dock)].filter(([, d]) => tripTicks(2 * d) < far).map(([id]) => game.buildings.get(id));
+  budget = CONFIG.SHIP_MAX_TRADE;
+  for (const [good, cap] of Object.entries(p.buys)) {
+    const s = settings[good];
+    if (!s || s.mode !== 'export') continue;
+    let held = dock.stock[good] || 0;
+    for (const b of sources) held += b.stock[good] || 0;
+    const surplus = cityStock(game, good) - s.level - (claims.open[good] || 0);
+    const n = lots(Math.min(exportQuotaLeft(game, partnerId, good, claims), surplus, budget, held));
+    if (n > 0) { wants[good] = n; budget -= n; }
+  }
+  return { unload, wants };
+}
+
+/** A ship reached its berth: fix its manifest and set the dock's workers going. */
+export function shipArrive(game, w) {
+  const dock = game.buildings.get(w.target);
+  const route = game.city.trade.routes[w.partner];
+  w.state = 'docked';
+  w.mooredTick = game.time.totalTicks;
+  w.deal = dealOf({});
+  w.unload = {};
+  w.wants = {};
+  w.crane = 0;
+  w.craneIdle = 0;
+  w.craneTurn = 0;
+  w.wantTurn = 0;
+  w.wantsStuck = false;
+  // The Dock was lost while the ship sailed in: it turns round.
+  if (!dock || dock.def.kind !== 'dock' || dock.shipId !== w.id || dock.efficiency <= 0 || !route) {
+    shipLeave(game, w);
+    return;
+  }
+  route.visits++;
+  Object.assign(w, shipManifest(game, w.partner, dock));
+  // Nothing to trade: it sails at once.
+  if (isEmpty(w.unload) && isEmpty(w.wants)) {
+    shipLeave(game, w);
+    return;
+  }
+  handOverFromQuay(game, w, dock);
+  dockDispatch(game, dock);
+  reviewStay(game, w, dock);
+}
+
+/**
+ * Every tick while moored: the crane lands the next lot when it is ready,
+ * and the ship casts off when its stay is over (sim/walkers.js calls this).
+ */
+export function shipMoored(game, w) {
+  const dock = game.buildings.get(w.target);
+  if (!dock || dock.def.kind !== 'dock' || dock.shipId !== w.id || stayTicksLeft(game, w) <= 0) {
+    shipLeave(game, w);
+    return;
+  }
+  if (dock.efficiency > 0) runCrane(game, w, dock);
+  if (stayDone(game, w)) shipLeave(game, w);
+}
+
+/**
+ * Both sides done? Cargo: nothing aboard, or nothing could land for a whole
+ * day (no room on the quay, no money, no partner quota). Wants: all met, or
+ * nothing more can be fetched and no worker is out for this ship.
+ */
+function stayDone(game, w) {
+  const cargoDone = isEmpty(w.unload) || w.craneIdle >= CONFIG.TICKS_PER_DAY;
+  return cargoDone && (isEmpty(w.wants) || w.wantsStuck);
+}
+
+/**
+ * The most of `good` the crane can land now (0: none, -1: drop the good, it
+ * is no longer on Import or the partner's quota is used up): a lot of up
+ * to DOCK_LOAD, as much as the quay has room for and the city can pay.
+ * `level`: also no more than the city is still short of its import level
+ * (a caravan or another ship may have filled it meanwhile), counting dock
+ * workers' loads on their way to storage. That looks at every building, so
+ * the crane asks only when a lot is due.
+ */
+function landable(game, w, dock, good, level = false) {
+  const s = game.city.trade.settings[good];
+  const p = TRADE_PARTNERS[w.partner];
+  const route = game.city.trade.routes[w.partner];
+  if (!s || s.mode !== 'import' || !p || !route) return -1;
+  const quota = (p.sells[good] || 0) - (route.bought[good] || 0);
+  if (quota < CONFIG.CART_CAPACITY) return -1;
+  const afford = game.cheats.freeBuild ? Infinity : Math.floor(Math.max(0, game.city.treasury) / GOODS[good].buy) * 100;
+  const short = level ? s.level - cityStock(game, good) - importsComing(game, good, 0, false) : Infinity;
+  return lots(Math.min(CONFIG.DOCK_LOAD, w.unload[good], CONFIG.DOCK_CAPACITY - dockUsed(dock), quota, afford, short));
+}
+
+/** One tick of the crane: the next lot in turn lands once its time is up. */
+function runCrane(game, w, dock) {
+  if (isEmpty(w.unload)) return;
+  for (const good of Object.keys(w.unload)) {
+    if (!(w.unload[good] > 0) || landable(game, w, dock, good) < 0) delete w.unload[good];
+  }
+  const goods = Object.keys(w.unload);
+  if (!goods.length) return;
+  // Work done waits for the next lot, a full lot's worth at most.
+  w.crane = Math.min((w.crane || 0) + 1, craneTicks(CONFIG.DOCK_LOAD));
+  for (let k = 0; k < goods.length; k++) {
+    const i = ((w.craneTurn || 0) + k) % goods.length;
+    // A good held back by the import level today waits until tomorrow (that check looks at the whole city).
+    if (w.levelHeld?.[goods[i]] === game.time.totalDays) continue;
+    const lot = landable(game, w, dock, goods[i]);
+    if (lot <= 0) continue;
+    if (w.crane < craneTicks(lot)) { w.craneIdle = 0; return; }
+    // Due: now the import level too (the lot may come out smaller, never larger).
+    const n = landable(game, w, dock, goods[i], true);
+    if (n <= 0) {
+      w.levelHeld = { ...w.levelHeld, [goods[i]]: game.time.totalDays };
+      continue;
+    }
+    w.craneIdle = 0;
+    w.crane -= craneTicks(n);
+    w.craneTurn = i + 1;
+    land(game, w, dock, goods[i], n);
+    return;
+  }
+  w.craneIdle = (w.craneIdle || 0) + 1;
+}
+
+/** A lot lands on the quay: the city pays for it now, and the partner's quota counts it. */
+function land(game, w, dock, good, n) {
+  const route = game.city.trade.routes[w.partner];
+  const money = Math.round((GOODS[good].buy * n) / 100);
+  dock.stock[good] += n;
+  w.unload[good] -= n;
+  if (w.unload[good] <= 0) delete w.unload[good];
+  transact(game, 'imports', -money);
+  route.bought[good] = (route.bought[good] || 0) + n;
+  w.deal.bought[good] = (w.deal.bought[good] || 0) + n;
+  w.deal.spent += money;
+  logGoods(game, good, 'imported', n);
+  game.events.emit('sound', { name: 'coin' });
+  dockDispatch(game, dock); // a free dock worker can take it on now
+}
+
+/**
+ * Hand up to `n` units of `good` to the ship: the city is paid and the
+ * partner's quota counts them now. Only while the ship still wants the good,
+ * it is still on Export and the quota has room. @returns units handed over
+ */
+function handOver(game, w, good, n) {
+  const s = game.city.trade.settings[good];
+  const p = TRADE_PARTNERS[w.partner];
+  const route = game.city.trade.routes[w.partner];
+  if (!s || s.mode !== 'export' || !p || !route) return 0;
+  const quota = (p.buys[good] || 0) - (route.sold[good] || 0);
+  // The partner bought its year's worth meanwhile (another of its ships): it wants no more.
+  if (quota < CONFIG.CART_CAPACITY) delete w.wants[good];
+  const take = lots(Math.min(n, w.wants[good] || 0, quota));
+  if (take <= 0) return 0;
+  const money = Math.round((GOODS[good].sell * take) / 100);
+  w.wants[good] -= take;
+  if (w.wants[good] <= 0) delete w.wants[good];
+  transact(game, 'exports', money);
+  route.sold[good] = (route.sold[good] || 0) + take;
+  w.deal.sold[good] = (w.deal.sold[good] || 0) + take;
+  w.deal.earned += money;
+  logGoods(game, good, 'exported', take);
+  game.events.emit('sound', { name: 'coin' });
+  return take;
+}
+
+/**
+ * Goods of a kind the ship wants that already sit on the quay go aboard
+ * without a walk: up to its wants not yet claimed by a worker, and never
+ * below the export level.
+ */
+function handOverFromQuay(game, w, dock) {
+  const settings = game.city.trade.settings;
+  const claims = exportClaims(game);
+  const mine = claims.byShip.get(w.id) || {};
+  for (const good of Object.keys(w.wants)) {
+    const s = settings[good];
+    if (!s || s.mode !== 'export') continue;
+    const n = lots(Math.min(dock.stock[good] || 0, w.wants[good] - (mine[good] || 0), cityStock(game, good) - s.level - (claims.open[good] || 0)));
+    if (n <= 0) continue;
+    dock.stock[good] -= n;
+    dock.stock[good] += n - handOver(game, w, good, n);
+  }
+}
+
+/**
+ * Is the ship done? Worked out at the dock's daily tick and whenever a
+ * worker gets home: whether anything more can be fetched for it (and no
+ * worker is still out for it), then the cast-off rule.
+ */
+function reviewStay(game, w, dock) {
+  if (w.state !== 'docked') return;
+  const claims = exportClaims(game);
+  const out = !isEmpty(claims.byShip.get(w.id));
+  w.wantsStuck = !out && (isEmpty(w.wants) || !(dock.efficiency > 0 && planFetch(game, dock, w, dock.accessRoad, claims)));
+  if (stayDone(game, w)) shipLeave(game, w);
+}
+
+/**
+ * A dock worker's next export fetch for the moored ship, from road tile
+ * `from`, or null: the good (in turn through the ship's wants), the nearest
+ * staffed warehouse by road within DOCK_REACH of the dock with a lot to
+ * spare, and the amount: up to DOCK_LOAD, never more than the ship's wants
+ * not yet claimed or the city's surplus above the export level (less open
+ * claims). A trip that would not be back before the ship's stay limit is not
+ * made.
+ */
+function planFetch(game, dock, w, from, claims = exportClaims(game), sources = exportSources(game, dock)) {
+  if (from < 0 || !sources.size) return null;
+  const settings = game.city.trade.settings;
+  const goods = Object.keys(w.wants).filter((g) => w.wants[g] > 0);
+  const mine = claims.byShip.get(w.id) || {};
+  const left = stayTicksLeft(game, w);
+  const walk = Math.floor(left * CONFIG.CART_SPEED); // no farther than a cart can walk in the time left
+  for (let k = 0; k < goods.length; k++) {
+    const turn = ((w.wantTurn || 0) + k) % goods.length;
+    const good = goods[turn];
+    const s = settings[good];
+    if (!s || s.mode !== 'export') continue;
+    const most = lots(Math.min(CONFIG.DOCK_LOAD, w.wants[good] - (mine[good] || 0), exportQuotaLeft(game, w.partner, good, claims),
+      cityStock(game, good) - s.level - (claims.open[good] || 0)));
+    if (most <= 0) continue;
+    const spare = (b) => (b.stock[good] || 0) - (claims.atWh.get(b.id)?.[good] || 0);
+    const found = game.pf.findNearest(from, (id) => {
+      const b = sources.has(id) ? game.buildings.get(id) : null;
+      return !!b && spare(b) >= CONFIG.CART_CAPACITY;
+    }, walk);
+    if (!found || found.path.length - 1 >= walk) continue;
+    // Time the way back from where it will stand (a far side of the
+    // warehouse may be farther from the dock than its near side).
+    const back = game.pf.roadPath(found.goal, dock.accessRoad);
+    if (!back || tripTicks(found.path.length + back.length - 2) >= left) continue;
+    const wh = game.buildings.get(found.id);
+    return { good, wh, amount: lots(Math.min(most, spare(wh))), path: found.path, turn: turn + 1 };
+  }
+  return null;
+}
+
+/** Send dock worker `cart` (out already, or new) on a planned fetch. */
+function startFetch(game, cart, ship, plan) {
+  cart.state = 'dockFetch';
+  cart.target = plan.wh.id;
+  cart.want = plan.good;
+  cart.claim = { ship: ship.id, partner: ship.partner, good: plan.good, amount: plan.amount, wh: plan.wh.id, picked: false };
+  ship.wantTurn = plan.turn;
+  ship.wantsStuck = false;
+  followPath(game, cart, plan.path);
+}
+
+/**
+ * Free dock workers take their next jobs, in this order, until the dock's
+ * number by staffing (dockWorkers) are out:
+ *   1. a lot from the quay (up to DOCK_LOAD of one good) to wherever any
+ *      cart would take it (findDeliveryTarget: a barracks, a workshop, a
+ *      granary for food, storage that accepts it), unless the moored ship
+ *      wants that good;
+ *   2. an export fetch for the moored ship (planFetch).
+ * Run at the dock's daily tick, when a worker gets home and when a lot lands.
+ */
+export function dockDispatch(game, dock) {
+  if (dock.efficiency <= 0 || dock.accessRoad < 0) return;
+  const ship = mooredShip(game, dock);
+  const most = dockWorkers(dock);
+  const stuck = new Set();
+  let triedQuay = false;
+  let sources = null;
+  while (cartsOut(game, dock) < most) {
+    triedQuay = true;
+    if (sendQuayLot(game, dock, ship, stuck)) continue;
+    if (!ship) break;
+    sources = sources || exportSources(game, dock);
+    const plan = planFetch(game, dock, ship, dock.accessRoad, exportClaims(game), sources);
+    if (!plan) break;
+    const cart = spawnWalker(game, 'cart', dock.accessRoad, dock, { speed: CONFIG.CART_SPEED });
+    if (!cart) break; // the city is at its walker limit
+    startFetch(game, cart, ship, plan);
+  }
+  // For the panel: imports piling up with nowhere to go.
+  if (triedQuay) dock.noStorage = stuck.size > 0;
+}
+
+/** One lot off the quay to storage. @returns {boolean} a cart went */
+function sendQuayLot(game, dock, ship, stuck) {
+  for (const good of Object.keys(dock.stock)) {
+    const have = dock.stock[good];
+    if (have < CONFIG.CART_CAPACITY || stuck.has(good)) continue;
+    if (ship && (ship.wants[good] || 0) > 0) continue; // the ship takes it (handOverFromQuay)
+    // Up to a wagon, as much as the best place can take: a workshop that uses
+    // it holds only WORKSHOP_RAW_CAP, and still comes before a warehouse.
+    if (dispatchCart(game, dock, good, Math.min(CONFIG.DOCK_LOAD, lots(have)), true)) return true;
+    stuck.add(good);
+  }
+  return false;
+}
+
+/**
+ * A dock worker unloaded imports at storage: if the moored ship still wants
+ * something it goes straight on from there to fetch it, without coming home
+ * first (the original's "import out, export back"). @returns {boolean}
+ */
+export function dockWorkerOnward(game, w) {
+  const dock = game.buildings.get(w.origin);
+  const ship = mooredShip(game, dock);
+  const here = game.map.idx(w.x, w.y);
+  if (!ship || dock.efficiency <= 0 || !game.map.road[here]) return false;
+  const plan = planFetch(game, dock, ship, here);
+  if (!plan) return false;
+  startFetch(game, w, ship, plan);
+  return true;
+}
+
+/**
+ * A dock worker reached the warehouse it is fetching from: it loads its lot,
+ * checking again that the ship is still moored, the good still on Export,
+ * and that the city keeps its export level (other open claims counted).
+ * Nothing to take: the claim is released and it tries another fetch from
+ * here (twice at most), else it heads home empty.
+ */
+export function dockFetchArrive(game, w) {
+  const c = w.claim;
+  const wh = game.buildings.get(w.target);
+  const dock = game.buildings.get(w.origin);
+  const ship = mooredShip(game, dock);
+  const s = c ? game.city.trade.settings[c.good] : null;
+  let got = 0;
+  if (c && wh && wh.def.kind === 'warehouse' && ship && ship.id === c.ship && s && s.mode === 'export') {
+    const others = (exportClaims(game).open[c.good] || 0) - c.amount;
+    got = takeGoods(wh, c.good, lots(Math.min(c.amount, wh.stock[c.good] || 0, cityStock(game, c.good) - s.level - others)));
+  }
+  if (got > 0) {
+    c.amount = got;
+    c.picked = true;
+    w.cargo = { good: c.good, amount: got };
+    if (!goHome(game, w)) wh.stock[c.good] += got; // no way home: the lot stays where it was
+    return;
+  }
+  w.claim = null;
+  w.tries = (w.tries || 0) + 1;
+  if (w.tries < 3 && dockWorkerOnward(game, w)) return;
+  goHome(game, w);
+}
+
+/**
+ * A dock worker is home. A lot it fetched goes aboard if its ship is still
+ * moored and still wants it; what is left (the ship sailed, or the good went
+ * off Export) stays on the quay as city goods, and dock workers take it to
+ * storage like any other. Then the dock sends out its free workers again.
+ */
+export function dockWorkerHome(game, w, dock) {
+  const ship = mooredShip(game, dock);
+  if (w.cargo && w.cargo.amount > 0) {
+    if (ship && w.claim && w.claim.ship === ship.id) w.cargo.amount -= handOver(game, ship, w.cargo.good, w.cargo.amount);
+    if (w.cargo.amount > 0) receiveGoods(dock, w.cargo.good, w.cargo.amount, true);
+  }
+  w.cargo = null;
+  w.claim = null;
+  killWalker(game, w);
+  dockDispatch(game, dock);
+  if (ship) reviewStay(game, ship, dock);
+}
+
+/** Leaving: sail back to open water and leave the map. The visit goes in the trade log now. */
+export function shipLeave(game, w) {
+  const { map } = game;
+  const dock = game.buildings.get(w.target);
+  if (dock && dock.shipId === w.id) dock.shipId = 0;
+  if (w.deal && !w.dealLogged) {
+    // The goods book counted each lot as it moved (land, handOver).
+    logTrade(game, w.partner, dealOf(w.deal), 'sea', false);
+    w.dealLogged = true;
+  }
+  w.state = 'leaving';
+  if (!map.seaEntry) { killWalker(game, w); return; }
+  const here = map.idx(w.x, w.y);
+  const path = shipPath(game, here, map.idx(map.seaEntry.x, map.seaEntry.y));
+  if (path) followPath(game, w, path);
+  else killWalker(game, w);
+}
+
+/**
+ * Daily: a Dock that lost its staff sends its ship away; goods the ship
+ * wants that are on the quay go aboard; free dock workers take their next
+ * jobs (dockDispatch); then the ship's stay is reviewed.
+ */
 export function updateDock(game, b) {
   dockBerth(game, b);
-  if (b.efficiency <= 0 || b.accessRoad < 0) return;
-  for (const good of Object.keys(b.stock)) {
-    if (cartsOut(game, b) >= 2) return;
-    const lots = Math.floor(b.stock[good] / CONFIG.CART_CAPACITY);
-    if (lots <= 0) continue;
-    const amount = Math.min(CONFIG.CART_LOAD, lots * CONFIG.CART_CAPACITY);
-    dispatchCart(game, b, good, amount);
-  }
+  const ship = mooredShip(game, b);
+  if (ship && b.efficiency <= 0) shipLeave(game, ship);
+  if (b.efficiency <= 0) return;
+  if (ship) handOverFromQuay(game, ship, b);
+  dockDispatch(game, b);
+  if (ship) reviewStay(game, ship, b);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +879,8 @@ function buyImports(game, partnerId, budget, out, spaceFor, put) {
     const s = settings[good];
     if (!s || s.mode !== 'import' || budget <= 0) continue;
     const quota = cap - (route.bought[good] || 0);
-    const shortfall = s.level - cityStock(game, good);
+    // Imports a moored ship still has aboard, or dock workers are carting, count as on their way.
+    const shortfall = s.level - cityStock(game, good) - importsComing(game, good);
     const price = GOODS[good].buy;
     const affordable = game.cheats.freeBuild ? 1e9 : Math.floor(Math.max(0, game.city.treasury) / price) * 100;
     let n = Math.min(quota, shortfall, budget, affordable, spaceFor(good));
@@ -395,11 +896,17 @@ function buyImports(game, partnerId, budget, out, spaceFor, put) {
   }
 }
 
-/** Remember a visit in the trade log (Trade advisor). */
-function logTrade(game, partnerId, summary, kind) {
+/**
+ * Remember a visit in the trade log (Trade advisor), one entry a visit.
+ * `goods`: also count the goods in this month's goods book (a ship's lots
+ * were counted one by one as they moved, so it passes false).
+ */
+function logTrade(game, partnerId, summary, kind, goods = true) {
   if (!summary.earned && !summary.spent) return;
-  for (const [good, n] of Object.entries(summary.sold || {})) logGoods(game, good, 'exported', n);
-  for (const [good, n] of Object.entries(summary.bought || {})) logGoods(game, good, 'imported', n);
+  if (goods) {
+    for (const [good, n] of Object.entries(summary.sold || {})) logGoods(game, good, 'exported', n);
+    for (const [good, n] of Object.entries(summary.bought || {})) logGoods(game, good, 'imported', n);
+  }
   const log = game.city.trade.log;
   log.unshift({ date: game.time.shortLabel(), partner: TRADE_PARTNERS[partnerId].name, kind, ...summary });
   if (log.length > 20) log.pop();

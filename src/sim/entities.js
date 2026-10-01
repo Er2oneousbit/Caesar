@@ -272,10 +272,18 @@ export function removeBuilding(game, b, reason = 'demolish') {
     if (map.building[i] === b.id) map.building[i] = 0;
   }
   game.buildings.delete(b.id);
-  // Walkers that belong to this building vanish with it (their cargo is lost).
+  // Walkers that belong to this building vanish with it (their cargo is
+  // lost), except a dock worker with a load: imports the city paid for, or an
+  // export fetched for a ship. It takes its load to storage instead
+  // (sim/walkers.js deliverElsewhere).
   for (const wid of [...b.walkers]) {
     const w = game.walkers.get(wid);
-    if (w && w.kind !== 'traveler') killWalker(game, w);
+    if (!w || w.kind === 'traveler') continue;
+    if (b.def.kind === 'dock' && w.type === 'cart' && w.cargo && w.cargo.amount > 0) {
+      w.claim = null;
+      continue;
+    }
+    killWalker(game, w);
   }
   // Residents of a destroyed home become homeless and look for a new one.
   if (b.house && b.house.pop > 0 && reason !== 'merge') {

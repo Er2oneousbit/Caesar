@@ -85,7 +85,7 @@ export function tradeRouteCard(app, g, id, onChange) {
   else if (!seaOk) how = h('div', { class: 'status bad', style: { fontSize: '12px' } }, 'Unreachable: no river or coast connects this province to the sea.');
   else if (!docks.length) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Ships need a Dock: build one on the bank of the river or sea.');
   else if (!staffedDock) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Your Dock has no workers: ships cannot tie up.');
-  else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships call at your Dock and buy from warehouses near it.');
+  else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships wait at your Dock while dock workers unload them and fetch exports from warehouses near it.');
   return h('div', { class: 'card' },
     h('div', { class: 'row' },
       h('h4', { style: { flex: 1 } }, h('span', { style: { color: p.color } }, '● '), p.name),
@@ -384,7 +384,7 @@ export class Advisors {
         h('div', { class: 'row', style: { fontSize: '12px', marginTop: '4px' } },
           h('span', { class: 'muted', style: { flex: 1 } }, '╌ land route (caravans)   ··· sea route (ships)   solid = open. ', seaOk ? 'Ships can reach this province.' : 'No ships can reach this province: only land routes work here.'),
           h('button', { class: 'btn small', title: 'Who is on the way, and when (E)', onclick: () => this.app.ui.openEmpire() }, 'Empire map'))),
-      h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships unload imports at a staffed Dock (dock workers cart them to storage) and buy exports from warehouses near it. Prices are per 100 units.'),
+      h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships wait at a staffed Dock while its workers cart their imports to storage and fetch exports from warehouses near it (a stay of 2 to 7 weeks: several sea partners need more than one Dock). Prices are per 100 units.'),
       h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
       h('h4', {}, 'Goods'),
       h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'In storage'), h('th', {}, 'Mode'), h('th', {}, 'Level'), h('th', {}, '')), rows),

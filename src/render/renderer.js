@@ -1420,12 +1420,15 @@ export class Renderer {
 
   /**
    * The walker drawn at CSS pixel (sx, sy) of the screen, or 0: the figure
-   * nearest the point among those whose box holds it. The box is a little
-   * bigger than the figure and never under about 22 x 36 CSS px (the owner:
-   * people were hard to click; zoomed out a figure is a few pixels wide). Where a building stands
+   * nearest the point among those whose box holds it. The box is the figure
+   * itself (a little bigger, never under about 12 x 22 CSS px) or, with
+   * `generous`, never under about 22 x 36 CSS px (the owner: people were
+   * hard to click; zoomed out a figure is a few pixels wide). The generous
+   * box only wins on open ground (app.js clickTile): on a building or a
+   * roadblock it would steal clicks meant for them. Where a building stands
    * in front of a walker and covers the point, the building gets the click.
    */
-  pickWalker(sx, sy) {
+  pickWalker(sx, sy, generous = true) {
     const cam = this.camera;
     const p = cam.screenToWorld(sx, sy);
     const css = cam.dpr / cam.scale; // world px per CSS px
@@ -1442,9 +1445,9 @@ export class Renderer {
     let best = 0;
     let bestD = Infinity;
     for (const s of this.walkerSpots) {
-      const hw = s.ship ? Math.max(26, 12 * css) : Math.max(7, 11 * css);
-      const top = s.ship ? Math.max(40, 20 * css) : Math.max(24, 30 * css);
-      const bottom = Math.max(5, 6 * css);
+      const hw = s.ship ? Math.max(26, 12 * css) : Math.max(7, (generous ? 11 : 6) * css);
+      const top = s.ship ? Math.max(40, 20 * css) : generous ? Math.max(24, 30 * css) : Math.max(22, 16 * css);
+      const bottom = generous ? Math.max(5, 6 * css) : Math.max(4, 3 * css);
       const dx = p.x - s.wx;
       const dy = p.y - s.wy;
       if (Math.abs(dx) > hw || dy < -top || dy > bottom) continue;

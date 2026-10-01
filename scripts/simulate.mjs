@@ -22,6 +22,7 @@
  *   npm run sim -- --pace       (how long the campaign's goals take, no city)
  *   npm run sim -- --capacity   (how many people each mission's buildings employ, no city)
  *   npm run sim -- --scenario c1 --unlocks --homes 40   (mission 1 as a player could build it)
+ *   npm run sim -- --type coast --seed beach --years 4 --harbor   (sea trade: ships' stays at the dock)
  *
  * Campaign runs build every building unless --unlocks is given (then only
  * what the mission unlocks), so their numbers stay comparable with earlier
@@ -34,7 +35,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor } from '../src/dev/demoCity.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
@@ -45,6 +46,7 @@ import { generateMap } from '../src/world/mapgen.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
 import { goalStatus } from '../src/sim/ratings.js';
+import { setTradeMode } from '../src/sim/trade.js';
 
 const HELP = `
 Headless balance simulation
@@ -62,6 +64,9 @@ Options:
   --years <n>       years to simulate (default 3)
   --level <1-3>     demo city complexity (default 2)
   --garrison        also build a barracks, forts, towers and a wall (equipped)
+  --harbor [docks]  after 6 months, a Dock (or this many) and a warehouse by the water, every sea
+                    route open; the warehouse gets 300 pottery, furniture and oil a month for
+                    export (the demo city makes none). Reports ships' stays and trade a year
   --caretaker       rebuild whatever burns or collapses, as a player would (npm run sweep)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --json            print a JSON summary at the end
@@ -72,7 +77,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -86,6 +91,7 @@ function parse(argv) {
     else if (a === '--difficulty') o.difficulty = next();
     else if (a === '--json') o.json = true;
     else if (a === '--garrison') o.garrison = true;
+    else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
@@ -171,9 +177,60 @@ function caretake() {
     if (plan && plan.count > 0 && applyPlan(game, plan).ok) rebuilt++;
   }
 }
+// --harbor: sea trade, measured tick by tick (see the help). Without it the
+// run is exactly what it always was.
+const harbor = { docks: 0, warehouse: null, from: 0, stays: [], moored: new Map(), exports: 0, imports: 0, summary: null };
+const HARBOR_EXPORTS = ['pottery', 'furniture', 'oil'];
+function buildHarbor() {
+  for (let k = 0; k < opts.harbor; k++) {
+    const h = buildDemoHarbor(game, res.center);
+    if (!h.ok) break;
+    harbor.docks++;
+    harbor.warehouse = harbor.warehouse || h.warehouse;
+  }
+  if (!harbor.docks) { console.log('Harbor: no Dock could be built (no sea access here?)'); return; }
+  for (const g of HARBOR_EXPORTS) setTradeMode(game, g, 'export', 0);
+  harbor.from = game.time.totalDays;
+  const y = game.city.finance.thisYear;
+  harbor.exports -= y.exports || 0; // count from now
+  harbor.imports -= y.imports || 0;
+}
+/** Monthly: the harbor's warehouse gets goods to export, room allowing (a stand-in for workshops). */
+function harborMonth() {
+  const wh = harbor.warehouse;
+  if (!wh || !game.buildings.has(wh.id)) return;
+  for (const g of HARBOR_EXPORTS) {
+    let used = 0;
+    for (const k in wh.stock) used += wh.stock[k] + (wh.incoming[k] || 0);
+    wh.stock[g] += Math.max(0, Math.min(300, CONFIG.WAREHOUSE_CAPACITY - used));
+  }
+}
+/** Every tick: when each ship tied up and when it cast off. */
+function harborTick() {
+  for (const w of game.walkers.values()) if (w.type === 'ship' && w.state === 'docked' && !harbor.moored.has(w.id)) harbor.moored.set(w.id, game.time.totalTicks);
+  for (const [id, t] of harbor.moored) {
+    const w = game.walkers.get(id);
+    if (w && w.state === 'docked') continue;
+    harbor.stays.push((game.time.totalTicks - t) / CONFIG.TICKS_PER_DAY);
+    harbor.moored.delete(id);
+  }
+}
+function runDays(n) {
+  if (!harbor.docks) { game.runDays(n); return; }
+  for (let t = 0; t < n * CONFIG.TICKS_PER_DAY; t++) {
+    const year = game.time.year;
+    game.tick();
+    if (game.time.year !== year) { // the ledger rolled over
+      harbor.exports += game.city.finance.lastYear.exports || 0;
+      harbor.imports += game.city.finance.lastYear.imports || 0;
+    }
+    harborTick();
+  }
+}
 const runMonth = () => {
-  if (!opts.caretaker) { game.runDays(16); return; }
-  for (let k = 0; k < 4; k++) { game.runDays(4); caretake(); }
+  if (harbor.docks) harborMonth();
+  if (!opts.caretaker) { runDays(16); return; }
+  for (let k = 0; k < 4; k++) { runDays(4); caretake(); }
 };
 
 const pad = (v, n) => String(v).padStart(n);
@@ -185,6 +242,7 @@ const built = SIM_MONEY - game.city.treasury;
 const money = { funds, built, need: built, needMonth: 0, debtMonth: null };
 const treasuryByMonth = [];
 for (let m = 0; m < opts.years * 12; m++) {
+  if (opts.harbor && m === 6) buildHarbor();
   runMonth();
   const c = game.city;
   treasuryByMonth.push(c.treasury);
@@ -221,11 +279,26 @@ if (opts.scenario) {
   const goals = goalStatus(game).map((r) => `${r.key} ${r.have}/${r.need}${r.ok ? '' : ' (short)'}`).join(', ');
   console.log(`Goals${opts.unlocks ? '' : ' (built with every building, not only those of the mission: see --unlocks)'}: ${goals}; ${wonMonth === null ? 'not met' : `all met in month ${wonMonth}`}`);
 }
+if (harbor.docks) {
+  const years = (game.time.totalDays - harbor.from) / (CONFIG.DAYS_PER_MONTH * CONFIG.MONTHS_PER_YEAR);
+  const y = game.city.finance.thisYear;
+  const n = harbor.stays.length;
+  const s = {
+    docks: harbor.docks,
+    ships: n,
+    avgStayDays: n ? +(harbor.stays.reduce((a, b) => a + b, 0) / n).toFixed(1) : 0,
+    longestStayDays: n ? +Math.max(...harbor.stays).toFixed(1) : 0,
+    exportsPerYear: Math.round((harbor.exports + (y.exports || 0)) / years),
+    importsPerYear: Math.round((harbor.imports + (y.imports || 0)) / years),
+  };
+  harbor.summary = s;
+  console.log(`Harbor: ${s.docks} dock${s.docks === 1 ? '' : 's'}, ${s.ships} ships in ${years.toFixed(1)} years, average stay ${s.avgStayDays} days (longest ${s.longestStayDays}); exports ${s.exportsPerYear} Dn a year, imports ${s.importsPerYear} Dn a year`);
+}
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
 const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
-if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment }));
+if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment }));
 
 /** The highest disease risk of any occupied home (sim/disease.js). */
 function peakRisk(g) {

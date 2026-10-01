@@ -15,10 +15,10 @@ import { followPath, goHome, pickRoamTile, setNextTile } from './movement.js';
 import { roamerVisit } from './services.js';
 import { buyerArrive, buyerUnload } from './market.js';
 import { settlerArrive, seekHome } from './population.js';
-import { caravanArrive, shipArrive, shipLeave } from './trade.js';
+import { caravanArrive, shipArrive, shipMoored, dockFetchArrive, dockWorkerHome, dockWorkerOnward } from './trade.js';
 import { prefectArriveAtFire, afterWait } from './risk.js';
 import { performerArrive } from './entertainment.js';
-import { findDeliveryTarget, receiveGoods, isStorage } from './storage.js';
+import { findDeliveryTarget, findDeliveryFit, receiveGoods, isStorage } from './storage.js';
 import { collectArrive } from './storageOrders.js';
 import { recruitArrive } from './military.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
@@ -50,11 +50,15 @@ function stepWalker(game, w) {
     if (w.waitTicks === 0 && w.afterWait) {
       const what = w.afterWait;
       w.afterWait = null;
-      if (what === 'shipLeave') shipLeave(game, w);
-      else if (w.kind === 'criminal') criminalAfterWait(game, w, what);
+      if (w.kind === 'criminal') criminalAfterWait(game, w, what);
       else if (what === 'nextSick') physicianAfterWait(game, w);
       else afterWait(game, w, what);
     }
+    return;
+  }
+  // A ship at the dock: its crane lands cargo while dock workers come and go.
+  if (w.state === 'docked' && w.kind === 'ship') {
+    shipMoored(game, w);
     return;
   }
   if (!w.moving) {
@@ -159,6 +163,9 @@ function onPathEnd(game, w) {
     case 'collect':
       collectArrive(game, w);
       break;
+    case 'dockFetch':
+      dockFetchArrive(game, w);
+      break;
     case 'toHouse':
       settlerArrive(game, w);
       break;
@@ -203,11 +210,38 @@ function onPathEnd(game, w) {
 /** Walker is back at its building. Unload anything it carries (its own goods: no orders apply). */
 function returnHome(game, w) {
   const origin = game.buildings.get(w.origin);
+  if (origin && origin.def.kind === 'dock' && w.type === 'cart') {
+    dockWorkerHome(game, w, origin); // hands an export to the ship, sends the dock's workers out again
+    return;
+  }
   if (origin) {
     if (w.type === 'buyer') buyerUnload(game, w);
     if (w.cargo && w.cargo.amount > 0) receiveGoods(origin, w.cargo.good, w.cargo.amount, true);
+  } else if (w.type === 'cart' && w.cargo && w.cargo.amount > 0 && deliverElsewhere(game, w)) {
+    return;
   }
   killWalker(game, w);
+}
+
+/**
+ * A cart whose home is gone (a dock worker's, when the Dock is demolished:
+ * entities.js removeBuilding lets it go on) takes its load to wherever any
+ * cart would take it, so the goods are not lost: as much as the best place
+ * can take, then (cartArrive) on to the next with the rest. @returns {boolean}
+ */
+function deliverElsewhere(game, w) {
+  const here = game.map.idx(w.x, w.y);
+  if (!game.map.road[here]) return false;
+  const t = findDeliveryFit(game, here, w.cargo.good, w.cargo.amount);
+  if (!t) return false;
+  const b = game.buildings.get(t.id);
+  if (b.incoming && b.incoming[w.cargo.good] !== undefined) b.incoming[w.cargo.good] += t.amount;
+  w.reserve = { id: t.id, good: w.cargo.good, amount: t.amount };
+  w.target = t.id;
+  w.state = 'deliver';
+  w.claim = null;
+  followPath(game, w, t.path);
+  return true;
 }
 
 /** Cart reached its destination: unload, or try somewhere else. */
@@ -238,5 +272,9 @@ function cartArrive(game, w) {
       }
     }
   }
+  // A dock worker that unloaded imports goes on from here to fetch an export for the ship.
+  if (!w.cargo && game.buildings.get(w.origin)?.def.kind === 'dock' && dockWorkerOnward(game, w)) return;
+  // No home to take the rest back to (a demolished Dock's worker): on to the next place.
+  if (w.cargo && w.type === 'cart' && !game.buildings.has(w.origin) && deliverElsewhere(game, w)) return;
   goHome(game, w);
 }

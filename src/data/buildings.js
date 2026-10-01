@@ -409,7 +409,7 @@ export const BUILDINGS = Object.freeze({
   dock: B({
     name: 'Dock', category: 'commerce', kind: 'dock', cost: 120, size: 3, workers: 10, labor: 'industry',
     des: [-6, 1, 1, 3], fire: 1.2, damage: 1, placement: 'shore',
-    desc: 'Merchant ships from sea trade routes tie up here. Build it on the bank of a river or sea that reaches the map edge. Dock workers cart imports to your warehouses; ships buy exports from warehouses connected to the dock by road.',
+    desc: 'Merchant ships from sea trade routes tie up here and wait while they trade. Build it on the bank of a river or sea that reaches the map edge. Up to 3 dock workers (by staffing) cart imports to storage and fetch exports from warehouses connected to the dock by road: keep one close.',
   }),
 
   // --- Horses & military ----------------------------------------------------

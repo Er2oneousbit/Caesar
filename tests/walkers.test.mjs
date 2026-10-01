@@ -188,6 +188,11 @@ test('clicking picks the walker figure under the pointer', () => {
   assert.equal(pick(z.x + 9, z.y - 4), 7, 'zoomed out: 9 px beside its feet');
   assert.equal(pick(z.x, z.y - 28), 7, 'zoomed out: just above its head');
   assert.equal(pick(z.x + 30, z.y), 0, 'but not 30 px away');
+  // The strict box is the figure itself: the generous one gives way on a
+  // building or a roadblock (app.js clickTile), so it must be told apart.
+  const strict = (sx, sy) => Renderer.prototype.pickWalker.call(r, sx, sy, false);
+  assert.equal(strict(z.x + 9, z.y - 4), 0, 'strict: 9 px beside is not the figure');
+  assert.equal(strict(z.x, z.y - 6), 7, 'strict: on the figure');
 });
 
 test('a walker says who it is, what it carries and what troubles the city', () => {

@@ -52,6 +52,15 @@
  *        (ruins[]: one entry per fallen building with the tiles it still
  *        covers, see sim/ruins.js). Older saves load with rubble that has no
  *        record; its info panel says what it always said.
+ *   8  ships wait at the dock while dock workers carry goods both ways
+ *      (sim/trade.js): a moored ship holds what it still has to unload
+ *      (`unload`), what it still wants (`wants`), its running `deal`, when
+ *      it tied up (`mooredTick`) and its crane's progress; a dock worker
+ *      fetching an export holds a `claim` and walks in state 'dockFetch'.
+ *      A version 7 ship at the dock had traded everything on arrival (and
+ *      was logged then): it loads with nothing left to trade and casts off
+ *      on the first tick, see upgradeShipsV7(). Goods on a quay stay there
+ *      and dock workers cart them on, as before.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -356,6 +365,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 5) upgradeV4(game);
   if (data.version < 6) upgradeV5(game);
   if (data.version < 7) upgradeOrdersV6(game);
+  if (data.version < 8) upgradeShipsV7(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -409,6 +419,35 @@ function upgradeOrdersV6(game) {
     }
     b.emptying = false;
     b.orderNote = null;
+  }
+}
+
+/** How long a ship stayed at the dock before version 8 (ticks): 6 days, whatever it traded. */
+const OLD_SHIP_STAY_TICKS = 120;
+
+/**
+ * A save before version 8: a ship at the dock had already traded everything
+ * the moment it arrived (and the trade log has its visit), and was only
+ * waiting out its 6 days. It loads with nothing left to unload or buy, its
+ * deal kept for its panel and not logged a second time, so it casts off on
+ * the first tick. Its days at the dock count from when it arrived.
+ */
+function upgradeShipsV7(game) {
+  for (const w of game.walkers.values()) {
+    if (w.type !== 'ship' || w.state !== 'docked') continue;
+    const stayed = Math.max(0, OLD_SHIP_STAY_TICKS - (w.waitTicks || 0));
+    w.mooredTick = game.time.totalTicks - stayed;
+    w.unload = {};
+    w.wants = {};
+    w.deal = w.deal || { sold: {}, bought: {}, earned: 0, spent: 0 };
+    w.dealLogged = true;
+    w.crane = 0;
+    w.craneIdle = 0;
+    w.craneTurn = 0;
+    w.wantTurn = 0;
+    w.wantsStuck = true;
+    w.waitTicks = 0;
+    w.afterWait = null;
   }
 }
 

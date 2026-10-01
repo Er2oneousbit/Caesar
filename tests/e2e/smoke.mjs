@@ -189,22 +189,33 @@ try {
   check('music plays in the day mood once the city is founded', music.playing && music.mood === 'day' && music.bars > 0, JSON.stringify(music));
 
   // 3. Build with real input: road drag + housing drag near the map entrance
-  const info = await page.evaluate(() => {
+  // The road tile nearest the map's center that has free land beside it
+  // (a 6x3 patch 2-11 tiles off it). Only the one nearest tile was tried
+  // before, and on a random map where water or forest hemmed it in the
+  // check failed for that reason alone: every road tile is tried in turn.
+  const found = await page.evaluate(() => {
     const app = window.colonia;
     const g = app.game;
+    const m = g.map;
     app.paused = true;
-    // Find the imperial road tile nearest the map center, then free land beside it.
-    let best = null;
-    for (let i = 0; i < g.map.size; i++) {
-      if (!g.map.road[i]) continue;
-      const x = g.map.xOf(i);
-      const y = g.map.yOf(i);
-      const d = Math.hypot(x - g.map.w / 2, y - g.map.h / 2);
-      if (!best || d < best.d) best = { x, y, d };
+    const roads = [];
+    for (let i = 0; i < m.size; i++) if (m.road[i]) roads.push({ x: m.xOf(i), y: m.yOf(i), d: Math.hypot(m.xOf(i) - m.w / 2, m.yOf(i) - m.h / 2) });
+    roads.sort((a, b) => a.d - b.d);
+    for (const best of roads) {
+      for (let r = 2; r < 12; r++) {
+        for (const [dx, dy] of [[0, r], [r, 0], [0, -r], [-r, 0]]) {
+          let ok = true;
+          for (let k = 0; k < 6 && ok; k++) for (let j = 0; j < 3; j++) if (!m.isFree(best.x + dx + k, best.y + dy + j)) { ok = false; break; }
+          if (ok) {
+            app.renderer.camera.centerOnTile(best.x, best.y);
+            return { info: { x: best.x, y: best.y, money: g.city.treasury, buildings: g.buildings.size }, spot: { x: best.x + dx, y: best.y + dy } };
+          }
+        }
+      }
     }
-    app.renderer.camera.centerOnTile(best.x, best.y);
-    return { x: best.x, y: best.y, money: g.city.treasury, buildings: g.buildings.size };
+    return { info: { x: roads[0].x, y: roads[0].y, money: g.city.treasury, buildings: g.buildings.size }, spot: null };
   });
+  const info = found.info;
   const toScreen = (tx, ty) => page.evaluate(([x, y]) => {
     const cam = window.colonia.renderer.camera;
     const wx = (x + 0.5 - (y + 0.5)) * 32;
@@ -212,18 +223,7 @@ try {
     const r = window.colonia.canvas.getBoundingClientRect();
     return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
   }, [tx, ty]);
-  // Find a free spot 3..8 tiles from the road for a little street.
-  const spot = await page.evaluate(({ x, y }) => {
-    const m = window.colonia.game.map;
-    for (let r = 2; r < 12; r++) {
-      for (const [dx, dy] of [[0, r], [r, 0], [0, -r], [-r, 0]]) {
-        let ok = true;
-        for (let k = 0; k < 6 && ok; k++) for (let j = 0; j < 3; j++) if (!m.isFree(x + dx + k, y + dy + j)) { ok = false; break; }
-        if (ok) return { x: x + dx, y: y + dy };
-      }
-    }
-    return null;
-  }, info);
+  const spot = found.spot;
   check('found free land for the input test', !!spot);
   if (spot) {
     await page.keyboard.press('r');

@@ -36,7 +36,7 @@ import { HERD_MAX, HERD_GROWTH_DAYS } from '../data/units.js';
 import { Terrain } from '../world/map.js';
 import { spawnWalker } from './entities.js';
 import { followPath } from './movement.js';
-import { findDeliveryTarget, takeGoods } from './storage.js';
+import { findDeliveryTarget, findDeliveryFit, takeGoods } from './storage.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
 import { logGoods } from './goodsLedger.js';
 
@@ -53,15 +53,18 @@ export function cartsOut(game, b) {
 /**
  * Send a cart with `amount` of `good` from building `b` to the best target.
  * Stock is removed only if a target exists.
+ * `fit`: up to `amount`, as much as the best target can take (a dock
+ * worker's wagon: findDeliveryFit), instead of only targets with room for all.
  * @returns {boolean}
  */
-export function dispatchCart(game, b, good, amount) {
+export function dispatchCart(game, b, good, amount, fit = false) {
   if (b.accessRoad < 0) return false;
-  const t = findDeliveryTarget(game, b.accessRoad, good, amount, b.id);
+  const t = fit ? findDeliveryFit(game, b.accessRoad, good, amount, b.id) : findDeliveryTarget(game, b.accessRoad, good, amount, b.id);
   if (!t) {
     b.noStorage = true;
     return false;
   }
+  if (fit) amount = t.amount;
   b.noStorage = false;
   const target = game.buildings.get(t.id);
   if (target.incoming && target.incoming[good] !== undefined) target.incoming[good] += amount;

@@ -146,3 +146,24 @@ test('roads: no message when a road touches it, or arrives in time; none for bui
   }
   assert.equal(byType('engineer_post').noRoadDays, 0, 'the count starts again once a road touches it');
 });
+
+test('roads: the door is only drawn; a road along any of the four sides serves a building', () => {
+  // The owner asked whether a building's door must face the road. It need
+  // not: every side counts the same (sim/entities.js computeAccessRoad).
+  for (const [type, S] of [['prefecture', 1], ['market', 2]]) {
+    for (const side of ['north', 'east', 'south', 'west']) {
+      const game = newGame();
+      const s = room(game, S + 4, S + 4);
+      const x = s.x + 2;
+      const y = s.y + 2;
+      assert.ok(build(game, type, x + (S - 1 >> 1), y + (S - 1 >> 1)).ok, `${type} placed`);
+      const b = [...game.buildings.values()].find((q) => q.type === type);
+      assert.equal(b.accessRoad, -1, 'no road yet');
+      const [rx, ry] = { north: [x, y - 1], east: [x + S, y], south: [x, y + S], west: [x - 1, y] }[side];
+      assert.ok(build(game, 'road', rx, ry).ok);
+      game.processRoadChanges();
+      assert.equal(b.accessRoad, game.map.idx(rx, ry), `${type}: a road on its ${side} side serves it`);
+      assert.equal(lacksRoad(b), false);
+    }
+  }
+});

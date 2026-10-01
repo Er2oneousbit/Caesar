@@ -7,8 +7,10 @@
  * to its planned pace, missions get longer as the campaign goes on, the pace
  * model counts settlers at the game's own rate, and the first mission is no
  * longer won in a few months. The goals also have to be within reach of each
- * mission's buildings: the housing level its unlocks allow and the culture
- * and prosperity it can earn.
+ * mission's buildings: the housing level its unlocks allow, the culture and
+ * prosperity it can earn, and the people a sensibly built city of its
+ * buildings can employ and its map can house and feed (sim/capacity.js;
+ * missions 3 to 7 are known exceptions for now).
  * ----------------------------------------------------------------------------
  */
 
@@ -18,79 +20,26 @@ import assert from 'node:assert/strict';
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
-import { SCENARIOS, TRADE_PARTNERS, findScenario } from '../src/data/scenarios.js';
-import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_BOTH_SHOWS, ENT_BASE_MAX } from '../src/data/buildings.js';
+import { SCENARIOS, findScenario } from '../src/data/scenarios.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
-import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, populationMonths, monthsToMinutes } from '../src/sim/pace.js';
+import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, employmentCeiling, employsEnough, landCeiling, landOf, peoplePerTile, lowProduction, LEAN, SENSIBLE } from '../src/sim/capacity.js';
+import { generateMap } from '../src/world/mapgen.js';
 import { updateImmigration, immigrationPerDay } from '../src/sim/population.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { newGame } from './helpers.mjs';
-import { Terrain } from '../src/world/map.js';
 
 log.setLevel('error');
 
 // ---------------------------------------------------------------------------
-// What a mission's buildings allow (a rough model of the needs in data/housing.js)
+// What a mission's buildings allow (sim/capacity.js reads the needs in data/housing.js)
 // ---------------------------------------------------------------------------
 
-/** Building keys a mission unlocks (its tools, such as roads, left out). */
-function unlocked(s) {
-  return new Set(s.unlocks === 'all' ? Object.keys(BUILDINGS) : s.unlocks.filter((k) => BUILDINGS[k]));
-}
-
-/** Goods the city can make (a workshop and its raw material) or import. */
-function goodsFor(s) {
-  const keys = unlocked(s);
-  const out = new Set();
-  for (const k of keys) {
-    const d = BUILDINGS[k];
-    if (!d.produces) continue;
-    if (d.consumes && ![...keys].some((r) => BUILDINGS[r].produces === d.consumes)) continue;
-    out.add(d.produces);
-  }
-  for (const id of s.partners) for (const g of Object.keys(TRADE_PARTNERS[id].sells)) out.add(g);
-  return out;
-}
-
-/** The best entertainment score a home can get with the mission's venues. */
-function bestEntertainment(keys) {
-  const venues = Object.keys(VENUE_POINTS).filter((v) => keys.has(v) && [...keys].some((k) => BUILDINGS[k].kind === 'training' && BUILDINGS[k].venue === v));
-  if (!venues.length) return 0;
-  let score = ENT_BASE_MAX;
-  for (const v of venues) {
-    score += VENUE_POINTS[v];
-    if (VENUE_BOTH_SHOWS[v] && VENUE_BOTH_SHOWS[v].every((w) => venues.includes(w))) score += VENUE_BOTH_BONUS[v] || 0;
-  }
-  return score;
-}
-
-/** The highest housing level a mission's buildings and partners allow. */
-function topLevel(s) {
-  const keys = unlocked(s);
-  const goods = goodsFor(s);
-  const gods = [...keys].filter((k) => k.startsWith('temple_')).length;
-  const foods = FOOD_TYPES.filter((f) => goods.has(f)).length;
-  const water = keys.has('fountain') ? 2 : keys.has('well') ? 1 : 0;
-  const edu = keys.has('school') && keys.has('library') ? (keys.has('academy') ? 3 : 2) : keys.has('school') || keys.has('library') ? 1 : 0;
-  const health = (keys.has('clinic') ? 1 : 0) + (keys.has('hospital') ? 1 : 0);
-  const wine = (keys.has('wine_ws') && goods.has('grapes') ? 1 : 0) + s.partners.filter((id) => TRADE_PARTNERS[id].sells.wine).length;
-  const ent = bestEntertainment(keys);
-  let top = 0;
-  for (let t = 1; t < HOUSE_TIERS.length; t++) {
-    const n = HOUSE_TIERS[t];
-    const ok = n.water <= water && n.food <= foods && n.religion <= gods && n.ent <= ent && n.edu <= edu
-      && (!n.barber || keys.has('barber')) && (!n.baths || keys.has('baths')) && n.health <= health
-      && n.goods.every((g) => goods.has(g)) && n.wine <= wine;
-    if (!ok) break;
-    top = t;
-  }
-  return top;
-}
+const topLevel = (s) => topLevels(s).top;
 
 /** The most culture a mission's buildings can earn (sim/ratings.js). */
 function bestCulture(s) {
-  const keys = unlocked(s);
+  const keys = unlockedBuildings(s);
   return ([...keys].some((k) => k.startsWith('temple_')) ? 25 : 0)
     + Math.min(1, bestEntertainment(keys) / 40) * 25
     + (keys.has('school') ? 15 : 0) + (keys.has('library') ? 15 : 0) + (keys.has('academy') ? 12 : 0) + (keys.has('senate') ? 8 : 0);
@@ -98,7 +47,7 @@ function bestCulture(s) {
 
 /** The most prosperity (sim/ratings.js): every home at the top level, a profit, full work, fair wages. */
 function bestProsperity(s) {
-  const keys = unlocked(s);
+  const keys = unlockedBuildings(s);
   const top = topLevel(s);
   const patricians = HOUSE_TIERS.slice(1, top + 1).some((t) => t.patrician);
   return Math.min(1, top / 12) * 40 + (patricians ? 15 : 0) + (keys.has('forum') ? 15 : 5) + 10 + 8 + (keys.has('senate') ? 10 : 0);
@@ -123,24 +72,117 @@ test('each mission keeps to its planned pace, and the missions get longer', () =
 });
 
 test('each mission\'s goals are within reach of its buildings', () => {
-  // The housing ladder through the campaign: Huts, Townhouses, Domus, Villas, then every level.
+  // The housing ladder through the campaign: Huts, Townhouses, Domus (the
+  // amphitheater: a theater alone gives at most 16 entertainment, a Domus
+  // needs 20), Villas, then every level.
   assert.deepEqual(SCENARIOS.map(topLevel), [4, 7, 9, 13, 20, 20, 20]);
   for (const s of SCENARIOS) {
     const g = s.goals;
-    const keys = unlocked(s);
+    const keys = unlockedBuildings(s);
     assert.ok(keys.has('forum'), `${s.id}: a forum, so the city has an income`);
     assert.ok(g.culture <= bestCulture(s) * 0.8, `${s.id}: culture ${g.culture} of at most ${bestCulture(s)}`);
     assert.ok(g.prosperity <= bestProsperity(s) * 0.8, `${s.id}: prosperity ${g.prosperity} of at most ${bestProsperity(s)}`);
-    // The map has the farmland to feed half as many again as the goal, from
-    // wheat farms fully on meadow (what one feeds: data/buildings.js, config.js).
-    const map = new Game({ scenario: s, flags: {} }).map;
-    let meadow = 0;
-    for (let i = 0; i < map.size; i++) if (map.terrain[i] === Terrain.MEADOW) meadow++;
-    const farm = BUILDINGS.farm_wheat;
-    const feeds = (CONFIG.DAYS_PER_MONTH / farm.productionDays) * CONFIG.CART_CAPACITY / CONFIG.FOOD_PER_PERSON_MONTH;
-    const fed = Math.floor(meadow / (farm.size * farm.size)) * feeds;
-    assert.ok(fed >= g.population * 1.5, `${s.id}: farmland for ${Math.round(fed)} people, goal ${g.population}`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Population goals that fit the jobs (sim/capacity.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Missions whose population goal is known to be more than their buildings can
+ * employ, until the economy has the jobs for it: partners' yearly purchases
+ * cap exports, and villa residents do not work. See the ROADMAP note "The
+ * late missions need more jobs". Take a mission off this list once its goal
+ * fits; a new mission must never be added to it (LEGACY_OVER holds the list
+ * to the missions that were over when the rule came in).
+ */
+const KNOWN_OVER = ['c3', 'c4', 'c5', 'c6', 'c7'];
+const LEGACY_OVER = Object.freeze(['c3', 'c4', 'c5', 'c6', 'c7']);
+
+test('each mission\'s population goal fits the jobs its buildings give, and its map', () => {
+  // Mission 1 asked for 1,200 people when a sensibly built town of Huts has
+  // about 100 jobs: played well it stalled near 600 with half its workers
+  // idle, a mood under 45 and peace stuck short of its goal.
+  for (const s of SCENARIOS) {
+    const goal = s.goals.population;
+    const ceiling = employmentCeiling(s, SENSIBLE);
+    const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
+    const land = landCeiling(s, landOf(map));
+    assert.ok(goal <= land, `${s.id}: population goal ${goal}, but the map houses and feeds at most ${land}`);
+    if (KNOWN_OVER.includes(s.id)) {
+      // Still over: when it fits, take it off the list (and the ROADMAP note).
+      assert.ok(goal > ceiling, `${s.id}: its goal ${goal} now fits (ceiling ${ceiling}): take it off KNOWN_OVER`);
+      continue;
+    }
+    assert.ok(goal <= ceiling, `${s.id}: population goal ${goal}, but a sensibly built city of its buildings employs at most ${ceiling} people`);
+    assert.ok(employsEnough(s, goal, SENSIBLE), `${s.id}: a city of ${goal} has the jobs`);
+  }
+  // Only the late missions: the rule holds for the first two and every new one.
+  assert.ok(KNOWN_OVER.every((id) => LEGACY_OVER.includes(id)), `KNOWN_OVER ${KNOWN_OVER} may only shrink`);
+});
+
+test('capacity model: a mission 1 town of Huts, worked through', () => {
+  const c1 = findScenario('c1');
+  assert.deepEqual(topLevels(c1), { top: 4, working: 4 });
+  assert.equal(peoplePerTile(4), 11);
+  // Lean, 200 people: 18 home tiles, eating 50 food a month (a wheat farm makes 80 to 92).
+  const plan = planCity(c1, 200, LEAN);
+  const count = Object.fromEntries(plan.items.map((it) => [it.key, it.count]));
+  assert.deepEqual(count, { prefecture: 2, engineer_post: 2, market: 1, forum: 1, farm_wheat: 1, granary: 1, temple_mercury: 1, temple_ceres: 1 });
+  // 2 x 6 + 2 x 5 + 5 + 6 + 10 + 12 + 2 + 2 = 59 jobs for a workforce of 64: 8% idle, fine.
+  assert.equal(plan.jobs, 59);
+  assert.ok(employsEnough(c1, 200, LEAN));
+  // 300 people still have those 59 jobs, for 96 workers: 39% idle.
+  assert.equal(jobsFor(c1, 300, LEAN), 59);
+  assert.ok(!employsEnough(c1, 300, LEAN));
+  assert.equal(employmentCeiling(c1, LEAN), 200);
+  // Sensible (the demo city's way): 3 spare farms, 30 more jobs. 300 people
+  // have 89 jobs for 96 workers, 7% idle; the demo town of 312 had 95 to 100.
+  assert.equal(jobsFor(c1, 300, SENSIBLE), 89);
+  assert.equal(employmentCeiling(c1, SENSIBLE), 300);
+});
+
+test('capacity model: shows, patricians, trade and winter fields', () => {
+  // A theater alone (mission 2): 10 for a visit and a seat base of 6 (full
+  // seats for one of the three venue kinds); with an amphitheater and both
+  // kinds of show (mission 3 on), 10 + 15 + 5 and a base of 13.
+  assert.equal(bestEntertainment(unlockedBuildings(findScenario('c2'))), 16);
+  assert.equal(bestEntertainment(unlockedBuildings(findScenario('c3'))), 43);
+  // Patricians do not work: with every level open the model's homes are
+  // Insulae (level 12), the best whose residents look for work.
+  assert.deepEqual(topLevels(findScenario('c7')), { top: 20, working: 12 });
+  // What partners buy is work: mission 3 without its trade routes employs fewer.
+  const c3 = findScenario('c3');
+  assert.ok(employmentCeiling({ ...c3, partners: [] }) < employmentCeiling(c3));
+  // The land's food at Insane: production 0.8, and no growth for 3 months in 12.
+  assert.ok(Math.abs(lowProduction() - 0.8 * 0.75) < 1e-9);
+});
+
+test('mission 1, built only with its own buildings and sized to its jobs, is won', () => {
+  // A town of 40 plots holds a little over the goal's people (some stay
+  // tents, with no well in reach). The plot count is tuned: the goal is the
+  // sensible ceiling, so a few more plots push unemployment past 10% (44
+  // plots: 348 people, 14%). Its jobs keep everyone at work, so the mood
+  // stays at PEACE_MOOD or more after the new city's first year and peace
+  // reaches its goal. The whole demo site (about 600 people for the same
+  // 100 jobs) stalls with half its workers idle.
+  const s = findScenario('c1');
+  const game = new Game({ scenario: s, flags: {} });
+  let won = null;
+  game.events.on('victory', () => {
+    const c = game.city;
+    won ??= { month: game.time.totalMonths, population: c.population, unemployment: c.unemploymentRate, mood: c.sentiment };
+  });
+  assert.ok(buildDemoCity(game, { level: 2, homes: 40 }).ok);
+  game.runDays(24 * CONFIG.DAYS_PER_MONTH);
+  const c = game.city;
+  assert.ok(won !== null, `won (${c.population} people, peace ${c.ratings.peace}, culture ${c.ratings.culture})`);
+  assert.ok(won.population >= s.goals.population, `${won.population} people when won, goal ${s.goals.population}`);
+  assert.ok(won.unemployment <= CONFIG.UNEMPLOYMENT_MOOD_FREE, `unemployment ${Math.round(won.unemployment * 100)}% when won`);
+  assert.ok(won.mood >= CONFIG.PEACE_MOOD, `mood ${won.mood} when won`);
+  // And it stays so: a year on, still at work and content.
+  assert.ok(c.unemploymentRate <= CONFIG.UNEMPLOYMENT_MOOD_FREE && c.sentiment >= CONFIG.PEACE_MOOD, `month 24: unemployment ${Math.round(c.unemploymentRate * 100)}%, mood ${c.sentiment}`);
 });
 
 test('the pace model counts settlers at the game\'s own rate', () => {

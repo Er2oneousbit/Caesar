@@ -20,6 +20,12 @@
  *   npm run sim -- --years 5
  *   npm run sim -- --difficulty insane --raids frequent --garrison
  *   npm run sim -- --pace       (how long the campaign's goals take, no city)
+ *   npm run sim -- --capacity   (how many people each mission's buildings employ, no city)
+ *   npm run sim -- --scenario c1 --unlocks --homes 40   (mission 1 as a player could build it)
+ *
+ * Campaign runs build every building unless --unlocks is given (then only
+ * what the mission unlocks), so their numbers stay comparable with earlier
+ * sweeps; a sandbox unlocks everything, so --unlocks changes nothing there.
  *
  * Made with ❤️ from your friendly hacker - er2oneousbit
  * ----------------------------------------------------------------------------
@@ -34,6 +40,11 @@ import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
 import { sickHomes } from '../src/sim/disease.js';
 import { planAction, applyPlan } from '../src/sim/construction.js';
+import { missionCapacity, landOf } from '../src/sim/capacity.js';
+import { generateMap } from '../src/world/mapgen.js';
+import { HOUSE_TIERS } from '../src/data/housing.js';
+import { CONFIG } from '../src/config.js';
+import { goalStatus } from '../src/sim/ratings.js';
 
 const HELP = `
 Headless balance simulation
@@ -42,6 +53,8 @@ Headless balance simulation
 
 Options:
   --scenario <id>   campaign scenario id (c1..c7) instead of a sandbox map
+  --unlocks         build only what the mission unlocks (campaign runs build everything without it)
+  --homes <n>       at most n housing plots, to size the town to its jobs (default: the whole site)
   --type <t>        sandbox landscape: river | coast | lakes | plains | desert (default river)
   --size <n>        sandbox map size (default 64; Uber is 256)
   --difficulty <d>  easy | normal | hard | insane (default normal)
@@ -53,12 +66,13 @@ Options:
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --json            print a JSON summary at the end
   --pace            print the campaign's pace (the fewest months each goal takes) and exit
+  --capacity        print what each mission's buildings can employ (sim/capacity.js) and exit
   --verbose         print game messages as they happen
   --help            this help
 `;
 
 function parse(argv) {
-  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false };
+  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -76,6 +90,13 @@ function parse(argv) {
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
     else if (a === '--caretaker') o.caretaker = true;
+    else if (a === '--capacity') o.capacity = true;
+    else if (a === '--unlocks') o.unlocks = true;
+    else if (a === '--homes') {
+      // A count, or the whole site would be built without a word (NaN caps nothing).
+      o.homes = Number(next());
+      if (!Number.isFinite(o.homes) || o.homes < 0) { console.error(`--homes needs a number of plots\n${HELP}`); process.exit(2); }
+    }
     else { console.error(`Unknown option ${a}\n${HELP}`); process.exit(2); }
   }
   return o;
@@ -95,6 +116,22 @@ if (opts.pace) {
   }
   process.exit(0);
 }
+// --capacity: each mission's population goal against the jobs its buildings
+// give and the room its map has (sim/capacity.js).
+if (opts.capacity) {
+  const pad = (v, n) => String(v).padStart(n);
+  console.log(`Employment ceiling: the most people whose jobs keep unemployment at ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% or less, every home at the`);
+  console.log('best working level (sim/capacity.js), for a lean and a sensible builder. Land: room to house and feed them.');
+  console.log('A population goal must fit the sensible ceiling and the land (tests/campaign.test.mjs; missions 3 to 7 are known exceptions).');
+  console.log(' mission  top home            working home      /tile   lean (jobs)   sensible (jobs)     land    goal');
+  for (const s of SCENARIOS) {
+    const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
+    const m = missionCapacity(s, landOf(map));
+    const over = s.goals.population > Math.min(m.sensible.people, m.land) ? '  over' : '';
+    console.log(` ${s.id.padEnd(7)}  ${HOUSE_TIERS[m.top].name.padEnd(18)}  ${HOUSE_TIERS[m.working].name.padEnd(16)} ${pad(m.perTile, 5)}  ${pad(m.lean.people, 6)} (${pad(m.lean.jobs, 4)})  ${pad(m.sensible.people, 8)} (${pad(m.sensible.jobs, 4)})  ${pad(m.land, 7)}  ${pad(s.goals.population, 6)}${over}`);
+  }
+  process.exit(0);
+}
 if (!DIFFICULTY[opts.difficulty]) { console.error(`Unknown difficulty ${opts.difficulty} (${Object.keys(DIFFICULTY).join(' | ')})`); process.exit(2); }
 
 const scenario = opts.scenario
@@ -102,11 +139,13 @@ const scenario = opts.scenario
   : sandboxScenario({ size: opts.size, type: opts.type, seed: opts.seed, difficulty: opts.difficulty });
 if (!scenario) { console.error(`Unknown scenario ${opts.scenario}`); process.exit(2); }
 const SIM_MONEY = 20000;
-const game = new Game({ scenario, flags: { unlockall: true, money: SIM_MONEY, raids: opts.raids } });
+const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids } });
 const messages = [];
 game.events.on('message', (m) => { messages.push(m); if (opts.verbose) console.log(`   [${m.level}] ${m.text}`); });
+let wonMonth = null; // a campaign mission: the month every goal was first met
+game.events.on('victory', () => { wonMonth ??= game.time.totalMonths; });
 
-const res = buildDemoCity(game, { level: opts.level });
+const res = buildDemoCity(game, { level: opts.level, homes: opts.homes });
 if (!res.ok) { console.error(`Demo city failed: ${res.reason}`); process.exit(1); }
 if (opts.garrison) {
   const gar = buildDemoGarrison(game, res.center, { stock: true });
@@ -178,6 +217,10 @@ money.lastYearMonthly = last >= 12 ? Math.round((treasuryByMonth[last - 1] - tre
 money.margin = funds - money.need;
 money.rebuilt = rebuilt;
 console.log(`Money: built ${Math.round(built)} Dn; most out of pocket ${money.need} Dn (month ${money.needMonth}); ${game.difficulty.name} gives ${funds} Dn: margin ${money.margin}${money.debtMonth ? `, in debt from month ${money.debtMonth}` : ''}; last year ${money.lastYearMonthly >= 0 ? '+' : ''}${money.lastYearMonthly} Dn a month${opts.caretaker ? `; ${rebuilt} rebuilt` : ''}`);
+if (opts.scenario) {
+  const goals = goalStatus(game).map((r) => `${r.key} ${r.have}/${r.need}${r.ok ? '' : ' (short)'}`).join(', ');
+  console.log(`Goals${opts.unlocks ? '' : ' (built with every building, not only those of the mission: see --unlocks)'}: ${goals}; ${wonMonth === null ? 'not met' : `all met in month ${wonMonth}`}`);
+}
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');

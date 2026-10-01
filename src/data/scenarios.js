@@ -9,6 +9,9 @@
  *   funds                         starting treasury (Dn)
  *   startYear                     negative = BC
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
+ *                                 population: no more than the mission's buildings
+ *                                 can employ (sim/capacity.js; a test holds it
+ *                                 there, missions 3 to 7 excepted for now)
  *   paceYears                     the planned floor: the fewest game years the
  *                                 goals allow (sim/pace.js; a test holds the
  *                                 goals to it). A year is about 5.3 minutes at 1x
@@ -72,18 +75,32 @@ export const INVASION_PRESETS = Object.freeze({
 });
 
 /*
- * The campaign's length: each mission's goals are set so the fastest possible
- * city takes the mission's paceYears (sim/pace.js), about 1 year for the first
- * and 15 for the last. With the homes, farms and services to build first,
- * that is roughly half an hour for the first missions and a few hours for the
- * last at normal speed. The goals follow the housing ladder: what the
- * unlocked buildings let homes reach (Huts in the first mission, Townhouses
- * in the second, Domus in the third, Villas in the fourth, then everything).
+ * The campaign's goals. Population: about a third of the plebeians look for
+ * work, and above 10% unemployment the city's mood falls and peace stops
+ * growing, so a goal of more people than the mission's buildings employ
+ * cannot be met by a well run city. Mission 1 once asked for 1,200 people
+ * when a sensible town of its buildings has about 100 jobs. Missions 1 and 2
+ * ask for what a sensibly built town employs: measured with the demo city
+ * (`npm run sim -- --scenario c1 --unlocks --homes 40`: 312 people, 4% out
+ * of work) and held under the capacity model's sensible ceiling by a test
+ * (sim/capacity.js, `npm run sim -- --capacity`). Missions 3 to 7 keep their
+ * goals for now, though their buildings cannot yet employ those populations:
+ * see the ROADMAP note "The late missions need more jobs".
+ *
+ * Length: each mission's goals are set so the fastest possible city takes the
+ * mission's paceYears (sim/pace.js). In missions 1 and 2 peace sets it (a
+ * point a month from 20); from mission 3 on, the population.
+ *
+ * The homes follow the housing ladder: what the unlocked buildings let homes
+ * reach (Huts in the first mission, Townhouses in the second, Domus in the
+ * third, Villas in the fourth, then everything). The third mission has the
+ * amphitheater for its Domus: a theater alone gives a home at most 16
+ * entertainment (10 for a visit, 6 from the seat base), and a Domus needs 20.
  */
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
-const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit'];
-const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'amphitheater', 'gladiator_school', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',
+const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school'];
+const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',
   'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall'];
 
 export const SCENARIOS = Object.freeze([
@@ -92,7 +109,7 @@ export const SCENARIOS = Object.freeze([
     intro: 'The Senate has granted you a patch of riverside land and a handful of settlers. Lay out roads, give families a place to live, keep them fed and keep the fires down. Grow a town, bring the gods to its streets and keep the peace to prove you can govern.',
     map: { size: 64, type: 'river', seed: 'novum-castrum' },
     funds: 6000, startYear: -280,
-    goals: { population: 1200, culture: 15, prosperity: 0, peace: 35, favor: 0 },
+    goals: { population: 300, culture: 15, prosperity: 0, peace: 35, favor: 0 },
     paceYears: 1.25,
     unlocks: BASIC, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
@@ -103,6 +120,7 @@ export const SCENARIOS = Object.freeze([
       'The Forum sends tax collectors. Homes they have not visited pay nothing!',
       `Culture here comes from the temples: every home a priest visits counts. Peace grows a point a month while the city is content (a mood of ${CONFIG.PEACE_MOOD} or more): fed, housed, at work and not overtaxed.`,
       'Click any building for details. Homes tell you exactly what they need to grow.',
+      `This land gives little work: a town of about 300 people fills its jobs. More homes than that only add idle hands, and above ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% unemployment the mood falls and peace stops growing. The Labor advisor shows how many are out of work.`,
     ],
   },
   {
@@ -110,14 +128,15 @@ export const SCENARIOS = Object.freeze([
     intro: 'A lakeside town needs clean water and a little culture. Build reservoirs by the lakes, run aqueducts, and give citizens fountains, schools and a stage.',
     map: { size: 96, type: 'lakes', seed: 'aquae-clarae' },
     funds: 7000, startYear: -270,
-    goals: { population: 2500, culture: 35, prosperity: 20, peace: 45, favor: 0 },
-    paceYears: 2.25,
+    goals: { population: 450, culture: 35, prosperity: 20, peace: 45, favor: 0 },
+    paceYears: 2.1,
     unlocks: TIER2, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
       'A Reservoir placed next to water fills up. Fountains inside its piped area (10 tiles) supply homes within 4 tiles.',
       'Aqueducts connect a full reservoir to other reservoirs farther inland.',
       'Cottages need a fountain; above them homes want entertainment, then a school. A Theater needs actors: build an Actor Troupe nearby.',
       'Prosperity grows with better homes, a profit, work for everyone and fair wages.',
+      'Work is still scarce here: about 450 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
     ],
   },
   {
@@ -132,6 +151,8 @@ export const SCENARIOS = Object.freeze([
       'Clay Pits must be near water. Potters turn clay into pottery, which Merchant Houses and every home above them need, with Thermae nearby.',
       'Warehouses store goods. Caravans only trade with warehouses.',
       'Open trade routes in the Trade advisor, then mark goods for import or export.',
+      'Trade is work: what your partners buy keeps farms, clay pits and potters staffed. Let the town grow as its jobs do.',
+      'A Domus wants more shows than a theater gives: add an Amphitheater, with gladiators from a Gladiator School (and actors too, for its best shows).',
     ],
   },
   {

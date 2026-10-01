@@ -11,6 +11,11 @@
  * with streets every third row (street, house, house), two cross streets
  * joining them to the Imperial road, and service buildings dropped into the
  * housing bands. Farms and a granary go on the best meadow nearby.
+ *
+ * In a campaign mission it builds only what the mission unlocks (a locked
+ * building is skipped, not tried slot after slot), unless the game was made
+ * with the unlockall flag; in a sandbox everything is unlocked, so a sandbox
+ * city is the same either way.
  * ----------------------------------------------------------------------------
  */
 
@@ -157,13 +162,18 @@ function findSite(game, W, D) {
 /**
  * Build the demo city.
  * @param {object} game
- * @param {object} [opts] { level: 1 basic | 2 with culture and industry | 3 also piped water }
+ * @param {object} [opts] { level: 1 basic | 2 with culture and industry | 3 also piped water,
+ *   homes: at most this many housing plots (default: every free tile of the housing bands) }
  * Level 3 is the yardstick for money (npm run sweep): with fountain water its
  * homes climb past Huts as a sensible player's do; level 2's stay Huts.
+ * `homes` sizes the town to a mission's jobs (npm run sim -- --homes): the
+ * whole rectangle houses far more people than mission 1's buildings employ.
  * @returns {{ok:boolean, center?:{x:number,y:number}, reason?:string}}
  */
 export function buildDemoCity(game, opts = {}) {
   const level = opts.level ?? 2;
+  const homes = opts.homes ?? Infinity;
+  const can = (type) => game.isUnlocked(type);
   const W = 18;
   const D = 11;
   const site = findSite(game, W, D);
@@ -206,7 +216,7 @@ export function buildDemoCity(game, opts = {}) {
   // take the nearest free slot in a housing band (after all the planned ones,
   // so a moved service never takes another's slot). Skipping them silently
   // once left the balance sim's city without a Forum, so it never taxed.
-  const failed = services.filter(([type, a, b, size]) => !placeLocal(type, a, b, size));
+  const failed = services.filter(([type, a, b, size]) => can(type) && !placeLocal(type, a, b, size));
   for (const [type, a0, b0, size] of failed) {
     const slots = [];
     for (let b = 0; b + size <= D; b++) {
@@ -216,16 +226,17 @@ export function buildDemoCity(game, opts = {}) {
     slots.sort((s, t) => s.d - t.d);
     slots.find((s) => placeLocal(type, s.a, s.b, size));
   }
-  // Houses everywhere else inside the rectangle.
+  // Houses everywhere else inside the rectangle (up to `homes` of them).
+  let plots = 0;
   for (let b = 0; b < D; b++) {
     for (let a = 1; a < W - 1; a++) {
-      if (b === 2 || b === 5 || b === 8) continue;
+      if (b === 2 || b === 5 || b === 8 || plots >= homes) continue;
       const p = at(a, b);
-      if (game.map.isFree(p.x, p.y)) build(game, 'house', p.x, p.y);
+      if (game.map.isFree(p.x, p.y) && build(game, 'house', p.x, p.y)) plots++;
     }
   }
   // Level 2: an actor troupe beside the theater street (outside the housing).
-  if (level >= 2) {
+  if (level >= 2 && can('actor_troupe')) {
     const p = at(W + 1, 5);
     const q = at(W + 2, 6);
     R(W - 1, 5, W + 3, 5);
@@ -233,12 +244,12 @@ export function buildDemoCity(game, opts = {}) {
   }
 
   // Level 2+: a small pottery industry beside the city (jobs + goods).
-  if (level >= 2) placeIndustry(game, at(W / 2, D / 2));
+  if (level >= 2 && can('clay_pit') && can('pottery_ws')) placeIndustry(game, at(W / 2, D / 2));
   // Level 3: piped water for the fountains.
-  if (level >= 3) pipeWater(game, at(W / 2, D / 2));
+  if (level >= 3 && can('reservoir')) pipeWater(game, at(W / 2, D / 2));
 
   // Farms + granary on the best meadow within reach.
-  const farms = placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2);
+  const farms = can('farm_wheat') ? placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2) : 0;
   const c = at(W / 2, D / 2);
   return { ok: true, center: c, farms };
 }
@@ -397,7 +408,7 @@ function besideToward(s, t) {
  */
 function guard(game, x, y, types = ['prefecture', 'engineer_post']) {
   const { map } = game;
-  for (const type of types) {
+  for (const type of types.filter((t) => game.isUnlocked(t))) {
     let done = false;
     for (let r = 1; r <= 6 && !done; r++) {
       for (let dy = -r; dy <= r && !done; dy++) {

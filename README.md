@@ -13,7 +13,9 @@ Everything is original: the art is drawn in code, the sound and music are synthe
 
 ## Play it
 
-Download **[`dist/colonia.html`](dist/colonia.html)** (the *Download raw file* button on that page) and open it in Chrome, Edge or Firefox. It is the whole game in one file: no install, no account, nothing to set up. It works offline.
+**[Play in your browser](https://er2oneousbit.github.io/Colonia/)**: Chrome, Edge or Firefox, on a computer or a phone.
+
+Or download **[`dist/colonia.html`](dist/colonia.html)** (the *Download raw file* button on that page) and open it. It is the whole game in one file: no install, no account, nothing to set up. It works offline.
 
 Saved games stay in your browser. To keep a backup or move a city to another computer, press 💾 beside any save in the Save or Load menu to download it as a file (or *Export current game* for the game you are playing).
 

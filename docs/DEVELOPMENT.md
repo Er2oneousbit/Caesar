@@ -52,6 +52,8 @@ npm i --no-save playwright && npx playwright install chromium
 
 `dist/colonia.html` is committed on purpose, so players can download one file and double-click it. CI rebuilds it and fails if the committed copy is stale: commit the rebuilt file with every source change.
 
+The same file is the web version: after CI passes on the release branch, `.github/workflows/pages.yml` publishes the commit CI tested to GitHub Pages as `index.html` (https://er2oneousbit.github.io/Colonia/). It needs Settings > Pages > Source: **GitHub Actions**, and can be run by hand from the Actions tab.
+
 ## Debug options
 
 URL flags, appended to the address (for example `dist/colonia.html?debug=1&seed=42&skipmenu=1`):
@@ -130,7 +132,7 @@ scripts/                serve.mjs, build.mjs, simulate.mjs, sweep.mjs, run.ps1, 
 tests/                  *.test.mjs, e2e/ (smoke test, screenshots, art sheet,
                         render and music pages)
 docs/                   ARCHITECTURE.md, GAMEPLAY.md, ROADMAP.md, DEVELOPMENT.md
-.github/                CI, the pull-request auto-close, the bug report form
+.github/                CI, publishing to GitHub Pages, the pull-request auto-close, the bug report form
 ```
 
 **Recipes:**

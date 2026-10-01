@@ -1,0 +1,47 @@
+# Publish the game on GitHub Pages: after CI passes on the release branch,
+# the tested single-file build (dist/colonia.html, which CI checks is the
+# exact output of `npm run build`) becomes the site's front page.
+# Needs Settings > Pages > Build and deployment > Source: GitHub Actions.
+name: Pages
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [claude/caesar-3-game-clone-a3ey5m]
+  workflow_dispatch:
+
+# One deployment at a time; a newer one waits rather than cancelling a live one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    # Only a CI run that passed (or a manual run) publishes.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit CI tested, not whatever the branch holds by now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Assemble the site
+        run: |
+          mkdir _site
+          cp dist/colonia.html _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

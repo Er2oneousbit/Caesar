@@ -18,6 +18,7 @@ Alongside: the sim fuzzer and the save corpus, so all of this lands without brea
 ## Done (v0.13.2)
 
 * **The Health, Education and Entertainment advisors fit a phone in any font**: with wider fonts (Linux's defaults, Verdana) the Entertainment advisor's Venues table ran 15 px past a 390 px screen and scrolled sideways. On narrow screens the coverage tables now tighten and their figures may wrap. The browser check measures the three tabs in Verdana too, so it catches this on any machine (it failed on the old styles)
+* **Play in the browser**: the game is published on GitHub Pages at https://er2oneousbit.github.io/Colonia/ once CI passes on the release branch (the same tested `dist/colonia.html`), and the README links to it
 * On GitHub Actions a failed browser check, or a crash with the last check that passed, is written as an error annotation, public on the run's page, so a CI failure names itself (the run's log needs admin rights)
 
 ## Done (v0.13.1)

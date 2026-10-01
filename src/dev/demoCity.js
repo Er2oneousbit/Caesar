@@ -356,9 +356,11 @@ function placeIndustry(game, center) {
 function pipeWater(game, center) {
   const { map } = game;
   const R = CONFIG.RESERVOIR_RADIUS;
-  // A reservoir wears out like any building, and one no engineer reaches
-  // collapses in months (the lakeshore reservoir here once did): each gets a
-  // road and an engineer's post beside it.
+  // Each reservoir gets a road and an engineer's post beside it. Added when
+  // reservoirs could collapse (the lakeshore one here once did); they no
+  // longer wear out, but the post now looks after the homes and workshops
+  // around it, and the sweep's money yardstick was measured with it (without
+  // it the level 3 cities collapse more often and end with other margins).
   const keepUp = (r) => { connectToRoad(game, r.x + 3, r.y + 1); guard(game, r.x + 3, r.y + 1, ['engineer_post']); };
   let shore = null;
   for (const s of findSpot(game, 3, center, 0, 60)) {

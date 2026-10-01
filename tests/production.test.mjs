@@ -182,22 +182,32 @@ test('homes with food counts the homes whose people eat and hold food, not the o
   assert.deepEqual(homesWithFood(game), { homes: 3, withFood: 1 });
 });
 
-test("a well or reservoir out of every engineer's reach is flagged when placed and afterwards", () => {
+test('a well far from every road is fine: water works never wear out, and nothing shows odds they cannot have', () => {
+  // v0.11.0 warned about wells and reservoirs out of an engineer's reach,
+  // because they collapsed. Now they never burn or collapse (as in the
+  // original), so no warning, no panel flag, no Problems entry, and the
+  // Fire risk and Collapse risk overlays raise no column over them.
   const game = newGame({ seed: 'well-reach', money: 50000 });
   const spot = findFree(game, 12, 9);
   const y = spot.y + 1;
   assert.ok(build(game, 'road', spot.x, y, spot.x + 11, y).ok);
-  const warn = (type, x, yy) => checkBuilding(game, type, x, yy).warnings.find((w) => /engineers cannot reach/.test(w));
-  assert.equal(warn('well', spot.x + 2, y + 2), undefined, 'two tiles off the road: an engineer walking it repairs it');
-  assert.ok(warn('well', spot.x + 2, y + 3), 'three tiles off: never repaired');
-  assert.equal(warn('prefecture', spot.x + 2, y + 5), undefined, 'buildings that need a road say so already');
-  const far = addBuilding(game, 'well', spot.x + 6, y + 4, 1);
-  const s = buildingStatus(game, far);
-  assert.equal(s.level, 'warn');
-  assert.match(s.text, /engineers cannot reach it/);
-  assert.match(problemOf(game, far).text, /engineers cannot reach it/, 'and the Problems overlay shows it');
-  const near = addBuilding(game, 'well', spot.x + 9, y + 1, 1);
-  assert.equal(buildingStatus(game, near).level, 'good');
+  assert.deepEqual(checkBuilding(game, 'well', spot.x + 2, y + 5).warnings, [], 'five tiles off the road: no warning');
+  const far = addBuilding(game, 'well', spot.x + 6, y + 6, 1);
+  assert.equal(buildingStatus(game, far).level, 'good');
+  assert.equal(problemOf(game, far), null, 'nothing on the Problems overlay');
+  const fire = overlayByKey('fire');
+  const damage = overlayByKey('damage');
+  far.damageRisk = 60; // as Neptune's wrath once left one
+  for (const type of ['well', 'warehouse', 'engineer_post']) {
+    const b = type === 'well' ? far : addBuilding(game, type, spot.x + (type === 'warehouse' ? 1 : 9), y + 2, type === 'warehouse' ? 3 : 1);
+    assert.equal(fire.value(b), null, `${type}: no fire column`);
+    assert.equal(damage.value(b), null, `${type}: no collapse column`);
+  }
+  const potter = addBuilding(game, 'pottery_ws', spot.x + 6, y + 2, 2);
+  potter.fireRisk = 50;
+  potter.damageRisk = 25;
+  assert.equal(fire.value(potter), 0.5, 'a workshop still shows its fire risk');
+  assert.equal(damage.value(potter), 0.25, 'and its collapse risk');
 });
 
 test("a home's tax line says why it pays nothing: no Forum, a Forum without workers, or no collector lately", () => {

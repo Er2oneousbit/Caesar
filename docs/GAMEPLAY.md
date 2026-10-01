@@ -105,7 +105,7 @@ Most services are delivered by walkers. A walker serves every building within **
 
 A home's **entertainment score** is the points of every venue whose entertainer passed by recently, plus a city-wide base of up to 20: for each kind of venue, the share of the population its working venues can seat (theater 400, amphitheater 900, colosseum 2,000 people), averaged over the three kinds and divided by 5. A growing city needs more venues, not just one of each.
 
-Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, the same faint blue shows the reservoirs' piped area, where they would run. Placing or clicking a well, fountain or reservoir shows its own reach in dark blue. Wells and reservoirs need no road, but they wear out like everything else, and an engineer repairs only what lies within 2 tiles of the road he walks: one placed further from every road is flagged when you place it, on its panel and on the Problems overlay, and in time it collapses.
+Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, the same faint blue shows the reservoirs' piped area, where they would run. Placing or clicking a well, fountain or reservoir shows its own reach in dark blue. Wells and reservoirs need no road. Wells, fountains and reservoirs never burn or collapse.
 
 ## Workers
 
@@ -117,7 +117,7 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 ## Food and industry
 
 * People eat **0.25 units per month** (a 100-unit load feeds 400 person-months).
-* Farms must sit on meadow. Output scales with the share of meadow under the 3x3 field. A full wheat farm makes 100 units every 20 days (about 80 a month, enough for ~300 people). Fields never burn. On Insane nothing grows in winter (December to Februarius; see [Difficulty](#difficulty)).
+* Farms must sit on meadow. Output scales with the share of meadow under the 3x3 field. A full wheat farm makes 100 units every 20 days (about 80 a month, enough for ~300 people). Fields never catch fire or wear out (raiders and rioters can still destroy them). On Insane nothing grows in winter (December to Februarius; see [Difficulty](#difficulty)).
 * Farm wagons haul up to 400 units, other carts up to 200; a producer can have 2 carts on the road.
 * You can read a cart at a glance: it carries its good (sacks of wheat, crates of vegetables or fruit, baskets of olives or grapes, meat, clay, logs, iron ingots, marble blocks, pots, pale amphorae of oil, dark amphorae of wine, tables and chairs, shields and spears, sheaves of arrows), piled 1 to 4 high for how full it is. A farm's wagon is longer and pulled by an ox; a warehouse sends one 100-unit lot, which fills its cart. Horses are not carted: a drover leads them, one horse per 100 units. An empty cart on its way home shows its bare bed.
 * Raw material goes to a workshop that needs it, else to a warehouse (which later ships it to workshops that run low). Finished goods go to warehouses; markets fetch them for homes that need them.
@@ -277,7 +277,14 @@ At most 100, and at most 40 for a home whose level eats and that has no food at 
 
 ## Fire and collapse
 
-Every building gains fire and collapse risk daily (houses by level, industry faster; x0.5 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread: each building beside the flames gains 5 fire risk a day and has a 2% chance a day to catch, once a day however many burning tiles it touches. An unguarded fire in a dense block usually takes a handful of homes; a prefect on the way usually stops it at one or two. Prefects within 24 road tiles are dispatched automatically.
+Every building gains fire and collapse risk daily at its own rates (homes by level; x0.5 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread: each building beside the flames gains 5 fire risk a day and has a 2% chance a day to catch, once a day however many burning tiles it touches. An unguarded fire in a dense block usually takes a handful of homes; a prefect on the way usually stops it at one or two. Prefects within 24 road tiles are dispatched automatically.
+
+Left with no prefect or engineer passing, an ordinary building reaches 100 in about 100 days on Normal, for fire and collapse alike:
+
+* **As likely to burn as to collapse:** workshops (potter, carpenter, oil press, winery, weaponsmith, fletcher), the timber yard, and every other building not named below: markets, granaries, health, education and entertainment buildings, the Forum and Senate, barracks; and Domus and Apartment Houses. Docks burn a little sooner.
+* **Burn first:** homes from Tent to Merchant House (Tents and Family Tents never collapse).
+* **Collapse first:** temples, the clay pit, iron mine and marble quarry, Tenements and up. The Prefecture, Oracle and Watchtower cannot burn at all.
+* **Never burn or collapse:** warehouses, the Engineer's Post, wells, fountains, reservoirs, farms and the Horse Ranch, gardens, statues and forts. Only raiders and rioters can destroy them (rioters set fire to farms and engineer's posts, never to warehouses, water works or forts). They never catch from a fire next door either; their panel says so, and the Fire risk and Collapse risk overlays raise no column over them.
 
 ## Gods
 

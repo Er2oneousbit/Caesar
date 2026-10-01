@@ -15,6 +15,9 @@
  *                  value at distance 1, changes by stepSize every `step` tiles,
  *                  zero beyond `range`. Negative value = unpleasant neighbor.
  *   fire, damage   risk points gained per day (0 = immune). 100 = disaster.
+ *                  Immune to both: wells, fountains, reservoirs, warehouses,
+ *                  the engineer's post, farms, gardens, statues and forts
+ *                  (raiders and rioters can still destroy them).
  *   walker         roaming walker type spawned by the building
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
@@ -122,19 +125,23 @@ export const BUILDINGS = Object.freeze({
   }),
 
   // --- Water ---------------------------------------------------------------
+  // Wells, fountains and reservoirs never burn or collapse, as in the
+  // original. Wells and reservoirs need no road, so an engineer could not
+  // always reach one; when they could wear out, a reservoir left off his
+  // rounds fell unseen and dried every fountain and bath it fed.
   well: B({
     name: 'Well', category: 'water', kind: 'well', cost: 5, size: 1, workers: 0,
-    des: [-1, 1, 1, 1], fire: 0, damage: 0.3, needsRoad: false,
+    des: [-1, 1, 1, 1], fire: 0, damage: 0, needsRoad: false,
     desc: 'Basic ground water for homes within 2 tiles. Enough for the humblest dwellings.',
   }),
   fountain: B({
     name: 'Fountain', category: 'water', kind: 'fountain', cost: 15, size: 1, workers: 4, labor: 'water',
-    des: [1, 1, -1, 1], fire: 0, damage: 0.4, needsPiped: true,
+    des: [1, 1, -1, 1], fire: 0, damage: 0, needsPiped: true,
     desc: 'Clean running water for homes within 4 tiles. Must sit inside a reservoir\'s piped area.',
   }),
   reservoir: B({
     name: 'Reservoir', category: 'water', kind: 'reservoir', cost: 80, size: 3, workers: 0,
-    des: [-2, 1, 1, 2], fire: 0, damage: 0.5, needsRoad: false,
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, needsRoad: false,
     desc: 'Fills when built next to water or linked by aqueduct to a full reservoir. Pipes water 10 tiles around.',
   }),
 
@@ -276,8 +283,10 @@ export const BUILDINGS = Object.freeze({
   // --- Engineering & security --------------------------------------------
   engineer_post: B({
     name: 'Engineer\'s Post', category: 'engineering', cost: 30, size: 1, workers: 5, labor: 'engineering',
-    des: [0, 1, 0, 0], walker: 'engineer', spawnDays: 3,
-    desc: 'Engineers inspect buildings and prevent collapses.',
+    // Never burns or collapses, as in the original: its engineers keep their
+    // own post in repair, and a post that fell would take its cover with it.
+    des: [0, 1, 0, 0], walker: 'engineer', spawnDays: 3, fire: 0, damage: 0,
+    desc: 'Engineers inspect buildings and prevent collapses. The post itself never burns or collapses on its own.',
   }),
   prefecture: B({
     name: 'Prefecture', category: 'security', cost: 30, size: 1, workers: 6, labor: 'safety',
@@ -325,7 +334,8 @@ export const BUILDINGS = Object.freeze({
   }),
   timber_yard: B({
     name: 'Timber Yard', category: 'industry', kind: 'raw', produces: 'timber', cost: 40, size: 2, workers: 8, labor: 'industry',
-    des: [-4, 1, 1, 3], fire: 2, damage: 1, placement: 'nearTrees', productionDays: 22,
+    // Burns no faster than it collapses, like the workshops (it was fire 2).
+    des: [-4, 1, 1, 3], fire: 1, damage: 1, placement: 'nearTrees', productionDays: 22,
     desc: 'Fells trees for timber. Must be within 2 tiles of woods: at least 4 tiles of forest (lone trees are not enough).',
   }),
   iron_mine: B({
@@ -340,34 +350,37 @@ export const BUILDINGS = Object.freeze({
   }),
 
   // --- Workshops -----------------------------------------------------------
+  // Fire and damage 1 each, so a workshop burns and collapses at the same
+  // pace, as in the original. Fire rates of 1.5 to 3 made them the city's
+  // main fire source, burning two or three times as often as they fell.
   pottery_ws: B({
     name: 'Potter', category: 'industry', kind: 'workshop', produces: 'pottery', consumes: 'clay', cost: 40, size: 2, workers: 10, labor: 'industry',
-    des: [-4, 1, 1, 3], fire: 2.5, damage: 1, productionDays: 18,
+    des: [-4, 1, 1, 3], fire: 1, damage: 1, productionDays: 18,
     desc: 'Turns clay into pottery.',
   }),
   furniture_ws: B({
     name: 'Carpenter', category: 'industry', kind: 'workshop', produces: 'furniture', consumes: 'timber', cost: 40, size: 2, workers: 10, labor: 'industry',
-    des: [-4, 1, 1, 3], fire: 2.5, damage: 1, productionDays: 20,
+    des: [-4, 1, 1, 3], fire: 1, damage: 1, productionDays: 20,
     desc: 'Turns timber into furniture.',
   }),
   oil_ws: B({
     name: 'Oil Press', category: 'industry', kind: 'workshop', produces: 'oil', consumes: 'olives', cost: 50, size: 2, workers: 10, labor: 'industry',
-    des: [-4, 1, 1, 3], fire: 2, damage: 1, productionDays: 20,
+    des: [-4, 1, 1, 3], fire: 1, damage: 1, productionDays: 20,
     desc: 'Presses olives into oil.',
   }),
   wine_ws: B({
     name: 'Winery', category: 'industry', kind: 'workshop', produces: 'wine', consumes: 'grapes', cost: 45, size: 2, workers: 10, labor: 'industry',
-    des: [-1, 1, 1, 1], fire: 1.5, damage: 1, productionDays: 22,
+    des: [-1, 1, 1, 1], fire: 1, damage: 1, productionDays: 22,
     desc: 'Ferments grapes into wine.',
   }),
   weapons_ws: B({
     name: 'Weaponsmith', category: 'industry', kind: 'workshop', produces: 'weapons', consumes: 'iron', cost: 50, size: 2, workers: 10, labor: 'industry',
-    des: [-4, 1, 1, 3], fire: 3, damage: 1, productionDays: 22,
+    des: [-4, 1, 1, 3], fire: 1, damage: 1, productionDays: 22,
     desc: 'Forges iron into weapons: legionaries need them, and they sell well abroad.',
   }),
   fletcher_ws: B({
     name: 'Fletcher', category: 'industry', kind: 'workshop', produces: 'arrows', recipe: { timber: 100, iron: 50 }, cost: 45, size: 2, workers: 8, labor: 'industry',
-    des: [-2, 1, 1, 2], fire: 2.5, damage: 1, productionDays: 16,
+    des: [-2, 1, 1, 2], fire: 1, damage: 1, productionDays: 16,
     desc: 'Makes bows and iron-tipped arrows from timber (shafts) and iron (arrowheads): 100 timber + 50 iron per 100 arrows. Archer recruits need them at the barracks.',
   }),
 
@@ -384,8 +397,10 @@ export const BUILDINGS = Object.freeze({
   }),
   warehouse: B({
     name: 'Warehouse', category: 'commerce', kind: 'warehouse', cost: 70, size: 3, workers: 6, labor: 'industry',
-    des: [-5, 2, 1, 4], fire: 1.2, damage: 1,
-    desc: 'Stores raw materials and goods. Supplies workshops and trades with caravans.',
+    // Never burns or collapses, as in the original (players of it know
+    // "warehouses don't burn"); raiders can still wreck one.
+    des: [-5, 2, 1, 4], fire: 0, damage: 0,
+    desc: 'Stores raw materials and goods. Supplies workshops and trades with caravans. Never burns or collapses on its own.',
   }),
   dock: B({
     name: 'Dock', category: 'commerce', kind: 'dock', cost: 120, size: 3, workers: 10, labor: 'industry',

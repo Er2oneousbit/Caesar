@@ -68,6 +68,13 @@
  *      hippodrome access and venues a hippodrome show count. Fishing grounds
  *      are derived from the terrain at load, never saved. Older saves load
  *      with no fish, no boats and the new keys at 0, see upgradeFishV8().
+ *  10  the cloth industry: flax, linen and clothing are goods (every
+ *      warehouse and dock stock and trade setting has them), homes and
+ *      markets hold clothing, and homes need it from the Insula up. Older
+ *      saves load with the new goods at 0 and no trade in them, see
+ *      upgradeClothV9(); their Tenements and better homes start with three
+ *      months of clothing, and fall back after that unless a market brings
+ *      more.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -92,6 +99,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario, withDifficulty } from '../data/scenarios.js';
+import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
 import { log } from './debug.js';
 
@@ -374,6 +382,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 7) upgradeOrdersV6(game);
   if (data.version < 8) upgradeShipsV7(game);
   if (data.version < 9) upgradeFishV8(game);
+  if (data.version < 10) upgradeClothV9(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -485,6 +494,47 @@ export function upgradeFishV8(game) {
   }
   const settings = game.city.trade && game.city.trade.settings;
   if (settings) settings.fish ??= { mode: 'none', level: 400 };
+}
+
+/** The goods added in version 10 (the cloth industry). */
+const CLOTH_GOODS = ['flax', 'linen', 'clothing'];
+
+/** Months of clothing an upgraded save's Tenements and better homes start with (see upgradeClothV9). */
+export const CLOTHING_GRACE_MONTHS = 3;
+
+/**
+ * A save before version 10 (before the cloth industry): markets get
+ * clothing at 0 (also on the way to them), warehouses and docks flax, linen
+ * and clothing at 0, and the trade settings get the three goods with no
+ * trade. Warehouse orders for them were filled in with their defaults
+ * (Accept) as the buildings were read.
+ *
+ * Homes get clothing at 0, except those that need it now (Insulae and up)
+ * or will next (Tenements): they start with what a market vendor would have
+ * left them, CLOTHING_GRACE_MONTHS of it, so a loaded city has time to build
+ * the chain (its first clothing takes about two months) before they fall
+ * back. Without it every villa of a loaded late mission fell to a Tenement
+ * within days.
+ */
+export function upgradeClothV9(game) {
+  const firstLevel = HOUSE_TIERS.findIndex((t) => t.goods.includes('clothing'));
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (h) {
+      if (!h.goods || h.goods.clothing !== undefined) continue;
+      const months = h.pop > 0 && h.tier >= firstLevel - 1 ? CLOTHING_GRACE_MONTHS : 0;
+      h.goods.clothing = (Math.max(0.25, h.pop / CONFIG.GOODS_PER_HOUSE_PEOPLE)) * months;
+      continue;
+    }
+    const kind = b.def.kind;
+    const goods = kind === 'market' ? ['clothing'] : kind === 'warehouse' || kind === 'dock' ? CLOTH_GOODS : [];
+    for (const g of goods) {
+      if (b.stock) b.stock[g] ??= 0;
+      if (b.incoming) b.incoming[g] ??= 0;
+    }
+  }
+  const settings = game.city.trade && game.city.trade.settings;
+  if (settings) for (const g of CLOTH_GOODS) settings[g] ??= { mode: 'none', level: 400 };
 }
 
 /**

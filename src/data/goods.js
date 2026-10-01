@@ -4,7 +4,10 @@
  * Every tradeable/storable resource.
  *
  *   kind:  'food'  eaten by houses, stored in granaries (and warehouses)
- *          'raw'   raw materials for workshops, stored in warehouses
+ *          'raw'   raw materials for workshops, stored in warehouses. Linen
+ *                  is one too, though a workshop makes it: what makes a good
+ *                  'raw' is that a workshop works it up, so carts take it to
+ *                  a Clothing Maker first and warehouses forward it to one
  *          'goods' manufactured goods houses want, stored in warehouses
  *   buy:   Dn the city PAYS per cart (100 units) when importing
  *   sell:  Dn the city EARNS per cart when exporting
@@ -29,6 +32,13 @@ export const GOODS = Object.freeze({
   grapes: { name: 'Grapes', kind: 'raw', color: '#6b3fa0', buy: 48, sell: 34, icon: '🍇' },
   iron: { name: 'Iron', kind: 'raw', color: '#6d7480', buy: 64, sell: 44, icon: '⛏' },
   marble: { name: 'Marble', kind: 'raw', color: '#e9e6df', buy: 210, sell: 150, icon: '🪨' },
+  // The cloth industry (not in the original): flax from a farm, spun and woven
+  // into linen, sewn into clothing. Last among the raw materials, so every
+  // loop over them keeps the others in their old order. Flax is priced like
+  // the other crops; linen, made by a workshop, between a crop and finished
+  // goods; clothing, two workshops from the field, above furniture.
+  flax: { name: 'Flax', kind: 'raw', color: '#b7a974', buy: 44, sell: 30, icon: '🌿' },
+  linen: { name: 'Linen', kind: 'raw', color: '#ece6d2', buy: 110, sell: 80, icon: '🧵' },
   // Manufactured goods
   pottery: { name: 'Pottery', kind: 'goods', color: '#c7643e', buy: 170, sell: 128, icon: '🏺' },
   furniture: { name: 'Furniture', kind: 'goods', color: '#a0703c', buy: 200, sell: 150, icon: '🪑' },
@@ -36,6 +46,8 @@ export const GOODS = Object.freeze({
   wine: { name: 'Wine', kind: 'goods', color: '#7b1f3a', buy: 215, sell: 160, icon: '🍷' },
   weapons: { name: 'Weapons', kind: 'goods', color: '#9aa3ad', buy: 250, sell: 180, icon: '⚔' },
   arrows: { name: 'Arrows', kind: 'goods', color: '#b89a64', buy: 130, sell: 95, icon: '🏹' },
+  // Clothing (Clothing Maker: linen -> clothing): homes need it from the Insula up.
+  clothing: { name: 'Clothing', kind: 'goods', color: '#4a6fa5', buy: 220, sell: 165, icon: '👕' },
   // Military stock: 100 units = one horse
   horses: { name: 'Horses', kind: 'stock', color: '#8a5a3c', buy: 420, sell: 300, icon: '🐎', unitSize: 100, unitName: 'horse' },
 });
@@ -74,8 +86,11 @@ export function formatAmount(good, units) {
   return `${Math.round(units)} units`;
 }
 
-/** Goods houses consume (weapons and arrows are export/military only). */
-export const HOUSE_GOODS = Object.freeze(['pottery', 'furniture', 'oil', 'wine']);
+/**
+ * Goods houses consume (weapons and arrows are export/military only).
+ * Clothing comes last, so loops over the older four keep their order.
+ */
+export const HOUSE_GOODS = Object.freeze(['pottery', 'furniture', 'oil', 'wine', 'clothing']);
 
 /** Empty stock record { wheat: 0, ... } */
 export function emptyStock(keys = GOOD_KEYS) {

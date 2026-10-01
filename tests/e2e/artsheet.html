@@ -21,6 +21,7 @@
   reviewing changes, and as a side-by-side reference when making replacement
   sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)  carts=1 (the carts only; scale=1 is the default zoom)
   water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
+  cloth=1 (the cloth industry only: the flax farm as it grows and rests, the two workshops, the carts)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
@@ -37,7 +38,8 @@
   const scale = Number(q.get('scale') || 2);
   // carts=1 shows only the carts (an empty tier list skips every home level)
   const water = !!q.get('water');
-  const only = q.get('carts') || water ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const cloth = !!q.get('cloth');
+  const only = q.get('carts') || water || cloth ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -88,6 +90,15 @@
       return [t, buildingSpec(t, S, 0, 0)];
     }));
   }
+  if (!only || q.get('extras') || cloth) {
+    // The cloth industry: the flax field at each growth stage (blue from the
+    // third), resting for an Insane winter, and the two workshops in their looks.
+    section('Flax Farm: growth stages 0 to 4, then resting in winter (Insane)', [0, 1, 2, 3, 4, 7].map((st) => [st >= 5 ? `resting ${st - 5}` : `stage ${st}`, buildingSpec('farm_flax', 3, 0, st)]));
+    section('Linen Maker (loom) and Clothing Maker (tunics drying), in their looks', [
+      ...[0, 1].map((v) => [`linen_ws ${v}`, buildingSpec('linen_ws', 2, v, 0)]),
+      ...[0, 1, 2, 3].map((v) => [`clothing_ws ${v}`, buildingSpec('clothing_ws', 2, v, 0)]),
+    ]);
+  }
   if (!only || q.get('extras') || water) {
     // Fishing: the shipyard turned to each side of the water (empty slip,
     // ribs, planked hull), the wharf with and without the catch waiting.
@@ -127,7 +138,7 @@
       chariot(1, '#2f6db5', 'charioteer'), chariot(-1, '#2f6db5', 'facing left'), chariot(1, '#b8573a', 'team'),
     ]);
   }
-  if ((!only || q.get('extras') || q.get('carts')) && !water) {
+  if ((!only || q.get('extras') || q.get('carts') || cloth) && !water) {
     // Carts: every good at a part load (100 of a hand cart's 200) and a full
     // load, facing right then left; farm wagons at 100 and 400; horses led;
     // caravan mules coming in (bales) and going out with what they bought.
@@ -169,7 +180,7 @@
       ['warehouse lot (full)', [[pusher('iron', 100), 1, BUILDINGS.warehouse]]],
       ['unknown good', [[pusher('silk', 200), 1, shop]]],
     ]));
-    walkers('Farm wagons: 100, 200, 300, 400', ['wheat', 'vegetables', 'fruit', 'meat', 'olives', 'grapes'].map((g) => [g,
+    walkers('Farm wagons: 100, 200, 300, 400', ['wheat', 'vegetables', 'fruit', 'meat', 'olives', 'grapes', 'flax'].map((g) => [g,
       [100, 200, 300, 400].map((n) => [pusher(g, n), 1, BUILDINGS.farm_wheat])])
       .concat([['empty wagon', [[pusher(null, 0), 1, BUILDINGS.farm_wheat], [pusher(null, 0), -1, BUILDINGS.farm_wheat]]]]), 46);
     walkers('Horses led: 1 to 4, and facing left', [

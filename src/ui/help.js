@@ -12,6 +12,7 @@ import { CONFIG } from '../config.js';
 import { HOUSE_TIERS, MAX_TIER } from '../data/housing.js';
 import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, ENT_SEATS_MAX, ENT_BASE_MAX } from '../data/buildings.js';
 import { GOODS } from '../data/goods.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { KEY_HELP } from '../input/input.js';
 import { tierNeeds } from './advisors.js';
@@ -19,6 +20,12 @@ import { CONSOLE_HELP } from './console.js';
 import { RAID_MIN_POP } from '../sim/military.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
+
+/** "Tarraco and Alexandria": the partners that sell (`side` 'sells') or buy (`side` 'buys') a good, from the data. */
+const partnersWho = (side, good) => {
+  const names = Object.values(TRADE_PARTNERS).filter((p) => p[side][good]).map((p) => p.name);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0] || 'nobody';
+};
 
 /** "none on Easy, 5 on Normal, 10 on Hard, 15 on Insane": crime's cost in peace by difficulty. */
 const peaceByLevel = (base) => Object.values(DIFFICULTY)
@@ -101,6 +108,8 @@ function content(tab) {
         chain('Timber Yard (near forest)', 'Carpenter', 'Warehouse', 'Market', 'Homes (Furniture)'),
         chain('Olive Grove (meadow)', 'Oil Press', 'Warehouse', 'Market', 'Homes (Oil)'),
         chain('Vineyard (meadow)', 'Winery', 'Warehouse', 'Market', 'Homes (Wine)'),
+        chain('Flax Farm (meadow)', 'Linen Maker', 'Clothing Maker', 'Warehouse', 'Market', 'Homes (Clothing)'),
+        h('p', { class: 'muted' }, `Clothing takes two workshops: a Linen Maker spins and weaves flax into linen, and a Clothing Maker sews the linen into clothing. Homes need it from the Insula up (a Tenement already stocks it). Linen can also be bought (${partnersWho('sells', 'linen')} sell it) for a Clothing Maker, and ${partnersWho('buys', 'clothing')} buy clothing.`),
         chain('Iron Mine (by rocks)', 'Weaponsmith', 'Warehouse', 'Export'),
         chain('Marble Quarry (by rocks)', 'Warehouse', 'Export'),
         h('p', {}, 'Raw materials go straight to a workshop that needs them, otherwise to a warehouse, which later sends them to workshops that run low.'),

@@ -20,19 +20,33 @@ import { logGoods } from './goodsLedger.js';
 import { hasWorkingWharf } from './fishing.js';
 
 /**
+ * Cloth goods (not in the original) are asked for only while the city has a
+ * building that makes them, as fish only while a wharf works.
+ */
+const CLOTH_GOODS = new Set(['flax', 'linen', 'clothing']);
+
+/**
  * Goods the city could plausibly supply (it can build the producer). Fish
- * only while a wharf is at work: a city with no wharf is never asked for it,
- * and its requests are drawn exactly as before there was fish.
+ * only while a wharf is at work, flax, linen and clothing only while a
+ * building that makes them stands: a city without them is never asked for
+ * them, and its requests are drawn exactly as before they existed.
  */
 function requestableGoods(game) {
   const out = new Set();
   for (const [key, def] of Object.entries(BUILDINGS)) {
     if (!def.produces || !game.isUnlocked(key)) continue;
     if (def.kind === 'wharf' && !hasWorkingWharf(game)) continue;
+    if (CLOTH_GOODS.has(def.produces) && !hasBuilding(game, key)) continue;
     out.add(def.produces);
   }
   // Import-able goods also count if a route could be opened.
   return [...out];
+}
+
+/** Does the city have a building of this type (staffed or not)? */
+function hasBuilding(game, type) {
+  for (const b of game.buildings.values()) if (b.type === type) return true;
+  return false;
 }
 
 export function scheduleNextRequest(game, first = false) {

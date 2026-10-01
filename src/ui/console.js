@@ -10,7 +10,7 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth } from '../dev/demoCity.js';
 import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
@@ -46,6 +46,7 @@ export const CONSOLE_HELP = [
   ['fishing', 'Build a shipyard, two fishing wharves and a granary on the nearest water with fish'],
   ['grounds', 'List the fishing grounds, and every wharf and its boat'],
   ['hippodrome', 'Build a hippodrome and a chariot maker beside the city'],
+  ['cloth', 'Build the cloth industry beside the city: a flax farm, a linen maker, a clothing maker and a warehouse'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['army', 'List forts, soldiers, barracks stock and the raid schedule'],
   ['win', 'Trigger victory'],
@@ -242,6 +243,7 @@ export class DebugConsole {
         return res.ok ? `Harbor built; sea routes opened: ${res.routes.join(', ') || 'none in this scenario'}.` : 'No navigable shore near the city (try a river or coast map).';
       }
       case 'fishing':
+      case 'cloth':
       case 'hippodrome': {
         need();
         const center = cityCenter(g);
@@ -250,6 +252,12 @@ export class DebugConsole {
           const res = buildDemoFishery(g, center);
           if (res.shipyard) app.renderer.camera.centerOnTile(res.shipyard.x, res.shipyard.y);
           return res.ok ? `Fishing quarter built: a shipyard, ${res.wharves.length} wharves${res.granary ? ' and a granary' : ''}. The first boat comes in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff.` : 'No water with fishing grounds near the city (try a coast or river map).';
+        }
+        if (cmd === 'cloth') {
+          const res = buildDemoCloth(g, center);
+          if (res.linen) app.renderer.camera.centerOnTile(res.linen.x, res.linen.y);
+          if (res.ok) return 'Cloth industry built: a flax farm, a linen maker, a clothing maker and a warehouse. Homes need clothing from the Insula up.';
+          return res.farm || res.linen ? 'Cloth industry only partly built (no room, or no meadow for the flax farm).' : 'No room for the cloth industry near the city (the flax farm needs meadow), or it is locked in this mission.';
         }
         const res = buildDemoHippodrome(g, center);
         if (res.hippodrome) app.renderer.camera.centerOnTile(res.hippodrome.x + 7, res.hippodrome.y + 2);

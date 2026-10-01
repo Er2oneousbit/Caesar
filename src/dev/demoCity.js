@@ -23,7 +23,7 @@ import { planAction, applyPlan, undoLast } from '../sim/construction.js';
 import { removeBuilding } from '../sim/entities.js';
 import { openRoute, setTradeMode } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
-import { Terrain } from '../world/map.js';
+import { Terrain, WaterBits } from '../world/map.js';
 import { CONFIG } from '../config.js';
 
 /** Undo records of the builds made inside the current attempt() (null outside one). */
@@ -252,7 +252,10 @@ export function buildDemoCity(game, opts = {}) {
   const farms = can('farm_wheat') ? placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2) : 0;
   roadEveryBuilding(game);
   const c = at(W / 2, D / 2);
-  return { ok: true, center: c, farms };
+  const p = at(0, 0);
+  const q = at(W - 1, D - 1);
+  const bounds = { x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y) };
+  return { ok: true, center: c, farms, bounds };
 }
 
 /**
@@ -750,6 +753,87 @@ export function buildDemoHippodrome(game, center) {
   // The maker by the town, where its workers live (the track may lie a long walk out).
   const maker = placeNear(game, 'chariot_maker', 3, center, 6, 24);
   return { ok: !!maker, hippodrome, maker };
+}
+
+// ---------------------------------------------------------------------------
+// The cloth industry, and an uptown for Insulae (simulate.mjs --cloth,
+// --uptown; the console's `cloth`; tests and screenshots)
+// ---------------------------------------------------------------------------
+
+/**
+ * A cloth quarter: a Flax Farm on the nearest meadow, a Linen Maker and a
+ * Clothing Maker beside the town and a warehouse for the clothing, guarded
+ * by a prefect and an engineer. The flax goes straight to the Linen Maker by
+ * cart, the linen straight to the Clothing Maker, and the clothing to the
+ * warehouse, where the markets' buyers fetch it.
+ * @returns {{ok:boolean, farm?:object, linen?:object, clothing?:object, warehouse?:object}}
+ */
+export function buildDemoCloth(game, center) {
+  if (!['farm_flax', 'linen_ws', 'clothing_ws'].every((k) => game.isUnlocked(k))) return { ok: false };
+  const farm = placeNear(game, 'farm_flax', 3, center, 8, 34, true);
+  const linen = placeNear(game, 'linen_ws', 2, center, 6, 22);
+  const clothing = linen ? placeNear(game, 'clothing_ws', 2, linen, 2, 12) : null;
+  const warehouse = clothing ? placeNear(game, 'warehouse', 3, clothing, 2, 12) : null;
+  for (const b of [linen, clothing]) if (b) guard(game, b.x, b.y);
+  return { ok: !!(farm && linen && clothing && warehouse), farm, linen, clothing, warehouse };
+}
+
+/**
+ * The goods every market is topped up with each month by the uptown's
+ * `monthly()` (to MARKET_GOODS_CAP): a stand-in for a potter, a carpenter
+ * and an oil press, with buyers to fetch their wares, that never run short.
+ * The demo city's own potter hangs on one clay pit that can burn or fall,
+ * and with five goods and five foods to fetch, a market's one buyer falls
+ * behind; the stand-in keeps a run about the clothing, which travels the
+ * whole way (field, two workshops, warehouse, market buyer, vendor).
+ */
+export const UPTOWN_GOODS = Object.freeze(['pottery', 'furniture', 'oil']);
+
+/**
+ * Lift the level 3 demo city's homes toward the Insula, as a player
+ * building for them would, all but the clothing: plazas on its streets and
+ * statues by it for desirability, a library and three baths (school, barber
+ * and medicus it has), a third market, the amphitheater and colosseum with
+ * their schools for entertainment, and three vegetable farms for a second
+ * food (and more of it: the town's four wheat farms feed it as Huts).
+ * `monthly()` stocks the markets with pottery, furniture and oil (see
+ * UPTOWN_GOODS). With buildDemoCloth too, every need of an Insula is met.
+ * `res`: what buildDemoCity returned (its center and bounds).
+ * @returns {{ok:boolean, built:object, monthly:Function}}
+ */
+export function buildDemoUptown(game, res) {
+  const { center, bounds } = res;
+  const built = {};
+  if (bounds && game.isUnlocked('plaza')) built.plaza = build(game, 'plaza', bounds.x0, bounds.y0, bounds.x1, bounds.y1);
+  // Second rounds of the walkers that cover the most demanding needs, from
+  // the other side of town (one of each left homes out of reach for weeks).
+  for (const [type, size, minD, maxD] of [['library', 2, 3, 12], ['library', 2, 8, 14], ['school', 2, 8, 14], ['clinic', 1, 3, 12], ['market', 2, 3, 12]]) {
+    if (game.isUnlocked(type)) built[type] = (built[type] || 0) + (placeNear(game, type, size, center, minD, maxD) ? 1 : 0);
+  }
+  // The baths inside a reservoir's piped area (they run on piped water).
+  const { map } = game;
+  const piped = (x, y) => (map.water[map.idx(x, y)] & WaterBits.PIPED) !== 0 && (map.water[map.idx(x + 1, y + 1)] & WaterBits.PIPED) !== 0;
+  built.baths = 0;
+  for (let k = 0; k < 3 && game.isUnlocked('baths'); k++) if (placeJoined(game, 'baths', 2, center, 16, piped)) built.baths++;
+  Object.assign(built, Object.fromEntries(Object.entries(buildDemoVenues(game, center)).map(([k, b]) => [k, !!b])));
+  built.farm_veg = 0;
+  for (let k = 0; k < 3 && game.isUnlocked('farm_veg'); k++) if (placeNear(game, 'farm_veg', 3, center, 8, 34, true)) built.farm_veg++;
+  // Statues around the town, the grand ones first (each lifts every home
+  // within its reach).
+  let statues = 0;
+  for (const [type, size] of [['statue_large', 3], ['statue_large', 3], ['statue_medium', 2], ['statue_medium', 2], ['statue_medium', 2], ['statue_medium', 2]]) {
+    if (!game.isUnlocked(type)) continue;
+    const s = findSpot(game, size, center, 5, 12).find((p) => place(game, type, p.x, p.y, size));
+    if (s) statues++;
+  }
+  built.statues = statues;
+  const monthly = () => {
+    for (const b of game.buildings.values()) {
+      if (b.def.kind !== 'market') continue;
+      for (const g of UPTOWN_GOODS) b.stock[g] = Math.max(b.stock[g], CONFIG.MARKET_GOODS_CAP);
+    }
+  };
+  return { ok: !!(built.library && built.baths), built, monthly };
 }
 
 // ---------------------------------------------------------------------------

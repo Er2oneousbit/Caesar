@@ -147,8 +147,11 @@ export function goodsAvailable(s) {
   const bought = new Set();
   for (const id of s.partners) for (const g of Object.keys(TRADE_PARTNERS[id].sells)) bought.add(g);
   const made = new Set();
-  // Raw goods first, then the workshops that use them (a workshop's input may be bought).
-  for (let pass = 0; pass < 2; pass++) {
+  // Raw goods first, then the workshops that use them (a workshop's input may
+  // be bought), pass after pass until nothing new: a chain can be three long
+  // (flax, then linen, then clothing).
+  for (let size = -1; size !== made.size;) {
+    size = made.size;
     for (const k of keys) {
       const d = BUILDINGS[k];
       if (!d.produces || d.kind === 'wharf') continue; // fish depends on the water: never counted on
@@ -430,12 +433,19 @@ function industryPlan(s, keys, goods, need, people, production) {
       units += n; // exports leave from a warehouse, food too
     }
   }
-  // Workshops' raw materials, made at home when the mission has the producer.
-  for (const g of Object.keys(demand)) {
+  // Workshops' raw materials, made at home when the mission has the producer,
+  // down the chain: clothing's linen, and that linen's flax.
+  const inputsOf = (g, units) => {
     const def = producerOf(keys, g);
-    if (!def || !def.recipe) continue;
-    for (const [r, per] of Object.entries(def.recipe)) if (producerOf(keys, r)) want(r, (demand[g] * per) / CONFIG.CART_CAPACITY);
-  }
+    if (!def || !def.recipe) return;
+    for (const [r, per] of Object.entries(def.recipe)) {
+      if (!producerOf(keys, r)) continue;
+      const n = (units * per) / CONFIG.CART_CAPACITY;
+      want(r, n);
+      inputsOf(r, n);
+    }
+  };
+  for (const [g, n] of Object.entries({ ...demand })) inputsOf(g, n);
   const items = [];
   let made = 0;
   for (const [g, n] of Object.entries(demand)) {

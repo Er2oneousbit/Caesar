@@ -669,6 +669,60 @@ try {
   check('a wharf can be placed, and its panel shows its boat and catch', /Fishing/.test(water.wharf || '') && /Catch in store/.test(water.wharf || '') && errors.length === 0, JSON.stringify({ fish: water.fish, wharf: (water.wharf || '').slice(0, 160) }));
   check('a hippodrome can be placed; any section opens its panel with the races', !!water.main && water.target === water.main && /Races/.test(water.hipPanel || '') && errors.length === 0, JSON.stringify({ hip: water.hip, target: water.target, main: water.main }));
 
+  // 5a2d. The cloth industry from the build menu: each of the three buildings
+  //       is in its category, the click picks it as the tool, and a click on
+  //       the map places it (the flax farm on meadow, all beside a road).
+  const clothPlaced = [];
+  for (const [cat, name, key, size] of [['Farms', 'Flax Farm', 'farm_flax', 3], ['Industry', 'Linen Maker', 'linen_ws', 2], ['Industry', 'Clothing Maker', 'clothing_ws', 2]]) {
+    const at = await page.evaluate(({ size, meadow }) => {
+      const app = window.colonia;
+      const m = app.game.map;
+      const home = [...app.game.buildings.values()].find((b) => b.house && b.house.pop > 0);
+      // Top-left corners of free land (meadow for the farm) with a road along an edge.
+      const fits = (x, y) => {
+        for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+          const i = m.idx(x + dx, y + dy);
+          if (!m.isFree(x + dx, y + dy) || m.terrain[i] === 2 || (meadow && m.terrain[i] !== 1)) return false;
+        }
+        for (let k = 0; k < size; k++) if (m.hasRoad(x + k, y - 1) || m.hasRoad(x + k, y + size) || m.hasRoad(x - 1, y + k) || m.hasRoad(x + size, y + k)) return true;
+        return false;
+      };
+      for (let r = 2; r < 60; r++) {
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = home.x + dx; const y = home.y + dy;
+          if (!m.inBounds(x, y) || !m.inBounds(x + size, y + size) || !fits(x, y)) continue;
+          // planAction takes a big building by its middle tile.
+          const off = Math.floor((size - 1) / 2);
+          app.renderer.camera.centerOnTile(x + off, y + off);
+          app.renderer.render(0, 0.016);
+          return { x, y, ax: x + off, ay: y + off };
+        }
+      }
+      return null;
+    }, { size, meadow: key === 'farm_flax' });
+    await page.click(`.cat-btn[title^="${cat}"]`);
+    const listed = await page.isVisible(`.build-item:has-text("${name}")`);
+    if (listed) await page.click(`.build-item:has-text("${name}")`);
+    const tool = await page.evaluate(() => window.colonia.input.tool);
+    let placed = null;
+    if (at && tool === key) {
+      const p = await toScreen(at.ax, at.ay);
+      await page.mouse.move(p.x - 4, p.y);
+      await page.mouse.move(p.x, p.y);
+      await page.waitForTimeout(100);
+      await page.mouse.click(p.x, p.y);
+      placed = await page.evaluate(({ x, y, key }) => {
+        const app = window.colonia;
+        const b = app.game.buildings.get(app.game.map.building[app.game.map.idx(x, y)]);
+        return b && b.type === key ? { type: b.type, x: b.x, y: b.y, road: b.accessRoad >= 0 } : null;
+      }, { ...at, key });
+    }
+    if (await page.evaluate(() => window.colonia.input.tool)) await page.keyboard.press('Escape');
+    clothPlaced.push({ key, listed, tool, at, placed });
+  }
+  check('the Flax Farm, Linen Maker and Clothing Maker are in the build menu and can be placed', clothPlaced.every((c) => c.listed && c.tool === c.key && c.placed && c.placed.x === c.at.x && c.placed.y === c.at.y && c.placed.road) && errors.length === 0, JSON.stringify(clothPlaced));
+
   // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
   //      the Production advisor and the trend charts.
   await page.selectOption('.hud-select', 'problems');

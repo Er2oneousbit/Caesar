@@ -50,17 +50,24 @@ import { BUILDINGS, TOOLS } from './buildings.js';
  *          sits just inland of its harbor; Cirta is inland too, and its
  *          ships put in on the coast below it
  *   color  sail / banner color
+ *
+ * Cloth (not in the original), by what each place was known for: Egypt's
+ * linen was the finest in the Mediterranean (Alexandria sells the most), and
+ * Hispania's coast round Tarraco wove linen of its own; rich Capua and
+ * Corinthus buy clothing. A mission whose homes can reach the Insula, where
+ * clothing is first needed, also unlocks the Flax Farm, Linen Maker and
+ * Clothing Maker (TIER4 on), so linen bought in only saves a flax field.
  */
 export const TRADE_PARTNERS = Object.freeze({
-  tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: at(1.25, 41.12), color: '#b8573a', sells: { timber: 1200, olives: 1000 }, buys: { wheat: 1500, pottery: 800 } },
+  tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: at(1.25, 41.12), color: '#b8573a', sells: { timber: 1200, olives: 1000, linen: 600 }, buys: { wheat: 1500, pottery: 800 } },
   massilia: { name: 'Massilia', route: 'sea', openCost: 700, pos: at(5.37, 43.29), color: '#3f6fb0', sells: { clay: 1200, wine: 600 }, buys: { furniture: 800, vegetables: 1200, pottery: 600 } },
   lugdunum: { name: 'Lugdunum', route: 'land', openCost: 800, pos: at(4.83, 45.76), color: '#6d7480', sells: { iron: 1000, meat: 1200, arrows: 400 }, buys: { oil: 800, wine: 800, fruit: 1000 } },
   aquileia: { name: 'Aquileia', route: 'land', openCost: 600, pos: at(13.37, 45.77), color: '#7a9c5a', sells: { pottery: 600, vegetables: 1500 }, buys: { clay: 1200, olives: 1000, meat: 1000 } },
-  capua: { name: 'Capua', route: 'land', openCost: 700, pos: at(14.25, 41.08), color: '#a38b3d', sells: { wheat: 1500, wine: 600 }, buys: { pottery: 800, furniture: 600, iron: 600 } },
+  capua: { name: 'Capua', route: 'land', openCost: 700, pos: at(14.25, 41.08), color: '#a38b3d', sells: { wheat: 1500, wine: 600 }, buys: { pottery: 800, furniture: 600, iron: 600, clothing: 600 } },
   carthago: { name: 'Carthago', route: 'sea', openCost: 1000, pos: at(10.25, 36.85), color: '#8a3a9a', sells: { fruit: 1500, grapes: 1200, furniture: 500 }, buys: { weapons: 800, marble: 600, timber: 1000 } },
   cirta: { name: 'Cirta', route: 'sea', openCost: 900, pos: at(6.61, 36.37), color: '#c9962e', sells: { horses: 600, fruit: 800 }, buys: { weapons: 600, pottery: 800, oil: 600 } },
-  corinthus: { name: 'Corinthus', route: 'sea', openCost: 1200, pos: at(22.92, 37.9), color: '#2f8a8a', sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000, arrows: 600 } },
-  alexandria: { name: 'Alexandria', route: 'sea', openCost: 1400, pos: at(29.9, 31.15), color: '#d6ab3c', sells: { wheat: 2500, vegetables: 1000 }, buys: { wine: 800, oil: 800, weapons: 600, furniture: 600 } },
+  corinthus: { name: 'Corinthus', route: 'sea', openCost: 1200, pos: at(22.92, 37.9), color: '#2f8a8a', sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000, arrows: 600, clothing: 600 } },
+  alexandria: { name: 'Alexandria', route: 'sea', openCost: 1400, pos: at(29.9, 31.15), color: '#d6ab3c', sells: { wheat: 2500, vegetables: 1000, linen: 1000 }, buys: { wine: 800, oil: 800, weapons: 600, furniture: 600 } },
 });
 
 /**
@@ -115,7 +122,7 @@ export const INVASION_PRESETS = Object.freeze({
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school'];
-const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',
+const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock', 'farm_flax', 'linen_ws', 'clothing_ws',
   'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall', 'shipyard', 'wharf'];
 /**
  * Missions 5 and 6: every building and tool but the hippodrome and its
@@ -191,6 +198,7 @@ export const SCENARIOS = Object.freeze([
       'Bridges must start and end on land and run straight across water.',
       'Massilia trades by sea: build a Dock on the river bank. Tarraco and Lugdunum send caravans along the Imperial road.',
       'Apartment Houses need furniture (a Carpenter, from timber); Tenements, the first big homes, also need oil, a barber, and both a school and a library.',
+      'Insulae also need clothing: a Flax Farm on meadow, a Linen Maker and a Clothing Maker, or linen bought from Tarraco for the Clothing Maker.',
       'Raiders roam these hills. A Barracks trains soldiers for your forts: legionaries need weapons (Weaponsmith), archers need arrows (Fletcher, from timber).',
     ],
   },
@@ -205,6 +213,7 @@ export const SCENARIOS = Object.freeze([
     military: { first: 48, interval: [22, 32], base: 6 },
     hints: [
       'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity.',
+      'From the Insula up homes need clothing. Alexandria\'s ships bring Egyptian linen for a Clothing Maker, and Corinthus buys clothing.',
       'The Emperor\'s favor drifts back toward 50: his requests, the yearly tribute and gifts raise it.',
       'Cavalry needs horses. Breed them at a Horse Ranch on meadow (the herd grows over time), or import them from Cirta by sea.',
     ],

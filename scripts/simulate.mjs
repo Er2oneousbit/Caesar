@@ -25,6 +25,8 @@
  *   npm run sim -- --type coast --seed beach --years 4 --harbor   (sea trade: ships' stays at the dock)
  *   npm run sim -- --type coast --fishing 2   (two fishing wharves and a shipyard: fish a year per wharf)
  *   npm run sim -- --level 3 --venues --hippodrome   (the big venues and the hippodrome: entertainment scores)
+ *   npm run sim -- --size 96 --level 3 --uptown --cloth --years 5   (Insulae, with clothing from the cloth industry)
+ *   npm run sim -- --size 96 --level 3 --uptown --cloth --cloth-off 36 --years 5   (and when it stops)
  *
  * Campaign runs build every building unless --unlocks is given (then only
  * what the mission unlocks), so their numbers stay comparable with earlier
@@ -37,7 +39,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, UPTOWN_GOODS } from '../src/dev/demoCity.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
@@ -73,6 +75,11 @@ Options:
   --fishing <n>     also build a shipyard and n fishing wharves (and a granary by them)
   --venues          also build an amphitheater, a colosseum, a gladiator school and a menagerie
   --hippodrome      also build a hippodrome and a chariot maker
+  --uptown          lift the homes toward the Insula: plazas, statues, a library, baths, the big
+                    venues, vegetable farms; markets get pottery, furniture and oil every month
+                    (a stand-in for those industries). Everything an Insula needs but clothing
+  --cloth           also build the cloth industry: a flax farm, a linen maker, a clothing maker
+  --cloth-off <m>   demolish the cloth industry after month m (homes lose their clothing)
   --caretaker       rebuild whatever burns or collapses, as a player would (npm run sweep)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --json            print a JSON summary at the end
@@ -83,7 +90,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -100,6 +107,9 @@ function parse(argv) {
     else if (a === '--fishing') o.fishing = Number(next());
     else if (a === '--venues') o.venues = true;
     else if (a === '--hippodrome') o.hippodrome = true;
+    else if (a === '--uptown') o.uptown = true;
+    else if (a === '--cloth') o.cloth = true;
+    else if (a === '--cloth-off') o.clothOff = Number(next());
     else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--verbose') o.verbose = true;
@@ -176,6 +186,11 @@ if (opts.hippodrome) {
   const hip = buildDemoHippodrome(game, res.center);
   console.log(`Hippodrome: ${hip.hippodrome ? 'yes' : 'no'}, chariot maker ${hip.maker ? 'yes' : 'no'}`);
 }
+// --uptown and --cloth: homes that can reach the Insula, and the clothing it needs.
+const uptown = opts.uptown ? buildDemoUptown(game, res) : null;
+if (uptown) console.log(`Uptown: ${Object.entries(uptown.built).map(([k, v]) => `${k} ${v === true ? 'yes' : v === false ? 'no' : v}`).join(', ')}; markets get ${UPTOWN_GOODS.join(', ')} every month`);
+const cloth = opts.cloth ? buildDemoCloth(game, res.center) : null;
+if (cloth) console.log(`Cloth: flax farm ${cloth.farm ? 'yes' : 'no'}, linen maker ${cloth.linen ? 'yes' : 'no'}, clothing maker ${cloth.clothing ? 'yes' : 'no'}, warehouse ${cloth.warehouse ? 'yes' : 'no'}${opts.clothOff ? `; demolished after month ${opts.clothOff}` : ''}`);
 console.log(`Map ${scenario.map.type} ${scenario.map.size} seed=${game.seed}  difficulty=${game.difficultyKey}  buildings=${game.buildings.size}  farms=${res.farms}  treasury=${Math.round(game.city.treasury)}`);
 
 // --caretaker: a player's minimum. The demo city never rebuilds, so on the
@@ -248,10 +263,14 @@ function runDays(n) {
 }
 const runMonth = () => {
   if (harbor.docks) harborMonth();
+  if (uptown) uptown.monthly();
   if (!opts.caretaker) { runDays(16); return; }
   for (let k = 0; k < 4; k++) { runDays(4); caretake(); }
 };
 
+/** The Insula's level: homes need clothing from here up. */
+const INSULA = HOUSE_TIERS.findIndex((t) => t.goods.includes('clothing'));
+const clothing = { months: [], peak: 0, offAt: null, peakBefore: 0 };
 const pad = (v, n) => String(v).padStart(n);
 console.log(' date        pop  work/jobs  unemp  mood  fed%  food(gran/mkt)  treas   tiers');
 const t0 = Date.now();
@@ -262,7 +281,9 @@ const money = { funds, built, need: built, needMonth: 0, debtMonth: null };
 const treasuryByMonth = [];
 for (let m = 0; m < opts.years * 12; m++) {
   if (opts.harbor && m === 6) buildHarbor();
+  if (cloth && opts.clothOff && m === opts.clothOff) clothOff();
   runMonth();
+  if (opts.uptown || opts.cloth) clothMonth(m + 1);
   const c = game.city;
   treasuryByMonth.push(c.treasury);
   const out = SIM_MONEY - c.treasury;
@@ -328,9 +349,55 @@ if (fishery) {
   fishing = { wharves: wharves.length, perYear, staff, boatsBuilt: yard ? yard.boatsBuilt || 0 : 0, fishMade: c.produced.fish || 0, pigFarmYear: pigYear };
   console.log(`Fishing: ${wharves.length} wharves (staff ${staff.join('%, ')}%), fish a year per wharf ${perYear.join(', ')} (${BUILDINGS.wharf.workers} workers each); a pig farm at full staff and fertility: ${pigYear} a year (${BUILDINGS.farm_pig.workers} workers); boats built ${fishing.boatsBuilt}`);
 }
+if (opts.uptown || opts.cloth) {
+  const last = clothing.months.at(-1) || { top: 0, wanting: 0, dressed: 0 };
+  const made = (g) => c.produced[g] || 0;
+  const firstTop = clothing.months.find((r) => r.top > 0);
+  console.log(`Clothing: made flax ${made('flax')}, linen ${made('linen')}, clothing ${made('clothing')}; homes at the Insula or above: first in month ${firstTop ? firstTop.month : '-'}, at most ${clothing.peak}, now ${last.top}; Tenements and up with clothing now ${last.dressed} of ${last.wanting}`);
+  if (clothing.offAt !== null) {
+    const after = clothing.months.filter((r) => r.month > opts.clothOff);
+    console.log(`Cloth industry demolished after month ${opts.clothOff}: ${clothing.peakBefore} homes at the Insula or above at most before, ${after.length ? Math.min(...after.map((r) => r.top)) : '-'} at the fewest after (${after.map((r) => r.top).join(' ')})`);
+  }
+}
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
 const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
-if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(fishing ? { fishing } : {}) }));
+if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(fishing ? { fishing } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
+
+/**
+ * --cloth-off: demolish the cloth industry (and the clothing in store), as a
+ * fire or a player might, to see how many homes fall back without it.
+ */
+function clothOff() {
+  for (const b of [cloth.farm, cloth.linen, cloth.clothing]) {
+    if (!b) continue;
+    // Gone for good: the caretaker (--caretaker) must not build it again.
+    for (let k = keep.length - 1; k >= 0; k--) if (keep[k].x === b.x && keep[k].y === b.y && keep[k].type === b.type) keep.splice(k, 1);
+    if (game.buildings.has(b.id)) applyPlan(game, planAction(game, 'clear', b.x, b.y, b.x + b.size - 1, b.y + b.size - 1));
+  }
+  for (const b of game.buildings.values()) if (b.stock && b.stock.clothing && !b.house) b.stock.clothing = 0;
+  // And what is on its way: carts' loads and market buyers' baskets.
+  for (const w of game.walkers.values()) {
+    if (w.cargo && w.cargo.good === 'clothing') w.cargo.amount = 0;
+    if (w.load && w.load.clothing) w.load.clothing = 0;
+  }
+  clothing.offAt = game.time.totalMonths;
+  clothing.peakBefore = clothing.peak;
+}
+
+/** --uptown / --cloth: homes at the Insula or above, month by month, and the clothing they had. */
+function clothMonth(month) {
+  let top = 0;
+  let wanting = 0;
+  let dressed = 0;
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (!h || h.pop <= 0) continue;
+    if (h.tier >= INSULA) top++;
+    if (h.tier >= INSULA - 1) { wanting++; if (h.goods.clothing > 0.01) dressed++; }
+  }
+  clothing.months.push({ month, top, wanting, dressed });
+  clothing.peak = Math.max(clothing.peak, top);
+}
 
 /** The highest disease risk of any occupied home (sim/disease.js). */
 function peakRisk(g) {

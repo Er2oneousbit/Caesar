@@ -353,6 +353,14 @@ export const BUILDINGS = Object.freeze({
     des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 24,
     desc: 'Grows grapes for wineries.',
   }),
+  // The cloth industry (not in the original). A flax field is a crop farm like
+  // the olive grove and the vineyard: the same cost, staff and pace, resting
+  // in an Insane winter like every farm.
+  farm_flax: B({
+    name: 'Flax Farm', category: 'farms', kind: 'farm', produces: 'flax', cost: 40, size: 3, workers: 10, labor: 'industry',
+    des: [-2, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 24,
+    desc: 'Grows flax on meadow land for Linen Makers.',
+  }),
 
   // --- Raw materials -------------------------------------------------------
   clay_pit: B({
@@ -410,6 +418,18 @@ export const BUILDINGS = Object.freeze({
     name: 'Fletcher', category: 'industry', kind: 'workshop', produces: 'arrows', recipe: { timber: 100, iron: 50 }, cost: 45, size: 2, workers: 8, labor: 'industry',
     des: [-2, 1, 1, 2], fire: 1, damage: 1, productionDays: 16,
     desc: 'Makes bows and iron-tipped arrows from timber (shafts) and iron (arrowheads): 100 timber + 50 iron per 100 arrows. Archer recruits need them at the barracks.',
+  }),
+  // Cloth: two workshops, each the size, staff and pace of the others. A
+  // weaver's and a tailor's shop are quieter neighbors than a kiln or a forge.
+  linen_ws: B({
+    name: 'Linen Maker', category: 'industry', kind: 'workshop', produces: 'linen', consumes: 'flax', cost: 45, size: 2, workers: 10, labor: 'industry',
+    des: [-2, 1, 1, 2], fire: 1, damage: 1, productionDays: 20,
+    desc: 'Spins flax and weaves it into linen on its looms. Clothing Makers need linen.',
+  }),
+  clothing_ws: B({
+    name: 'Clothing Maker', category: 'industry', kind: 'workshop', produces: 'clothing', consumes: 'linen', cost: 50, size: 2, workers: 10, labor: 'industry',
+    des: [-1, 1, 1, 1], fire: 1, damage: 1, productionDays: 18,
+    desc: 'Cuts and sews linen into tunics and cloaks. Homes need clothing from the Insula up.',
   }),
 
   // --- Storage & markets --------------------------------------------------

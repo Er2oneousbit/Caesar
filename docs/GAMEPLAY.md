@@ -72,7 +72,7 @@ Homes follow the housing ladder of the original game: 20 levels, rebuilt with Co
 | 9 | Domus | 1x1 | 18/tile | des 19, entertainment 20 | 16 | 3 |
 | 10 | Apartment House | 1x1 | 20/tile | des 23, medicus or hospital, furniture | 20 | 4 |
 | 11 | Tenement | 2x2 | 80 | des 28, school and library, barber, oil, room to grow to 2x2 | 22 | 4 |
-| 12 | Insula | 2x2 | 88 | des 34, 2 food types, entertainment 30 | 31 | 5 |
+| 12 | Insula | 2x2 | 88 | des 34, 2 food types, entertainment 30, clothing | 31 | 5 |
 | 13 | Villa ★ | 2x2 | 44 | des 40, 2 gods, wine | 37 | 8 |
 | 14 | Garden Villa ★ | 2x2 | 48 | des 45, entertainment 40, medicus and hospital | 41 | 9 |
 | 15 | Peristyle Villa ★ | 3x3 | 99 | des 49, entertainment 45, academy (with school and library), room to grow to 3x3 | 43 | 10 |
@@ -85,7 +85,8 @@ Homes follow the housing ladder of the original game: 20 levels, rebuilt with Co
 Needs add up: each level also needs everything the levels below it need. "To reach it" gives the desirability the level below needs to move up. "Bad at" is the floor for a home at that level. ★ Patricians (levels 13 and up) do not work, but pay much higher taxes, and never emigrate.
 
 * **Food:** tents forage and need none. Others eat only as many kinds as their level needs (a quarter unit per person per month, shared between the kinds; when one runs short, the rest comes from other food in the house), and market vendors bring only those kinds, topped up to three months.
-* **Goods** (pottery, furniture, oil, wine) are used up twice a month, and only the ones the level needs. When one runs out, the next day is a bad day.
+* **Goods** (pottery, furniture, oil, clothing, wine) are used up twice a month, and only the ones the level needs. When one runs out, the next day is a bad day. A home stocks a good already one level before it needs it (a Tenement buys clothing for the Insula).
+* **Clothing** (Colonia's own, not in the original) is needed from the Insula up, villas and palaces included: the last level whose people work, so a city clothes its people before it builds villas. A city saved before version 10 loads with three months of clothing in its Tenements and better homes: time to build the chain (its first clothing takes about two months). After that, a home without it falls back a level after its bad days (3, 6 on Easy).
 * **Wine sources** (levels 17 and up): a working (staffed) winery counts as one, and so does each open trade route that sells wine while wine is set to import.
 * **Education** is a tier: a school or a library, then both, then both and an academy. An academy alone does nothing.
 * **Health:** barber and baths are needs of their own; medical care is a medicus or a hospital (within 12 tiles), then both.
@@ -136,7 +137,7 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
   * The wharf's boat waits at the wharf (1.02 - staffing) x 10 days (0.2 days at full staff, 5.2 at half, never with nobody at work, and not while the wharf holds 200 fish or more), sails at walking pace (2 tiles a day) to the nearest fishing ground by water, fishes 4 days (5 on Insane, by the production lever), comes back and lands 100 fish. The wharf carts them to a granary like a farm's harvest (up to 200 a cart). Where the wharf stands matters: measured on Normal (`npm run sim -- --type coast --fishing 2`, a level 2 town), a wharf 8 to 10 tiles from its ground made about 950 to 1,300 fish a year (a trip of 11 to 14 days), 15 tiles away about 650, 22 tiles 600, 30 tiles 400 and 60 tiles 200. A pig farm at full staff and fertility makes about 740 a year with 10 workers to the wharf's 6, so a wharf by its ground is the cheapest food there is, once the shipyard is paid for. Build wharves near the gulls.
   * Fishing goes on all year: the sea does not freeze, even in an Insane winter when the fields rest.
   * A demolished wharf's boat sinks with it, as does a demolished yard's spare; the yards build new ones. A boat that cannot find its way home is lost with its catch, with a message at most once a month. Neptune's wrath sinks every fishing boat. Raiders never attack boats.
-* You can read a cart at a glance: it carries its good (sacks of wheat, crates of vegetables or fruit, baskets of olives or grapes, meat, flat baskets of silver fish, clay, logs, iron ingots, marble blocks, pots, pale amphorae of oil, dark amphorae of wine, tables and chairs, shields and spears, sheaves of arrows), piled 1 to 4 high for how full it is. A farm's wagon is longer and pulled by an ox; a storehouse's cart shows its load against the most its orders move (a warehouse's 400-unit Get load, a granary's 800), so a routine 100-unit lot reads a quarter full; only a farm's cart is a wagon. Horses are not carted: a drover leads them, one horse per 100 units. An empty cart on its way home shows its bare bed.
+* You can read a cart at a glance: it carries its good (sacks of wheat, crates of vegetables or fruit, baskets of olives or grapes, meat, flat baskets of silver fish, clay, logs, iron ingots, marble blocks, pots, pale amphorae of oil, dark amphorae of wine, tables and chairs, shields and spears, sheaves of arrows, bundles of flax, bolts of linen, folded clothes in every dye), piled 1 to 4 high for how full it is. A farm's wagon is longer and pulled by an ox; a storehouse's cart shows its load against the most its orders move (a warehouse's 400-unit Get load, a granary's 800), so a routine 100-unit lot reads a quarter full; only a farm's cart is a wagon. Horses are not carted: a drover leads them, one horse per 100 units. An empty cart on its way home shows its bare bed.
 * Raw material goes to a workshop that needs it, else to a warehouse (which later ships it to workshops that run low). Finished goods go to warehouses; markets fetch them for homes that need them.
 
 | Chain | Placement rule |
@@ -145,12 +146,15 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 | Timber Yard → Carpenter → Furniture | within 2 tiles of woods: at least 4 tiles of forest (lone trees are not enough) |
 | Olive Grove → Oil Press → Oil | grove on meadow |
 | Vineyard → Winery → Wine | vineyard on meadow |
+| Flax Farm → Linen Maker → Clothing Maker → Clothing | flax farm on meadow (its field turns blue as it flowers) |
 | Iron Mine → Weaponsmith → Weapons | mine touching rocks (export good; legionaries need 50 each) |
 | Timber Yard + Iron Mine → Fletcher → Arrows | 100 timber + 50 iron per 100 arrows (archers need 50 each) |
 | Horse Ranch → Horses | ranch on meadow (1 horse = 100 units; cavalry need 1 each) |
 | Marble Quarry → Marble | touching rocks (export good) |
 
 Workshops follow a **recipe**: most use 100 units of one raw material per 100-unit batch; the Fletcher needs both timber and iron and waits until it has both.
+
+**Cloth** (Colonia's own, not in the original; from mission 4, where the other workshops open): clothing takes two workshops. A **Flax Farm** (3x3, 40 Dn, 10 workers, Industry labor, 100 flax every 24 days at full staff and fertility, resting in an Insane winter like every farm) feeds a **Linen Maker** (2x2, 45 Dn, 10 workers, 100 flax into 100 linen in 20 days), whose linen goes by cart straight to a **Clothing Maker** (2x2, 50 Dn, 10 workers, 100 linen into 100 clothing in 18 days). Linen counts as a raw material: carts take it to a Clothing Maker first and warehouses send it on to one running low, like clay to a potter. Clothing goes to a warehouse, and markets fetch it for homes from the Tenement up. Thirty workers from field to tunic, against eighteen for furniture: the chain is work as well as goods. Tarraco and Alexandria sell linen, so a city without flax fields (a desert, say) can still sew; Capua and Corinthus buy clothing.
 
 ### Granary and warehouse orders
 
@@ -200,15 +204,15 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 
 | Partner | Route | Sells | Buys |
 |---|---|---|---|
-| Tarraco (500) | land | timber, olives | wheat, pottery |
+| Tarraco (500) | land | timber, olives, linen | wheat, pottery |
 | Lugdunum (800) | land | iron, meat, arrows | oil, wine, fruit |
 | Aquileia (600) | land | pottery, vegetables | clay, olives, meat |
-| Capua (700) | land | wheat, wine | pottery, furniture, iron |
+| Capua (700) | land | wheat, wine | pottery, furniture, iron, clothing |
 | Massilia (700) | sea | clay, wine | furniture, vegetables, pottery |
 | Carthago (1000) | sea | fruit, grapes, furniture | weapons, marble, timber |
 | Cirta (900) | sea | horses, fruit | weapons, pottery, oil |
-| Corinthus (1200) | sea | marble, oil | wine, wheat, iron, arrows |
-| Alexandria (1400) | sea | wheat, vegetables | wine, oil, weapons, furniture |
+| Corinthus (1200) | sea | marble, oil | wine, wheat, iron, arrows, clothing |
+| Alexandria (1400) | sea | wheat, vegetables, linen | wine, oil, weapons, furniture |
 
 **The Empire map** (E, the compass in the top bar, or the button under the Trade advisor's small map) shows the Mediterranean world from the Atlantic to Syria, each city where it really is: your province (the red star, on the Etruscan coast north of Rome), Rome, every partner of the scenario with its route (solid when open, faint and broken while closed, grey where ships cannot reach you), and who is on the way. Caravans keep to the roads (along the coast of Gaul from Tarraco, over the Alps from Lugdunum, through the Po valley from Aquileia, through Rome from Capua); ships keep to the sea lanes, those from Corinthus and Alexandria through the Strait of Messina.
 
@@ -242,7 +246,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: for backups, the 💾 beside each save in the Save and Load menus downloads that save as a file without loading it (exactly as stored, named like `colonia-slot1-aquae-clarae-279bc.json`), *Export current game* downloads the game being played, and *Copy save data* copies it as text. The save format is versioned (currently 7: granary and warehouse orders, rubble that remembers what fell, and the original's five gods; version 6 saves still load, each good a storehouse accepted on Accept and the rest on Refuse, nothing emptying, old rubble without its story, and Jupiter's temples, mood, priests and every home's access to him becoming Mercury's, and Vesta's Venus's; version 5 saves load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: for backups, the 💾 beside each save in the Save and Load menus downloads that save as a file without loading it (exactly as stored, named like `colonia-slot1-aquae-clarae-279bc.json`), *Export current game* downloads the game being played, and *Copy save data* copies it as text. The save format is versioned (currently 10: the cloth industry; version 9 saves load with no flax, linen or clothing in store, their Tenements and better homes with three months of clothing; version 8 saves load without fish or a hippodrome; version 7 brought granary and warehouse orders, rubble that remembers what fell, and the original's five gods; version 6 saves still load, each good a storehouse accepted on Accept and the rest on Refuse, nothing emptying, old rubble without its story, and Jupiter's temples, mood, priests and every home's access to him becoming Mercury's, and Vesta's Venus's; version 5 saves load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
 
 ## City mood (sentiment)
 
@@ -385,7 +389,7 @@ Seven missions, each opening the next. The first two teach the basics and have n
 | 6 Oasis Aurea | desert, 128 | 7,000 | 60 | 55 | 65 | 60 | Grand Palatium | 3.5 years |
 | 7 Urbs Magna | lakes, 160 | 12,000 | 75 | 70 | 75 | 65 | Imperial Palatium | 3 years |
 
-Mission 3 opens the Amphitheater and the Gladiator School for its Domus: a theater alone gives a home at most 16 entertainment (10 for a visit, 6 for the seats), and a Domus needs 20. Mission 4 opens shipyards and fishing wharves. Missions 5 and 6 have every building but the Hippodrome and its Chariot Maker, which only mission 7 (and the sandbox) has; without a hippodrome the Imperial Palatium (95 entertainment) is out of reach there.
+Mission 3 opens the Amphitheater and the Gladiator School for its Domus: a theater alone gives a home at most 16 entertainment (10 for a visit, 6 for the seats), and a Domus needs 20. Mission 4 opens shipyards and fishing wharves, and the cloth industry (Flax Farm, Linen Maker, Clothing Maker) its Insulae need: without clothing its homes would stop at Tenements. Missions 5 and 6 have every building but the Hippodrome and its Chariot Maker, which only mission 7 (and the sandbox) has; without a hippodrome the Imperial Palatium (95 entertainment) is out of reach there.
 
 **How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month. In the first two missions peace sets the length, from mission 3 on the population, so even a city that is always ready needs about 1.3 years for the first mission, 2.1, 3.6, 5.7, 7.8 and 8.5 for the next ones and 15 for the last (`npm run sim -- --pace` prints the table). A year is 8 minutes at 1x; with the city to build first, that makes roughly 45 minutes for the first missions and a few hours for the last at normal speed.
 

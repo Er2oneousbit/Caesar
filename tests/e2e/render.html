@@ -22,6 +22,7 @@
                 ladder=1 (a home of every level, 1-20, set out beside the city, plus a 2x2 block)
                 artset=1 (reservoirs joined by an aqueduct that crosses a road, the statues,
                 every temple, the iron mine and the marble quarry, beside the city)
+                cloth=1 (the cloth industry: flax farm, linen maker, clothing maker; clothDays=60)
 -->
 <canvas id="c"></canvas>
 <script type="module">
@@ -30,7 +31,7 @@
   import { buildDemoCity, buildDemoGarrison } from '../../src/dev/demoCity.js';
   import { Renderer } from '../../src/render/renderer.js';
   import { launchInvasion } from '../../src/sim/military.js';
-  import { buildDemoHarbor, buildDemoFishery, buildDemoHippodrome } from '../../src/dev/demoCity.js';
+  import { buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth } from '../../src/dev/demoCity.js';
   import { planAction } from '../../src/sim/construction.js';
   import { addBuilding } from '../../src/sim/entities.js';
   import { HOUSE_TIERS } from '../../src/data/housing.js';
@@ -99,6 +100,14 @@
       focus = { x: hip.hippodrome.x + 7, y: hip.hippodrome.y + 2 };
       hippodrome = { ok: !!main, maker: !!hip.maker, races: main ? main.shows.hippodrome : 0 };
     }
+  }
+  // cloth=1: the cloth industry (flax farm, linen maker, clothing maker); the view on the workshops.
+  let cloth = null;
+  if (q.get('cloth') && res.center) {
+    const c = buildDemoCloth(game, res.center);
+    game.runDays(Number(q.get('clothDays') || 60));
+    if (c.linen) focus = { x: c.linen.x, y: c.linen.y };
+    cloth = { ok: c.ok, made: { flax: game.city.produced.flax || 0, linen: game.city.produced.linen || 0, clothing: game.city.produced.clothing || 0 } };
   }
   const simMs = performance.now() - t0;
   const W = Number(q.get('w') || 1280), H = Number(q.get('h') || 800);
@@ -257,7 +266,7 @@
   r.weather.update = () => {}; // keep it as set for the picture
   r.render(0, 0.016);
   r.render(0.5, 0.016);
-  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, fishery, hippodrome, focus, coverage: r.stats.coverage, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
+  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, fishery, hippodrome, cloth, focus, coverage: r.stats.coverage, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
   window.__done = true;
 </script>
 </body>

@@ -1559,6 +1559,9 @@ const CROP = {
   farm_olive: { young: '#7f9a6a', ripe: '#8a9c78', kind: 'trees', fruit: '#4d5a2a' },
   farm_vine: { young: '#6d9a4a', ripe: '#5a8a3c', kind: 'vines', fruit: '#6b3fa0' },
   farm_pig: { young: '#8a7a55', ripe: '#8a7a55', kind: 'pigs' },
+  // Flax: thin green stalks that open sky-blue flowers, so a flax field reads
+  // blue from afar (no other crop does).
+  farm_flax: { young: '#79a052', ripe: '#6f9548', kind: 'flax', fruit: '#6f8fd8', bloom: '#b9cdf3' },
 };
 
 /** Winter tones for a resting farm: the crop stands (as high as it grew) but dry and dull. */
@@ -1637,6 +1640,34 @@ function farmArt(ctx, S, variant, stage, key) {
           ctx.fillStyle = crop.fruit;
           ctx.beginPath(); ctx.arc(x, y - 3, 1.3, 0, Math.PI * 2); ctx.fill();
         }
+      }
+    }
+  } else if (crop.kind === 'flax') {
+    // Close rows of leafy stalks; from the third stage they carry blue
+    // flowers (a few paler ones), so the field turns blue as it ripens.
+    for (let r = 0; r < 11; r++) {
+      const v = 0.16 + r * ((S - 0.32) / 10);
+      const p = P(1.0, v);
+      const q = P(S - 0.12, v);
+      ctx.strokeStyle = shade(COL.soil, -0.2);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      if (stage === 0) continue;
+      const h = 2 + t * 6;
+      // The leaves: a green band along the row, as tall as the crop.
+      ctx.strokeStyle = crop.young;
+      ctx.lineWidth = 1 + t * 2;
+      ctx.beginPath(); ctx.moveTo(p[0], p[1] - h * 0.35); ctx.lineTo(q[0], q[1] - h * 0.35); ctx.stroke();
+      for (let k = 0; k < 13; k++) {
+        const u = 1.04 + (k + (r % 2) * 0.5) * ((S - 1.2) / 13);
+        const [x, y] = P(u, v);
+        ctx.fillStyle = stage >= 4 ? crop.ripe : crop.young;
+        ctx.fillRect(x - 0.5, y - h, 1, h);
+        if (!crop.fruit || stage < 2) continue;
+        ctx.fillStyle = hash01(variant, r * 13 + k, 71) < 0.18 ? crop.bloom : crop.fruit;
+        const fr = 0.9 + t * 0.8;
+        ctx.beginPath(); ctx.arc(x, y - h, fr, 0, Math.PI * 2); ctx.fill();
+        if (stage >= 3) { ctx.beginPath(); ctx.arc(x + 1.6, y - h + 1.2, fr * 0.8, 0, Math.PI * 2); ctx.fill(); }
       }
     }
   } else if (crop.kind === 'pigs') {
@@ -1782,6 +1813,181 @@ function workshopArt(ctx, S, variant, state, key) {
     ctx.fillStyle = COL.woodDark;
     ctx.fillRect(x - 12, y - 12, 18, 2);
     ctx.fillRect(x + 4, y - 12, 2, 12);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cloth (not in the original): the Linen Maker and the Clothing Maker
+// ---------------------------------------------------------------------------
+
+/** Natural linen and its shadow side. */
+const LINEN = '#efe9d6';
+const LINEN_SHADE = '#cfc6ab';
+
+/** A bundle of retted flax standing on end (a stook), tied at the waist. */
+function flaxStook(ctx, u, v) {
+  const [x, y] = P(u, v);
+  // A sheaf: splayed foot, tied waist, the seed heads fanning out on top.
+  ctx.fillStyle = '#b9a76a';
+  ctx.beginPath();
+  ctx.moveTo(x - 3.6, y);
+  ctx.lineTo(x - 1.4, y - 4.5);
+  ctx.lineTo(x - 3.2, y - 9);
+  ctx.lineTo(x + 3.2, y - 9);
+  ctx.lineTo(x + 1.4, y - 4.5);
+  ctx.lineTo(x + 3.6, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#d6c690'; // the lit side
+  ctx.fillRect(x - 1.6, y - 8.5, 1.2, 8);
+  ctx.fillStyle = '#8c7a46'; // seed heads
+  for (const dx of [-2.4, -0.8, 0.8, 2.4]) { ctx.beginPath(); ctx.arc(x + dx, y - 9.3, 0.9, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(x - 1.8, y - 5, 3.6, 1.1);
+}
+
+/** A bolt of linen lying on its side: a pale roll with its end toward the viewer. */
+function linenBolt(ctx, u, v, z = 0) {
+  const [x, y] = P(u, v, z);
+  ctx.fillStyle = LINEN_SHADE;
+  ctx.fillRect(x - 5, y - 3, 8, 3);
+  ctx.fillStyle = LINEN;
+  ctx.fillRect(x - 5, y - 3.4, 8, 1.6);
+  ctx.beginPath(); ctx.ellipse(x + 3, y - 1.7, 1.3, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = LINEN_SHADE;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.arc(x + 3, y - 1.7, 0.7, 0, Math.PI * 1.6); ctx.stroke();
+}
+
+/**
+ * Linen Maker: a weaving shed, and in its yard an upright loom of the
+ * Roman kind: two posts and a beam, the woven cloth hanging from the beam
+ * and the pale warp below it held taut by a row of clay weights. Stooks of
+ * flax wait by the shed, and bolts of finished linen lie on a bench.
+ */
+function linenMakerArt(ctx, S) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#b9a57c');
+  box(ctx, 0.12, 0.12, 1.25, 0.85, 0, 16, '#e4d8bc');
+  gableRoof(ctx, 0.12, 0.12, 1.25, 0.85, 16, 8, COL.terra, 'u');
+  door(ctx, 'left', 0.12, 0.12, 1.37, 0.97, 0, 0.3, '#3d2a1a', 0.2, 9);
+  windows(ctx, 'right', 0.12, 0.12, 1.37, 0.97, 0, 1, 2, '#4a3a2a', { z: 7, h: 4 });
+  // Flax waiting to be spun, along the shed's side.
+  for (const [u, v] of [[1.6, 0.28], [1.82, 0.4], [1.62, 0.56]]) flaxStook(ctx, u, v);
+  // Bolts of linen stacked on a low bench: two below, one on top.
+  box(ctx, 1.48, 0.78, 0.4, 0.42, 0, 3, COL.wood);
+  linenBolt(ctx, 1.6, 0.88, 3);
+  linenBolt(ctx, 1.62, 1.08, 3);
+  linenBolt(ctx, 1.61, 0.98, 6);
+  // The loom, square to the shed's front: posts, beam, cloth, warp, weights.
+  const top = 21;
+  const [ax, ay] = P(0.42, 1.55);
+  const [bx, by] = P(1.3, 1.55);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(bx + 4, by + 2); ctx.lineTo(ax + 4, ay + 2); ctx.closePath(); ctx.fill();
+  const at = (t, z) => [ax + (bx - ax) * t, ay + (by - ay) * t - z];
+  // The woven cloth, hanging from the beam (weaving runs downward).
+  poly(ctx, [at(0.08, top - 1), at(0.92, top - 1), at(0.92, top - 9), at(0.08, top - 9)], LINEN, LINEN_SHADE, 0.5);
+  ctx.strokeStyle = 'rgba(160,140,100,0.55)';
+  ctx.lineWidth = 0.4;
+  for (const z of [top - 4, top - 7]) {
+    const [p, q] = [at(0.08, z), at(0.92, z)];
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
+  // The warp below the cloth, down to the weights.
+  ctx.strokeStyle = '#f4efe0';
+  ctx.lineWidth = 0.45;
+  ctx.beginPath();
+  for (let k = 0; k <= 10; k++) {
+    const [px, py] = at(0.1 + k * 0.08, top - 9);
+    const [qx, qy] = at(0.1 + k * 0.08, 4);
+    ctx.moveTo(px, py); ctx.lineTo(qx, qy);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#9a5a36';
+  for (let k = 0; k <= 10; k += 2) {
+    const [x, y] = at(0.1 + k * 0.08, 3.5);
+    ctx.beginPath(); ctx.arc(x, y, 1.1, 0, Math.PI * 2); ctx.fill();
+  }
+  // Posts and beam last, in front.
+  ctx.fillStyle = COL.woodDark;
+  for (const t of [0.02, 0.98]) {
+    const [x, y] = at(t, 0);
+    ctx.fillRect(x - 0.9, y - top - 2, 1.8, top + 2);
+  }
+  const [p, q] = [at(0, top), at(1, top)];
+  ctx.strokeStyle = COL.wood;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  // A basket of spun thread at the loom's foot.
+  const [tx, ty] = P(1.65, 1.75);
+  ctx.fillStyle = '#b08850';
+  ctx.fillRect(tx - 2.5, ty - 3, 5, 3);
+  ctx.fillStyle = LINEN;
+  for (const dx of [-1.2, 1.2]) { ctx.beginPath(); ctx.arc(tx + dx, ty - 3.4, 1.2, 0, Math.PI * 2); ctx.fill(); }
+}
+
+/** Tunic colors: woad blue, madder red, saffron, undyed linen and a sea green. */
+const TUNICS = ['#4a6fa5', '#b0413e', '#d9a441', LINEN, '#4f8a7a'];
+
+/** A tunic hanging by its shoulders at (x, y): body, short sleeves, a neck. */
+function tunic(ctx, x, y, color, s = 1) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x - 2.2 * s, y, 4.4 * s, 6.5 * s);
+  ctx.fillRect(x - 3.6 * s, y, 7.2 * s, 2 * s);
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.fillRect(x + 0.9 * s, y + 2 * s, 1.3 * s, 4.5 * s); // the fold in shadow
+  ctx.fillStyle = 'rgba(60,40,20,0.55)';
+  ctx.fillRect(x - 0.7 * s, y, 1.4 * s, 0.8 * s); // the neck opening
+}
+
+/**
+ * Clothing Maker: a tailor's shop with a striped awning over its counter,
+ * folded clothes stacked on the counter, and a line of new tunics in every
+ * dye drying in the yard.
+ */
+function clothingMakerArt(ctx, S, variant) {
+  quad(ctx, 0.03, 0.03, S - 0.03, S - 0.03, 0, '#c2b08a');
+  box(ctx, 0.12, 0.12, 1.15, 1.0, 0, 18, '#ecdcbf');
+  gableRoof(ctx, 0.12, 0.12, 1.15, 1.0, 18, 8, COL.terraDark, 'v');
+  door(ctx, 'left', 0.12, 0.12, 1.27, 1.12, 0, 0.7, '#3d2a1a', 0.18, 9);
+  windows(ctx, 'right', 0.12, 0.12, 1.27, 1.12, 0, 1, 2, '#4a3a2a', { z: 8, h: 4, shutters: '#4d6f8f' });
+  // A striped awning over the counter on the street side.
+  const stripes = 5;
+  for (let k = 0; k < stripes; k++) {
+    const a = 0.16 + (k * 0.6) / stripes;
+    const b = a + 0.6 / stripes;
+    poly(ctx, [P(a, 1.12, 13), P(b, 1.12, 13), P(b, 1.45, 9), P(a, 1.45, 9)], k % 2 ? LINEN : '#4a6fa5');
+  }
+  for (const u of [0.18, 0.74]) {
+    const [x, y] = P(u, 1.43);
+    ctx.fillStyle = COL.woodDark;
+    ctx.fillRect(x - 0.5, y - 9, 1, 9);
+  }
+  // The counter with folded clothes on it.
+  box(ctx, 0.22, 1.18, 0.5, 0.2, 0, 4, COL.wood);
+  for (let k = 0; k < 3; k++) {
+    const [x, y] = P(0.32 + k * 0.15, 1.27, 4);
+    for (let j = 0; j < 2; j++) {
+      ctx.fillStyle = TUNICS[(variant + k * 2 + j) % TUNICS.length];
+      ctx.fillRect(x - 2.4, y - 1.7 * (j + 1), 4.8, 1.7);
+    }
+  }
+  // The drying line across the yard, tunics hanging from it.
+  const [ax, ay] = P(1.5, 0.25);
+  const [bx, by] = P(1.6, 1.85);
+  const H = 20;
+  ctx.fillStyle = COL.woodDark;
+  ctx.fillRect(ax - 0.6, ay - H, 1.2, H);
+  ctx.fillRect(bx - 0.6, by - H, 1.2, H);
+  ctx.strokeStyle = '#6b5a44';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(ax, ay - H + 1); ctx.quadraticCurveTo((ax + bx) / 2, (ay + by) / 2 - H + 5, bx, by - H + 1); ctx.stroke();
+  for (let k = 0; k < 4; k++) {
+    const t = 0.16 + k * 0.22;
+    const sag = 8 * t * (1 - t); // the curve's own sag: its control point sits 4 px low, so 2 px at the middle
+    const x = ax + (bx - ax) * t;
+    const y = ay + (by - ay) * t - H + 1 + sag;
+    tunic(ctx, x, y, TUNICS[(variant + k) % TUNICS.length], 1.3);
   }
 }
 
@@ -2195,6 +2401,8 @@ const ART = {
   hippodrome: hippodromeArt,
   hippodrome_part: hippodromeArt,
   chariot_maker: chariotMakerArt,
+  linen_ws: linenMakerArt,
+  clothing_ws: clothingMakerArt,
 };
 
 /**

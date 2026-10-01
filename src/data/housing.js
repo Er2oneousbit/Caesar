@@ -55,7 +55,11 @@ function L(row) {
 const POTTERY = ['pottery'];
 const FURNISHED = ['pottery', 'furniture'];
 const COMFORT = ['pottery', 'furniture', 'oil'];
-const LUXURY = ['pottery', 'furniture', 'oil', 'wine'];
+// Clothing (not in the original) from the Insula up: the first homes that
+// need it are the last whose people work, so a city must make or buy it
+// before its villas. Wine stays the villas' own need.
+const DRESSED = ['pottery', 'furniture', 'oil', 'clothing'];
+const LUXURY = ['pottery', 'furniture', 'oil', 'clothing', 'wine'];
 
 // Desirability the homes give off, by band: humble homes are poor neighbors,
 // villas and palaces lift the streets around them.
@@ -78,7 +82,7 @@ export const HOUSE_TIERS = Object.freeze([
   L({ name: 'Apartment House', people: 20, down: 20, up: 28, water: 2, food: 1, religion: 1, ent: 20, edu: 1, baths: 1, health: 1, goods: FURNISHED, tax: 4, fire: 0.8, damage: 0.8, desOut: TIDY }),
   // --- 2x2 -------------------------------------------------------------------
   L({ name: 'Tenement', size: 2, people: 80, down: 22, up: 34, water: 2, food: 1, religion: 1, ent: 20, edu: 2, barber: 1, baths: 1, health: 1, goods: COMFORT, tax: 4, fire: 1.0, damage: 1.2, desOut: TIDY }),
-  L({ name: 'Insula', size: 2, people: 88, down: 31, up: 40, water: 2, food: 2, religion: 1, ent: 30, edu: 2, barber: 1, baths: 1, health: 1, goods: COMFORT, tax: 5, fire: 1.0, damage: 1.2, desOut: TIDY }),
+  L({ name: 'Insula', size: 2, people: 88, down: 31, up: 40, water: 2, food: 2, religion: 1, ent: 30, edu: 2, barber: 1, baths: 1, health: 1, goods: DRESSED, tax: 5, fire: 1.0, damage: 1.2, desOut: TIDY }),
   L({ name: 'Villa', size: 2, people: 44, down: 37, up: 45, water: 2, food: 2, religion: 2, ent: 30, edu: 2, barber: 1, baths: 1, health: 1, goods: LUXURY, tax: 8, patrician: true, fire: 0.6, damage: 0.8, desOut: [2, 1, -1, 2] }),
   L({ name: 'Garden Villa', size: 2, people: 48, down: 41, up: 49, water: 2, food: 2, religion: 2, ent: 40, edu: 2, barber: 1, baths: 1, health: 2, goods: LUXURY, tax: 9, patrician: true, fire: 0.6, damage: 0.8, desOut: [2, 1, -1, 2] }),
   // --- 3x3 -------------------------------------------------------------------

@@ -47,6 +47,18 @@ function nextMareText(game, b) {
   return `in about ${days} days${farmDormant(game, b) ? ' (after the winter)' : ''}`;
 }
 
+/**
+ * "; a Clothing Maker makes it from linen": who makes a home's good, for the
+ * description of the need. Most chains are one workshop long and named in
+ * the help; clothing's is two (flax, linen, clothing), so say it here too.
+ */
+function madeBy(good) {
+  const def = Object.values(BUILDINGS).find((d) => d.kind === 'workshop' && d.produces === good);
+  if (!def) return '';
+  const inputs = Object.keys(def.recipe).map((g) => GOODS[g].name.toLowerCase()).join(' and ');
+  return `; ${withArticle(def.name)} makes it from ${inputs}`;
+}
+
 /** Plain-English description of one missing house requirement. */
 export function describeNeed(m) {
   switch (m.key) {
@@ -60,7 +72,7 @@ export function describeNeed(m) {
     case 'health': return m.need >= 2
       ? `Both a medicus nearby and a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles (has ${m.have === 0 ? 'neither' : m.hospital ? 'the hospital' : 'the medicus'}).`
       : `A medicus nearby, or a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles.`;
-    case 'goods': return `${GOODS[m.good].name} sold by a market vendor (needs a warehouse stocked with ${GOODS[m.good].name.toLowerCase()}).`;
+    case 'goods': return `${GOODS[m.good].name} sold by a market vendor (needs a warehouse stocked with ${GOODS[m.good].name.toLowerCase()}${madeBy(m.good)}).`;
     case 'wine': return `Two sources of wine in the city (has ${m.have}): a working winery, and each open trade route that sells wine while wine is set to import.`;
     case 'des': return `Desirability ${m.need} (now ${m.have}). Gardens, statues, plazas, temples and grand homes help; humble homes, industry and storage hurt.`;
     case 'space': return `Room to grow into a ${m.need}×${m.need} home: homes of its level or lower, clear land or gardens beside it.`;

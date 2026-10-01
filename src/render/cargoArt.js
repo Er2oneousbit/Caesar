@@ -6,7 +6,8 @@
  * baskets of olives and grapes, joints of meat, flat baskets of silver fish,
  * lumps of clay, logs, iron
  * ingots, marble blocks, pots, amphorae of oil (pale) and wine (dark), a
- * table and chairs, shields with spears, sheaves of arrows. Horses are not
+ * table and chairs, shields with spears, sheaves of arrows, bundles of flax,
+ * bolts of linen and stacks of folded clothes. Horses are not
  * carted at all: the drover leads them (walkerArt.js).
  *
  * The load shows as 1 to 4 items against what that cart can hold, so a full
@@ -312,6 +313,53 @@ function log(ctx, x, y, k, f, hw) {
   ellipse(ctx, x + f * hw * k, y - 0.65 * k, 0.5 * k, 0.65 * k);
 }
 
+/** Flax: a pulled bundle lying along the bed, tied in the middle, blue flowers at its head. */
+function flaxBundle(ctx, x, y, k, f) {
+  ctx.fillStyle = '#c2b076';
+  ctx.beginPath();
+  ctx.moveTo(x - f * 1.8 * k, y - 0.5 * k);
+  ctx.lineTo(x + f * 1.6 * k, y - 0.2 * k);
+  ctx.lineTo(x + f * 1.6 * k, y - 1.8 * k);
+  ctx.lineTo(x - f * 1.8 * k, y - 1.2 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#9c8a52'; // a darker stalk or two
+  ctx.fillRect(x - 1.6 * k, y - 0.95 * k, 3.2 * k, 0.25 * k);
+  ctx.fillStyle = '#6b4a2a'; // the tie
+  ctx.fillRect(x - 0.25 * k, y - 1.9 * k, 0.5 * k, 1.8 * k);
+  ctx.fillStyle = '#6f8fd8'; // the flowers at the head
+  ellipse(ctx, x + f * 1.7 * k, y - 1.5 * k, 0.45 * k, 0.45 * k);
+  ellipse(ctx, x + f * 1.9 * k, y - 0.8 * k, 0.4 * k, 0.4 * k);
+}
+
+/** Linen: a bolt of pale cloth, its rolled end facing forward. */
+function linenBolt(ctx, x, y, k, f) {
+  ctx.fillStyle = '#d3caae';
+  ctx.fillRect(x - 1.6 * k, y - 1.5 * k, 3.2 * k, 1.5 * k);
+  ctx.fillStyle = '#efe9d6';
+  ctx.fillRect(x - 1.6 * k, y - 1.75 * k, 3.2 * k, 0.9 * k);
+  ellipse(ctx, x + f * 1.6 * k, y - 0.85 * k, 0.55 * k, 0.85 * k);
+  ctx.strokeStyle = '#b9ae8c'; // the roll's spiral
+  ctx.lineWidth = 0.25 * k;
+  ctx.beginPath();
+  ctx.arc(x + f * 1.6 * k, y - 0.85 * k, 0.3 * k, 0, Math.PI * 1.5);
+  ctx.stroke();
+}
+
+/** Tunic dyes for a load of clothing: woad blue, madder red, saffron, undyed. */
+const DYES = ['#4a6fa5', '#b0413e', '#d9a441', '#efe9d6'];
+
+/** Clothing: a stack of two folded garments in different dyes. */
+function foldedClothes(ctx, x, y, k, f, i) {
+  for (let j = 0; j < 2; j++) {
+    const top = y - (j + 1) * 0.95 * k;
+    ctx.fillStyle = DYES[(i + j * 2) % DYES.length];
+    ctx.fillRect(x - 1.5 * k, top, 3 * k, 0.95 * k);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; // the fold
+    ctx.fillRect(x - 1.5 * k, top + 0.7 * k, 3 * k, 0.25 * k);
+  }
+}
+
 /** Fallback: a block in the good's own color. */
 function block(color) {
   return (ctx, x, y, k) => {
@@ -348,6 +396,9 @@ export const CARGO_ART = Object.freeze({
   wine: { layout: 'row', draw: amphora('#a9583c', '#3e0f1e') }, // red clay, dark stoppers
   weapons: { layout: 'row', draw: shield, extra: spears },
   arrows: { layout: 'row', draw: sheaf },
+  flax: { layout: 'pile', draw: flaxBundle },
+  linen: { layout: 'pile', draw: linenBolt },
+  clothing: { layout: 'pile', draw: foldedClothes },
 });
 
 /** Goods that are led on foot rather than carted (see walkerArt.js). */

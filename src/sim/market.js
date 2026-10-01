@@ -88,12 +88,15 @@ export function updateMarketBuyer(game, market) {
   for (const f of FOOD_TYPES) {
     // Fish only when some granary or warehouse holds it: a want nobody can
     // fill would take one of the day's four tries from pottery or furniture.
-    if (f === 'fish' && !fishInStore(game)) continue;
+    if (f === 'fish' && !inStore(game, 'fish')) continue;
     const ratio = market.stock[f] / CONFIG.MARKET_FOOD_CAP;
     if (ratio < 0.6) wants.push({ good: f, ratio });
   }
   for (const g of HOUSE_GOODS) {
     if (!demand[g]) continue;
+    // Clothing, likewise: Tenements want it from the day they stand, long
+    // before a city may make any, and no partner sells it.
+    if (g === 'clothing' && !inStore(game, 'clothing')) continue;
     const ratio = market.stock[g] / CONFIG.MARKET_GOODS_CAP;
     if (ratio < 0.5) wants.push({ good: g, ratio });
   }
@@ -108,9 +111,9 @@ export function updateMarketBuyer(game, market) {
   market.buyerCooldown = 3; // nothing available, check again later
 }
 
-/** Does any granary or warehouse hold fish? */
-function fishInStore(game) {
-  for (const b of game.buildings.values()) if (isStorage(b) && b.stock.fish > 0) return true;
+/** Does any granary or warehouse hold some of `good`? */
+function inStore(game, good) {
+  for (const b of game.buildings.values()) if (isStorage(b) && b.stock[good] > 0) return true;
   return false;
 }
 

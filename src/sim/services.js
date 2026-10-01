@@ -97,12 +97,15 @@ function applyEffect(game, effect, w, origin, b) {
   }
 }
 
-/** Does the building have one of its own roamers out right now? */
-function roamersOut(game, b, type) {
+/** Roamers whose next round starts as the last one heads home (see updateServiceSpawns). */
+const OVERLAP_ROUNDS = new Set(['prefect', 'engineer']);
+
+/** How many of the building's own roamers are out (`onlyRoaming`: not counting those walking home)? */
+function roamersOut(game, b, type, onlyRoaming = false) {
   let n = 0;
   for (const id of b.walkers) {
     const w = game.walkers.get(id);
-    if (w && w.type === type) n++;
+    if (w && w.type === type && (!onlyRoaming || w.state !== 'return')) n++;
   }
   return n;
 }
@@ -132,8 +135,12 @@ export function updateServiceSpawns(game, b) {
   b.spawnTimer -= b.efficiency;
   if (b.spawnTimer > 0) return;
   // Markets keep two vendors on the streets; everything else one walker.
+  // Prefects and engineers count only while on their rounds: the next one
+  // sets out as the last turns for home. Waiting for him to walk all the way
+  // back left a prefecture's streets unwatched for half of every round, and
+  // a round that wandered off up an empty road cost a whole month.
   const maxOut = def.kind === 'market' ? 2 : 1;
-  if (roamersOut(game, b, def.walker) >= maxOut) return;
+  if (roamersOut(game, b, def.walker, OVERLAP_ROUNDS.has(def.walker)) >= maxOut) return;
   const init = {};
   if (def.god) init.god = def.god;
   if (def.kind === 'venue') init.venue = def.venue;

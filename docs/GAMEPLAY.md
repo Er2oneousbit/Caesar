@@ -98,8 +98,8 @@ Most services are delivered by walkers. A walker serves every building within **
 
 | Service | Building | Notes |
 |---|---|---|
-| Fire safety, police | Prefecture (6 workers) | Prefects reset fire risk and give homes 32 days of police cover (half the crime); they run to fires and douse everything within 4 tiles, and catch protesters, thieves and rioters (see Crime) |
-| Collapse | Engineer's Post (5) | Engineers reset collapse risk |
+| Fire safety, police | Prefecture (6 workers) | Prefects reset fire risk and give homes 32 days of police cover (half the crime); they run to fires and douse everything within 4 tiles, and catch protesters, thieves and rioters (see Crime). At a junction a prefect is drawn to the way whose buildings are closest to burning, and the next prefect sets out as the last one turns for home |
+| Collapse | Engineer's Post (5) | Engineers reset collapse risk. Like prefects, they are drawn to the way whose buildings are closest to falling down, and the next sets out as the last turns for home |
 | Religion | Temples (2) | One per god: Ceres, Neptune, Mercury, Mars, Venus (see Gods) |
 | Food & goods | Market (5) | Up to two vendors on the streets; the buyer restocks from granaries/warehouses |
 | Education | School (10), Library (20), Academy (30) | Tiers: school or library, both, both and an academy |

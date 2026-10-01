@@ -14,7 +14,7 @@
 import { CONFIG } from '../config.js';
 import { WALKER_TYPES, roadblockBit } from '../data/walkers.js';
 import { ROADBLOCK } from '../world/map.js';
-import { killWalker } from './entities.js';
+import { killWalker, mainOf } from './entities.js';
 
 const DX = [0, 1, 0, -1];
 const DY = [-1, 0, 1, 0];
@@ -120,6 +120,20 @@ const ROAM_MEMORY = 24;
  */
 const ROAM_LOOKAHEAD = 8;
 const EMPTY_STREET_WEIGHT = 0.2;
+/**
+ * Prefects and engineers are drawn to the way whose buildings are closest to
+ * burning or falling down: a way whose worst building is at the disaster
+ * threshold weighs 1 + RISK_PULL times as much. Without it the junctions were
+ * coin tosses and a round takes some 25 days, and in a mission 2 playtest the
+ * far side of a two-street block six tiles from its prefecture went 165 days
+ * unvisited and burned (a Stone Cottage reaches the threshold in about 100).
+ * With this and the overlapping rounds (sim/services.js), the longest gap
+ * there fell to 58-82 days over six seeds; a pull of 4 left 81-108. The risk
+ * is already in every save, so the pull needs no new state.
+ */
+const RISK_PULL = 10;
+/** Which risk a roamer's visit clears (sim/services.js), by its effect. */
+const RISK_OF_EFFECT = { fire: 'fireRisk', damage: 'damageRisk' };
 
 /** Is there any building within SERVICE_RADIUS of (x, y), i.e. would a walker there serve anything? */
 function servesSomething(map, x, y) {
@@ -162,6 +176,42 @@ export function streetValue(map, w, x, y, dir) {
 }
 
 /**
+ * The highest `risk` (0..1 of the disaster threshold) among the buildings a
+ * walker would pass going `dir` from road tile (x, y): the same way, through
+ * bends up to the next junction, that streetValue looks down.
+ */
+export function streetRisk(game, w, x, y, dir, risk) {
+  const { map, buildings } = game;
+  const r = CONFIG.SERVICE_RADIUS;
+  const limit = risk === 'fireRisk' ? CONFIG.FIRE_THRESHOLD : CONFIG.DAMAGE_THRESHOLD;
+  let worst = 0;
+  for (let k = 0; k < ROAM_LOOKAHEAD; k++) {
+    for (let ty = y - r; ty <= y + r; ty++) {
+      for (let tx = x - r; tx <= x + r; tx++) {
+        if (!map.inBounds(tx, ty)) continue;
+        // A hippodrome's risk is kept on its main section (sim/risk.js), and a
+        // walk past any section clears it (sim/services.js).
+        const b = mainOf(game, buildings.get(map.building[map.idx(tx, ty)]));
+        if (b && b[risk] > worst) worst = b[risk];
+      }
+    }
+    let next = -1;
+    let ways = 0;
+    for (let e = 0; e < 4; e++) {
+      if (e === (dir + 2) % 4) continue;
+      const nx = x + DX[e];
+      const ny = y + DY[e];
+      if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) { ways++; next = e; }
+    }
+    if (ways !== 1 || roadblockStops(map, w, map.idx(x + DX[next], y + DY[next]))) break;
+    dir = next;
+    x += DX[dir];
+    y += DY[dir];
+  }
+  return Math.min(1, worst / limit);
+}
+
+/**
  * Choose the next road tile for a roaming walker.
  *   - never reverses unless it hits a dead end
  *   - prefers going straight
@@ -177,6 +227,7 @@ export function pickRoamTile(game, w) {
   const ox = origin ? origin.x + (origin.size - 1) / 2 : w.x;
   const oy = origin ? origin.y + (origin.size - 1) / 2 : w.y;
   if (!w.memory) w.memory = [];
+  const risk = RISK_OF_EFFECT[WALKER_TYPES[w.type]?.effect];
   let total = 0;
   const choices = [];
   for (let d = 0; d < 4; d++) {
@@ -190,6 +241,7 @@ export function pickRoamTile(game, w) {
     if (w.memory.includes(idx)) weight *= 0.25;
     if (Math.max(Math.abs(nx - ox), Math.abs(ny - oy)) > ROAM_RADIUS) weight *= 0.1;
     weight *= EMPTY_STREET_WEIGHT + (1 - EMPTY_STREET_WEIGHT) * streetValue(map, w, nx, ny, d);
+    if (risk) weight *= 1 + RISK_PULL * streetRisk(game, w, nx, ny, d, risk);
     choices.push(d, weight);
     total += weight;
   }

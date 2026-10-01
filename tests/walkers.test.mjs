@@ -22,7 +22,8 @@ import { ROADBLOCK_GROUPS, roadblockBit, WALKER_TYPES } from '../src/data/walker
 import { ROADBLOCK, Wall } from '../src/world/map.js';
 import { planAction, undoLast } from '../src/sim/construction.js';
 import { spawnWalker } from '../src/sim/entities.js';
-import { startRoaming, followPath, pickRoamTile, streetValue } from '../src/sim/movement.js';
+import { startRoaming, followPath, pickRoamTile, streetValue, streetRisk } from '../src/sim/movement.js';
+import { updateServiceSpawns } from '../src/sim/services.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { walkerInfo, walkerSays, cityTrouble } from '../src/ui/walkerTalk.js';
@@ -256,6 +257,59 @@ test('a roamer at a junction prefers the street with buildings along it over an 
   }
   // Both turns weigh the same without the rule (about half each).
   assert.ok(east / trials > 0.7, `east ${east} of ${trials}`);
+});
+
+test('a prefect or engineer at a junction heads for the street closest to burning or falling down', () => {
+  // A T with homes along both arms; only the east arm's are near disaster.
+  // In a mission 2 playtest the far street of a block six tiles from its
+  // prefecture went 165 days without a prefect and its homes burned.
+  const game = newGame({ size: 96, type: 'plains', seed: 'roam-street' });
+  const spot = findFree(game, 21, 8);
+  const jx = spot.x + 10;
+  const jy = spot.y + 3;
+  assert.ok(build(game, 'road', spot.x, jy, spot.x + 20, jy).ok);
+  assert.ok(build(game, 'road', jx, jy, jx, jy + 3).ok);
+  const east = [];
+  for (let x = jx + 3; x <= jx + 9; x++) east.push(addBuilding(game, 'house', x, jy - 1, 1));
+  for (let x = jx - 9; x <= jx - 3; x++) addBuilding(game, 'house', x, jy - 1, 1);
+  east[3].fireRisk = 90;
+  east[5].damageRisk = 100;
+  assert.equal(streetRisk(game, { type: 'prefect' }, jx + 1, jy, 1, 'fireRisk'), 0.9);
+  assert.equal(streetRisk(game, { type: 'prefect' }, jx - 1, jy, 3, 'fireRisk'), 0);
+  const share = (type) => {
+    let n = 0;
+    for (let k = 0; k < 400; k++) {
+      const w = { type, x: jx, y: jy, lastDir: 0, memory: [], origin: 0 }; // heading north, at the junction
+      if (game.map.xOf(pickRoamTile(game, w)) > jx) n++;
+    }
+    return n / 400;
+  };
+  // Both turns weigh the same without the pull (about half each).
+  assert.ok(share('prefect') > 0.8, `prefect east ${share('prefect')}`);
+  assert.ok(share('engineer') > 0.8, `engineer east ${share('engineer')}`);
+  const priest = share('priest');
+  assert.ok(priest > 0.35 && priest < 0.65, `a priest is not drawn by risk: east ${priest}`);
+});
+
+test('a prefecture sends its next prefect as the last one turns for home; a temple waits for its priest', () => {
+  const game = newGame({ size: 96, type: 'plains', seed: 'roam-overlap' });
+  const { x0, y } = straightRoad(game, 20);
+  const out = (b, type) => b.walkers.map((id) => game.walkers.get(id)).filter((w) => w && w.type === type);
+  for (const [type, walker, x] of [['prefecture', 'prefect', x0 + 2], ['temple_ceres', 'priest', x0 + 10]]) {
+    assert.ok(build(game, type, x, y + 1).ok, `${type} built`);
+    const b = [...game.buildings.values()].find((o) => o.type === type);
+    b.efficiency = 1;
+    b.spawnTimer = 0;
+    updateServiceSpawns(game, b);
+    assert.equal(out(b, walker).length, 1, `${type}: one out`);
+    b.spawnTimer = 0;
+    updateServiceSpawns(game, b);
+    assert.equal(out(b, walker).length, 1, `${type}: not a second while the first is on his round`);
+    out(b, walker)[0].state = 'return';
+    b.spawnTimer = 0;
+    updateServiceSpawns(game, b);
+    assert.equal(out(b, walker).length, walker === 'prefect' ? 2 : 1, `${type}: the first heading home`);
+  }
 });
 
 test('a roamer weighs a way by where it leads: an empty road on to a dead end, a spur to a building, a roadblock', () => {

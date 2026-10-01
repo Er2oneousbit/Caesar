@@ -14,6 +14,7 @@ import { igniteBuilding, collapseBuilding } from '../src/sim/risk.js';
 import { updateTraining, updateEntertainmentBase, racesRunning, SHOW_DAYS } from '../src/sim/entertainment.js';
 import { updateServiceSpawns, venueActive } from '../src/sim/services.js';
 import { updateWalkers } from '../src/sim/walkers.js';
+import { streetRisk } from '../src/sim/movement.js';
 import { entertainmentScore } from '../src/sim/housing.js';
 import { updateRatings } from '../src/sim/ratings.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
@@ -129,6 +130,25 @@ function raceCity() {
   cm.efficiency = 1;
   return { game, main, maker: cm };
 }
+
+test('hippodrome: its risk draws a prefect or engineer down a street beside any of its sections', () => {
+  // Risk is kept on the main section, and a walk past any section clears it;
+  // a street beside the other sections alone once never drew anyone to it.
+  const { game, main } = raceCity();
+  const { map } = game;
+  const part = [...game.buildings.values()].find((b) => b.main === main.id);
+  assert.ok(part, 'a section that is not the main one');
+  main.fireRisk = CONFIG.FIRE_THRESHOLD;
+  main.damageRisk = CONFIG.DAMAGE_THRESHOLD / 2;
+  // West along the road under that section only, from its east end: the
+  // way passes nothing but the section (lookahead 8 tiles, reach 2).
+  const x = part.x + part.size - 1;
+  const y = part.y + part.size + 1;
+  assert.ok(map.road[map.idx(x, y)], 'a road under the section');
+  const w = { type: 'prefect' };
+  assert.equal(streetRisk(game, w, x, y, 3, 'fireRisk') > 0.99, true);
+  assert.equal(streetRisk(game, w, x, y, 3, 'damageRisk'), 0.5);
+});
 
 test('chariot maker: sends a team that books 32 days of races; the races run the charioteer', () => {
   const { game, main, maker } = raceCity();

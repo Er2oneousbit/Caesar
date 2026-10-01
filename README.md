@@ -45,7 +45,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 1. **Roads first.** Walkers only move on roads, and your city must connect to the Imperial road. The gateway with green pennants is the map entrance, where settlers arrive.
 2. **Housing plots** (H) beside the roads attract settlers, who pitch tents. Every building with workers needs a road touching one of its edges (any side; a corner does not count), or it gets no workers: a red sign with a crossed-out road floats over any building that has none.
 3. **Water:** a Well turns tents into family tents. Later, a Reservoir pipes water to Fountains for better homes. With the Housing tool in hand, a faint blue shows where homes would get water.
-4. **Safety:** Prefectures (against fire, and as police against thieves and rioters) and Engineer's Posts (against collapse) must send walkers past every building.
+4. **Safety:** Prefectures (against fire, and as police against thieves and rioters) and Engineer's Posts (against collapse) must send walkers past every building. Their walkers head for the streets closest to disaster, but each post looks after its own neighbourhood, so spread them out.
 5. **Food:** Wheat Farm on meadow → Granary → Market. Market vendors sell door to door.
 6. **Grow:** temples, schools, theaters, baths and a Forum (for taxes) let homes move up.
 7. **Click everything.** Every building says what it is doing and what it lacks.

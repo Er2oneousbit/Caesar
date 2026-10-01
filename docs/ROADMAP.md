@@ -15,6 +15,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.13.4)
+
+* **Prefects and engineers watch the whole neighbourhood**: at a junction they are drawn to the way whose buildings are closest to burning or falling down, and a post sends its next walker as the last one turns for home instead of waiting for him to walk back. In a mission 2 playtest the far street of a block six tiles from its prefecture went 165 days unvisited (a Stone Cottage burns at about 100) and five homes burned within weeks; the longest gap there is now 58 to 82 days over six seeds, and the city that lost 35 buildings in three years loses none after the homes already at the brink when it was saved. Headless sim: fires 0 on every level (Normal was 1, Hard 1, Insane 3); on Normal over five seeds fires 14 to 0, collapses 4 to 4, homes moving down 363 to 242. A hippodrome draws them too, by its risk on any of its sections
+* 432 unit tests
+
 ## Done (v0.13.3)
 
 * **Carters are clickable on their carts**: a click on a cart (or on a farm wagon and its ox) picks the carter pushing it. The click target covered only the figure, while the cart drawn ahead of him is most of what the eye sees

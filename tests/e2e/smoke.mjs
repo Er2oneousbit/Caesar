@@ -276,6 +276,37 @@ try {
     return { ok: true, heads };
   });
   check('the info panel names all 20 housing levels', ladder.ok && ladder.heads.length === 20 && ladder.heads[0] === 'Tent' && ladder.heads[19] === 'Imperial Palatium' && new Set(ladder.heads).size === 20 && errors.length === 0, JSON.stringify(ladder.heads));
+  // 5. (cont.) Storage orders: a granary's or warehouse's panel has a button
+  //     per good that cycles Accept, Refuse, Get, and an Empty switch
+  //     (sim/storageOrders.js). This map's demo city has a granary but no
+  //     warehouse; the phone check below uses a warehouse.
+  const store = await page.evaluate(() => {
+    const app = window.colonia;
+    const all = [...app.game.buildings.values()];
+    const b = all.find((x) => x.type === 'warehouse') || all.find((x) => x.type === 'granary');
+    if (!b) return null;
+    app.ui.info.showBuilding(b.id);
+    return { id: b.id, good: b.type === 'warehouse' ? 'wine' : 'wheat', name: b.type };
+  });
+  check('demo city has a granary or warehouse', !!store);
+  if (store) {
+    const order = () => page.evaluate(({ id, good }) => window.colonia.game.buildings.get(id).orders[good], store);
+    const seen = [await order()];
+    for (let k = 0; k < 3; k++) {
+      await page.click(`#info-panel .order-btn[data-good="${store.good}"]`);
+      seen.push(await order());
+    }
+    const label = await page.textContent(`#info-panel .order-btn[data-good="${store.good}"]`);
+    await page.click(`#info-panel button:has-text("Empty the ${store.name}")`);
+    const emptying = await page.evaluate(({ id }) => window.colonia.game.buildings.get(id).emptying, store);
+    const says = await page.textContent('#info-panel');
+    await page.click('#info-panel button:has-text("Stop emptying")');
+    const stopped = await page.evaluate(({ id }) => !window.colonia.game.buildings.get(id).emptying, store);
+    await page.evaluate(() => window.colonia.ui.info.close());
+    check(`a ${store.name}'s order cycles Accept, Refuse, Get in its panel, and Empty switches on and off`,
+      seen.join() === 'accept,refuse,get,accept' && label === 'Accept' && emptying && /Emptying/.test(says) && stopped && errors.length === 0,
+      JSON.stringify({ seen, label, emptying, stopped }));
+  }
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Population")');
   const rows = await page.evaluate(() => [...document.querySelectorAll('.modal tr')].filter((tr) => /^\d+\. /.test(tr.textContent)).length);
@@ -849,7 +880,7 @@ try {
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];
   phone.on('pageerror', (e) => perrors.push(e.message));
-  await phone.goto(`${url}?skipmenu=1&map=small`);
+  await phone.goto(`${url}?skipmenu=1&map=small&seed=phone`); // a map where the demo city gets a warehouse
   await phone.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   const layout = await phone.evaluate(() => {
     const sb = document.getElementById('sidebar').getBoundingClientRect();
@@ -858,6 +889,24 @@ try {
   check('phone: no horizontal scroll', layout.scrollW <= layout.w, `${layout.scrollW} <= ${layout.w}`);
   check('phone: build menu docked at the bottom', layout.sbTop > 400, `top ${Math.round(layout.sbTop)}`);
   if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone.png') });
+  // The warehouse panel fits a phone: no sideways scroll inside it, and a tap cycles an order.
+  const phoneWh = await phone.evaluate(() => {
+    const app = window.colonia;
+    app.ui.console.run('demo 2');
+    const wh = [...app.game.buildings.values()].find((b) => b.type === 'warehouse');
+    if (!wh) return null;
+    app.ui.info.showBuilding(wh.id);
+    const panel = document.getElementById('info-panel');
+    return { id: wh.id, scrollW: panel.scrollWidth, w: panel.clientWidth };
+  });
+  if (phoneWh) {
+    await phone.tap('#info-panel .order-btn[data-good="oil"]');
+    const oil = await phone.evaluate((id) => window.colonia.game.buildings.get(id).orders.oil, phoneWh.id);
+    if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone-warehouse.png') });
+    check('phone: the warehouse panel fits, and a tap cycles an order', phoneWh.scrollW <= phoneWh.w && oil === 'refuse', JSON.stringify({ ...phoneWh, oil }));
+  } else {
+    check('phone: demo city has a warehouse', false);
+  }
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
   // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing
   //     may query the page before the tap: Playwright's evaluate() counts as a

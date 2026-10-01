@@ -89,7 +89,7 @@ export class Building {
     this.phase = id % CONFIG.TICKS_PER_DAY; // which tick of the day this building updates on
     this.stock = null; // goods held (storage, markets, producers)
     this.incoming = null; // goods reserved by carts on their way here
-    this.accept = null; // storage accept flags
+    this.orders = null; // storage: per good 'accept' | 'refuse' | 'get' (sim/storageOrders.js)
     this.house = null;
     this.hasWater = false; // reservoirs, fountains, baths
     this.shows = null; // venues: days of performances booked by type
@@ -112,13 +112,17 @@ function initKind(b, def) {
     case 'granary':
       b.stock = emptyStock(FOOD_TYPES);
       b.incoming = emptyStock(FOOD_TYPES);
-      b.accept = Object.fromEntries(FOOD_TYPES.map((k) => [k, true]));
+      b.orders = Object.fromEntries(FOOD_TYPES.map((k) => [k, 'accept']));
+      b.emptying = false; // the Empty switch: send everything elsewhere, take nothing in
+      b.orderNote = null; // what the last Get or Empty check found, for the info panel
       break;
     case 'warehouse':
       b.stock = emptyStock(GOOD_KEYS);
       b.incoming = emptyStock(GOOD_KEYS);
       // Warehouses accept everything except food by default (food goes to granaries).
-      b.accept = Object.fromEntries(GOOD_KEYS.map((k) => [k, !FOOD_TYPES.includes(k)]));
+      b.orders = Object.fromEntries(GOOD_KEYS.map((k) => [k, FOOD_TYPES.includes(k) ? 'refuse' : 'accept']));
+      b.emptying = false;
+      b.orderNote = null;
       break;
     case 'market':
       b.stock = emptyStock([...FOOD_TYPES, ...HOUSE_GOODS]);

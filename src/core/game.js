@@ -36,7 +36,8 @@ import { GameTime } from '../sim/time.js';
 import { computeAccessRoad } from '../sim/entities.js';
 import { updateWalkers } from '../sim/walkers.js';
 import { updateHouse, consumeHouse, useGoods, updateWineSources } from '../sim/housing.js';
-import { updateProducer, updateWorkshop, updateWarehouseSupply, farmSeasonNotice } from '../sim/production.js';
+import { updateProducer, updateWorkshop, farmSeasonNotice } from '../sim/production.js';
+import { updateStorage } from '../sim/storageOrders.js';
 import { updateMarketBuyer } from '../sim/market.js';
 import { updateTraining, updateVenue, updateEntertainmentBase } from '../sim/entertainment.js';
 import { updateServiceSpawns, updateLaborAccess } from '../sim/services.js';
@@ -258,7 +259,8 @@ export class Game {
         case 'farm':
         case 'raw': updateProducer(this, b); break;
         case 'workshop': updateWorkshop(this, b); break;
-        case 'warehouse': updateWarehouseSupply(this, b); break;
+        case 'granary':
+        case 'warehouse': updateStorage(this, b); break;
         case 'market': updateMarketBuyer(this, b); break;
         case 'training': updateTraining(this, b); break;
         case 'venue': updateVenue(this, b); break;

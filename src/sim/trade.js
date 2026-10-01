@@ -25,7 +25,7 @@ import { GOODS, GOOD_KEYS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath, walkTo } from './movement.js';
-import { cityStock, storageSpaceFor, takeGoods, isStorage } from './storage.js';
+import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage } from './storage.js';
 import { dispatchCart, cartsOut } from './production.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
@@ -140,8 +140,9 @@ export function tradeAt(game, partnerId, wh) {
   const route = game.city.trade.routes[partnerId];
   if (!TRADE_PARTNERS[partnerId] || !route) return out;
   sellExports(game, partnerId, [wh], CONFIG.CARAVAN_MAX_TRADE, out);
-  // The caravan unloads into the warehouse itself, so staffing does not matter here.
-  buyImports(game, partnerId, CONFIG.CARAVAN_MAX_TRADE, out, (good) => (wh.accept[good] ? Math.max(0, storageCapacityLeft(wh)) : 0), (good, n) => { wh.stock[good] += n; });
+  // The caravan unloads into the warehouse itself, so staffing does not matter
+  // here; its orders do (Refuse or Empty: no imports of that good here).
+  buyImports(game, partnerId, CONFIG.CARAVAN_MAX_TRADE, out, (good) => (storageAccepts(wh, good) ? Math.max(0, storageCapacityLeft(wh)) : 0), (good, n) => { wh.stock[good] += n; });
   route.visits++;
   return out;
 }

@@ -134,6 +134,20 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 
 Workshops follow a **recipe**: most use 100 units of one raw material per 100-unit batch; the Fletcher needs both timber and iron and waits until it has both.
 
+### Granary and warehouse orders
+
+Click a granary or warehouse: each good (each food, in a granary) has an order button, and a click cycles it through three orders. Its panel also says what the orders are doing right now.
+
+* **Accept** (the default): carts and traders may bring it here. New warehouses refuse food, which belongs in granaries; set a food to Accept to store it in a warehouse.
+* **Refuse**: nothing brings it here: producer and dock carts, other storage's carts and caravan imports go elsewhere. Nobody taking it out cares: market buyers, exports and the Emperor still take a refused good.
+* **Get**: deliveries come as for Accept, and the building's own cart also fetches the good from other storage on its roads.
+  * A warehouse fetches while it holds 4 loads (400 units) or less and has room for 8, from another warehouse, while the others hold more than 4 loads between them. It brings up to 4 loads a trip and prefers nearer and fuller warehouses (each load stored there counts as 4 tiles of road), so Get keeps 5 to 8 loads; it does not fill the warehouse.
+  * A granary fetches while it has room for a load: up to 8 loads (800 units) of one food, from the nearest granary (one with 400 units or less to give counts as twice as far), taking the food on Get that granary holds most of. It never takes the last 100 units of a food from the granaries on its roads.
+  * A building on Get for a good is never a source of it, so two of them never pass a good back and forth.
+* **Empty the granary / warehouse** (a switch): it takes nothing in, and its cart carries everything out, up to 200 units a trip, wherever any cart would take it: a barracks that needs it, a workshop that uses it, a granary, or other storage that accepts it. A good with nowhere to go stays (the panel names it) and the cart takes the next one. Get pauses while emptying. Market buyers, traders and the Emperor still take from it.
+* A storage building sends **one cart at a time**, decided once a day: Empty, else Get, else (warehouses) its routine trips with weapons, arrows and horses to a barracks and raw materials to workshops. Get and Empty need the building at least half staffed; taking deliveries needs only some staff. The room for a Get cart's load is held at home from the moment it leaves, so nothing is lost on the way back.
+* The Emperor's requests take from storage not on Get first.
+
 **Finding what is wrong.** The **Problems** overlay (top bar) raises a column over each home with a problem, the most urgent first: a sick home (pale green); a home already falling back a level (tall, colored by the first thing it lacks); a home in unrest (wine red: mood under 30, or it has already sent out a protester or thief; only where there is crime); and a home that cannot move up, colored by the first thing it lacks (water, food, temples, entertainment, education, health, goods, desirability, room to grow), unless it is already as good as the province allows (its next level needs a building or a trade partner the mission does not have); empty lots no settler can reach and buildings that do not work are red, buildings that work badly (understaffed, short of goods, nowhere to deliver) amber. Point at a column for the reason; a legend lists the colors. The **Production** advisor shows, for each good, what was made, used (eaten, worked up, used by homes, spent on recruits, sent to the Emperor), imported and exported last month and what the storehouses hold; lists the buildings that are not working, grouped by reason, with a *Show* button that goes to each in turn; and names the bottlenecks: workshops waiting for a raw material (and what makes it or who sells it), buildings without workers, harvests with nowhere to go, goods used faster than they come in, homes short of food. The **Overview** tab charts population, treasury and mood month by month (up to 20 years).
 
 ## Money
@@ -154,7 +168,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 | From | the Imperial road entrance | the map edge where the river/sea leaves the map |
 | To | the nearest staffed warehouse on the road network | a free, staffed **Dock** |
 | Per visit | up to 800 units each way | up to 1,200 units each way |
-| Imports go | straight into that warehouse | onto the dock's quay (1,600 units); dock workers cart them to warehouses, granaries or workshops |
+| Imports go | straight into that warehouse, unless it refuses the good or is emptying | onto the dock's quay (1,600 units); dock workers cart them to warehouses, granaries or workshops that accept them |
 | Exports come from | that warehouse | staffed warehouses within 60 road tiles of the dock |
 
 * A **Dock** (3x3, 10 workers, 120 Dn) must touch navigable water: water connected to the map edge through a body of at least 80 tiles. Rivers and coasts always qualify, big lakes touching the edge sometimes do, desert and plains maps usually do not. Ships sail under bridges.
@@ -197,7 +211,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 6: disease; version 5 saves still load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 7: granary and warehouse orders; version 6 saves still load, each good a storehouse accepted on Accept and the rest on Refuse, nothing emptying; version 5 saves load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
 
 ## City mood (sentiment)
 

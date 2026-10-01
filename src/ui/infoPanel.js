@@ -20,6 +20,8 @@ import { WALKER_TYPES, ROADBLOCK_GROUPS } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall, ROADBLOCK } from '../world/map.js';
 import { walkerInfo } from './walkerTalk.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
+import { cycleOrder, setEmptying, orderGoods } from '../sim/storageOrders.js';
+import { ORDER_LABELS, orderLines } from './storageInfo.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
@@ -470,24 +472,41 @@ export class InfoPanel {
     mount(this.el, parts);
   }
 
+  /**
+   * Stock, and the orders: one button per good that cycles Accept, Refuse,
+   * Get (sim/storageOrders.js), the Empty switch, and what they are doing.
+   */
   storageSection(g, b) {
     const cap = storageCapacity(b);
     const used = storageUsed(b);
-    const keys = b.def.kind === 'granary' ? FOOD_TYPES : Object.keys(b.stock);
+    const granary = b.def.kind === 'granary';
+    const cycle = (k) => { cycleOrder(b, k); this.render(); };
     return h('div', { class: 'panel-sec' },
       h('h5', {}, 'Storage'),
       kv('Used', `${fmt(used)} / ${fmt(cap)}`), bar(used, cap),
+      orderLines(g, b).map((line) => h('div', { class: `status ${line.level}`, style: { marginTop: '6px' } }, line.text)),
+      h('div', { class: 'row', style: { marginTop: '6px', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        h('button', {
+          class: `btn small empty-btn${b.emptying ? ' active' : ''}`,
+          title: b.emptying ? 'Take deliveries again' : 'Take nothing in and send everything stored here elsewhere, one cart at a time',
+          onclick: () => { setEmptying(b, !b.emptying); this.render(); },
+        }, b.emptying ? 'Stop emptying' : `Empty the ${granary ? 'granary' : 'warehouse'}`),
+        h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Click an order to change it: Accept, Refuse, Get.')),
       h('table', { class: 'tbl', style: { marginTop: '6px' } },
-        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Stored'), h('th', { class: 'r' }, 'Accept')),
-        keys.map((k) => h('tr', {},
-          h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
-          h('td', { class: 'r num' }, fmt(b.stock[k])),
-          h('td', { class: 'r' }, h('input', {
-            type: 'checkbox',
-            checked: !!b.accept[k],
-            title: 'Accept deliveries of this good',
-            onchange: (e) => { b.accept[k] = e.target.checked; },
-          }))))));
+        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Stored'), h('th', { class: 'r' }, 'Orders')),
+        orderGoods(b).map((k) => {
+          const state = b.orders[k] || 'accept';
+          const label = ORDER_LABELS[state];
+          return h('tr', {},
+            h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
+            h('td', { class: 'r num' }, fmt(b.stock[k])),
+            h('td', { class: 'r' }, h('button', {
+              class: `btn small order-btn ${state}`,
+              'data-good': k,
+              title: label.title,
+              onclick: () => cycle(k),
+            }, label.label)));
+        })));
   }
 
   /** A walker: who, from where, doing what, carrying what, and what it says. */

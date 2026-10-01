@@ -11,6 +11,13 @@
  *   4. a warehouse that accepts G
  * "Room" includes loads already on their way (reservations in b.incoming),
  * so two carts never race to fill the same last slot.
+ *
+ * Storage orders (the player's, per building; sim/storageOrders.js runs the
+ * carts they send): each good is 'accept', 'refuse' or 'get', and the
+ * building has an Empty switch. Refuse and Empty only stop deliveries IN
+ * (producer, dock and storage carts, caravan imports). Nobody taking goods
+ * OUT looks at them: market buyers, exports, the Emperor and other storage's
+ * Get carts. Get counts as accepting.
  * ----------------------------------------------------------------------------
  */
 
@@ -40,23 +47,42 @@ function sumValues(obj) {
 /** Units currently stored. */
 export function storageUsed(b) { return sumValues(b.stock); }
 
+/** Units reserved by carts on their way here (deliveries and the building's own Get cart). */
+export function storageIncoming(b) { return sumValues(b.incoming); }
+
+/** Free room in a storage building, counting loads already on their way. */
+export function storageRoom(b) {
+  return Math.max(0, storageCapacity(b) - storageUsed(b) - storageIncoming(b));
+}
+
+/**
+ * Does this storage building take deliveries of a good? Only its orders
+ * decide (Refuse or Empty say no; Accept and Get say yes), not its room or
+ * staff. Goods it has no place for (wine in a granary) are never accepted.
+ */
+export function storageAccepts(b, good) {
+  if (!isStorage(b) || !b.orders || b.stock[good] === undefined) return false;
+  return !b.emptying && b.orders[good] !== 'refuse';
+}
+
 /** Free space for a good, counting loads already on their way. */
 export function storageSpaceFor(b, good) {
-  if (!isStorage(b)) return 0;
-  if (!b.accept || !b.accept[good]) return 0;
-  if (b.stock[good] === undefined) return 0;
+  if (!storageAccepts(b, good)) return 0;
   if (b.efficiency <= 0) return 0; // unstaffed storage cannot receive
-  return Math.max(0, storageCapacity(b) - storageUsed(b) - sumValues(b.incoming));
+  return storageRoom(b);
 }
 
 /**
  * Put goods into a building (storage, workshop or market).
+ * `home`: the building's own cart is bringing back what it carried (a Get
+ * cart's load, or a delivery nobody would take). Its orders do not turn it
+ * away: Refuse and Empty stop other people's deliveries, not its own goods.
  * @returns {number} how many units were accepted
  */
-export function receiveGoods(b, good, amount) {
+export function receiveGoods(b, good, amount, home = false) {
   const kind = b.def.kind;
   if (kind === 'granary' || kind === 'warehouse') {
-    if (!b.accept[good] || b.stock[good] === undefined) return 0;
+    if (b.stock[good] === undefined || (!home && !storageAccepts(b, good))) return 0;
     const room = Math.max(0, storageCapacity(b) - storageUsed(b));
     const n = Math.min(room, amount);
     b.stock[good] += n;
@@ -109,15 +135,50 @@ export function cityStock(game, good) {
   return n;
 }
 
-/** Remove goods from city storage (e.g. an Emperor request). Returns units removed. */
+/**
+ * Remove goods from city storage (e.g. an Emperor request). Returns units
+ * removed. Storage set to Get that good is drawn on last: the player wants
+ * it kept there (as in the original). Refuse and Empty make no difference.
+ */
 export function takeFromCity(game, good, amount) {
   let left = amount;
-  for (const b of game.buildings.values()) {
-    if (left <= 0) break;
-    if (!holdsCityGoods(b) || !b.stock[good]) continue;
-    left -= takeGoods(b, good, left);
+  for (const getting of [false, true]) {
+    for (const b of game.buildings.values()) {
+      if (left <= 0) break;
+      if (!holdsCityGoods(b) || !b.stock[good]) continue;
+      if ((b.orders?.[good] === 'get') !== getting) continue;
+      left -= takeGoods(b, good, left);
+    }
   }
   return amount - left;
+}
+
+/**
+ * Every storage building of `kind` ('warehouse' or 'granary') on the road
+ * network of tile `fromIdx`, in order of road distance (nearest first), with
+ * that distance and the road tile it was reached from. One search, so a
+ * caller can weigh distance against what each one holds.
+ * @returns {{b:object, dist:number, goal:number}[]}
+ */
+export function storageByRoad(game, fromIdx, kind, excludeId = 0) {
+  const { map, pf, buildings } = game;
+  const { w, h, building } = map;
+  const out = [];
+  const seen = new Set();
+  pf.bfsRoad(fromIdx, (i) => {
+    const x = i % w;
+    const y = (i / w) | 0;
+    for (const n of [y > 0 ? i - w : -1, x < w - 1 ? i + 1 : -1, y < h - 1 ? i + w : -1, x > 0 ? i - 1 : -1]) {
+      if (n < 0) continue;
+      const id = building[n];
+      if (!id || id === excludeId || seen.has(id)) continue;
+      seen.add(id);
+      const b = buildings.get(id);
+      if (b && b.def.kind === kind) out.push({ b, dist: pf.reachedDist(i), goal: i });
+    }
+    return false; // keep going: we want all of them
+  });
+  return out;
 }
 
 /**

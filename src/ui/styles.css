@@ -309,6 +309,11 @@ table.tbl td.r, table.tbl th.r { text-align: right; }
 .status.bad { background: color-mix(in srgb, var(--bad) 14%, var(--panel)); color: var(--bad); }
 .status.warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
 .status.good { background: color-mix(in srgb, var(--good) 12%, var(--panel)); }
+/* storage orders: one button per good, cycling Accept / Refuse / Get */
+.order-btn { min-width: 62px; }
+.order-btn.refuse { border-color: var(--bad); color: var(--bad); }
+.order-btn.get { background: var(--bronze); color: #fff; }
+@media (pointer: coarse) { .order-btn, .empty-btn { min-height: 32px; } }
 .needs li { margin: 2px 0; }
 .needs { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
 

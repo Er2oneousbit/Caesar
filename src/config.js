@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.11.1',
-  SAVE_VERSION: 7, // v7: storage orders (v6 saves load, accept flags mapped) and rubble that remembers what fell; v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 7, // v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v6 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -219,6 +219,47 @@ export const CONFIG = {
   GOD_MOOD_START: 60,
   GOD_BLESS_MOOD: 92,
   GOD_WRATH_MOOD: 12,
+  // Two levels of wrath, as in the original: a god that strikes stays angered
+  // until its mood climbs back above GOD_CALM_MOOD, and if it strikes again
+  // before then, Mercury and Venus strike harder (not in a mission whose
+  // scenario says majorWrath: false, the first two).
+  GOD_CALM_MOOD: 50,
+  // Mercury: the original's numbers (a load there is 100 units here).
+  MERCURY_BLESS_FOOD: 600, // units of each food the emptiest working granary receives (6 loads; room permitting)
+  MERCURY_WRATH_LOSS: 1600, // units lost from the fullest granary or warehouse (16 loads, half a full granary)
+  // Venus. Home moods (sim/mood.js) only breed crime and city mood (sim/
+  // population.js) drives migration, so she touches both, where the original's
+  // one happiness value did both jobs.
+  VENUS_BLESS_HOME: 25, // every occupied home's mood (the original's +25); homes drift back at MOOD_STEP an update, about 4 months
+  // The city mood factor: about a grand festival's worth (+14) for a blessing,
+  // which needs festivals or oracles to reach. City mood moves halfway to its
+  // target each month, so a factor of F moves it by about 0.65 x F at most
+  // (after two months), 0.4 x F after six, and is mostly gone after a year.
+  // Measured on the balance sim's demo city (mood about 45; six seeds, Normal
+  // and Hard): the blessing lifts it about 7 points; the first wrath takes
+  // about 3, the second about 9 more for a few months, so a city at 40 stays
+  // above 30, where settlers keep coming and peace stops falling 2 a month.
+  // (-8 and -15 took it to 28 on Hard and peace fell to 0.) The second wrath
+  // still costs about 20 peace through the thieves it breeds, and a few
+  // outbreaks: felt, and mended within a year.
+  VENUS_BLESS_CITY: 15,
+  VENUS_WRATH_CITY: [-5, -10], // first wrath, then again before she calms
+  VENUS_DECAY: 0.8, // the factor's monthly decay, as the festival boost
+  // Every occupied home's mood capped, then lowered. The original's: cap 50,
+  // -5 (homes at 45, just under its protest line of 50), then cap 40, -10
+  // (30, its thief line). Colonia's thief line is 5 higher (THIEF_MOOD 35),
+  // so the second cap is too: homes end on the thief line, not past it, and
+  // fall under it only where the city's mood or their own troubles pull.
+  VENUS_WRATH_CAP: [50, 45],
+  VENUS_WRATH_HOME: [-5, -10],
+  // Again before she calms, where disease is active: every occupied home
+  // gains this x (100 - its health score) / 100 disease risk (threshold 100):
+  // a home with no care (score about 20) gets 64, most of the way to an
+  // outbreak, a well served one (80) gets 16. A passing physician clears it,
+  // as always. The original's "certain plague" next month, made local: it
+  // falls on the badly served homes and resolves at once (the original's
+  // plague could stay armed for years).
+  VENUS_WRATH_DISEASE: 80,
 
   // --- Trade ---------------------------------------------------------------
   CARAVAN_INTERVAL_DAYS: [32, 56], // random range between visits per open route

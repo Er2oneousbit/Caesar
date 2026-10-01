@@ -56,7 +56,7 @@ import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
-import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor } from './buildingArt.js';
+import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor, templeAltar } from './buildingArt.js';
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
 import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
 import { drawWalker } from './walkerArt.js';
@@ -125,6 +125,18 @@ export function mapGateOffset(map, end, dir = null) {
   const b = dx;
   const r = 0.46; // pillars stand inside the tile, just off the road
   return { ox: (a - b) * HALF_W * r, oy: (a + b) * HALF_H * r };
+}
+
+/**
+ * Where a temple's live altar flame goes, in world px at zoom 1 from the
+ * building's anchor: on the altar templeArt draws (templeAltar), its fire
+ * about 5 px up. (It was once placed at the front left, where the god's own
+ * piece stands since each god got its look, so it burned over a herm or a
+ * rose bush.)
+ */
+export function altarFlameOffset(S) {
+  const [u, v] = templeAltar(S);
+  return [(u - v) * HALF_W, (u + v) * HALF_H - 5];
 }
 
 /**
@@ -1379,9 +1391,8 @@ export class Renderer {
       if (it.live === 'market') drawShoppers(ctx, ox, oy, k, b.size, t, b.id);
       else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5);
       else if (it.live === 'altar') {
-        // templeArt's altar fire sits at P(0.25, S - 0.08), about 5 px up.
-        const S = b.size;
-        drawAltarFlame(ctx, ox + (0.25 - (S - 0.08)) * HALF_W * k, oy + ((0.25 + S - 0.08) * HALF_H - 5) * k, k, t, b.id);
+        const [fx, fy] = altarFlameOffset(b.size);
+        drawAltarFlame(ctx, ox + fx * k, oy + fy * k, k, t, b.id);
       }
       return;
     }

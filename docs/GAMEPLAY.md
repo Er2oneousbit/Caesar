@@ -98,7 +98,7 @@ Most services are delivered by walkers. A walker serves every building within **
 |---|---|---|
 | Fire safety, police | Prefecture (6 workers) | Prefects reset fire risk and give homes 32 days of police cover (half the crime); they run to fires and douse everything within 4 tiles, and catch protesters, thieves and rioters (see Crime) |
 | Collapse | Engineer's Post (5) | Engineers reset collapse risk |
-| Religion | Temples (2) | One per god: Jupiter, Ceres, Neptune, Mars, Vesta |
+| Religion | Temples (2) | One per god: Ceres, Neptune, Mercury, Mars, Venus (see Gods) |
 | Food & goods | Market (5) | Up to two vendors on the streets; the buyer restocks from granaries/warehouses |
 | Education | School (10), Library (20), Academy (30) | Tiers: school or library, both, both and an academy |
 | Health | Barber (2), Medicus (5), Thermae (10, needs piped water), Valetudinarium (30, area 12 tiles) | Barber and baths are needs of their own; medicus and hospital make up medical care. All of them raise a home's health score; a physician passing clears its disease risk and cures the sick, and a medicus sends one to an outbreak (see Health and disease) |
@@ -226,7 +226,7 @@ Pay is Dn per soldier per month, on top of the wages of the forts' and barracks'
 
 ## Saving
 
-Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 7: granary and warehouse orders; version 6 saves still load, each good a storehouse accepted on Accept and the rest on Refuse, nothing emptying; version 5 saves load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
+Games are stored in the browser's localStorage under `colonia.save.<slot>`: `auto` (every 3 months and whenever the page is hidden or closed), `quick` (F5 / F9) and `slot1`-`slot5`. Map layers are run-length compressed and walker paths packed, so a year-old small city saves in about 120 KB and a year-old Uber city in about 300 KB; most of a big save is its buildings (about 0.8 KB each). Browsers usually allow about 5 MB per site, so a handful of big-city saves can fill it. The Save/Load menus show each save's size and the total in use. Saves are tied to that browser and site: use *Export to file* or *Copy save data* for backups. The save format is versioned (currently 7: granary and warehouse orders, rubble that remembers what fell, and the original's five gods; version 6 saves still load, each good a storehouse accepted on Accept and the rest on Refuse, nothing emptying, old rubble without its story, and Jupiter's temples, mood, priests and every home's access to him becoming Mercury's, and Vesta's Venus's; version 5 saves load with nobody sick and city health at 50, and version 4 saves too, their homes also starting at the city's mood). Until version 1.0 a release may change it: saves from before v0.7 (the 20-level housing ladder) cannot be loaded, and say so.
 
 ## City mood (sentiment)
 
@@ -299,19 +299,25 @@ At most 100, and at most 40 for a home whose level eats and that has no food at 
 
 Every building gains fire and collapse risk daily (houses by level, industry faster; x0.5 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread: each building beside the flames gains 5 fire risk a day and has a 2% chance a day to catch, once a day however many burning tiles it touches. An unguarded fire in a dense block usually takes a handful of homes; a prefect on the way usually stops it at one or two. Prefects within 24 road tiles are dispatched automatically.
 
-Rubble remembers what stood there. Click it: *Ruins of a Prefecture, burned down in Iul 280 BC.* The causes are burned down, struck by lightning, burned by raiders, burned by rioters, collapsed, torn down by raiders, and (for a wall) broken down by raiders. Every tile of a fallen building keeps the record until it is cleared or built over. Rubble in a save made by an older version of the game says only *Rubble from a disaster*.
+Rubble remembers what stood there. Click it: *Ruins of a Prefecture, burned down in Iul 280 BC.* The causes are burned down, burned by an angry god, burned by raiders, burned by rioters, collapsed, torn down by raiders, and (for a wall) broken down by raiders. Every tile of a fallen building keeps the record until it is cleared or built over. Rubble in a save made by an older version of the game says only *Rubble from a disaster*.
 
 ## Gods
 
-Each god wants one staffed temple per 500 of its share of citizens (a fifth of the population). Towns under 800 people are left alone. Above that, a god with no temple sinks toward mood 5 and eventually strikes. Blessings (mood 92+) need festivals or oracles on top of good coverage.
+The original's five gods: Ceres, Neptune, Mercury, Mars and Venus. Every temple is the same but for its god (50 Dn, 2 workers, a priest every 4 days); the first mission has Ceres and Mercury, the second adds the other three.
 
-| God | Blessing | Wrath |
-|---|---|---|
-| Jupiter | +10 favor | lightning sets a home on fire |
-| Ceres | instant harvest on every farm | farm progress lost |
-| Neptune | trade windfall (money) | buildings near water weakened |
-| Mars | +10 peace | brawls: -10 peace, treasury looted |
-| Vesta | fire risk reset city-wide | several homes on the brink of fire |
+Each god wants one staffed temple per 500 of its share of citizens (a fifth of the population). Towns under 800 people are left alone. Above that, a god with no temple sinks toward mood 5 and eventually strikes (mood 12 or less; then 8 months before it can strike again, and its mood rises 12). Blessings (mood 92+, then 14 months before the next) need festivals or oracles on top of good coverage.
+
+A god that strikes stays **angered** until its mood is back above 50 (the Religion advisor says so). If Mercury or Venus strikes again before then, the wrath is harder. The first two campaign missions spare a new player that: there a second wrath is like the first.
+
+| God | Blessing | Wrath | Angered again |
+|---|---|---|---|
+| Ceres | instant harvest on every farm | farm progress lost | the same |
+| Neptune | trade windfall (200 Dn + 0.2 a citizen) | buildings near water weakened | the same |
+| Mercury | the working granary with the least food receives 600 each of wheat, vegetables, fruit and meat, as far as it has room and accepts them (a granary set to refuse every food is passed over; any granary if none is staffed) | the granary or warehouse holding the most loses 1600 units (a granary wheat first, then vegetables, fruit, meat; a warehouse its largest stocks first) | that storehouse burns down, with everything in it; the fire can spread |
+| Mars | +10 peace | brawls: -10 peace, treasury looted (100 Dn + 0.1 a citizen) | the same |
+| Venus | every home's mood +25, and the city mood +15, fading a fifth a month | every home's mood capped at 50, then -5; the city mood -5, fading | homes capped at 45, then -10; the city mood -10, fading; and where disease can break out, every home gains disease risk of 80 x (100 - its health score) / 100 (x the difficulty's disease lever): badly served homes go most of the way to an outbreak, and a passing physician clears it |
+
+Venus's part of the city mood shows in the Overview's mood breakdown as "Venus's blessing or wrath" while it lasts (it fades x0.8 a month and is gone once under half a point). Measured in the balance sim's demo city (six seeds): a blessing lifts the city mood about 7 points; a first wrath takes about 3, a second about 9 more for a few months, and its thieves cost about 20 peace on Normal and Hard.
 
 ## Ratings and winning
 

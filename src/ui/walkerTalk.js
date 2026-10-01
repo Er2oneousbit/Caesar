@@ -44,7 +44,20 @@ const CITY_LINES = Object.freeze({
   fine: ['Not a bad place to live, all told.', 'Another fine day in the colony.', 'The streets are busy today.'],
 });
 
-const godLines = (god) => [`The priests say ${god} is angry with us.`, `We have forgotten ${god}, and ${god} has not forgotten us.`];
+/** What citizens fear from each angry god (its wrath, sim/religion.js). */
+const GOD_FEARS = Object.freeze({
+  ceres: 'Pray the blight spares the fields this year.',
+  neptune: 'The river is restless. I would not live by the water now.',
+  mercury: 'Goods go missing from the storehouses. Mercury is not pleased.',
+  mars: 'Brawls every night. Mars wants blood.',
+  venus: 'Nobody smiles in this city any more. Venus has turned away.',
+});
+
+/** Gossip about an angry god, by its key. */
+const godLines = (key) => {
+  const god = GODS[key].name;
+  return [`The priests say ${god} is angry with us.`, `We have forgotten ${god}, and ${god} has not forgotten us.`, ...(GOD_FEARS[key] ? [GOD_FEARS[key]] : [])];
+};
 
 /** What each kind of walker says about its own work. */
 function workLines(game, w) {
@@ -118,7 +131,7 @@ function anySick(game) {
 function emigrantLine(game) {
   const f = game.city.sentimentFactors || {};
   let worst = null;
-  for (const k of ['taxes', 'wages', 'unemployment', 'food', 'housing', 'gods']) if (f[k] < 0 && (!worst || f[k] < f[worst])) worst = k;
+  for (const k of ['taxes', 'wages', 'unemployment', 'food', 'housing', 'gods', 'venus']) if (f[k] < 0 && (!worst || f[k] < f[worst])) worst = k;
   return {
     taxes: 'The taxes drove us out.',
     wages: 'The pay was too poor to live on.',
@@ -126,6 +139,7 @@ function emigrantLine(game) {
     food: 'We could not feed the children.',
     housing: 'Our home was no better than a hut.',
     gods: 'The gods have turned their backs on this city.',
+    venus: 'Venus has turned her back on this city, and so have we.',
   }[worst] || 'This city has nothing left for us.';
 }
 
@@ -143,6 +157,7 @@ function protesterLine(game, w) {
     food: 'The granaries are empty and nobody cares!',
     housing: 'Is this how Rome houses its citizens?',
     gods: 'The gods have left us, and so has the governor!',
+    venus: 'Even Venus has abandoned us! Where is the joy in this city?',
   }[why] || pick(['We will be heard!', 'Enough is enough!'], w, game);
 }
 
@@ -174,7 +189,7 @@ export function walkerSays(game, w) {
   const trouble = cityTrouble(game);
   // Every other walker mentions the city's trouble; the rest talk shop.
   const gossip = pick([true, false], w, game, 1);
-  if (trouble && gossip) return pick(trouble.startsWith('god:') ? godLines(GODS[trouble.slice(4)].name) : CITY_LINES[trouble], w, game, 2);
+  if (trouble && gossip) return pick(trouble.startsWith('god:') ? godLines(trouble.slice(4)) : CITY_LINES[trouble], w, game, 2);
   if (!trouble && gossip) return pick(c.sentiment >= 70 ? CITY_LINES.happy : CITY_LINES.fine, w, game, 2);
   return pick(work, w, game, 3);
 }

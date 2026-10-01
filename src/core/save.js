@@ -35,15 +35,23 @@
  *      to a sick home. Version 5 (and 4) saves load: no home is sick, every
  *      risk starts at 0 and city health at its starting value, see
  *      upgradeV5().
- *   7  storage orders: granaries and warehouses hold `orders` (per good
- *      'accept', 'refuse' or 'get') and an Empty switch (`emptying`) in
- *      place of the old `accept` flags; carts can be out fetching ('collect').
- *      Version 6 (and older) saves load: each accept flag becomes Accept or
- *      Refuse and nothing is emptying, see upgradeV6().
- *   7  ruins: rubble remembers what stood there, why it fell and when
- *      (ruins[]: one entry per fallen building with the tiles it still
- *      covers, see sim/ruins.js). Older saves load with rubble that has no
- *      record; its info panel says what it always said.
+ *   7  three changes in one release (v0.12), each loading older saves:
+ *      - the original's five gods: Mercury and Venus took the places of two
+ *        gods of Colonia's own, Jupiter and Vesta. Each god has an `angered`
+ *        flag, and city.venusBoost is Venus's factor in the city mood.
+ *        upgradeGodsV6() renames the old gods on the raw data before
+ *        anything is built from it (their temples, their moods, every home's
+ *        access to them, their priests), so no temple is dropped as an
+ *        unknown building and no home loses a god.
+ *      - storage orders: granaries and warehouses hold `orders` (per good
+ *        'accept', 'refuse' or 'get') and an Empty switch (`emptying`) in
+ *        place of the old `accept` flags; carts can be out fetching
+ *        ('collect'). Each accept flag becomes Accept or Refuse and nothing
+ *        is emptying, see upgradeOrdersV6().
+ *      - ruins: rubble remembers what stood there, why it fell and when
+ *        (ruins[]: one entry per fallen building with the tiles it still
+ *        covers, see sim/ruins.js). Older saves load with rubble that has no
+ *        record; its info panel says what it always said.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -269,6 +277,8 @@ export function deserializeGame(data, flags = {}) {
   if (data.version > CONFIG.SAVE_VERSION) throw new Error(`This save was made by a newer version of the game (save v${data.version}, game supports v${CONFIG.SAVE_VERSION}).`);
   if (data.version < MIN_SAVE_VERSION) throw new Error(`This save was made by an older version of Colonia (save v${data.version}) and cannot be loaded: homes now have 20 levels. Start a new city.`);
   assert(data.map && data.time && data.city && Array.isArray(data.buildings), 'missing sections');
+  // Renames on the raw data, before anything is built from it.
+  if (data.version < 7) data = upgradeGodsV6(data);
 
   const scenario = data.scenario && data.scenario.map ? data.scenario : withDifficulty(findScenario(data.scenario?.id), data.difficulty);
   assert(scenario, `unknown scenario "${data.scenario?.id}"`);
@@ -345,7 +355,7 @@ export function deserializeGame(data, flags = {}) {
 
   if (data.version < 5) upgradeV4(game);
   if (data.version < 6) upgradeV5(game);
-  if (data.version < 7) upgradeV6(game);
+  if (data.version < 7) upgradeOrdersV6(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -389,7 +399,7 @@ function upgradeV5(game) {
  * accept flags become its orders (accepted: Accept, not: Refuse), with
  * nothing on Get and Empty off, so the city works exactly as it did.
  */
-function upgradeV6(game) {
+function upgradeOrdersV6(game) {
   for (const b of game.buildings.values()) {
     const old = b.accept;
     delete b.accept; // every building had the field (null outside storage)
@@ -400,6 +410,62 @@ function upgradeV6(game) {
     b.emptying = false;
     b.orderNote = null;
   }
+}
+
+/**
+ * The two gods of Colonia's own that saves before version 7 have, and the
+ * original's gods that took their places (the owner's call: their moods,
+ * temples and priests carry over).
+ */
+export const OLD_GODS = Object.freeze({ jupiter: 'mercury', vesta: 'venus' });
+
+/** A god key or a `temple_<god>` building type, renamed if it is an old one. */
+function newGodKey(k) {
+  return Object.hasOwn(OLD_GODS, k) ? OLD_GODS[k] : k;
+}
+function newTempleType(t) {
+  return typeof t === 'string' && t.startsWith('temple_') ? `temple_${newGodKey(t.slice(7))}` : t;
+}
+
+/** An object keyed by gods, with the old keys renamed (other keys kept as they are). */
+function renameGodKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[newGodKey(k)] = v;
+  return out;
+}
+
+/**
+ * A save before version 7 (Jupiter and Vesta): returns a copy of the raw data
+ * with the old gods renamed everywhere a god's key is stored. It must run
+ * before the Game and its buildings are built: the loader drops buildings of
+ * an unknown type, so the old temples would vanish and leave their tiles
+ * unclaimed. The parts it changes are copied; the caller's object is left
+ * alone. Old messages that name the old gods stay as they were (history),
+ * and fire risk from an old wrath plays out.
+ */
+export function upgradeGodsV6(data) {
+  const out = { ...data };
+  // The gods' state: the old god's whole state (mood, festival boost,
+  // cooldown, temples) goes to its successor. Nobody is angered yet.
+  const city = { ...data.city };
+  const gods = renameGodKeys(city.gods || {});
+  for (const k in gods) gods[k] = { ...gods[k], angered: false };
+  city.gods = gods;
+  city.venusBoost = 0;
+  out.city = city;
+  // Temples, and every home's access to each god.
+  out.buildings = data.buildings.map((raw) => {
+    if (!raw || typeof raw !== 'object') return raw;
+    const b = { ...raw, type: newTempleType(raw.type) };
+    if (raw.house && typeof raw.house === 'object') b.house = { ...raw.house, religion: renameGodKeys(raw.house.religion) };
+    return b;
+  });
+  // Priests: their god colors their tunic and gives homes access.
+  if (Array.isArray(data.walkers)) out.walkers = data.walkers.map((w) => (w && w.god ? { ...w, god: newGodKey(w.god) } : w));
+  // A sandbox save carries its scenario in full, unlock list included.
+  if (data.scenario && Array.isArray(data.scenario.unlocks)) out.scenario = { ...data.scenario, unlocks: data.scenario.unlocks.map(newTempleType) };
+  return out;
 }
 
 // ---------------------------------------------------------------------------

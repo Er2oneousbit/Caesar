@@ -390,7 +390,7 @@ test('demo city: every planned service is built, even where the site has trees o
   // The site may be up to a fifth blocked; on the balance sim's own seed
   // ('demo') the Forum and the second market used to be skipped without a
   // word, so that city never collected a denarius of tax.
-  const want = { forum: 1, market: 2, prefecture: 2, engineer_post: 2, clinic: 1, school: 1, theater: 1, barber: 1, temple_mars: 1, temple_neptune: 1, temple_vesta: 1, temple_ceres: 1, temple_jupiter: 1 };
+  const want = { forum: 1, market: 2, prefecture: 2, engineer_post: 2, clinic: 1, school: 1, theater: 1, barber: 1, temple_mars: 1, temple_neptune: 1, temple_venus: 1, temple_ceres: 1, temple_mercury: 1 };
   for (const seed of ['demo', 'a1', 'test-seed', 'near']) {
     const game = newGame({ seed });
     assert.ok(buildDemoCity(game, { level: 2 }).ok, `${seed}: demo city built`);

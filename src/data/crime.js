@@ -99,5 +99,6 @@ export const MOOD_REASONS = Object.freeze({
   food: 'Food is short across the city',
   housing: 'Most of the city lives in poor homes',
   gods: 'The gods are angry with the city',
+  venus: 'Venus has turned her face from the city',
   difficulty: 'The people are hard to please',
 });

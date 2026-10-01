@@ -194,7 +194,7 @@ export const CONFIG = {
   // At 0.5 a crowded home (40 people) scoring 20 that no physician visits
   // reaches the threshold in about 10 months on Normal; one scoring 80
   // (which takes health care) would need over 3 years, and gets visited.
-  DISEASE_RATE: 0.31, // was 0.5: slowed with fire and collapse (RISK_PACE; the owner found both too fast on Normal)
+  DISEASE_RATE: 0.2, // was 0.5, then 0.31: the owner found disease too fast on Normal (v0.12.1, then a 5-year sandbox save: 37 outbreaks)
   DISEASE_CROWD_BASE: 0.5,
   DISEASE_CROWD_PEOPLE: 40,
   DISEASE_CROWD_MAX: 1.5,
@@ -203,8 +203,8 @@ export const CONFIG = {
   DISEASE_DEATHS: 0.2, // share of a home's residents who die when it falls sick (at least 1)...
   DISEASE_DEATHS_HOSPITAL: 0.1, // ...within a staffed hospital's reach
   SICK_DAYS: 32, // a sick home recovers by itself after this many days (a physician cures it at once)
-  DISEASE_HEAT: 1, // disease risk a home beside a sick one gains per day, x difficulty.disease (once, however many sick homes it touches)
-  DISEASE_SPREAD_CHANCE: 0.005, // chance a day that it falls sick at once, x difficulty.disease (halved within a hospital's reach)
+  DISEASE_HEAT: 0.3, // disease risk a home beside a sick one gains per day, x difficulty.disease (once, however many sick homes it touches). Was 1, five times a Family Tent's own: one outbreak set off the whole block
+  DISEASE_SPREAD_CHANCE: 0.003, // chance a day that it falls sick at once, x difficulty.disease (halved within a hospital's reach); was 0.005
   PHYSICIAN_ALERT_RADIUS: 24, // road tiles: a physician or a staffed medicus this close is sent to a sick home
   PHYSICIAN_NEAR: 3, // no second physician is sent to a sick home this near one another is heading to
   PHYSICIAN_TREAT_TICKS: 20, // a physician stays a day with the sick, then looks for more
@@ -287,8 +287,8 @@ export const CONFIG = {
 
   // --- Emperor -------------------------------------------------------------
   REQUEST_INTERVAL_MONTHS: [14, 26],
-  FIRST_REQUEST_MONTHS: [24, 36], // the Emperor's first request: in the third year (x difficulty.requestInterval; was 14-26 like the rest: too early, the owner said)...
-  REQUEST_MIN_POP: 400, // ...and not before the city has this many people (was 150)
+  FIRST_REQUEST_MONTHS: [36, 48], // the Emperor's first request: in the fourth year (x difficulty.requestInterval; was 14-26 like the rest, then 24-36: still too early for a city to get going, the owner said)...
+  REQUEST_MIN_POP: 500, // ...and not before the city has this many people (was 150, then 400)
   REQUEST_DEADLINE_MONTHS: 12,
   FAVOR_START: 50,
 };

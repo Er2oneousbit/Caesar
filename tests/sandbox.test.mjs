@@ -380,10 +380,11 @@ test('raids leave time to build: no first raid inside 3 years on Normal, sandbox
   ];
   assert.ok(firsts.length >= 6);
   for (const [name, first] of firsts) assert.ok(first >= 36, `${name}: first raid after ${first} months`);
-  assert.equal(INVASION_PRESETS.occasional.first, 60, 'occasional: 5 years');
-  // The sandbox default (occasional) on Normal: no warning before year 5 (4 years 9 months).
+  assert.equal(INVASION_PRESETS.occasional.first, 96, 'occasional: 8 years (was 5: the owner still had barely a city)');
+  assert.equal(INVASION_PRESETS.frequent.first, 60, 'frequent: 5 years (was 3)');
+  // The sandbox default (occasional) on Normal: no warning before year 8 (7 years 9 months).
   const game = newGame({ invasions: 'occasional' });
-  assert.equal(game.military.nextRaidMonth, 60);
+  assert.equal(game.military.nextRaidMonth, 96);
 });
 
 test('demo city: every planned service is built, even where the site has trees or rock', () => {

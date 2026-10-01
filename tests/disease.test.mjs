@@ -115,13 +115,13 @@ test('health score: the level, health care, baths, barber, fountain water and fo
   assert.deepEqual(healthLacks(has({ hospital: true, medicus: true, baths: true, barber: true, fountain: true, foods: 4 })), []);
 });
 
-test('disease risk: a crowded, unvisited, unhealthy home falls sick in about 13-19 months on Normal (8-12 before v0.12.2 slowed it with fire); a healthy one practically never', () => {
+test('disease risk: a crowded, unvisited, unhealthy home falls sick in about 20-30 months on Normal (8-12 before v0.12.2); a healthy one practically never', () => {
   assert.equal(crowding(0), CONFIG.DISEASE_CROWD_BASE);
   assert.equal(crowding(40), 1.5);
   assert.equal(crowding(400), CONFIG.DISEASE_CROWD_BASE + CONFIG.DISEASE_CROWD_MAX, 'crowding tops out');
   const months = (score, pop, lever = 1) => CONFIG.DISEASE_THRESHOLD / dailyRisk(score, pop, lever) / CONFIG.DAYS_PER_MONTH;
   const poor = months(20, 40);
-  assert.ok(poor >= 13 && poor <= 19, `a poor, crowded home: ${poor.toFixed(1)} months`);
+  assert.ok(poor >= 20 && poor <= 30, `a poor, crowded home: ${poor.toFixed(1)} months`);
   assert.ok(months(80, 40) > 36, `a healthy one: ${months(80, 40).toFixed(1)} months, with no physician ever calling`);
   assert.ok(Math.abs(months(20, 40, 0.5) - 2 * poor) < 1e-9, 'Easy: half as fast');
   assert.ok(months(20, 10) > poor, 'an emptier home is slower');

@@ -70,8 +70,10 @@ export const HOME_POS = Object.freeze([48, 22]);
  */
 export const INVASION_PRESETS = Object.freeze({
   none: null,
-  occasional: { first: 60, interval: [24, 36], base: 5 },
-  frequent: { first: 36, interval: [12, 20], base: 7 },
+  // First raid in months: 8 and 5 years (were 5 and 3: the owner, a sandbox on
+  // Normal, still had barely a city when the first warband came).
+  occasional: { first: 96, interval: [24, 36], base: 5 },
+  frequent: { first: 60, interval: [12, 20], base: 7 },
 });
 
 /*

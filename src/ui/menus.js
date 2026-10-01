@@ -11,7 +11,8 @@
 
 import { h, fmt } from './dom.js';
 import { CONFIG } from '../config.js';
-import { SCENARIOS, withDifficulty } from '../data/scenarios.js';
+import { SCENARIOS, withDifficulty, INVASION_PRESETS } from '../data/scenarios.js';
+import { RAID_MIN_POP } from '../sim/military.js';
 import { MAP_SIZES, MAP_SIZE_NOTES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
@@ -173,7 +174,8 @@ export function sandboxMenu(app) {
       h('div', { class: 'field' }, h('label', {}, 'Raids'),
         h('select', { onchange: (e) => { state.invasions = e.target.value; } },
           [['none', 'Peaceful (no raids)'], ['occasional', 'Occasional raids'], ['frequent', 'Frequent raids']].map(([k, n]) => h('option', { value: k, selected: k === state.invasions }, n))),
-        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Raiders never come before the city has 120 people, and scouts warn you about 3 months ahead.'))),
+        // From the game's own numbers (this said 120 people long after the minimum became 300).
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, `The first raid comes after about ${INVASION_PRESETS.occasional.first / 12} years (occasional) or ${INVASION_PRESETS.frequent.first / 12} (frequent), never before the city has ${RAID_MIN_POP} people, and scouts warn you about 3 months ahead.`))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),

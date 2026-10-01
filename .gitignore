@@ -35,3 +35,6 @@ dist/colonia.artifact.html
 
 # NOTE: dist/colonia.html IS committed on purpose, so players can download
 # and double-click it without installing anything. Rebuild with `npm run build`.
+
+# Throwaway probe scripts while investigating (never committed)
+/scripts/_*_tmp.mjs

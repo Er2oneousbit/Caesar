@@ -80,6 +80,7 @@ export const CONFIG = {
   SETTLER_MAX_SPEEDUP: 2, // ...up to this many times walking speed (a trot): trips up to 140 tiles take no longer than a 70-tile walk
   IMMIGRATION_BASE_PER_DAY: 6, // people/day arriving when sentiment is 100 (scaled by (mood - 20) / 80)
   IMMIGRATION_MIN_MOOD: 30, // below this mood nobody moves in
+  UNEMPLOYMENT_MOOD_FREE: 0.1, // unemployment up to this share costs no mood; beyond it, 6 points per 10% (at most 15)
   NEW_CITY_BONUS_MONTHS: 12, // a new city's first months, when settlers are keen so cities can start:
   NEW_CITY_MOOD: 20, // ...extra mood
   NEW_CITY_IMMIGRATION: 1.6, // ...and this many times the settlers

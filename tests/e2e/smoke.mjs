@@ -629,7 +629,22 @@ try {
     out.shownAfter = !bar.classList.contains('no-season') || bar.scrollWidth > bar.clientWidth;
     return out;
   });
-  check('the season name gives way when the top bar is full', (fit.hidden || fit.over <= 0) && fit.shownAfter, JSON.stringify(fit));
+  // Unemployment sits beside the mood, amber once it costs mood.
+  const workChip = await page.evaluate(() => {
+    const app = window.colonia;
+    const c = app.game.city;
+    const keep = c.unemploymentRate;
+    c.unemploymentRate = 0.3;
+    app.ui.hud.update();
+    const el = [...document.querySelectorAll('#hud-top .hud-stat')].find((e) => e.textContent.includes('⚒'));
+    const out = { text: el && el.textContent, warn: !!el && el.classList.contains('warn'), title: el && el.title };
+    c.unemploymentRate = keep;
+    app.ui.hud.update();
+    out.calm = !!el && !el.classList.contains('warn') === keep <= 0.1;
+    return out;
+  });
+  check('the top bar shows unemployment, amber when it costs mood', /30%/.test(workChip.text || '') && workChip.warn && /lowers the city mood/.test(workChip.title || '') && workChip.calm, JSON.stringify(workChip));
+  check('the season name gives way when the top bar is full',(fit.hidden || fit.over <= 0) && fit.shownAfter, JSON.stringify(fit));
   check('the top bar shows the season; winter only snows', winter.text.includes('Winter') && winter.title.includes('winter') && winter.kind === 'snow' && /not possible in winter/.test(winter.reply) && /snow/.test(winter.after), JSON.stringify(winter));
   // Snow settles: the ground, trees and roofs turn white (baked into the
   // sprites, so the new look is prepared, then swapped in whole).

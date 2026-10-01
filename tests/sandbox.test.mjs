@@ -400,3 +400,24 @@ test('demo city: every planned service is built, even where the site has trees o
     for (const [type, n] of Object.entries(want)) assert.ok((have[type] || 0) >= n, `${seed}: ${type} ${have[type] || 0} of ${n}`);
   }
 });
+
+test('top bar: unemployment shows beside the mood and turns amber once it costs mood', async () => {
+  const { workLine } = await import('../src/ui/hud.js');
+  const calm = workLine({ unemploymentRate: 0.08, unemployed: 8, workforce: 100, sentimentFactors: { unemployment: 0 } });
+  assert.equal(calm.value, '8%');
+  assert.equal(calm.warn, false);
+  assert.match(calm.title, /8 of 100 workers have no job/);
+  const idle = workLine({ unemploymentRate: 0.32, unemployed: 123, workforce: 384, sentimentFactors: { unemployment: -13.2 } });
+  assert.equal(idle.value, '32%');
+  assert.equal(idle.warn, true);
+  assert.match(idle.title, /now -13/);
+  assert.match(idle.title, /build workplaces/);
+  // The chip turns amber exactly where the mood starts to pay for it.
+  const edge = { unemploymentRate: CONFIG.UNEMPLOYMENT_MOOD_FREE, unemployed: 10, workforce: 100 };
+  assert.equal(workLine(edge).warn, false);
+  const g = new Game({ scenario: sandboxScenario({ seed: 'work-chip' }) });
+  g.city.unemploymentRate = CONFIG.UNEMPLOYMENT_MOOD_FREE;
+  assert.equal(computeSentiment(g).unemployment, 0);
+  g.city.unemploymentRate = CONFIG.UNEMPLOYMENT_MOOD_FREE + 0.05;
+  assert.ok(computeSentiment(g).unemployment < 0);
+});

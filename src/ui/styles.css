@@ -161,6 +161,7 @@ button, input, select { font: inherit; color: inherit; }
 @media (max-width: 1280px) { .hud-stat .season { display: none; } }
 #hud-top.no-season .hud-stat .season { display: none; } /* set by Hud.fitSeason() when the bar is full */
 .hud-stat.neg { color: #ff8f83; }
+.hud-stat.warn { color: #ffcf6a; } /* unemployment that costs mood */
 .hud-title { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; color: var(--gold); white-space: nowrap; }
 .hud-spacer { flex: 1; min-width: 4px; }
 .speed-group { display: flex; gap: 2px; }

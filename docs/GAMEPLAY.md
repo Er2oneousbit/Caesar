@@ -215,6 +215,8 @@ Starts from 50 and is recalculated monthly (moving halfway toward the new value)
 | New city | +20 for the first year |
 | Difficulty | -8 on Insane |
 
+The top bar shows the mood (🙂) and, beside it, unemployment (⚒): the share of the workforce with no job. It turns amber above 10%, where it starts to cost mood; its tooltip says how much, and a click opens the Labor advisor. More workplaces, or fewer new homes, bring it down.
+
 Mood 30+ brings settlers; below 25 people start leaving.
 
 ## Home mood and crime

@@ -16,20 +16,25 @@
 <body>
 <!--
   Art sheet: every home level in all 8 looks (and 2x2 blocks of single-tile
-  homes), plus buildings with live details,
+  homes), plus buildings with live details, and carts with every good,
   drawn straight from the procedural art (no game running). Handy for artists
   reviewing changes, and as a side-by-side reference when making replacement
-  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)
+  sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)  carts=1 (the carts only; scale=1 is the default zoom)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
 <script type="module">
   import { buildingSpec } from '../../src/render/buildingArt.js';
   import { HOUSE_TIERS } from '../../src/data/housing.js';
+  import { drawWalker } from '../../src/render/walkerArt.js';
+  import { LED_GOODS } from '../../src/render/cargoArt.js';
+  import { GOOD_KEYS } from '../../src/data/goods.js';
+  import { BUILDINGS } from '../../src/data/buildings.js';
 
   const q = new URLSearchParams(location.search);
   const scale = Number(q.get('scale') || 2);
-  const only = q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  // carts=1 shows only the carts (an empty tier list skips every home level)
+  const only = q.get('carts') ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -79,6 +84,65 @@
       const S = { prefecture: 1, forum: 2, senate: 4, barracks: 3, fort_legion: 3, colosseum: 5 }[t];
       return [t, buildingSpec(t, S, 0, 0)];
     }));
+  }
+  if (!only || q.get('extras') || q.get('carts')) {
+    // Carts: every good at a part load (100 of a hand cart's 200) and a full
+    // load, facing right then left; farm wagons at 100 and 400; horses led;
+    // caravan mules coming in (bales) and going out with what they bought.
+    // Drawn with the game's own walker art at `scale` (1 = the default zoom).
+    const pusher = (good, amount, extra = {}) => ({ id: 3, type: 'cart', anim: 0, moving: true, cargo: amount ? { good, amount } : null, ...extra });
+    // Each walker gets a slot `step` px wide; `back` is how far his feet stand
+    // from the slot's back edge (room for what trails behind him: horses).
+    const walkers = (title, cells, step = 36, back = 6) => {
+      const h = document.createElement('h2');
+      h.textContent = title;
+      const row = document.createElement('div');
+      row.className = 'row';
+      for (const [label, list] of cells) {
+        const fig = document.createElement('figure');
+        const c = document.createElement('canvas');
+        c.width = Math.ceil(list.length * step * scale);
+        c.height = Math.ceil(28 * scale);
+        const ctx = c.getContext('2d');
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        list.forEach(([w, face, origin], i) => {
+          const x = (i * step + (face > 0 ? back : step - back)) * scale;
+          drawWalker(ctx, w, x, 25 * scale, scale, 0, face, 0, 0.3, origin);
+        });
+        fig.appendChild(c);
+        const cap = document.createElement('figcaption');
+        cap.textContent = label;
+        fig.appendChild(cap);
+        row.appendChild(fig);
+      }
+      sheet.append(h, row);
+    };
+    const shop = BUILDINGS.pottery_ws; // a workshop's cart holds CART_LOAD
+    const carted = GOOD_KEYS.filter((g) => !LED_GOODS.includes(g));
+    walkers(`Carts: half load and full, both ways (scale ${scale})`, carted.map((g) => [g, [
+      [pusher(g, 100), 1, shop], [pusher(g, 200), 1, shop], [pusher(g, 200), -1, shop],
+    ]]).concat([
+      ['empty', [[pusher(null, 0), 1, shop], [pusher(null, 0), -1, shop]]],
+      ['warehouse lot (full)', [[pusher('iron', 100), 1, BUILDINGS.warehouse]]],
+      ['unknown good', [[pusher('silk', 200), 1, shop]]],
+    ]));
+    walkers('Farm wagons: 100, 200, 300, 400', ['wheat', 'vegetables', 'fruit', 'meat', 'olives', 'grapes'].map((g) => [g,
+      [100, 200, 300, 400].map((n) => [pusher(g, n), 1, BUILDINGS.farm_wheat])])
+      .concat([['empty wagon', [[pusher(null, 0), 1, BUILDINGS.farm_wheat], [pusher(null, 0), -1, BUILDINGS.farm_wheat]]]]), 46);
+    walkers('Horses led: 1 to 4, and facing left', [
+      ['horses', [1, 2, 3, 4].map((n) => [pusher('horses', n * 100), 1, BUILDINGS.horse_ranch])],
+      ['horses, left', [[pusher('horses', 400), -1, BUILDINGS.horse_ranch]]],
+      ['going home', [[pusher(null, 0), 1, BUILDINGS.horse_ranch]]],
+    ], 44, 38);
+    const caravan = (packs) => ({ id: 5, type: 'caravan', anim: 0, moving: true, packs });
+    walkers('Caravans: coming in (bales), leaving with what they bought', [
+      ['in', [[caravan(undefined), 1]]],
+      ['wine + oil', [[caravan(['wine', 'oil']), 1]]],
+      ['marble', [[caravan(['marble']), -1]]],
+      ['wheat + timber', [[caravan(['wheat', 'timber']), 1]]],
+      ['bought nothing', [[caravan([]), 1]]],
+    ], 30);
   }
   window.__done = true;
 </script>

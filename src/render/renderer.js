@@ -549,7 +549,9 @@ export class Renderer {
       const ddx = (w.tx - w.x) - (w.ty - w.y);
       const ddy = (w.tx - w.x) + (w.ty - w.y);
       const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
-      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
+      // A cart's look depends on who sent it (a farm's wagon, a warehouse's single lot).
+      const origin = w.type === 'cart' ? game.buildings.get(w.origin)?.def || null : null;
+      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -602,7 +604,7 @@ export class Renderer {
           break;
         case K_WALKER:
           if (it.w.id === this.selectedWalker) this.drawWalkerRing(it);
-          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride);
+          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride, it.origin);
           break;
         case K_FIRE:
           drawFlames(ctx, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, this.time, it.seed);

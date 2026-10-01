@@ -71,8 +71,8 @@ In the browser's dev tools, `window.colonia` is the running app (`colonia.game` 
 
 **Art and music tools** (with `npm run dev` running):
 
-* `/tests/e2e/artsheet.html`: every home level in all 8 looks, blocks, every god's temple, statues and mines, buildings with flags (`tiers=1,2` for some levels only, `extras=1` to keep the other sections).
-* `/tests/e2e/render.html`: the demo city in one frame. Parameters are listed at the top of the file: `time=0.8` (night), `month`, `weather`, `look=market`, `place=house` (a placement preview), `ladder=1` (a home of every level), `artset=1` (aqueducts joining reservoirs and bridging a road, statues, every temple, the mines), `military=1`, `busy=1`...
+* `/tests/e2e/artsheet.html`: every home level in all 8 looks, blocks, every god's temple, statues and mines, buildings with flags, and carts: every good at a half and a full load in both facings, farm wagons at 100 to 400, led horses, caravan mules (`tiers=1,2` for some levels only, `extras=1` to keep the other sections, `carts=1` for the carts alone; `scale=1` shows them at the default zoom).
+* `/tests/e2e/render.html`: the demo city in one frame. Parameters are listed at the top of the file: `time=0.8` (night), `month`, `weather`, `look=market`, `walker=cart` (center on a cart), `place=house` (a placement preview), `ladder=1` (a home of every level), `artset=1` (aqueducts joining reservoirs and bridging a road, statues, every temple, the mines), `military=1`, `busy=1`...
 * `/tests/e2e/music.html`: play each track and each mood; *Run the check* renders every mood offline and reports peak, loudness and each instrument's tuning.
 
 ---

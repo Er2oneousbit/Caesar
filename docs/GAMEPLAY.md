@@ -119,6 +119,7 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 * People eat **0.25 units per month** (a 100-unit load feeds 400 person-months).
 * Farms must sit on meadow. Output scales with the share of meadow under the 3x3 field. A full wheat farm makes 100 units every 20 days (about 80 a month, enough for ~300 people). Fields never burn. On Insane nothing grows in winter (December to Februarius; see [Difficulty](#difficulty)).
 * Farm wagons haul up to 400 units, other carts up to 200; a producer can have 2 carts on the road.
+* You can read a cart at a glance: it carries its good (sacks of wheat, crates of vegetables or fruit, baskets of olives or grapes, meat, clay, logs, iron ingots, marble blocks, pots, pale amphorae of oil, dark amphorae of wine, tables and chairs, shields and spears, sheaves of arrows), piled 1 to 4 high for how full it is. A farm's wagon is longer and pulled by an ox; a warehouse sends one 100-unit lot, which fills its cart. Horses are not carted: a drover leads them, one horse per 100 units. An empty cart on its way home shows its bare bed.
 * Raw material goes to a workshop that needs it, else to a warehouse (which later ships it to workshops that run low). Finished goods go to warehouses; markets fetch them for homes that need them.
 
 | Chain | Placement rule |
@@ -150,7 +151,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 
 | | Land route | Sea route |
 |---|---|---|
-| Who comes | a caravan (with a mule) | a merchant ship, sail striped in the partner's color |
+| Who comes | a caravan (with a mule: plain bales on the way in, what it bought from you on the way out) | a merchant ship, sail striped in the partner's color |
 | From | the Imperial road entrance | the map edge where the river/sea leaves the map |
 | To | the nearest staffed warehouse on the road network | a free, staffed **Dock** |
 | Per visit | up to 800 units each way | up to 1,200 units each way |

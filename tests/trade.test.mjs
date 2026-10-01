@@ -6,7 +6,7 @@
  * Covers navigable water detection, dock placement rules, sea routes being
  * refused where ships cannot come, ships unloading at a dock and buying
  * exports from nearby warehouses, dock workers carting imports to storage,
- * and the scenario data staying consistent (no sea partner on a map without
+ * caravans leaving with packs of what they bought, and the scenario data staying consistent (no sea partner on a map without
  * sea access).
  * ----------------------------------------------------------------------------
  */
@@ -19,9 +19,9 @@ import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { SCENARIOS, TRADE_PARTNERS } from '../src/data/scenarios.js';
-import { addBuilding } from '../src/sim/entities.js';
+import { addBuilding, spawnWalker } from '../src/sim/entities.js';
 import { planAction } from '../src/sim/construction.js';
-import { openRoute, setTradeMode, tradeAtDock, updateDock, dockBerth, routeKind } from '../src/sim/trade.js';
+import { openRoute, setTradeMode, tradeAtDock, updateDock, dockBerth, routeKind, caravanArrive, caravanPacks } from '../src/sim/trade.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { buildDemoCity, buildDemoHarbor } from '../src/dev/demoCity.js';
 import { newGame, build, findFree } from './helpers.mjs';
@@ -117,6 +117,36 @@ test('a ship trades at the dock: imports onto the quay, exports from nearby ware
   for (let t = 0; t < CONFIG.TICKS_PER_DAY * 8; t++) updateWalkers(game);
   assert.equal(dock.stock.wine, 0, 'quay emptied');
   assert.equal(wh.stock.wine, 600, 'wine reached the warehouse');
+});
+
+test('a caravan leaves with packs of what it bought, biggest lot first (for the art)', () => {
+  assert.deepEqual(caravanPacks({ wine: 200, oil: 100, marble: 300 }), ['marble', 'wine'], 'two biggest lots');
+  assert.deepEqual(caravanPacks({ wheat: 0 }), [], 'nothing bought');
+  assert.deepEqual(caravanPacks(undefined), []);
+
+  const game = newGame({ type: 'coast', seed: 'beach' });
+  const res = buildDemoCity(game, { level: 1 });
+  assert.ok(res.ok, res.reason);
+  const { warehouse: wh } = buildDemoHarbor(game, res.center);
+  assert.ok(wh && wh.accessRoad >= 0, 'a warehouse on the road');
+  wh.efficiency = 1;
+  const partner = Object.keys(game.city.trade.routes).find((id) => routeKind(id) === 'land' && Object.keys(TRADE_PARTNERS[id].buys).length >= 2);
+  assert.ok(partner, 'a land partner that buys two goods');
+  const [small, big] = Object.keys(TRADE_PARTNERS[partner].buys);
+  for (const k of Object.keys(wh.stock)) wh.stock[k] = 0;
+  wh.stock[small] = 200;
+  wh.stock[big] = 400;
+  for (const g of Object.keys(game.city.trade.settings)) setTradeMode(game, g, 'none');
+  setTradeMode(game, small, 'export', 0);
+  setTradeMode(game, big, 'export', 0);
+  const arrive = () => {
+    const w = spawnWalker(game, 'caravan', wh.accessRoad, null, { partner, target: wh.id, state: 'toWarehouse' });
+    assert.equal(w.packs, undefined, 'coming in: plain bales');
+    caravanArrive(game, w);
+    return w;
+  };
+  assert.deepEqual(arrive().packs, [big, small], 'leaves loaded with what it bought');
+  assert.deepEqual(arrive().packs, [], 'the next one finds nothing left to buy');
 });
 
 test('merchant ships sail in, trade and leave (full simulation)', () => {

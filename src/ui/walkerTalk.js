@@ -239,6 +239,33 @@ export function walkerDoing(game, w) {
 }
 
 /**
+ * A caravan's or ship's business. After trading: what it bought from the city
+ * and sold to it, with the money (sim/trade.js keeps it as w.deal). On its way
+ * in: what it comes for, from the partner's wants and your export and import
+ * settings (it may still find nothing to spare, or no room or money).
+ * @returns {[string, string][]}
+ */
+export function tradeRows(game, w) {
+  const list = (goods) => goods.map((g) => GOODS[g].name.toLowerCase()).join(', ');
+  const items = (o) => Object.entries(o).map(([g, n]) => amountText(g, n)).join(', ');
+  if (w.deal) {
+    const d = w.deal;
+    return [
+      ['Bought here', Object.keys(d.sold).length ? `${items(d.sold)} (you earned ${d.earned} Dn)` : 'Nothing'],
+      ['Sold here', Object.keys(d.bought).length ? `${items(d.bought)} (you paid ${d.spent} Dn)` : 'Nothing'],
+    ];
+  }
+  const p = TRADE_PARTNERS[w.partner];
+  const settings = game.city.trade.settings;
+  const buys = Object.keys(p.buys).filter((g) => settings[g]?.mode === 'export');
+  const sells = Object.keys(p.sells).filter((g) => settings[g]?.mode === 'import');
+  return [
+    ['Comes to buy', buys.length ? list(buys) : 'Nothing you export'],
+    ['Comes to sell', sells.length ? list(sells) : 'Nothing you import'],
+  ];
+}
+
+/**
  * Everything the info panel shows about a walker.
  * @returns {{title:string, desc:string, rows:[string, string][], says:string}}
  */
@@ -259,5 +286,6 @@ export function walkerInfo(game, w) {
   }
   if (w.people > 0) rows.push(['People', String(w.people)]);
   if (w.type === 'priest' && w.god && GODS[w.god]) rows.push(['God', GODS[w.god].name]);
+  if ((w.type === 'caravan' || w.type === 'ship') && TRADE_PARTNERS[w.partner]) rows.push(...tradeRows(game, w));
   return { title: def.name, desc: def.desc, rows, says: walkerSays(game, w) };
 }

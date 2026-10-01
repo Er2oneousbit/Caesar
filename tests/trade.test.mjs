@@ -20,6 +20,7 @@ import { Game } from '../src/core/game.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { SCENARIOS, TRADE_PARTNERS } from '../src/data/scenarios.js';
 import { addBuilding, spawnWalker } from '../src/sim/entities.js';
+import { GOODS } from '../src/data/goods.js';
 import { planAction } from '../src/sim/construction.js';
 import { openRoute, setTradeMode, tradeAtDock, updateDock, dockBerth, routeKind, caravanArrive, caravanPacks } from '../src/sim/trade.js';
 import { updateWalkers } from '../src/sim/walkers.js';
@@ -147,6 +148,36 @@ test('a caravan leaves with packs of what it bought, biggest lot first (for the 
   };
   assert.deepEqual(arrive().packs, [big, small], 'leaves loaded with what it bought');
   assert.deepEqual(arrive().packs, [], 'the next one finds nothing left to buy');
+});
+
+test("a caravan's panel lists what it comes for, then what it bought and sold here", async () => {
+  const { walkerInfo } = await import('../src/ui/walkerTalk.js');
+  const game = newGame({ type: 'coast', seed: 'beach' });
+  const res = buildDemoCity(game, { level: 1 });
+  assert.ok(res.ok, res.reason);
+  const { warehouse: wh } = buildDemoHarbor(game, res.center);
+  wh.efficiency = 1;
+  const partner = Object.keys(game.city.trade.routes).find((id) => routeKind(id) === 'land' && Object.keys(TRADE_PARTNERS[id].buys).length >= 1 && Object.keys(TRADE_PARTNERS[id].sells).length >= 1);
+  const good = Object.keys(TRADE_PARTNERS[partner].buys)[0];
+  const imp = Object.keys(TRADE_PARTNERS[partner].sells)[0];
+  for (const k of Object.keys(wh.stock)) wh.stock[k] = 0;
+  wh.stock[good] = 300;
+  for (const g of Object.keys(game.city.trade.settings)) setTradeMode(game, g, 'none');
+  setTradeMode(game, good, 'export', 0);
+  setTradeMode(game, imp, 'import', 200);
+  wh.orders[imp] = 'accept';
+  game.city.treasury = 10000;
+  const w = spawnWalker(game, 'caravan', wh.accessRoad, null, { partner, target: wh.id, state: 'toWarehouse' });
+  const row = (label) => walkerInfo(game, w).rows.find(([k]) => k === label)?.[1];
+  const name = (g) => GOODS[g].name.toLowerCase();
+  assert.match(row('Comes to buy'), new RegExp(name(good)), 'on its way: what it wants that you export');
+  assert.match(row('Comes to sell'), new RegExp(name(imp)));
+  caravanArrive(game, w);
+  assert.match(row('Bought here'), /^\d+ [a-z]+ \(you earned \d+ Dn\)$/, row('Bought here'));
+  assert.ok(row('Bought here').startsWith(`300 ${name(good)} `), row('Bought here'));
+  assert.match(row('Sold here'), /^\d+ [a-z]+ \(you paid \d+ Dn\)$/, row('Sold here'));
+  assert.ok(row('Sold here').startsWith(`200 ${name(imp)} `), row('Sold here'));
+  assert.equal(row('Comes to buy'), undefined, 'after trading it says what it did');
 });
 
 test('merchant ships sail in, trade and leave (full simulation)', () => {

@@ -138,10 +138,20 @@ export function caravanArrive(game, w) {
     // For the art only: the mules leave loaded with what the city sold them,
     // the biggest lots first (an empty list: they bought nothing).
     w.packs = caravanPacks(out.sold);
+    w.deal = dealOf(out);
   }
   const { map } = game;
   w.state = 'leaving';
   if (!walkTo(game, w, map.idx(map.exit.x, map.exit.y))) killWalker(game, w);
+}
+
+/**
+ * What a trader did here, kept on the walker for its info panel: the goods
+ * the city sold it and bought from it, and the money each way.
+ */
+export function dealOf(out) {
+  const only = (o) => Object.fromEntries(Object.entries(o || {}).filter(([, n]) => n > 0));
+  return { sold: only(out.sold), bought: only(out.bought), earned: out.earned || 0, spent: out.spent || 0 };
 }
 
 /** The (at most two) goods a leaving caravan shows on its mules, biggest lot first. */
@@ -232,7 +242,9 @@ function spawnShip(game, partnerId) {
 export function shipArrive(game, w) {
   const dock = game.buildings.get(w.target);
   if (dock && dock.def.kind === 'dock') {
-    logTrade(game, w.partner, tradeAtDock(game, w.partner, dock), 'sea');
+    const out = tradeAtDock(game, w.partner, dock);
+    logTrade(game, w.partner, out, 'sea');
+    w.deal = dealOf(out);
     game.events.emit('sound', { name: 'coin' });
   }
   w.state = 'docked';

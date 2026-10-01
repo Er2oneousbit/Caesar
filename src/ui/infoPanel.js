@@ -33,6 +33,7 @@ import { farmDormant, daysToNextMare } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
 import { ruinAt } from '../sim/ruins.js';
+import { rebuildPlan } from '../sim/construction.js';
 import { lacksRoad } from '../sim/roadAccess.js';
 import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
@@ -631,7 +632,38 @@ export class InfoPanel {
       road ? kv('Road', road === Road.PLAZA ? 'Plaza' : road === Road.BRIDGE ? 'Bridge' : 'Road') : null,
       map.aqueduct[i] ? kv('Aqueduct', map.aqueduct[i] === 2 ? 'Carrying water' : 'Dry') : null,
       wall ? kv(wall === Wall.GATE ? 'Gate' : 'Wall', `${Math.round(wallHpOf(g, i).hp)} / ${wallHpOf(g, i).max} hp`) : null,
-      notes.length ? h('div', { class: 'panel-sec' }, notes.map((n) => h('div', {}, n))) : null);
+      notes.length ? h('div', { class: 'panel-sec' }, notes.map((n) => h('div', {}, n))) : null,
+      map.rubble[i] ? this.rebuildButton(g, i) : null);
+  }
+
+  /**
+   * Rubble that remembers what stood there offers to put it back: the same
+   * building on the same spot (a home's plots as empty lots), at the usual
+   * price plus clearing the rubble, undone like any building. Greyed out
+   * with the reason when it cannot be (still burning, no money, locked...).
+   */
+  rebuildButton(g, i) {
+    const rec = ruinAt(g, i);
+    if (!rec || !rec.site) return null;
+    const plan = rebuildPlan(g, i);
+    const { type, size } = rec.site;
+    const name = type === 'house' ? (size > 1 ? 'the housing plots' : 'the housing plot') : type === 'wall' ? 'the wall' : `the ${BUILDINGS[type]?.name || type}`;
+    const ok = !!plan && plan.count > 0 && plan.items.every((it) => it.ok);
+    const why = !plan ? 'The ground has changed since.' : plan.reason || plan.items.find((it) => !it.ok)?.reason || '';
+    return h('div', { class: 'panel-sec' },
+      h('button', {
+        class: 'btn small primary',
+        disabled: !ok,
+        title: ok ? '' : why,
+        onclick: () => {
+          const fresh = rebuildPlan(g, i);
+          if (!fresh) return;
+          this.app.applyPlan(fresh);
+          const id = g.map.buildingAt(rec.site.x, rec.site.y);
+          if (id) this.showBuilding(id); else this.render();
+        },
+      }, `Rebuild ${name}${ok ? ` (${plan.cost} Dn)` : ''}`),
+      ok ? null : h('div', { class: 'muted' }, why));
   }
 }
 

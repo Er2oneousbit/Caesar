@@ -40,6 +40,11 @@ export function riskRates(b) {
   return { fire: r.fire, damage: r.damage };
 }
 
+/** Where a building stood and what would put it back (a home: its plots), for the rubble's Rebuild. */
+function siteOf(b) {
+  return { type: b.house ? 'house' : b.type, x: b.x, y: b.y, size: b.size };
+}
+
 /** Daily risk growth + disaster checks for one building. */
 export function updateRisk(game, b) {
   const { fire, damage: dmg } = riskRates(b);
@@ -75,7 +80,7 @@ export function igniteBuilding(game, b, cause = 'fire') {
     game.map.rubble[i] = 1;
     game.fires.set(i, CONFIG.FIRE_BURN_DAYS);
   }
-  recordRuin(game, tiles, label, RUIN_OF_FIRE[cause] || 'fire');
+  recordRuin(game, tiles, label, RUIN_OF_FIRE[cause] || 'fire', siteOf(b));
   game.city.stats.fires++;
   const texts = {
     wrath: null,
@@ -102,7 +107,7 @@ export function collapseBuilding(game, b, cause = 'decay') {
   const aLabel = withArticle(label);
   removeBuilding(game, b, 'collapse');
   for (const i of tiles) game.map.rubble[i] = 1;
-  recordRuin(game, tiles, label, cause === 'raid' || cause === 'raidQuiet' ? 'raid' : 'collapse');
+  recordRuin(game, tiles, label, cause === 'raid' || cause === 'raidQuiet' ? 'raid' : 'collapse', siteOf(b));
   game.city.stats.collapses++;
   if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause !== 'raidQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y);

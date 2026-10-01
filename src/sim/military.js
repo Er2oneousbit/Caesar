@@ -521,7 +521,7 @@ function damageWall(game, i, dmg) {
   map.wall[i] = Wall.NONE;
   if (!map.road[i]) {
     map.rubble[i] = 1;
-    recordRuin(game, [i], 'Wall', 'raidWall');
+    recordRuin(game, [i], 'Wall', 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
   }
   map.touch();
   const now = game.time.totalDays;

@@ -22,8 +22,9 @@ import { addBuilding, footprintTiles } from '../src/sim/entities.js';
 import { igniteBuilding, collapseBuilding } from '../src/sim/risk.js';
 import { launchInvasion, updateMilitary } from '../src/sim/military.js';
 import { ruinAt, serializeRuins, RUIN_CAUSES } from '../src/sim/ruins.js';
-import { undoLast } from '../src/sim/construction.js';
+import { undoLast, rebuildPlan, applyPlan } from '../src/sim/construction.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
+import { BUILDINGS } from '../src/data/buildings.js';
 import { ruinText } from '../src/ui/infoPanel.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -69,7 +70,7 @@ test('ruins: every way a building falls is remembered, with the date', () => {
     const i = game.map.idx(b.x, b.y);
     fell(game, b);
     assert.equal(game.map.rubble[i], 1);
-    assert.deepEqual(ruinAt(game, i), { what: 'Prefecture', cause, month: 6, year: -300 }, cause);
+    assert.deepEqual(ruinAt(game, i), { what: 'Prefecture', cause, month: 6, year: -300, site: { type: 'prefecture', x: b.x, y: b.y, size: 1 } }, cause);
     assert.equal(ruinText(ruinAt(game, i)), `Ruins of a Prefecture, ${words} in Iul 300 BC.`);
   }
   assert.ok(RUIN_CAUSES.includes('raidWall'));
@@ -196,4 +197,60 @@ test('ruins: a version 6 save loads; its rubble has no record and keeps the old 
   const c = placed(copy, 'prefecture');
   collapseBuilding(copy, c);
   assert.equal(ruinAt(copy, copy.map.idx(c.x, c.y)).cause, 'collapse');
+});
+
+test('rubble rebuilds what stood there: same building, same spot, at the usual price', () => {
+  const game = newGame({ seed: 'rebuild' });
+  const b = placed(game, 'market', 2);
+  const { x, y } = b;
+  igniteBuilding(game, b);
+  const i = game.map.idx(x, y);
+  assert.deepEqual(ruinAt(game, i).site, { type: 'market', x, y, size: 2 });
+  // Still burning: no rebuilding on the flames.
+  const hot = rebuildPlan(game, i);
+  assert.ok(hot && !hot.items[0].ok, 'not while it burns');
+  game.fires.clear();
+  const plan = rebuildPlan(game, i);
+  assert.ok(plan.items[0].ok, plan.reason);
+  assert.equal(plan.cost, BUILDINGS.market.cost + 4 * CONFIG.CLEAR_RUBBLE_COST, 'the building plus clearing its rubble');
+  const t0 = game.city.treasury;
+  assert.ok(applyPlan(game, plan).ok);
+  const m = game.buildings.get(game.map.buildingAt(x, y));
+  assert.equal(m.type, 'market');
+  assert.deepEqual([m.x, m.y], [x, y], 'on the same footprint');
+  assert.equal(game.city.treasury, t0 - plan.cost);
+  assert.equal(ruinAt(game, i), null, 'the rubble and its story are gone');
+  // Undo brings the ruins back, story and all.
+  undoLast(game);
+  assert.equal(game.map.buildingAt(x, y), 0);
+  assert.equal(ruinAt(game, i).site.type, 'market');
+});
+
+test('rubble of a home rebuilds its plots; a raided wall its wall; old ruins offer nothing', () => {
+  const game = newGame({ seed: 'rebuild2' });
+  const home = placed(game, 'house', 1);
+  home.house.tier = 4;
+  home.house.pop = 5;
+  collapseBuilding(game, home);
+  const i = game.map.idx(home.x, home.y);
+  assert.equal(ruinAt(game, i).site.type, 'house');
+  const plan = rebuildPlan(game, i);
+  assert.ok(plan.count === 1 && plan.items.every((it) => it.ok));
+  applyPlan(game, plan);
+  const lot = game.buildings.get(game.map.buildingAt(home.x, home.y));
+  assert.ok(lot && lot.house && lot.house.tier === 0, 'an empty plot again');
+  // A save keeps where it stood; a ruin from before (no site) offers no rebuild.
+  const b = placed(game, 'school', 2);
+  igniteBuilding(game, b);
+  game.fires.clear();
+  const j = game.map.idx(b.x, b.y);
+  const back = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  assert.deepEqual(ruinAt(back, j).site, { type: 'school', x: b.x, y: b.y, size: 2 });
+  delete ruinAt(back, j).site;
+  assert.equal(rebuildPlan(back, j), null);
+  // A hand-edited site that makes no sense is dropped on load.
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  data.ruins.forEach((r) => { r.site = { type: 'castle', x: -4, y: 0, size: 9 }; });
+  const odd = deserializeGame(data);
+  assert.equal(ruinAt(odd, j).site, undefined);
 });

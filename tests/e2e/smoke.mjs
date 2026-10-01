@@ -617,6 +617,28 @@ try {
     }
   }
 
+  // 5a2b. Rubble remembers what stood there and offers to rebuild it, on the
+  //      same spot, from its panel.
+  const fell = await page.evaluate(() => {
+    const app = window.colonia;
+    const reply = app.ui.console.run('collapse');
+    const m = /at (\d+),(\d+)/.exec(reply);
+    if (!m) return { reply };
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    app.ui.info.showTile(x, y);
+    return { x, y, rubble: app.game.map.rubble[app.game.map.idx(x, y)] };
+  });
+  let rebuilt = null;
+  if (fell.x !== undefined) {
+    const label = await page.textContent('#info-panel button:has-text("Rebuild")').catch(() => null);
+    await page.click('#info-panel button:has-text("Rebuild")').catch(() => {});
+    rebuilt = await page.evaluate(({ x, y }) => ({ standing: window.colonia.game.map.buildingAt(x, y) > 0, panel: window.colonia.ui.info.target?.kind }), fell);
+    rebuilt.label = label;
+    await page.evaluate(() => window.colonia.ui.info.close());
+  }
+  check('rubble offers to rebuild what stood there, on the same spot', fell.rubble === 1 && !!rebuilt && rebuilt.standing && /^Rebuild the .+ \(\d+ Dn\)$/.test(rebuilt.label || ''), JSON.stringify({ fell, rebuilt }));
+
   // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
   //      the Production advisor and the trend charts.
   await page.selectOption('.hud-select', 'problems');

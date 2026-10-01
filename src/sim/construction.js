@@ -33,7 +33,7 @@ import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
 import { addBuilding, perimeterTiles, removeBuilding } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
-import { clearRuin, restoreRuin } from './ruins.js';
+import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -155,6 +155,26 @@ export function checkBuilding(game, type, x, y) {
     if (!touchesAqueduct) out.warnings.push('Not next to water: connect it by aqueduct to a full reservoir');
   }
   return out;
+}
+
+/**
+ * The plan that puts back what fell on rubble tile `i` (the rubble's Rebuild
+ * button): the same building on the same footprint, or a home's plots as
+ * empty lots, or a wall. A normal plan (its cost includes clearing the
+ * rubble), so it is checked, paid for and undone like any other. Null when
+ * the rubble does not know what stood there (ruins from before v0.12.2).
+ */
+export function rebuildPlan(game, i) {
+  const rec = ruinAt(game, i);
+  if (!rec || !rec.site) return null;
+  const { type, x, y, size } = rec.site;
+  if (type === 'house') return planAction(game, 'house', x, y, x + size - 1, y + size - 1);
+  if (type === 'wall') return planAction(game, 'wall', x, y, x, y);
+  if (!BUILDINGS[type]) return null;
+  const off = Math.floor((BUILDINGS[type].size - 1) / 2);
+  const plan = planAction(game, type, x + off, y + off, x + off, y + off);
+  // planAction anchors on the middle tile: the same footprint, or nothing.
+  return plan.items[0] && plan.items[0].x === x && plan.items[0].y === y ? plan : null;
 }
 
 /** Anchor a building so the cursor tile sits at its center. */

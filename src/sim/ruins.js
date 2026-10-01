@@ -7,7 +7,13 @@
  * collapses (or raiders break a wall), every tile it leaves rubble on points
  * to one record in `game.ruins` (tile index -> record):
  *
- *   { what: 'Prefecture', cause: 'fire', month: 6, year: -280 }
+ *   { what: 'Prefecture', cause: 'fire', month: 6, year: -280,
+ *     site: { type: 'prefecture', x: 12, y: 30, size: 1 } }
+ *
+ * `site` is where it stood and what to build to put it back (the rubble's
+ * Rebuild button, construction.js rebuildPlan): its building type, 'house'
+ * for a home (its plots come back as empty lots) or 'wall', and its
+ * footprint. Ruins from before v0.12.2 have none and offer no rebuild.
  *
  * `what` is the building's name or the home's level name at the moment it
  * fell, `cause` one of RUIN_CAUSES, `month`/`year` the game date. Every tile
@@ -33,12 +39,15 @@
  *   raid       torn down by raiders
  *   raidWall   a wall raiders broke through
  */
+import { BUILDINGS } from '../data/buildings.js';
+
 export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall']);
 
-/** Remember what fell on these tiles (they hold rubble now). */
-export function recordRuin(game, tiles, what, cause) {
+/** Remember what fell on these tiles (they hold rubble now); `site`: see the header. */
+export function recordRuin(game, tiles, what, cause, site = null) {
   if (!game.ruins) return null;
   const rec = { what, cause, month: game.time.month, year: game.time.year };
+  if (site) rec.site = { type: site.type, x: site.x, y: site.y, size: site.size };
   for (const i of tiles) game.ruins.set(i, rec);
   return rec;
 }
@@ -61,6 +70,15 @@ export function ruinAt(game, i) {
   return game.ruins.get(i) || null;
 }
 
+/** A saved `site` if it makes sense (a known type, a footprint on the map), else null. */
+function validSite(s, map) {
+  if (!s || typeof s !== 'object') return null;
+  const { type, x, y, size } = s;
+  if (typeof type !== 'string' || !(type === 'house' || type === 'wall' || Object.hasOwn(BUILDINGS, type))) return null;
+  if (![x, y, size].every(Number.isInteger) || size < 1 || size > 5 || x < 0 || y < 0 || x + size > map.w || y + size > map.h) return null;
+  return { type, x, y, size };
+}
+
 /**
  * Ruins for the save: one entry per fallen building, with the tiles that
  * still hold its rubble. Tiles whose rubble went some other way are left
@@ -76,7 +94,7 @@ export function serializeRuins(game) {
     tiles.push(i);
   }
   const out = [];
-  for (const [rec, tiles] of byRec) out.push({ what: rec.what, cause: rec.cause, month: rec.month, year: rec.year, tiles });
+  for (const [rec, tiles] of byRec) out.push({ what: rec.what, cause: rec.cause, month: rec.month, year: rec.year, ...(rec.site ? { site: rec.site } : {}), tiles });
   return out;
 }
 
@@ -93,6 +111,8 @@ export function restoreRuins(game, list) {
     if (!e || typeof e.what !== 'string' || !RUIN_CAUSES.includes(e.cause)) continue;
     if (!Number.isInteger(e.month) || e.month < 0 || e.month > 11 || !Number.isInteger(e.year) || !Array.isArray(e.tiles)) continue;
     const rec = { what: e.what.slice(0, 60), cause: e.cause, month: e.month, year: e.year };
+    const site = validSite(e.site, map);
+    if (site) rec.site = site;
     for (const i of e.tiles) {
       if (Number.isInteger(i) && i >= 0 && i < map.size && map.rubble[i]) game.ruins.set(i, rec);
     }

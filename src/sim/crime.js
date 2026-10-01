@@ -424,7 +424,7 @@ export function thiefArrive(game, w) {
       b.stock[good] -= n;
       bump(game, 'thefts');
       bump(game, 'looted', n);
-      game.message(`A thief made off with ${n} ${GOODS[good].name.toLowerCase()} from a ${b.def.name}.`, 'bad', b.x, b.y);
+      game.message(`A thief made off with ${n} ${GOODS[good].name.toLowerCase()} from ${withArticle(b.def.name)}.`, 'bad', b.x, b.y);
     }
     killWalker(game, w);
     return;

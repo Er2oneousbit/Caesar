@@ -268,8 +268,8 @@ test('a Tenement moves up to an Insula only with clothing, and uses it up from t
   consumeHouse(game, b);
   assert.ok(b.house.goods.clothing < had, 'an Insula uses clothing up');
   // The info panel says who makes it.
-  assert.match(describeNeed({ key: 'goods', good: 'clothing' }), /Clothing Maker makes it from linen/);
-  assert.match(describeNeed({ key: 'goods', good: 'pottery' }), /Potter makes it from clay/);
+  assert.match(describeNeed({ key: 'goods', good: 'clothing' }), /a Taberna Vestiaria makes it from linen/);
+  assert.match(describeNeed({ key: 'goods', good: 'pottery' }), /a Figlina makes it from clay/);
 });
 
 test('markets: buyers fetch clothing for the homes that want it; vendors sell it only to them', () => {

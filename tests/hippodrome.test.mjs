@@ -61,7 +61,7 @@ test('hippodrome: placed as three linked 5x5 sections in a row, one cost; a seco
   const again = findFree(game, 17, 7);
   const chk = checkBuilding(game, 'hippodrome', again.x + 1, again.y + 1);
   assert.equal(chk.ok, false);
-  assert.match(chk.reason, /Only one Hippodrome/);
+  assert.match(chk.reason, /Only one Circus/);
   assert.equal(checkBuilding(game, 'hippodrome_part', again.x + 1, again.y + 1).ok, false, 'a section alone cannot be placed');
 });
 

@@ -47,11 +47,3 @@ export const CITY_HEALTH_WARN = 40;
 /** Each kind of show, by the performer type that puts it on (data/buildings.js PERFORMER_NAMES). */
 export const SHOW_NAMES = Object.freeze({ theater: 'plays', amphitheater: 'bouts', colosseum: 'beast shows' });
 
-/** Building names in the plural, for the advisors' lines (the rest add an s). */
-export const PLURAL_NAMES = Object.freeze({
-  clinic: 'Medici',
-  hospital: 'Valetudinaria',
-  baths: 'Thermae',
-  library: 'Libraries',
-  academy: 'Academies',
-});

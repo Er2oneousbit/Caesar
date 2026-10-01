@@ -14,15 +14,21 @@
  * ----------------------------------------------------------------------------
  */
 
-import { BUILDINGS } from '../data/buildings.js';
+import { BUILDINGS, pluralName } from '../data/buildings.js';
 import { GOODS, GOOD_KEYS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { cityStock } from '../sim/storage.js';
 import { buildingStatus } from './infoPanel.js';
+import { withArticle } from '../sim/risk.js';
 
-/** "3 Potters", "a Potter". */
+/** "3 producers", "a producer". */
 function count(n, name) {
   return n === 1 ? `a ${name}` : `${n} ${name}${/s$/.test(name) ? '' : 's'}`;
+}
+
+/** "a Figlina", "3 Figlinae": a building type counted, with its Latin plural. */
+function countType(n, type) {
+  return n === 1 ? withArticle(BUILDINGS[type].name) : `${n} ${pluralName(type)}`;
 }
 
 /** "clay", "clay and timber". */
@@ -30,9 +36,9 @@ function andList(items) {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-/** Buildings the mission allows that make `good`. */
+/** Buildings the mission allows that make `good`, in the plural ("Figlinae"). */
 function makersOf(game, good) {
-  return Object.entries(BUILDINGS).filter(([k, d]) => d.produces === good && game.isUnlocked(k)).map(([, d]) => d.name);
+  return Object.entries(BUILDINGS).filter(([k, d]) => d.produces === good && game.isUnlocked(k)).map(([k]) => pluralName(k));
 }
 
 /** Trade partners of this mission that sell `good`. */
@@ -69,12 +75,12 @@ export function productionReport(game) {
   const troubles = [...groups.values()].sort((a, b) => (a.level === b.level ? b.ids.length - a.ids.length : a.level === 'bad' ? -1 : 1));
   // --- hints -----------------------------------------------------------------
   const hints = [];
-  const waiting = new Map(); // workshop type -> { name, goods: Set, n }
+  const waiting = new Map(); // workshop type -> { type, goods: Set, n }
   let noWorkers = 0;
   let noStorage = 0;
   for (const { b, s } of statuses) {
     if (b.def.kind === 'workshop' && s.text.startsWith('Waiting for')) {
-      const w = waiting.get(b.type) || { name: b.def.name, goods: new Set(), n: 0 };
+      const w = waiting.get(b.type) || { type: b.type, goods: new Set(), n: 0 };
       for (const [good, n] of Object.entries(b.def.recipe)) if (b.stock[good] < n) w.goods.add(good);
       w.n++;
       waiting.set(b.type, w);
@@ -86,11 +92,11 @@ export function productionReport(game) {
     const names = need.map((g) => GOODS[g].name.toLowerCase());
     const makers = [...new Set(need.flatMap((g) => makersOf(game, g)))];
     const sellers = [...new Set(need.flatMap((g) => sellersOf(game, g)))];
-    const how = [makers.length ? `build more ${andList(makers.map((m) => `${m}s`))}` : null, sellers.length ? `import from ${andList(sellers)}` : null].filter(Boolean);
-    hints.push(`${count(w.n, w.name)} ${w.n === 1 ? 'is' : 'are'} waiting for ${andList(names)}${how.length ? `: ${how.join(', or ')}` : ''}.`);
+    const how = [makers.length ? `build more ${andList(makers)}` : null, sellers.length ? `import from ${andList(sellers)}` : null].filter(Boolean);
+    hints.push(`${countType(w.n, w.type)} ${w.n === 1 ? 'is' : 'are'} waiting for ${andList(names)}${how.length ? `: ${how.join(', or ')}` : ''}.`);
   }
   if (noWorkers) hints.push(`${count(noWorkers, 'building')} ${noWorkers === 1 ? 'has' : 'have'} no workers: the city needs more people living near them, or labor priorities (Labor advisor).`);
-  if (noStorage) hints.push(`${count(noStorage, 'producer')} ${noStorage === 1 ? 'has' : 'have'} nowhere to deliver: build a Granary or Warehouse with room nearby.`);
+  if (noStorage) hints.push(`${count(noStorage, 'producer')} ${noStorage === 1 ? 'has' : 'have'} nowhere to deliver: build a Granarium or a Horreum with room nearby.`);
   for (const r of goods) {
     const inflow = r.made + r.imported;
     if (r.used > inflow && r.stock < (r.used - inflow) * 3) {

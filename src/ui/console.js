@@ -50,10 +50,10 @@ export const CONSOLE_HELP = [
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['fishing', 'Build a shipyard, two fishing wharves and a granary on the nearest water with fish'],
   ['grounds', 'List the fishing grounds, and every wharf and its boat'],
-  ['hippodrome', 'Build a hippodrome and a chariot maker beside the city'],
-  ['cloth', 'Build the cloth industry beside the city: a flax farm, a linen maker, a clothing maker and a warehouse'],
+  ['hippodrome', 'Build a Circus (hippodrome) and a Factio (chariot stable) beside the city'],
+  ['cloth', 'Build the cloth industry beside the city: a Linarium, a Textrinum, a Taberna Vestiaria and a Horreum'],
   ['navy', 'Build a naval station and a navalia on the shore, stocked for a squadron of liburnians (river/coast maps)'],
-  ['academy', 'Build a Military Academy near the city, and a Portus by the first Naval Station if there is one (they train only at full staff)'],
+  ['academy', 'Build a Campus (military academy) near the city, and a Portus by the first Statio if there is one (they train only at full staff)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
   ['legion', 'Caesar\'s legions set out from Rome now (they arrive in 12 months)'],
@@ -277,12 +277,12 @@ export class DebugConsole {
         if (cmd === 'cloth') {
           const res = buildDemoCloth(g, center);
           if (res.linen) app.renderer.camera.centerOnTile(res.linen.x, res.linen.y);
-          if (res.ok) return 'Cloth industry built: a flax farm, a linen maker, a clothing maker and a warehouse. Homes need clothing from the Insula up.';
-          return res.farm || res.linen ? 'Cloth industry only partly built (no room, or no meadow for the flax farm).' : 'No room for the cloth industry near the city (the flax farm needs meadow), or it is locked in this mission.';
+          if (res.ok) return 'Cloth industry built: a Linarium, a Textrinum, a Taberna Vestiaria and a Horreum. Homes need clothing from the Insula up.';
+          return res.farm || res.linen ? 'Cloth industry only partly built (no room, or no meadow for the Linarium).' : 'No room for the cloth industry near the city (the Linarium needs meadow), or it is locked in this mission.';
         }
         const res = buildDemoHippodrome(g, center);
         if (res.hippodrome) app.renderer.camera.centerOnTile(res.hippodrome.x + 7, res.hippodrome.y + 2);
-        return res.hippodrome ? `Hippodrome built${res.maker ? ', with a chariot maker' : ' (no room for a chariot maker)'}.` : 'No room for a hippodrome (15 x 5 clear tiles) near the city, or there is one already.';
+        return res.hippodrome ? `Circus built${res.maker ? ', with a Factio' : ' (no room for a Factio)'}.` : 'No room for a Circus (15 x 5 clear tiles) near the city, or there is one already.';
       }
       case 'grounds': {
         need();
@@ -291,7 +291,7 @@ export class DebugConsole {
         for (const b of g.buildings.values()) {
           if (b.def.kind !== 'wharf') continue;
           const boat = wharfBoat(g, b);
-          lines.push(`Wharf #${b.id} at ${b.x},${b.y}: ${boat ? boatStatus(g, b) : 'no boat'}, ${b.stock.fish || 0} fish, ${b.catches || 0} catches, staff ${Math.round(b.efficiency * 100)}%`);
+          lines.push(`${b.def.name} #${b.id} at ${b.x},${b.y}: ${boat ? boatStatus(g, b) : 'no boat'}, ${b.stock.fish || 0} fish, ${b.catches || 0} catches, staff ${Math.round(b.efficiency * 100)}%`);
         }
         return lines.join('\n');
       }
@@ -301,8 +301,8 @@ export class DebugConsole {
         if (!center) return 'Build some homes first (try: demo 2).';
         const res = buildDemoNavy(g, center, { stock: true });
         if (res.station) app.renderer.camera.centerOnTile(res.station.x, res.station.y);
-        if (res.ok) return `Fleet built: a Naval Station and a Navalia stocked for ${STATION_CAPACITY} liburnians (one every ${CONFIG.NAVALIA_BUILD_DAYS} days at full staff; military labor may need to go first).`;
-        return res.station ? 'A Naval Station was built, but no room for a Navalia on its water.' : 'No shore near the city that ships can reach (try a river or coast map), or the fleet is locked in this mission.';
+        if (res.ok) return `Fleet built: a Statio and a Navalia stocked for ${STATION_CAPACITY} liburnians (one every ${CONFIG.NAVALIA_BUILD_DAYS} days at full staff; military labor may need to go first).`;
+        return res.station ? 'A Statio was built, but no room for a Navalia on its water.' : 'No shore near the city that ships can reach (try a river or coast map), or the fleet is locked in this mission.';
       }
       case 'academy': {
         need();
@@ -313,8 +313,8 @@ export class DebugConsole {
         const portus = station ? buildDemoPortus(g, station) : null;
         const shown = academy || portus;
         if (shown) app.renderer.camera.centerOnTile(shown.x, shown.y);
-        const parts = [academy ? `a Military Academy at ${academy.x},${academy.y}` : null, portus ? `a Portus at ${portus.x},${portus.y}` : null].filter(Boolean);
-        return parts.length ? `Built ${parts.join(' and ')}. They train only at full staff (military labor may need to go first).` : 'No room for a Military Academy near the city, or it is locked in this mission.';
+        const parts = [academy ? `a Campus at ${academy.x},${academy.y}` : null, portus ? `a Portus at ${portus.x},${portus.y}` : null].filter(Boolean);
+        return parts.length ? `Built ${parts.join(' and ')}. They train only at full staff (military labor may need to go first).` : 'No room for a Campus near the city, or it is locked in this mission.';
       }
       case 'invade':
       case 'searaid': {
@@ -374,11 +374,11 @@ export class DebugConsole {
           if (b.def.kind === 'fort') {
             lines.push(`${b.def.name} #${b.id} at ${b.x},${b.y}: ${counts.get(b.id) || 0}/${FORT_CAPACITY} ${UNIT_TYPES[b.def.unit].name.toLowerCase()}s, ${b.recruiting || 0} on the way, staff ${Math.round(b.efficiency * 100)}%${b.rally ? `, deployed to ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : ''}`);
           } else if (b.def.kind === 'barracks') {
-            lines.push(`Barracks #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, training ${Math.round(b.trainProgress || 0)}%${b.blocked ? ` (${b.blocked})` : ''}`);
+            lines.push(`${b.def.name} #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, training ${Math.round(b.trainProgress || 0)}%${b.blocked ? ` (${b.blocked})` : ''}`);
           } else if (b.def.kind === 'station') {
             lines.push(`${b.def.name} #${b.id} at ${b.x},${b.y}: ${squadronCounts(g).get(b.id) || 0}/${STATION_CAPACITY} liburnians, staff ${Math.round(b.efficiency * 100)}%${b.rally ? `, deployed to ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : ''}`);
           } else if (b.def.kind === 'navalia') {
-            lines.push(`Navalia #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, building ${Math.round(b.progress || 0)}%, ${b.built || 0} launched${b.blocked ? ` (${b.blocked})` : ''}`);
+            lines.push(`${b.def.name} #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, building ${Math.round(b.progress || 0)}%, ${b.built || 0} launched${b.blocked ? ` (${b.blocked})` : ''}`);
           }
         }
         for (const u of g.units.values()) {

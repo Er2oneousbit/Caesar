@@ -8,7 +8,7 @@
  *   theater       accepts actors
  *   amphitheater  accepts gladiators (or actors)
  *   colosseum     accepts gladiators and beasts
- *   hippodrome    accepts charioteers (a Chariot Maker's teams): races
+ *   hippodrome    accepts charioteers (a Factio's teams): races
  *
  * Every home also gets a city-wide base (0..ENT_BASE_MAX) for how well the
  * seats of working venues cover the population, averaged over the three

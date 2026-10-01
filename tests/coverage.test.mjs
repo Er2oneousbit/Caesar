@@ -116,9 +116,10 @@ test('the needs a home is measured by are its next level\'s, or its own at the t
   assert.equal(firstLevelNeeding('edu'), 'Townhouse');
   assert.equal(firstLevelNeeding('edu', 3), 'Peristyle Villa');
   assert.match(educationLadderText(), /from Townhouse up, both from Tenement up, and an academy as well from Peristyle Villa up/);
-  assert.equal(pluralName('library'), 'Libraries');
+  assert.equal(pluralName('library'), 'Bibliothecae');
   assert.equal(pluralName('clinic'), 'Medici');
-  assert.equal(pluralName('theater'), 'Theaters');
+  assert.equal(pluralName('theater'), 'Theatra');
+  assert.equal(pluralName('baths'), 'Balneae', 'already plural');
 });
 
 // ---------------------------------------------------------------------------
@@ -165,7 +166,7 @@ test('health: buildings, reach, and the needs of homes each kind meets', () => {
   assert.equal(e.house.tier, LEVEL.Cottage);
   // The advice: four homes need the baths, the most; none is built.
   assert.deepEqual(rep.advice, { key: 'build', type: 'baths', homes: 4 });
-  assert.match(healthAdviceText(rep.advice), /^4 homes need the baths to keep or reach their level, and the city has no Thermae yet/);
+  assert.match(healthAdviceText(rep.advice), /^4 homes need the baths to keep or reach their level, and the city has no Balneae yet/);
 });
 
 test('health advice: most homes held back first (ties in the original\'s order), then care, then needs the province cannot meet', () => {
@@ -258,7 +259,7 @@ test('education: a library serves a home that needs only one of the two, and aca
   // One home each is short of a library and an academy: the library comes
   // first (the ladder's order), and is built but has no workers.
   assert.deepEqual(rep.advice, { key: 'idle', type: 'library', homes: 1 });
-  assert.match(educationAdviceText(rep.advice), /^1 home needs a library to keep or reach their level, and no Library is working/);
+  assert.match(educationAdviceText(rep.advice), /^1 home needs a library to keep or reach their level, and no Bibliotheca is working/);
 });
 
 test('education advice: held back first, then no demand, then a need the province cannot meet', () => {
@@ -275,7 +276,7 @@ test('education advice: held back first, then no demand, then a need the provinc
   assert.equal(educationAdviceText({ key: 'fine' }), 'Every home that needs schooling has it.');
   // An academy the province does not have.
   assert.deepEqual(pickEducationAdvice({ rows: rows({ school: row('school', 0, 100, 100), academy: row('academy', 4, 40, 0, 0) }), unlocked: (k) => k !== 'academy' }), { key: 'locked', type: 'academy', homes: 4 });
-  assert.match(educationAdviceText({ key: 'locked', type: 'academy', homes: 4 }), /no Academy to build/);
+  assert.match(educationAdviceText({ key: 'locked', type: 'academy', homes: 4 }), /no Academia to build/);
 });
 
 // ---------------------------------------------------------------------------
@@ -326,7 +327,7 @@ test('entertainment: seats, shows booked, the city-wide base, and homes short of
   // A venue without shows sends no entertainer, so the advice for homes with
   // no visit also names the venues that need performers.
   assert.deepEqual(rep.advice, { key: 'none', homes: 1, shows: { type: 'amphitheater', perfs: ['theater'], silent: false } });
-  assert.equal(entertainmentAdviceText(rep.advice), '1 home short of entertainment gets no entertainer\'s visit. Amphitheaters lack plays: they need actors (Actor Troupe); a venue with both kinds of show is worth more. Build venues where there are none.');
+  assert.equal(entertainmentAdviceText(rep.advice), '1 home short of entertainment gets no entertainer\'s visit. Amphitheatra lack plays: they need actors (Grex); a venue with both kinds of show is worth more. Build venues where there are none.');
   // The base and the cover are the day's count, what homes get until
   // tomorrow, even after a show runs out today; the seats are now.
   theater.shows.theater = 0;
@@ -345,7 +346,7 @@ test('entertainment: the venue most in need of performers, by the original\'s we
   assert.equal(venueNeedingShows({ theater: v({}), amphitheater: v({}), colosseum: v({}) }), null);
   // Without a Menagerie in the province, a colosseum's empty beasts' slot does not count.
   assert.equal(venueNeedingShows({ theater: v({ theater: 1 }), amphitheater: v({}), colosseum: v({ colosseum: 1 }) }, (k) => k !== 'menagerie'), 'theater');
-  assert.match(performersText('amphitheater'), /^gladiators \(Gladiator School\) or actors \(Actor Troupe\)$/);
+  assert.match(performersText('amphitheater'), /^gladiators \(Ludus Gladiatorius\) or actors \(Grex\)$/);
 });
 
 test('entertainment advice, in the original\'s order', () => {
@@ -355,11 +356,11 @@ test('entertainment advice, in the original\'s order', () => {
   assert.deepEqual(pickEntertainmentAdvice({ short: { none: 0, more: 0 }, average: 0 }), { key: 'noDemand' });
   assert.deepEqual(pickEntertainmentAdvice({ short: { none: 0, more: 0 }, average: 14 }), { key: 'fine' });
   assert.deepEqual(pickEntertainmentAdvice({ short: { none: 2, more: 2 }, needShows: 'colosseum', missing: { perfs: ['colosseum'], silent: false } }), { key: 'shows', type: 'colosseum', perfs: ['colosseum'], silent: false });
-  assert.equal(entertainmentAdviceText({ key: 'shows', type: 'colosseum', perfs: ['colosseum'], silent: false }), 'Colosseums lack beast shows: they need beast tamers (Menagerie); a venue with both kinds of show is worth more.');
-  assert.equal(entertainmentAdviceText({ key: 'shows', type: 'theater', perfs: ['theater'], silent: true }), 'Theaters stand without shows: they need actors (Actor Troupe).');
+  assert.equal(entertainmentAdviceText({ key: 'shows', type: 'colosseum', perfs: ['colosseum'], silent: false }), 'Arenae lack beast shows: they need beast tamers (Vivarium); a venue with both kinds of show is worth more.');
+  assert.equal(entertainmentAdviceText({ key: 'shows', type: 'theater', perfs: ['theater'], silent: true }), 'Theatra stand without shows: they need actors (Grex).');
   assert.deepEqual(pickEntertainmentAdvice({ short: { none: 1, more: 4 }, needShows: null }), { key: 'more', homes: 4 });
   assert.match(entertainmentAdviceText({ key: 'noDemand' }), /Stone Cottages and up/);
-  assert.match(entertainmentAdviceText({ key: 'shows', type: 'colosseum' }), /^Colosseums stand without shows: they need gladiators \(Gladiator School\) or beast tamers \(Menagerie\)/);
+  assert.match(entertainmentAdviceText({ key: 'shows', type: 'colosseum' }), /^Arenae stand without shows: they need gladiators \(Ludus Gladiatorius\) or beast tamers \(Vivarium\)\.$/);
   for (const a of [{ key: 'none', homes: 2 }, { key: 'fine' }, { key: 'shows', type: 'theater' }, { key: 'more', homes: 1 }]) {
     const t = entertainmentAdviceText(a);
     assert.ok(t.length > 10 && !t.includes(String.fromCharCode(0x2014)), `${a.key}: ${t}`);

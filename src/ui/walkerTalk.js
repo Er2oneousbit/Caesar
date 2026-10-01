@@ -86,7 +86,7 @@ function workLines(game, w) {
     case 'charioteer': return ['The Blues will win today, mark my words!', 'Races at the hippodrome! Seven laps, four teams, one winner!'];
     case 'entertainer':
       if (w.venue === 'amphitheater') return ['Gladiators at the amphitheater! Do not miss it!'];
-      if (w.venue === 'colosseum') return ['Beasts from Africa at the colosseum! Come and see!'];
+      if (w.venue === 'colosseum') return ['Beasts from Africa at the arena! Come and see!'];
       return ['A new play tonight at the theater. A comedy!'];
     case 'taxman': return ['Everyone pays their share. Well, almost everyone.', 'Rome needs its taxes, and I need my list.'];
     case 'vendor': {
@@ -215,7 +215,7 @@ function nameOf(b) {
   return b.house ? HOUSE_TIERS[b.house.tier].name : b.def.name;
 }
 
-/** "the Granary", "a Hut". */
+/** "the Granarium", "the Hut". */
 function the(b) {
   const n = nameOf(b);
   return n ? `the ${n}` : 'somewhere';
@@ -251,7 +251,7 @@ export function walkerDoing(game, w) {
       return 'Leaving the city';
     case 'toVenue': return `On the way to perform at ${the(target)}`;
     case 'toAcademy': return `Marching to ${the(game.buildings.get(w.academy))} to be trained, then to ${the(target)}`;
-    case 'toFort': return `Marching to ${the(target)}${w.trained ? ', trained at the Military Academy' : ''}`;
+    case 'toFort': return `Marching to ${the(target)}${w.trained ? ', trained at the Campus' : ''}`;
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;
     case 'spare': return 'Waiting by the shipyard for a wharf';

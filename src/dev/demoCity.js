@@ -802,10 +802,10 @@ export function buildDemoHippodrome(game, center) {
 // ---------------------------------------------------------------------------
 
 /**
- * A cloth quarter: a Flax Farm on the nearest meadow, a Linen Maker and a
- * Clothing Maker beside the town and a warehouse for the clothing, guarded
- * by a prefect and an engineer. The flax goes straight to the Linen Maker by
- * cart, the linen straight to the Clothing Maker, and the clothing to the
+ * A cloth quarter: a Linarium (flax field) on the nearest meadow, a Textrinum and a
+ * Taberna Vestiaria beside the town and a warehouse for the clothing, guarded
+ * by a prefect and an engineer. The flax goes straight to the Textrinum by
+ * cart, the linen straight to the Taberna Vestiaria, and the clothing to the
  * warehouse, where the markets' buyers fetch it.
  * @returns {{ok:boolean, farm?:object, linen?:object, clothing?:object, warehouse?:object}}
  */

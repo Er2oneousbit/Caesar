@@ -70,8 +70,8 @@ test('ruins: every way a building falls is remembered, with the date', () => {
     const i = game.map.idx(b.x, b.y);
     fell(game, b);
     assert.equal(game.map.rubble[i], 1);
-    assert.deepEqual(ruinAt(game, i), { what: 'Prefecture', cause, month: 6, year: -300, site: { type: 'prefecture', x: b.x, y: b.y, size: 1 } }, cause);
-    assert.equal(ruinText(ruinAt(game, i)), `Ruins of a Prefecture, ${words} in Iul 300 BC.`);
+    assert.deepEqual(ruinAt(game, i), { what: 'Excubitorium', cause, month: 6, year: -300, site: { type: 'prefecture', x: b.x, y: b.y, size: 1 } }, cause);
+    assert.equal(ruinText(ruinAt(game, i)), `Ruins of an Excubitorium, ${words} in Iul 300 BC.`);
   }
   assert.ok(RUIN_CAUSES.includes('raidWall'));
 });
@@ -87,7 +87,7 @@ test('ruins: a home is remembered by its level, and "an" before a vowel', () => 
   const post = placed(game, 'engineer_post');
   const j = game.map.idx(post.x, post.y);
   collapseBuilding(game, post);
-  assert.equal(ruinText(ruinAt(game, j)), "Ruins of an Engineer's Post, collapsed in Ian 300 BC.");
+  assert.equal(ruinText(ruinAt(game, j)), "Ruins of a Collegium Fabrum, collapsed in Ian 300 BC.");
 });
 
 test('ruins: raiders breaking a wall leave rubble that says so', () => {
@@ -118,7 +118,7 @@ test('ruins: raiders breaking a wall leave rubble that says so', () => {
   assert.ok(broken >= 0, 'the raider broke a wall tile');
   assert.equal(map.rubble[broken], 1);
   assert.equal(ruinAt(game, broken).cause, 'raidWall');
-  assert.match(ruinText(ruinAt(game, broken)), /^Ruins of a Wall, broken down by raiders in /);
+  assert.match(ruinText(ruinAt(game, broken)), /^Ruins of a Murus, broken down by raiders in /);
 });
 
 test('ruins: one record spans the footprint; clearing and building over take it tile by tile, undo gives it back', () => {
@@ -176,7 +176,7 @@ test('ruins: a save keeps them, one entry per fallen building', () => {
   // Nonsense entries (a hand-edited file) are skipped, never trusted.
   data.ruins.push({ what: 'X', cause: 'aliens', month: 1, year: 1, tiles: [ai] }, { what: 'Y', cause: 'fire', month: 1, year: -1, tiles: [-5, 1e9, 'a'] }, null);
   const copy2 = deserializeGame(data);
-  assert.equal(ruinAt(copy2, ai).what, 'Granary');
+  assert.equal(ruinAt(copy2, ai).what, 'Granarium');
 });
 
 test('ruins: a version 6 save loads; its rubble has no record and keeps the old words', () => {

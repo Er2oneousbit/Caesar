@@ -108,13 +108,13 @@ export function tradeRouteCard(app, g, id, onChange) {
   let how;
   if (!sea) how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Caravans come along the Imperial road to a staffed warehouse.');
   else if (!seaOk) how = h('div', { class: 'status bad', style: { fontSize: '12px' } }, 'Unreachable: no river or coast connects this province to the sea.');
-  else if (!docks.length) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Ships need a Dock: build one on the bank of the river or sea.');
-  else if (!staffedDock) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Your Dock has no workers: ships cannot tie up.');
-  else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships wait at your Dock while dock workers unload them and fetch exports from warehouses near it.');
+  else if (!docks.length) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Ships need an Emporium (Trade Dock): build one on the bank of the river or sea.');
+  else if (!staffedDock) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Your Emporium has no workers: ships cannot tie up.');
+  else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships wait at your Emporium while dock workers unload them and fetch exports from warehouses near it.');
   return h('div', { class: 'card' },
     h('div', { class: 'row' },
       h('h4', { style: { flex: 1 } }, h('span', { style: { color: p.color } }, '● '), p.name),
-      h('span', { class: 'chip', title: sea ? 'Sea route: merchant ships and a Dock' : 'Land route: caravans on the Imperial road' }, sea ? '⛵ Sea' : '🐪 Land'),
+      h('span', { class: 'chip', title: sea ? 'Sea route: merchant ships and an Emporium' : 'Land route: caravans on the Imperial road' }, sea ? '⛵ Sea' : '🐪 Land'),
       r.open ? h('span', { class: 'chip ok' }, 'Open') : h('button', {
         class: 'btn small primary',
         disabled: sea && !seaOk,
@@ -366,7 +366,7 @@ export class Advisors {
           taxVal, taxInput,
           kv('Expected taxes', ''), est,
           kv('Homes registered', pct(c.taxCoverage)),
-          h('div', { class: 'muted' }, `Only homes visited by a tax collector (Forum/Senate) in the last ${CONFIG.TAX_ACCESS_DAYS} days pay. Above ${CONFIG.DEFAULT_TAX_RATE}% citizens grumble.`),
+          h('div', { class: 'muted' }, `Only homes visited by a tax collector (Forum or Curia) in the last ${CONFIG.TAX_ACCESS_DAYS} days pay. Above ${CONFIG.DEFAULT_TAX_RATE}% citizens grumble.`),
           unregisteredNote(g)),
         h('div', { class: 'card' },
           kv('Treasury', `${fmt(c.treasury)} Dn`),
@@ -436,7 +436,7 @@ export class Advisors {
         h('div', { class: 'row', style: { fontSize: '12px', marginTop: '4px' } },
           h('span', { class: 'muted', style: { flex: 1 } }, '╌ land route (caravans)   ··· sea route (ships)   solid = open. ', seaOk ? 'Ships can reach this province.' : 'No ships can reach this province: only land routes work here.'),
           h('button', { class: 'btn small', title: 'Who is on the way, and when (E)', onclick: () => this.app.ui.openEmpire() }, 'Empire map'))),
-      h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships wait at a staffed Dock while its workers cart their imports to storage and fetch exports from warehouses near it (a stay of 2 to 7 weeks: several sea partners need more than one Dock). Prices are per 100 units.'),
+      h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships wait at a staffed Emporium (Trade Dock) while its workers cart their imports to storage and fetch exports from warehouses near it (a stay of 2 to 7 weeks: several sea partners need more than one Emporium). Prices are per 100 units.'),
       h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
       h('h4', {}, 'Goods'),
       h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'In storage'), h('th', {}, 'Mode'), h('th', {}, 'Level'), h('th', {}, '')), rows),
@@ -471,7 +471,7 @@ export class Advisors {
     const army = h('div', { class: 'card' },
       h('h4', {}, 'Army'),
       kv('Soldiers', fmt(soldiers)),
-      soldiers ? kv('Trained (Military Academy)', `${fmt(trained.soldiersTrained)} of ${fmt(trained.soldiers)}`) : null,
+      soldiers ? kv('Trained (Campus)', `${fmt(trained.soldiersTrained)} of ${fmt(trained.soldiers)}`) : null,
       kv('Army pay', `${fmt(pay)} Dn / month`),
       kv('Forts / barracks / towers', `${forts.length} / ${barracks.length} / ${towers.length}`),
       kv('Record', `${st.repelled} of ${st.raids} raids repelled`),
@@ -538,15 +538,15 @@ export class Advisors {
       h('h4', {}, 'Forts'),
       forts.length
         ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Fort'), h('th', { class: 'r' }, 'Soldiers'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', { title: 'Sent when Caesar calls for troops (Imperial advisor)' }, 'Distant battles'), h('th', {}, '')), fortRows)
-        : h('div', { class: 'muted' }, 'No forts yet. Build a Barracks and at least one fort (Military menu). Garrisons guard the area around their fort; use Deploy to send them where raiders will come.'),
+        : h('div', { class: 'muted' }, 'No forts yet. Build a Tirocinium (Barracks) and at least one fort (Military menu). Garrisons guard the area around their fort; use Deploy to send them where raiders will come.'),
       h('h4', {}, 'Supplies'),
       supplies,
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } },
-        'Each recruit needs equipment at the Barracks: a legionary 50 weapons (Weaponsmith: iron), an archer 50 arrows (Fletcher: timber + iron), a cavalryman one horse (Horse Ranch on meadow, or imported). Carts deliver them automatically while forts have empty places.'),
+        'Each recruit needs equipment at the Tirocinium: a legionary 50 weapons (Fabrica: iron), an archer 50 arrows (Officina Sagittaria: timber + iron), a cavalryman one horse (Equaria on meadow, or imported). Carts deliver them automatically while forts have empty places.'),
       showFleet ? h('h4', {}, 'Naval stations') : null,
       showFleet ? (stations.length
         ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Station'), h('th', { class: 'r' }, 'Liburnians'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', { title: 'Sent when Caesar calls for troops for a city by the sea (Imperial advisor)' }, 'Distant battles'), h('th', {}, '')), stationRows)
-        : h('div', { class: 'muted' }, `No naval stations yet. Build a Navalia and a Naval Station on the shore (Military menu): the Navalia builds liburnians from ${Object.entries(CONFIG.LIBURNIAN_COST).map(([gd, n]) => `${n} ${GOODS[gd].name.toLowerCase()}`).join(', ')}, and each station berths ${STATION_CAPACITY} of them to fight raider ships.`)) : null,
+        : h('div', { class: 'muted' }, `No naval stations yet. Build a Navalia and a Statio (Naval Station) on the shore (Military menu): the Navalia builds liburnians from ${Object.entries(CONFIG.LIBURNIAN_COST).map(([gd, n]) => `${n} ${GOODS[gd].name.toLowerCase()}`).join(', ')}, and each station berths ${STATION_CAPACITY} of them to fight raider ships.`)) : null,
       navalSupplies,
     ];
   }
@@ -677,7 +677,7 @@ export class Advisors {
       h('table', { class: 'tbl coverage' },
         h('tr', {}, h('th', {}, 'Venue'), h('th', { class: 'r' }, 'Staffed'), h('th', { class: 'r' }, 'Shows'), h('th', {}, 'Seats'), h('th', { class: 'r' }, 'Reach')),
         venueRows),
-      h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Shows: the kinds of show booked at the staffed venues, of those they can stage (a theater plays; an amphitheater stages plays and bouts, a colosseum bouts and beasts, worth more with both). Seats: theater ${fmt(VENUE_SEATS.theater)}, amphitheater ${fmt(VENUE_SEATS.amphitheater)}, colosseum ${fmt(VENUE_SEATS.colosseum)} each.`),
+      h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Shows: the kinds of show booked at the staffed venues, of those they can stage (a theater plays; an amphitheater stages plays and bouts, an arena bouts and beasts, worth more with both). Seats: theater ${fmt(VENUE_SEATS.theater)}, amphitheater ${fmt(VENUE_SEATS.amphitheater)}, arena ${fmt(VENUE_SEATS.colosseum)} each.`),
       h('h4', {}, 'Training'),
       h('table', { class: 'tbl coverage' },
         h('tr', {}, h('th', {}, 'Building'), h('th', { class: 'r' }, 'Staffed'), h('th', {}, 'Sends performers to')),
@@ -716,10 +716,10 @@ export class Advisors {
       kv(name, `${Math.floor(r[key])}${goals[key] ? ` (goal ${goals[key]})` : ''}`), bar(r[key], 100),
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '3px' } }, tip));
     const seats = g.city.entCoverage || {};
-    const seatText = `Venue seats for ${seats.theater || 0}% (theaters), ${seats.amphitheater || 0}% (amphitheaters) and ${seats.colosseum || 0}% (colosseums) of the city${seats.hippodrome ? ', and races at the hippodrome for everyone,' : ''} give every home +${g.city.entBase || 0} entertainment.`;
+    const seatText = `Venue seats for ${seats.theater || 0}% (theaters), ${seats.amphitheater || 0}% (amphitheaters) and ${seats.colosseum || 0}% (arenas) of the city${seats.hippodrome ? ', and races at the hippodrome for everyone,' : ''} give every home +${g.city.entBase || 0} entertainment.`;
     return [
       row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. ${seatText} Build temples, schools, libraries and venues where people live.`),
-      row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Senate. Changes slowly.'),
+      row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Curia. Changes slowly.'),
       row('peace', 'Peace', `Grows each month the city is content (mood ${CONFIG.PEACE_MOOD}+). No growth in a month when a thief is about (except on Easy); falls with low mood, thieves and riots (more on harder levels), raids and the wrath of Mars.`),
       row('favor', 'Favor', `The Emperor likes paid tributes, fulfilled requests, troops sent when he calls for them and gifts. Debt, missed requests and calls ignored anger him. At ${CONFIG.LEGION_FAVOR} or less he sends his legions against you (Imperial advisor).`),
     ];
@@ -782,7 +782,7 @@ export class Advisors {
     const head = h('h4', {}, 'Calls for troops');
     if (!s) {
       return h('div', { class: 'card battle-card', style: { marginTop: '10px' } }, head,
-        h('div', { class: 'muted' }, 'Caesar has asked for no troops. When he does, switch forts (and, for a city by the sea, Naval Stations) to Empire service and send them from here.'),
+        h('div', { class: 'muted' }, 'Caesar has asked for no troops. When he does, switch forts (and, for a city by the sea, naval stations) to Empire service and send them from here.'),
         kv('Battles won / lost', `${record.won} / ${record.lost}`),
         archLine(g));
     }
@@ -811,7 +811,7 @@ export class Advisors {
             h('td', { class: 'r num' }, fmt(strengthOf(men))),
             h('td', {}, serviceButton(g, b, () => this.render())));
         })) : null,
-      pending && !forts.length ? h('div', { class: 'muted' }, 'You have no forts to send. Build a Barracks and a fort (Military menu).') : null,
+      pending && !forts.length ? h('div', { class: 'muted' }, 'You have no forts to send. Build a Tirocinium (Barracks) and a fort (Military menu).') : null,
       pending ? h('button', { class: 'btn primary send-troops', style: { marginTop: '6px' }, disabled: !!sendBlocked(g), title: sendBlocked(g) || '', onclick: send }, `Send the troops (strength ${s.ready.strength})`) : null,
       h('button', { class: 'btn small', style: { marginTop: '6px', marginLeft: '6px' }, onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map'),
       kv('Battles won / lost', `${record.won} / ${record.lost}`),

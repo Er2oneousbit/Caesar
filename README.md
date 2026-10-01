@@ -21,6 +21,7 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 
 ## What's in it
 
+* **Latin names:** every building goes by its Roman name, a Horreum for your goods, the Castra for your legion, with its English name beside it in the build menu and when you click it.
 * **The housing ladder of the original:** 20 levels, from a tent to an imperial palace. Homes grow from single tiles into 2x2 insulae and villas, 3x3 villas and 4x4 palaces as you bring them water, food, gods, schools, baths, entertainment and fine goods. Click any home to see exactly what it needs next.
 * **A campaign** of seven missions, from a riverside village to a great capital (about half an hour for the first, a few hours for the last), and a **sandbox** with five landscapes, four map sizes (up to *Uber*, 256x256) and your choice of raids.
 * **Crime:** unhappy homes send out protesters, thieves who rob the Forum or a market, and in a city at the end of its patience, rioters who burn their way toward its finest buildings. Prefects patrol as police and chase criminals down. The Crime overlay shows where trouble is brewing and why.
@@ -28,14 +29,14 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 * **The five gods of the original:** Ceres, Neptune, Mercury, Mars and Venus. Keep them content with temples (a large temple counts as two) and festivals and they bless the city (a bumper harvest, a trade windfall, food for the granaries, peace, a happier people); neglect them and they strike, and an angered Mercury or Venus strikes harder the second time.
 * **Advisors (F2)** for every part of the city. The Health, Education and Entertainment advisors show, for each kind of building, how many work, whom they reach and how many of the people whose homes need them they serve, with one line of advice on what holds homes back most; the Overview gives city health and crime at a glance.
 * **Fishing:** a shipyard builds fishing boats; a wharf's boat sails out to where the gulls circle and brings the catch home. Fish is a food of its own, and the sea does not freeze in winter.
-* **The hippodrome:** a 15-tile racetrack with chariot races (a Chariot Maker sends the teams), the grandest show in the city and the key to its finest palaces.
-* **Sea raids and a fleet** (new, not in the original, which had no war at sea): where a river or the coast reaches the sea, about a third of raids come by ship, throwing fire pots at boats and buildings by the shore before they land. A Navalia builds liburnians, light warships with two banks of oars and a bronze ram, from timber, iron and linen; Naval Stations berth them in squadrons you send out like a fort's soldiers, and the Portus, a training harbor, teaches their crews to row in time. A *Sea raids* switch turns it off.
-* **Cloth and clothing** (new, not in the original): flax fields that flower blue, a Linen Maker at its loom and a Clothing Maker with tunics drying in the yard. From the Insula up, homes need clothing too; linen can also be bought from Hispania and Egypt.
+* **The Circus:** a 15-tile hippodrome with chariot races (a Factio sends the teams), the grandest show in the city and the key to its finest palaces.
+* **Sea raids and a fleet** (new, not in the original, which had no war at sea): where a river or the coast reaches the sea, about a third of raids come by ship, throwing fire pots at boats and buildings by the shore before they land. A Navalia builds liburnians, light warships with two banks of oars and a bronze ram, from timber, iron and linen; naval stations (Stationes) berth them in squadrons you send out like a fort's soldiers, and the Portus, a training harbor, teaches their crews to row in time. A *Sea raids* switch turns it off.
+* **Cloth and clothing** (new, not in the original): flax fields that flower blue, a Textrinum (linen weaver) at its loom and a Taberna Vestiaria (clothing maker) with tunics drying in the yard. From the Insula up, homes need clothing too; linen can also be bought from Hispania and Egypt.
 * **The governor's career:** a rank from Citizen up, a salary you set yourself (Rome frowns on a greedy governor) paid into personal savings that follow you from mission to mission, gifts to the Emperor from those savings, and a residence of your own: a house, a villa or a marble palace.
 * **Four difficulties**, Easy to Insane.
-* **Trade** by land and sea with nine partner cities: ships wait at your Dock while its workers unload them and bring your exports aboard. An empire map (E) of the Mediterranean that shows the caravans and ships on their way, the warbands your scouts have seen coming, Caesar's legions on the road and your troops marching to a distant battle.
+* **Trade** by land and sea with nine partner cities: ships wait at your Emporium (trade dock) while its workers unload them and bring your exports aboard. An empire map (E) of the Mediterranean that shows the caravans and ships on their way, the warbands your scouts have seen coming, Caesar's legions on the road and your troops marching to a distant battle.
 * **Granary and warehouse orders:** per good, accept it, refuse it, or *get* it (the building's cart fetches it from other storage), and an *Empty* switch that sends everything elsewhere.
-* **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates. A Military Academy trains your soldiers: trained legionaries holding their ground shrug off sling stones and arrows.
+* **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates. A Campus (military academy) trains your soldiers: trained legionaries holding their ground shrug off sling stones and arrows.
 * **The Emperor's wrath and his wars:** let his favor sink to 10 and Caesar sends his own legions against your residence and finest homes, a year's march from Rome; win back his favor before they arrive and they turn for home. He also calls for troops to save a city of the empire: send your forts (and, for a city by the sea, your fleet) in time and strong enough, and he grants you a triumphal arch to build across a road.
 * **A living world:** day and night, four seasons with snow in winter, rain and thunderstorms, fluttering flags, busy markets, crowds at the shows, chariots racing round the spina.
 * **Music:** ten original tracks of a few minutes each for building and for the night, festival music, and war drums when raiders attack, all played live by synthesized lyre, pipes and drums.
@@ -45,10 +46,10 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 ## Getting started
 
 1. **Roads first.** Walkers only move on roads, and your city must connect to the Imperial road. The gateway with green pennants is the map entrance, where settlers arrive.
-2. **Housing plots** (H) beside the roads attract settlers, who pitch tents. Every building with workers needs a road touching one of its edges (any side; a corner does not count), or it gets no workers: a red sign with a crossed-out road floats over any building that has none.
-3. **Water:** a Well turns tents into family tents. Later, a Reservoir pipes water to Fountains for better homes. With the Housing tool in hand, a faint blue shows where homes would get water.
-4. **Safety:** Prefectures (against fire, and as police against thieves and rioters) and Engineer's Posts (against collapse) must send walkers past every building. Their walkers head for the streets closest to disaster, but each post looks after its own neighbourhood, so spread them out.
-5. **Food:** Wheat Farm on meadow → Granary → Market. Market vendors sell door to door.
+2. **Housing plots** (Area, H) beside the roads attract settlers, who pitch tents. Every building with workers needs a road touching one of its edges (any side; a corner does not count), or it gets no workers: a red sign with a crossed-out road floats over any building that has none.
+3. **Water:** a Puteus (Well) turns tents into family tents. Later, a Castellum Aquae (Reservoir) pipes water to a Lacus (Fountain) for better homes. With the Housing tool in hand, a faint blue shows where homes would get water.
+4. **Safety:** an Excubitorium (Prefecture: against fire, and as police against thieves and rioters) and a Collegium Fabrum (Engineer's Post: against collapse) must send walkers past every building. Their walkers head for the streets closest to disaster, but each post looks after its own neighbourhood, so spread them out.
+5. **Food:** Seges (Wheat Farm) on meadow → Granarium (Granary) → Macellum (Market). Market vendors sell door to door.
 6. **Grow:** temples, schools, theaters, baths and a Forum (for taxes) let homes move up.
 7. **Click everything.** Every building says what it is doing and what it lacks.
 
@@ -87,7 +88,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | A building never gets workers | No road touches it. A red sign with a crossed-out road floats over it, and after 8 days a message says where it is. Run a road along any of its edges; a road that only meets a corner does not count. |
 | Fountains or baths ran dry | The reservoir feeding them, or an aqueduct linking it to a full one, is gone (raiders, or demolished by mistake). A fountain also needs its workers. Click a reservoir or fountain: its panel says whether it is full. Wells, fountains and reservoirs never burn or wear out. |
 | Caesar's legions are coming | The Emperor's favor fell to 10 or less. Raise it before they arrive (his requests, gifts from your savings, troops when he calls for them) and they turn for home; otherwise ready your army. The mission is lost only if the city is overrun. The Imperial advisor (F2) says where they are and what they will do. |
-| Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Dock on its bank. Use land routes on maps without one. |
+| Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Emporium (Trade Dock) on its bank. Use land routes on maps without one. |
 | "Something broke in the city" screen | Click *Copy report* and include it in a bug report. *Download emergency save* keeps your city. |
 
 ---

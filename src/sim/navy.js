@@ -421,7 +421,7 @@ export function updateNavalia(game, b) {
   if (b.efficiency <= 0 || b.accessRoad < 0) { b.blocked = b.accessRoad < 0 ? 'No road access.' : 'No workers.'; return; }
   if (slip < 0) { b.blocked = 'It does not stand by water a ship can sail.'; return; }
   const [dest] = stationsWithRoom(game, game.map.navBody[slip]);
-  if (!dest) { b.blocked = 'No staffed Naval Station on this water has an empty berth.'; return; }
+  if (!dest) { b.blocked = 'No staffed Statio (Naval Station) on this water has an empty berth.'; return; }
   const cost = CONFIG.LIBURNIAN_COST;
   const missing = Object.keys(cost).filter((g) => (b.stock[g] || 0) < cost[g]);
   if (missing.length) { b.blocked = `Waiting for ${missing.map((g) => GOODS[g].name.toLowerCase()).join(', ')}.`; return; }
@@ -438,7 +438,7 @@ export function updateNavalia(game, b) {
   b.built = (b.built || 0) + 1;
   const st = game.military.stats;
   st.shipsBuilt = (st.shipsBuilt || 0) + 1;
-  game.message(school ? 'A liburnian is launched at the Navalia. Its crew rows to the Portus to train, then on to its Naval Station.' : 'A liburnian is launched at the Navalia and rows to its Naval Station.', 'good', b.x, b.y);
+  game.message(school ? 'A liburnian is launched at the Navalia. Its crew rows to the Portus to train, then on to its Statio.' : 'A liburnian is launched at the Navalia and rows to its Statio.', 'good', b.x, b.y);
   game.events.emit('sound', { name: 'recruit' });
 }
 
@@ -939,7 +939,7 @@ function sinkBoat(game, w) {
   const inv = game.military.active;
   if (inv && !inv.boatSaid) {
     inv.boatSaid = true; // once a raid
-    game.message('Raider ships have sunk a fishing boat! A Shipyard will build another.', 'bad', w.x, w.y);
+    game.message('Raider ships have sunk a fishing boat! A Fabrica Navalis will build another.', 'bad', w.x, w.y);
   }
 }
 

@@ -10,6 +10,7 @@
 
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { withArticle } from '../sim/risk.js';
 import { getGoods, orderCart, ORDER_MIN_STAFF, WAREHOUSE_GET_ROOM } from '../sim/storageOrders.js';
 
 /** Button label and tooltip for each order. */
@@ -65,7 +66,7 @@ export function orderLines(game, b) {
   });
   if (cart && cart.state === 'collect') {
     const src = game.buildings.get(cart.target);
-    lines.push({ level: 'good', text: `Its cart is fetching ${goodsList([cart.want])}${src ? ` from a ${BUILDINGS[src.type].name}` : ''}.` });
+    lines.push({ level: 'good', text: `Its cart is fetching ${goodsList([cart.want])}${src ? ` from ${withArticle(BUILDINGS[src.type].name)}` : ''}.` });
   } else if (cart && cart.state === 'return' && cart.cargo) {
     lines.push({ level: 'good', text: `Its cart is bringing back ${Math.round(cart.cargo.amount)} ${goodsList([cart.cargo.good])}.` });
   } else if (note?.kind === 'get') {

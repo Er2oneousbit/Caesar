@@ -74,7 +74,7 @@ export function openRoute(game, id) {
   transact(game, 'other', -p.openCost);
   route.open = true;
   route.nextVisit = game.time.totalDays + FIRST_VISIT_DAYS;
-  const how = routeKind(id) === 'sea' ? 'Their ships will call at your Dock soon.' : 'Their caravans will arrive along the Imperial road soon.';
+  const how = routeKind(id) === 'sea' ? 'Their ships will call at your Emporium soon.' : 'Their caravans will arrive along the Imperial road soon.';
   game.message(`Trade route to ${p.name} is open. ${how}`, 'good');
   return { ok: true };
 }
@@ -241,7 +241,7 @@ function spawnShip(game, partnerId) {
   }
   if (!best) {
     const anyDock = [...game.buildings.values()].some((b) => b.def.kind === 'dock');
-    if (!anyDock) warnOnce(game, 'noDockWarned', `A ship from ${p.name} found no Dock and sailed on. Build a Dock on the shore to trade by sea.`);
+    if (!anyDock) warnOnce(game, 'noDockWarned', `A ship from ${p.name} found no Emporium and sailed on. Build an Emporium (Trade Dock) on the shore to trade by sea.`);
     return false;
   }
   const w = spawnWalker(game, 'ship', entry, null, {

@@ -647,7 +647,7 @@ test('with nothing to burn within 40 tiles, a mob marches on the nearest listed 
   assert.ok(first);
   const mob = [...game.walkers.values()].filter((w) => w.type === 'rioter');
   assert.ok(mob.length > 0 && mob.every((w) => w.target === reachable.id), 'all after the school');
-  assert.ok(game.messages.some((m) => /heading for a School/.test(m.text)));
+  assert.ok(game.messages.some((m) => /heading for a Ludus Litterarius/.test(m.text)));
   stepCriminals(game, 60);
   assert.ok(mob.some((w) => game.walkers.has(w.id) && w.path), 'on the march, not gone at once');
 });

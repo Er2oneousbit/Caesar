@@ -153,12 +153,12 @@ test('the Production advisor finds the bottleneck', () => {
   const rep = productionReport(game);
   assert.ok(rep.hasMonth);
   assert.ok(rep.goods.some((r) => r.good === 'wheat' && r.made > 0), 'wheat in the goods table');
-  const hint = rep.hints.find((t) => /Potter/.test(t));
+  const hint = rep.hints.find((t) => /Figlina/.test(t));
   assert.ok(hint, `a hint about the potter: ${rep.hints.join(' | ')}`);
   assert.match(hint, /waiting for clay/);
-  assert.match(hint, /Clay Pits/);
+  assert.match(hint, /^2 Figlinae are waiting for clay: build more Cretifodinae/, 'the Latin plurals');
   const grp = rep.troubles.find((t) => t.ids.includes(potter.id));
-  assert.ok(grp && grp.name === 'Potter' && /Waiting for clay/.test(grp.text), `the potter is listed with what is wrong: ${JSON.stringify(grp)}`);
+  assert.ok(grp && grp.name === 'Figlina' && /Waiting for clay/.test(grp.text), `the potter is listed with what is wrong: ${JSON.stringify(grp)}`);
 });
 
 // ---------------------------------------------------------------------------

@@ -47,8 +47,8 @@ export const WALKER_TYPES = Object.freeze({
   performer: { name: 'Performer', kind: 'traveler', tunic: '#d98c2b', item: 'mask', desc: 'Heading to a venue to perform.' },
   recruit: { name: 'Recruit', kind: 'traveler', tunic: '#a8322b', item: 'spear', desc: 'A freshly trained soldier marching to his fort.' },
   caravan: { name: 'Trade Caravan', kind: 'traveler', tunic: '#6b4a2a', item: 'mule', desc: 'Merchants from a distant city, travelling overland.' },
-  ship: { name: 'Merchant Ship', kind: 'ship', tunic: '#6b4a2a', item: null, desc: 'A trading ship on a sea route. Sails from the map edge to a Dock and back.' },
-  fishing_boat: { name: 'Fishing Boat', kind: 'ship', tunic: '#7a5a3a', item: 'net', desc: 'Built at a Shipyard, it works for one Fishing Wharf: out to the fishing grounds, 4 days with the nets, home with 100 fish.' },
+  ship: { name: 'Merchant Ship', kind: 'ship', tunic: '#6b4a2a', item: null, desc: 'A trading ship on a sea route. Sails from the map edge to an Emporium and back.' },
+  fishing_boat: { name: 'Fishing Boat', kind: 'ship', tunic: '#7a5a3a', item: 'net', desc: 'Built at a Fabrica Navalis, it works for one Piscatoria (Fishing Wharf): out to the fishing grounds, 4 days with the nets, home with 100 fish.' },
 
   // Unhappy homes breed these (sim/crime.js). Prefects and soldiers catch them.
   protester: { name: 'Protester', kind: 'criminal', tunic: '#8a7a62', item: 'placard', desc: 'An unhappy citizen airing his grievances in the street. Harmless, but a sign of unrest.' },

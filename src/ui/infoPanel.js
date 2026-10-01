@@ -13,7 +13,7 @@
 
 import { h, mount, fmt, pct, bar, kv } from './dom.js';
 import { CONFIG } from '../config.js';
-import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX, ENT_SEATS_MAX } from '../data/buildings.js';
+import { BUILDINGS, TOOLS, GATE, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX, ENT_SEATS_MAX, fullName } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX, STATION_CAPACITY } from '../data/units.js';
@@ -55,7 +55,7 @@ function nextMareText(game, b) {
 }
 
 /**
- * "; a Clothing Maker makes it from linen": who makes a home's good, for the
+ * "; a Taberna Vestiaria makes it from linen": who makes a home's good, for the
  * description of the need. Most chains are one workshop long and named in
  * the help; clothing's is two (flax, linen, clothing), so say it here too.
  */
@@ -72,10 +72,10 @@ export function describeNeed(m) {
     case 'water': return m.need >= 2 ? 'Clean water from a fountain within 4 tiles (fountains need a reservoir).' : 'Access to water: a well within 2 tiles.';
     case 'food': return `${m.need} type${m.need > 1 ? 's' : ''} of food (has ${m.have}). A market vendor must pass by, and the market needs a stocked granary.`;
     case 'religion': return `Priests of ${m.need} different god${m.need > 1 ? 's' : ''} visiting (has ${m.have}). Build temples nearby.`;
-    case 'ent': return `Entertainment ${m.need} (has ${m.have}). Entertainers passing by: theater ${VENUE_POINTS.theater}, amphitheater ${VENUE_POINTS.amphitheater} (${VENUE_POINTS.amphitheater + VENUE_BOTH_BONUS.amphitheater} with plays and gladiators), colosseum ${VENUE_POINTS.colosseum} (${VENUE_POINTS.colosseum + VENUE_BOTH_BONUS.colosseum} with gladiators and beasts), the hippodrome's charioteers ${VENUE_POINTS.hippodrome}, plus up to ${ENT_SEATS_MAX} when the city's venues have seats for everyone (${ENT_BASE_MAX} with races at the hippodrome).`;
+    case 'ent': return `Entertainment ${m.need} (has ${m.have}). Entertainers passing by: theater ${VENUE_POINTS.theater}, amphitheater ${VENUE_POINTS.amphitheater} (${VENUE_POINTS.amphitheater + VENUE_BOTH_BONUS.amphitheater} with plays and gladiators), arena ${VENUE_POINTS.colosseum} (${VENUE_POINTS.colosseum + VENUE_BOTH_BONUS.colosseum} with gladiators and beasts), the hippodrome's charioteers ${VENUE_POINTS.hippodrome}, plus up to ${ENT_SEATS_MAX} when the city's venues have seats for everyone (${ENT_BASE_MAX} with races at the hippodrome).`;
     case 'edu': return `${['', 'A school or a library nearby.', 'Both a school and a library nearby.', 'A school, a library and an academy nearby.'][m.need]} (has ${['none', 'one of school and library', 'school and library', 'all three'][m.have]})`;
     case 'barber': return 'A barber nearby.';
-    case 'baths': return 'Public baths (Thermae) nearby. They need piped water from a reservoir.';
+    case 'baths': return 'Public baths (Balneae) nearby. They need piped water from a reservoir.';
     case 'health': return m.need >= 2
       ? `Both a medicus nearby and a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles (has ${m.have === 0 ? 'neither' : m.hospital ? 'the hospital' : 'the medicus'}).`
       : `A medicus nearby, or a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles.`;
@@ -103,7 +103,7 @@ const RUIN_WORDS = {
 };
 
 /**
- * "Ruins of a Prefecture, burned down in Iul 280 BC." for a rubble record,
+ * "Ruins of an Excubitorium, burned down in Iul 280 BC." for a rubble record,
  * or null for rubble without one (from a save before version 7).
  */
 export function ruinText(rec) {
@@ -157,7 +157,7 @@ export function buildingStatus(game, b) {
     case 'wharf': {
       if (!wharfBoat(game, b)) {
         const yard = [...game.buildings.values()].some((x) => x.def.kind === 'shipyard' && bodyOf(game, x) === bodyOf(game, b));
-        return { level: 'warn', text: yard ? 'Waiting for a boat from the shipyard.' : 'Waiting for a boat: build a Shipyard on this water.' };
+        return { level: 'warn', text: yard ? 'Waiting for a boat from the shipyard.' : 'Waiting for a boat: build a Fabrica Navalis (Shipyard) on this water.' };
       }
       if (b.noStorage) return { level: 'warn', text: 'The catch is piling up: no granary or warehouse with room is reachable.' };
       break;
@@ -175,15 +175,15 @@ export function buildingStatus(game, b) {
       const n = garrisonCounts(game).get(b.id) || 0;
       if (n >= FORT_CAPACITY) return { level: 'good', text: `Garrison at full strength (${FORT_CAPACITY} soldiers).` };
       const hasBarracks = [...game.buildings.values()].some((x) => x.def.kind === 'barracks');
-      if (!hasBarracks) return { level: 'bad', text: 'No Barracks: build one (connected by road) to train recruits for this fort.' };
+      if (!hasBarracks) return { level: 'bad', text: 'No Tirocinium (Barracks): build one, connected by road, to train recruits for this fort.' };
       const cost = Object.keys(RECRUIT_COST[def.unit] || {});
       if (cost.length && b.efficiency > 0 && (b.recruiting || 0) === 0) {
-        return { level: 'warn', text: `${n} / ${FORT_CAPACITY} soldiers. Recruits need ${cost.map((g) => GOODS[g].name.toLowerCase()).join(' and ')} at the Barracks.` };
+        return { level: 'warn', text: `${n} / ${FORT_CAPACITY} soldiers. Recruits need ${cost.map((g) => GOODS[g].name.toLowerCase()).join(' and ')} at the Tirocinium.` };
       }
       break;
     }
     case 'venue':
-      if (def.venue === 'hippodrome' && !venueActive(b)) return { level: 'warn', text: 'No races: a Chariot Maker connected by road sends the teams.' };
+      if (def.venue === 'hippodrome' && !venueActive(b)) return { level: 'warn', text: 'No races: a Factio (Chariot Stable) connected by road sends the teams.' };
       if (!venueActive(b)) {
         const need = VENUE_SUPPLIERS[def.venue].map((v) => PERFORMER_NAMES[v].toLowerCase() + 's').join(' or ');
         return { level: 'warn', text: `No shows booked. It needs ${need} from a training building connected by road.` };
@@ -338,9 +338,14 @@ export class InfoPanel {
     else this.renderBuilding(g, b);
   }
 
-  head(title, sub) {
+  /**
+   * The panel's title row. `en`: a building's English name, shown in
+   * brackets after its Latin one ("Castra (Legion Fort)") so a player can
+   * always tell what it is; left out when it is the same word (Forum).
+   */
+  head(title, sub, en = null) {
     return h('div', { class: 'panel-head' },
-      h('h3', {}, title),
+      h('h3', {}, title, en && en !== title ? [' ', h('span', { class: 'en' }, `(${en})`)] : null),
       sub ? h('span', { class: 'chip' }, sub) : null,
       h('button', { class: 'panel-close', title: 'Close (right click)', onclick: () => this.close() }, '×'));
   }
@@ -416,14 +421,14 @@ export class InfoPanel {
       parts.push(status);
       const lv = hs.levels || {};
       const gods = GOD_KEYS.filter((k) => hs.religion[k] > 0).map((k) => GODS[k].name);
-      const ent = Object.keys(VENUE_POINTS).filter((v) => hs.ent[v] > 0).map((v) => (hs.entBoth && hs.entBoth[v] > 0 ? `${v} (both shows)` : v));
+      const ent = Object.keys(VENUE_POINTS).filter((v) => hs.ent[v] > 0).map((v) => (hs.entBoth && hs.entBoth[v] > 0 ? `${BUILDINGS[v].name} (both shows)` : BUILDINGS[v].name));
       if (g.city.entBase > 0) ent.push(`city ${g.city.entBase}`);
-      const health = [['barber', 'Barber'], ['clinic', 'Medicus'], ['baths', 'Thermae']].filter(([k]) => hs[k] > 0).map(([, n]) => n);
-      if (lv.hospital) health.push('Hospital');
-      const edu = [['school', 'School'], ['library', 'Library'], ['academy', 'Academy']].filter(([k]) => hs[k] > 0).map(([, n]) => n);
+      const health = ['barber', 'clinic', 'baths'].filter((k) => hs[k] > 0).map((k) => BUILDINGS[k].name);
+      if (lv.hospital) health.push(BUILDINGS.hospital.name);
+      const edu = ['school', 'library', 'academy'].filter((k) => hs[k] > 0).map((k) => BUILDINGS[k].name);
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Services'),
-        kv('Water', hs.water >= 2 ? 'Fountain' : hs.water === 1 ? 'Well' : 'None'),
+        kv('Water', hs.water >= 2 ? BUILDINGS.fountain.name : hs.water === 1 ? BUILDINGS.well.name : 'None'),
         kv('Food', FOOD_TYPES.filter((f) => hs.food[f] > 0.01).map((f) => `${GOODS[f].name} ${Math.floor(hs.food[f])}`).join(', ') || 'None'),
         kv('Religion', gods.join(', ') || 'None'),
         kv('Entertainment', ent.length ? `${lv.ent || 0} (${ent.join(', ')})` : 'None'),
@@ -477,7 +482,7 @@ export class InfoPanel {
   renderBuilding(g, b) {
     const def = b.def;
     const st = buildingStatus(g, b);
-    const parts = [this.head(def.name, `${b.size * (def.span || 1)}×${b.size}`), h('div', { class: `status ${st.level}` }, st.text)];
+    const parts = [this.head(def.name, `${b.size * (def.span || 1)}×${b.size}`, def.en), h('div', { class: `status ${st.level}` }, st.text)];
     if (def.workers) {
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Employment'),
@@ -494,7 +499,7 @@ export class InfoPanel {
             kv('Pasture (meadow)', pct(b.fertility)),
             kv('Next foal', pct(b.progress / 100)), bar(b.progress, 100),
             kv('Horses waiting', formatAmount('horses', b.stock.horses)),
-            h('div', { class: 'muted' }, 'A bigger herd foals faster: a new ranch is 4x slower than a mature one. Horses go to a Barracks that needs them, otherwise to a warehouse.')));
+            h('div', { class: 'muted' }, 'A bigger herd foals faster: a new ranch is 4x slower than a mature one. Horses go to a Tirocinium that needs them, otherwise to a warehouse.')));
           break;
         }
         parts.push(sec('Farm', kv('Crop', GOODS[def.produces].name), kv('Fertility', pct(b.fertility)),
@@ -526,7 +531,7 @@ export class InfoPanel {
             kv('Entertainment value', `${VENUE_POINTS.hippodrome} to the homes its charioteers pass`),
             kv('Seats', on ? `The whole city: +${ENT_BASE_MAX - ENT_SEATS_MAX} at most to every home` : 'None while no races run'),
             kv('Prosperity', on ? `+${CONFIG.HIPPODROME_PROSPERITY} while races run` : 'Nothing while no races run'),
-            h('div', { class: 'muted' }, 'A Chariot Maker connected by road books 32 days of races with each team it sends. One hippodrome per city.')));
+            h('div', { class: 'muted' }, 'A Factio connected by road books 32 days of races with each team it sends. One hippodrome per city.')));
           break;
         }
         const acc = VENUE_SUPPLIERS[def.venue];
@@ -575,7 +580,7 @@ export class InfoPanel {
           kv('Sea routes open', open.join(', ') || 'None (open them in the Trade advisor)'),
           kv('On the quay', `${fmt(dockUsed(b))} / ${fmt(CONFIG.DOCK_CAPACITY)}`), bar(dockUsed(b), CONFIG.DOCK_CAPACITY),
           goods.length ? h('div', {}, goods.map(([k, v]) => h('span', { class: 'chip' }, `${GOODS[k].icon} ${GOODS[k].name} ${fmt(v)}`))) : null,
-          h('div', { class: 'muted' }, `A ship waits here while it trades. The crane lands its imports on the quay (you pay as they land) and dock workers cart them to storage; they fetch exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles (you are paid as each load goes aboard). The ship sails when both are done, or after ${CONFIG.SHIP_MAX_STAY_DAYS} days: keep storage near the Dock.`)));
+          h('div', { class: 'muted' }, `A ship waits here while it trades. The crane lands its imports on the quay (you pay as they land) and dock workers cart them to storage; they fetch exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles (you are paid as each load goes aboard). The ship sails when both are done, or after ${CONFIG.SHIP_MAX_STAY_DAYS} days: keep storage near the Emporium.`)));
         break;
       }
       case 'wharf': {
@@ -584,7 +589,7 @@ export class InfoPanel {
         const grounds = g.map.groundsOf(bodyOf(g, b)).length;
         const trouble = b.boatTrouble && g.time.totalDays - b.boatTrouble.day < CONFIG.DAYS_PER_MONTH * 3 ? `A boat ${b.boatTrouble.what}.` : null;
         parts.push(sec('Fishing',
-          kv('Boat', boat ? boatStatus(g, b) : 'None: a Shipyard on this water sends one'),
+          kv('Boat', boat ? boatStatus(g, b) : 'None: a Fabrica Navalis on this water sends one'),
           ground ? kv('Fishing ground', ground) : null,
           kv('Fishing grounds on this water', `${grounds}`),
           kv('Catch in store', `${fmt(b.stock.fish || 0)} fish`),
@@ -609,7 +614,7 @@ export class InfoPanel {
         const cost = CONFIG.LIBURNIAN_COST;
         parts.push(sec('Materials in store',
           def.inputs.map((good) => kv(`${GOODS[good].icon} ${GOODS[good].name}`, `${fmt(b.stock[good] || 0)} / ${fmt(cost[good])}${b.incoming[good] ? ` (+${fmt(b.incoming[good])} on the way)` : ''}`)),
-          h('div', { class: 'muted' }, `One liburnian needs ${Object.entries(cost).map(([g, n]) => `${n} ${GOODS[g].name.toLowerCase()}`).join(', ')}. Carts bring them while a staffed Naval Station on this water has an empty berth.`)));
+          h('div', { class: 'muted' }, `One liburnian needs ${Object.entries(cost).map(([g, n]) => `${n} ${GOODS[g].name.toLowerCase()}`).join(', ')}. Carts bring them while a staffed Statio on this water has an empty berth.`)));
         parts.push(sec('Shipbuilding',
           kv('Next liburnian', pct((b.progress || 0) / 100)), bar(b.progress || 0, 100),
           kv('Takes', `${CONFIG.NAVALIA_BUILD_DAYS} days at full staff`),
@@ -638,7 +643,7 @@ export class InfoPanel {
       case 'military_academy':
         parts.push(sec('Drill yard',
           kv('Soldiers trained here', fmt(b.trainedHere || 0)),
-          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Barracks marches first to the academy nearest his fort, then on to it; soldiers resting in a fort come over one at a time (never while deployed or while raiders are about). Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
+          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Tirocinium marches first to the academy nearest his fort, then on to it; soldiers resting in a fort come over one at a time (never while deployed or while raiders are about). Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
         break;
       case 'portus':
         parts.push(sec('Training harbor',
@@ -646,7 +651,7 @@ export class InfoPanel {
           h('div', { class: 'muted' }, `Only a fully staffed Portus (${def.workers} workers) trains a crew. A new liburnian rows past the Portus nearest its station on the same water first, then to its berth; ships at their berths come over one at a time. A trained crew rows faster (${(UNIT_TYPES.liburnian.trainedSpeed * CONFIG.TICKS_PER_DAY).toFixed(1)} tiles a day to ${(UNIT_TYPES.liburnian.speed * CONFIG.TICKS_PER_DAY).toFixed(1)}), rams harder (${UNIT_TYPES.liburnian.trainedRam} to ${UNIT_TYPES.liburnian.ram}) and is harder to hit (+${UNIT_TYPES.liburnian.trainedDefense} defense). Rome's first war fleet, in 260 BC, learned to row on benches on dry land while its ships were built.`)));
         break;
       case 'tower':
-        parts.push(sec('Watchtower',
+        parts.push(sec('Turris',
           kv('Range', `${TOWER_RANGE} tiles`),
           kv('Shoots', b.efficiency > 0 ? `every ${(TOWER_COOLDOWN / b.efficiency / CONFIG.TICKS_PER_SECOND).toFixed(1)} s at normal speed` : 'not at all (no staff)'),
           h('div', { class: 'muted' }, 'Archers on the tower shoot raiders in range. Raiders will try to tear it down: back it with walls and soldiers.')));
@@ -794,7 +799,7 @@ export class InfoPanel {
     const set = (bits) => { map.roadblock[i] = ROADBLOCK.PRESENT | (bits & ROADBLOCK.GROUPS); this.render(); };
     const bits = map.roadblock[i] & ROADBLOCK.GROUPS;
     mount(this.el,
-      this.head('Roadblock', `${x},${y}`),
+      this.head(TOOLS.roadblock.name, `${x},${y}`, TOOLS.roadblock.en),
       h('div', { class: 'muted' }, 'Walkers roaming the streets turn back here. Carts, market buyers, settlers, caravans and anyone else heading somewhere always pass.'),
       h('div', { class: 'panel-sec' },
         h('h5', {}, 'Let through'),
@@ -836,9 +841,9 @@ export class InfoPanel {
       this.head(TERRAIN_NAMES[t], `${x},${y}`),
       kv('Desirability', `${map.desirability[i]}`),
       kv('Water access', water.join(', ') || 'None'),
-      road ? kv('Road', road === Road.PLAZA ? 'Plaza' : road === Road.BRIDGE ? 'Bridge' : 'Road') : null,
-      map.aqueduct[i] ? kv('Aqueduct', map.aqueduct[i] === 2 ? 'Carrying water' : 'Dry') : null,
-      wall ? kv(wall === Wall.GATE ? 'Gate' : 'Wall', `${Math.round(wallHpOf(g, i).hp)} / ${wallHpOf(g, i).max} hp`) : null,
+      road ? kv('Road', fullName(road === Road.PLAZA ? TOOLS.plaza : road === Road.BRIDGE ? TOOLS.bridge : TOOLS.road)) : null,
+      map.aqueduct[i] ? kv(fullName(TOOLS.aqueduct), map.aqueduct[i] === 2 ? 'Carrying water' : 'Dry') : null,
+      wall ? kv(fullName(wall === Wall.GATE ? GATE : TOOLS.wall), `${Math.round(wallHpOf(g, i).hp)} / ${wallHpOf(g, i).max} hp`) : null,
       notes.length ? h('div', { class: 'panel-sec' }, notes.map((n) => h('div', {}, n))) : null,
       map.rubble[i] ? this.rebuildButton(g, i) : null);
   }

@@ -49,7 +49,7 @@ export const UNIT_TYPES = Object.freeze({
     name: 'Archer', side: 'rome', color: '#3f7a3a', hp: 60, attack: 10, defense: 3, range: 6.5, aggro: 9,
     speed: 0.075, cooldown: 30, upkeep: 2, fort: 'fort_archer', ranged: true,
     trainedDefense: 2, strength: 1, trainedStrength: 2,
-    desc: 'Auxiliary bowmen. Fragile up close, deadly from a distance. Each recruit needs arrows from a Fletcher.',
+    desc: 'Auxiliary bowmen. Fragile up close, deadly from a distance. Each recruit needs arrows from an Officina Sagittaria.',
   },
   cavalry: {
     name: 'Cavalryman', side: 'rome', color: '#c9962e', hp: 120, attack: 15, defense: 6, range: 1.2, aggro: 12,
@@ -92,7 +92,7 @@ export const UNIT_TYPES = Object.freeze({
     name: 'Liburnian', side: 'rome', color: '#a8322b', hp: 180, attack: 13, defense: 6, range: 4.5, aggro: 10,
     speed: 0.12, cooldown: 30, upkeep: 4, naval: true, ranged: true, ram: 45,
     trainedRam: 55, trainedSpeed: 0.135, trainedDefense: 3, strength: 4, trainedStrength: 6,
-    desc: 'A light warship of the provincial fleet: two banks of oars, a bronze ram. Its marines shoot raider ships, and it rams those it reaches. Built at a Navalia from timber, iron and linen; berths at a Naval Station.',
+    desc: 'A light warship of the provincial fleet: two banks of oars, a bronze ram. Its marines shoot raider ships, and it rams those it reaches. Built at a Navalia from timber, iron and linen; berths at a Statio (Naval Station).',
   },
   raider_ship: {
     name: 'Raider Ship', side: 'enemy', color: '#3a2a1e', hp: 140, attack: 9, defense: 4, range: 5, aggro: 5,

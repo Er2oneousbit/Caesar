@@ -62,7 +62,7 @@ test('roadblocks go on roads only, and clearing one leaves its road', () => {
   const { x0, y } = straightRoad(game, 12);
   const at = x0 + 5;
   const i = map.idx(at, y);
-  assert.equal(planAction(game, 'roadblock', at, y - 2, at, y - 2).reason, 'Roadblocks go on a road');
+  assert.equal(planAction(game, 'roadblock', at, y - 2, at, y - 2).reason, 'A Claustra (Roadblock) goes on a road');
   const money = game.city.treasury;
   assert.ok(build(game, 'roadblock', at, y).ok);
   assert.equal(map.roadblock[i], ROADBLOCK.PRESENT, 'a new roadblock lets no one through');

@@ -364,7 +364,8 @@ test('residences: house 3x3, villa 4x4, palace 5x5 at the original\'s prices and
     assert.deepEqual([d.size, d.cost, d.des, d.workers, d.needsRoad, d.kind, d.category], [size, cost, des, 0, false, 'residence', 'government']);
     assert.ok(d.fire > 0 && d.damage > 0, 'none is fire-proof');
   }
-  assert.equal(BUILDINGS.governor_house.name, 'Governor\'s House');
+  assert.equal(BUILDINGS.governor_house.name, 'Praetorium');
+  assert.equal(BUILDINGS.governor_house.en, 'Governor\'s House');
 });
 
 test('residences: the house from mission 1, the villa from mission 3, the palace from mission 5', () => {
@@ -388,7 +389,7 @@ test('residences: one stands at a time; a second is refused with the reason unti
   const far = findFree(game, 6, 6, { x: game.map.w - 8, y: game.map.h - 8 });
   const no = checkBuilding(game, 'governor_palace', far.x, far.y);
   assert.equal(no.ok, false);
-  assert.equal(no.reason, 'You already have a residence (Governor\'s House): only one may stand at a time. Demolish it first to build another.');
+  assert.equal(no.reason, 'You already have a residence (Praetorium): only one may stand at a time. Demolish it first to build another.');
   assert.equal(checkBuilding(game, 'governor_house', far.x, far.y).ok, false);
   removeBuilding(game, house);
   assert.ok(checkBuilding(game, 'governor_palace', far.x, far.y).ok);

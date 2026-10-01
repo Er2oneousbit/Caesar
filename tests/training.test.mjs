@@ -141,7 +141,7 @@ test('data: the Military Academy and the Portus, with the spec\'s numbers', () =
   assert.deepEqual([p.size, p.cost, p.workers, p.labor, p.placement, p.kind], [3, 600, 12, 'military', 'shore', 'portus']);
   assert.equal(p.placement, BUILDINGS.navalia.placement, 'the Navalia\'s water rule');
   assert.equal(p.placement, BUILDINGS.naval_station.placement, 'and the Naval Station\'s');
-  for (const g of GOD_KEYS) assert.equal(BUILDINGS[`temple_large_${g}`].name.startsWith('Large Temple of '), true);
+  for (const g of GOD_KEYS) assert.equal(BUILDINGS[`temple_large_${g}`].name.startsWith('Templum '), true);
 });
 
 test('unlocks: the academy with the first forts, the Portus with the fleet, large temples from mission 3', () => {
@@ -572,14 +572,14 @@ test('panel words: the fort\'s training line and the academy\'s status', () => {
   const { game, academy, fort } = lineCity();
   garrison(game, fort, 3);
   assert.equal(trainedText(game, fort), '0 of 3 trained');
-  assert.match(trainingNote(game, fort), new RegExp(`^Recruits train at the Military Academy at ${academy.x}, ${academy.y}`));
+  assert.match(trainingNote(game, fort), new RegExp(`^Recruits train at the Campus at ${academy.x}, ${academy.y}`));
   assert.deepEqual(schoolStatus(game, academy), { level: 'good', text: 'Fully staffed: soldiers of the forts nearest it train here.' });
   academy.efficiency = 0.5;
   academy.workers = 10;
   assert.deepEqual(schoolStatus(game, academy), { level: 'warn', text: 'Trains nobody until fully staffed: 10 of 20 workers.' });
-  assert.equal(trainingNote(game, fort), 'No Military Academy is fully staffed: only one with every worker trains anyone.');
+  assert.equal(trainingNote(game, fort), 'No Campus is fully staffed: only one with every worker trains anyone.');
   removeBuilding(game, academy);
-  assert.match(trainingNote(game, fort), /^Build a Military Academy/);
+  assert.match(trainingNote(game, fort), /^Build a Campus \(Military Academy\)/);
 });
 
 // ---------------------------------------------------------------------------

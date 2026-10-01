@@ -202,8 +202,8 @@ test('warehouse Get (example A): fetches 4 loads from the best source, nearer or
   assert.equal(cart.target, w2.id, 'the fuller warehouse wins over the nearer one');
   assert.equal(cart.cargo, null, 'it goes empty');
   assert.equal(w1.incoming.wine, WAREHOUSE_GET_LOAD, 'room for its load is held at home');
-  assert.match(walkerDoing(game, cart), /Going to the Warehouse for wine/);
-  assert.match(orderLines(game, w1).map((l) => l.text).join(' '), /fetching wine from a Warehouse/);
+  assert.match(walkerDoing(game, cart), /Going to the Horreum for wine/);
+  assert.match(orderLines(game, w1).map((l) => l.text).join(' '), /fetching wine from a Horreum/);
   settle(game);
   assert.equal(w1.stock.wine, 600, '2 + 4 loads');
   assert.equal(w2.stock.wine, 200);

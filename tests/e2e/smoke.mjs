@@ -551,7 +551,14 @@ try {
   check('demo city has a straight road for a roadblock', !!rbSpot);
   if (rbSpot) {
     await page.click('.cat-btn[title^="Roads"]');
-    await page.click('.build-item:has-text("Roadblock")');
+    // Build menu entries are found by their key: the names are the Latin
+    // ones, with the English under them (data/buildings.js `en`).
+    const rbItem = await page.evaluate(() => {
+      const el = document.querySelector('.build-item[data-key="roadblock"] .nm');
+      return el ? { text: el.textContent, en: el.querySelector('.en')?.textContent, title: el.closest('.build-item').title } : null;
+    });
+    check('the build menu shows the Latin name with the English under it, and the tooltip both', !!rbItem && rbItem.text.startsWith('Claustra') && rbItem.en === 'Roadblock' && rbItem.title.startsWith('Claustra (Roadblock)\n'), JSON.stringify(rbItem));
+    await page.click('.build-item[data-key="roadblock"]');
     await page.waitForTimeout(100);
     const rp = await toScreen(rbSpot.x, rbSpot.y);
     await page.mouse.move(rp.x, rp.y);
@@ -575,7 +582,7 @@ try {
       return was;
     }, rp);
     await page.mouse.click(rp.x, rp.y);
-    const rbPanel = await page.isVisible('#info-panel h3:has-text("Roadblock")');
+    const rbPanel = (await page.textContent('#info-panel h3').catch(() => '')) === 'Claustra (Roadblock)';
     await page.evaluate((was) => { window.colonia.paused = was; }, rbWasPaused);
     await page.click('#info-panel label:has-text("Priests") input');
     const allowed = await page.evaluate(({ x, y }) => window.colonia.game.map.roadblock[window.colonia.game.map.idx(x, y)], rbSpot);
@@ -726,7 +733,7 @@ try {
   //       is in its category, the click picks it as the tool, and a click on
   //       the map places it (the flax farm on meadow, all beside a road).
   const clothPlaced = [];
-  for (const [cat, name, key, size] of [['Farms', 'Flax Farm', 'farm_flax', 3], ['Industry', 'Linen Maker', 'linen_ws', 2], ['Industry', 'Clothing Maker', 'clothing_ws', 2]]) {
+  for (const [cat, key, size] of [['Farms', 'farm_flax', 3], ['Industry', 'linen_ws', 2], ['Industry', 'clothing_ws', 2]]) {
     const at = await page.evaluate(({ size, meadow }) => {
       const app = window.colonia;
       const m = app.game.map;
@@ -817,8 +824,8 @@ try {
       await page.evaluate(({ ax, ay }) => { window.colonia.renderer.camera.centerOnTile(ax, ay); window.colonia.renderer.render(0, 0.016); }, at);
     }
     await page.click(`.cat-btn[title^="${cat}"]`);
-    const listed = await page.isVisible(`.build-item:has-text("${name}")`);
-    if (listed) await page.click(`.build-item:has-text("${name}")`);
+    const listed = await page.isVisible(`.build-item[data-key="${key}"]`);
+    if (listed) await page.click(`.build-item[data-key="${key}"]`);
     const tool = await page.evaluate(() => window.colonia.input.tool);
     let placed = null;
     if (at && tool === key) {
@@ -836,7 +843,7 @@ try {
     if (await page.evaluate(() => window.colonia.input.tool)) await page.keyboard.press('Escape');
     clothPlaced.push({ key, listed, tool, at, placed });
   }
-  check('the Flax Farm, Linen Maker and Clothing Maker are in the build menu and can be placed', clothPlaced.every((c) => c.listed && c.tool === c.key && c.placed && c.placed.x === c.at.x && c.placed.y === c.at.y && c.placed.road) && errors.length === 0, JSON.stringify(clothPlaced));
+  check('the Linarium, Textrinum and Taberna Vestiaria (the cloth chain) are in the build menu and can be placed', clothPlaced.every((c) => c.listed && c.tool === c.key && c.placed && c.placed.x === c.at.x && c.placed.y === c.at.y && c.placed.road) && errors.length === 0, JSON.stringify(clothPlaced));
 
   // 5a2e. The governor: his house picked from the build menu and placed with
   //       the mouse on open land (no road needed), then the Imperial advisor:
@@ -861,8 +868,8 @@ try {
     return null;
   });
   await page.click('.cat-btn[title^="Government"]');
-  const govListed = await page.isVisible('.build-item:has-text("Governor\'s House")');
-  if (govListed) await page.click('.build-item:has-text("Governor\'s House")');
+  const govListed = await page.isVisible('.build-item[data-key="governor_house"]');
+  if (govListed) await page.click('.build-item[data-key="governor_house"]');
   const govTool = await page.evaluate(() => window.colonia.input.tool);
   if (govAt && govTool === 'governor_house') {
     const p = await toScreen(govAt.x + 1, govAt.y + 1);
@@ -877,6 +884,17 @@ try {
     return b ? { type: b.type, x: b.x, y: b.y } : null;
   });
   check('the Governor\'s House is in the build menu and can be placed with no road', govListed && govTool === 'governor_house' && govPlaced && govPlaced.x === govAt.x && govPlaced.y === govAt.y && errors.length === 0, JSON.stringify({ govListed, govTool, govAt, govPlaced }));
+  // Its panel's title: the Latin name with the English after it.
+  const govHead = await page.evaluate(() => {
+    const app = window.colonia;
+    const b = [...app.game.buildings.values()].find((x) => x.def.kind === 'residence');
+    if (!b) return null;
+    app.ui.info.showBuilding(b.id);
+    const head = document.querySelector('#info-panel h3')?.textContent || '';
+    app.ui.info.close();
+    return head;
+  });
+  check('a building\'s panel title shows its Latin name with the English after it', govHead === 'Praetorium (Governor\'s House)', JSON.stringify(govHead));
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Imperial")');
   const govText = await page.textContent('.governor-card');
@@ -992,12 +1010,16 @@ try {
     JSON.stringify({ sickHome, healthTipShown, healthLegend, healthReport: healthReport.slice(0, 200), errors }));
   await page.selectOption('.hud-select', 'none');
   const legendGone = await page.isHidden('#overlay-legend');
+  // Wheat in store, so the goods table has a row to show however young the
+  // city is (the check used to find "Wheat" in a Wheat Farm's trouble line,
+  // and the young city had made and stored nothing yet).
+  await page.evaluate(() => window.colonia.ui.console.run('give wheat 400'));
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Production")');
-  const prod = await page.evaluate(() => ({ rows: document.querySelectorAll('.modal table.tbl tr').length, text: document.querySelector('.modal-body')?.textContent || '' }));
+  const prod = await page.evaluate(() => ({ rows: document.querySelectorAll('.modal table.tbl tr').length, text: document.querySelector('.modal-body')?.textContent || '', goods: [...document.querySelectorAll('.modal table.tbl tr td:first-child')].map((td) => td.textContent) }));
   await page.click('.tab:has-text("Overview")');
   const charts = await page.evaluate(() => document.querySelectorAll('.modal canvas.trend').length);
-  check('Production advisor lists goods and bottlenecks; the Overview draws three trend charts', legendGone && prod.rows > 1 && /Bottlenecks/.test(prod.text) && /Wheat/.test(prod.text) && charts === 3, JSON.stringify({ legendGone, rows: prod.rows, charts }));
+  check('Production advisor lists goods and bottlenecks; the Overview draws three trend charts', legendGone && prod.rows > 1 && /Bottlenecks/.test(prod.text) && prod.goods.some((t) => /Wheat/.test(t)) && charts === 3, JSON.stringify({ legendGone, rows: prod.rows, charts, goods: prod.goods.slice(0, 8) }));
   // 5a4. The Health, Education and Entertainment advisors open and show their
   //      numbers: a row per kind of building with figures, an advice line,
   //      and staffed counts that match the city; the Overview's health and
@@ -1238,6 +1260,7 @@ try {
   let archPlaced = null;
   let archListed = false;
   let archTool = null;
+  let archHover = null;
   if (archAt) {
     await page.waitForTimeout(150);
     await page.keyboard.press('r');
@@ -1251,13 +1274,19 @@ try {
     // (Another category first: a second click on the open one folds its list away.)
     await page.click('.cat-btn[title^="Roads"]');
     await page.click('.cat-btn[title^="Government"]');
-    archListed = await page.isVisible('.build-item:has-text("Triumphal Arch")');
+    archListed = await page.isVisible('.build-item[data-key="triumphal_arch"]');
     if (archListed) {
-      // Pointing at it first: its description fills the box under the list,
-      // which shifts the list's last items before the click lands.
-      await page.hover('.build-item:has-text("Triumphal Arch")');
-      await page.waitForTimeout(100);
-      await page.click('.build-item:has-text("Triumphal Arch")');
+      // Pointing at it fills the box under the list with its description.
+      // That box used to grow with the text and shrink the list from below,
+      // so the arch (the list's last item, scrolled to the bottom) slid
+      // under the box while the pointer stayed put, and the click went to
+      // the box: no tool. Point near its lower edge, as a player might, and
+      // the arch must still be what is under the pointer.
+      const arch = await page.evaluate(() => { const el = document.querySelector('.build-item[data-key="triumphal_arch"]'); el.scrollIntoView({ block: 'end' }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom - 3, top: Math.round(r.top) }; });
+      await page.mouse.move(arch.x, arch.y);
+      await page.waitForTimeout(150);
+      archHover = await page.evaluate((a) => { const e = document.elementFromPoint(a.x, a.y); return { under: e?.closest('[data-key]')?.dataset.key || e?.closest('[id]')?.id || null, top: Math.round(document.querySelector('.build-item[data-key="triumphal_arch"]').getBoundingClientRect().top), was: a.top, info: document.querySelector('#tool-info h4')?.textContent }; }, arch);
+      await page.mouse.click(arch.x, arch.y);
     }
     const p = await toScreen(archAt.x + 2, archAt.y);
     await page.mouse.move(p.x - 4, p.y);
@@ -1270,7 +1299,7 @@ try {
     archPlaced = await page.evaluate(({ x, y }) => {
       const g = window.colonia.game;
       const b = [...g.buildings.values()].find((o) => o.type === 'triumphal_arch');
-      return b ? { x: b.x, y: b.y, axis: b.axis, road: g.map.road[g.map.idx(x + 2, y)], listed: [...document.querySelectorAll('.build-item')].some((e) => /Triumphal Arch/.test(e.textContent)) } : null;
+      return b ? { x: b.x, y: b.y, axis: b.axis, road: g.map.road[g.map.idx(x + 2, y)], listed: !!document.querySelector('.build-item[data-key="triumphal_arch"]') } : null;
     }, archAt);
   }
   // On failure: the road under the patch and the arch's plan there.
@@ -1281,6 +1310,7 @@ try {
     const rows = [-1, 0, 1].map((j) => [-1, 0, 1, 2, 3, 4, 5].map((i) => m.road[m.idx(s.x + i, s.y + j)]).join(''));
     return { rows, tool: app.input.tool, earned: app.game.city.archesEarned, modal: app.ui.modalKind, toasts: [...document.querySelectorAll('.toast')].slice(0, 3).map((e) => e.textContent) };
   }, archAt);
+  check('pointing at the last build item shows it in the box below the list, and it stays under the pointer for the click', !!archHover && archHover.under === 'triumphal_arch' && archHover.top === archHover.was && /^Fornix/.test(archHover.info || ''), JSON.stringify(archHover));
   check('an arch earned is in the build menu and goes across a road, which runs on under it; then it leaves the menu', archListed && !!archPlaced && archPlaced.x === archAt.x + 1 && archPlaced.y === archAt.y - 1 && archPlaced.axis === 0 && archPlaced.road === 1 && !archPlaced.listed && errors.length === 0, JSON.stringify({ archAt, archListed, archTool, archPlaced, archWhy }));
 
   // 5c. The world around the city: smooth zoom, night lights, weather, settings.
@@ -1751,7 +1781,53 @@ try {
     if (shots) await phone.screenshot({ path: path.join(shots, `smoke-phone-${tab}.png`) });
     await phone.keyboard.press('Escape');
   }
+  // Every build menu list, and the inspect panel of the buildings with the
+  // longest names, in the same wide font: the Latin name, the English under
+  // it and the cost stay inside the list, and a title wraps rather than
+  // pushing the panel sideways.
+  const phoneNames = await phone.evaluate(() => {
+    const app = window.colonia;
+    const sb = app.ui.sidebar;
+    const list = document.getElementById('build-list');
+    const over = [];
+    const was = sb.category;
+    for (const cat of [...document.querySelectorAll('.cat-btn')].map((b) => b.title)) {
+      document.querySelector(`.cat-btn[title="${cat}"]`).click(); // (a click renders the buttons anew)
+      list.classList.remove('collapsed');
+      const right = list.getBoundingClientRect().right;
+      for (const item of list.querySelectorAll('.build-item')) {
+        const r = item.getBoundingClientRect();
+        const cost = item.querySelector('.cost').getBoundingClientRect();
+        if (r.right > right + 0.5 || cost.right > r.right + 0.5 || item.scrollWidth > item.clientWidth) over.push(`${cat}:${item.dataset.key}`);
+      }
+    }
+    sb.category = was;
+    sb.renderCategories();
+    sb.renderList();
+    // The longest titles, in a building's panel (the demo city's warehouse,
+    // its title row swapped for each): inside the panel, and on two lines at
+    // most, the English one wrapping under the Latin as a whole.
+    const panel = document.getElementById('info-panel');
+    const heads = [];
+    const wh = [...app.game.buildings.values()].find((x) => x.type === 'warehouse');
+    if (wh) {
+      app.ui.info.showBuilding(wh.id);
+      const title = (name, en) => {
+        panel.querySelector('.panel-head').replaceWith(app.ui.info.head(name, '3×3', en));
+        return panel.querySelector('h3');
+      };
+      const oneLine = title('Forum', 'Forum').getBoundingClientRect().height;
+      for (const [name, en] of [['Templum Mercurii', 'Grand Temple of Mercury'], ['Officina Sagittaria', 'Fletcher'], ['Taberna Vestiaria', 'Clothing Maker'], ['Ludus Gladiatorius', 'Gladiator School'], ['Praetorium Maius', "Governor's Villa"], ['Collegium Fabrum', "Engineer's Post"], ['Castellum Aquae', 'Reservoir']]) {
+        const h3 = title(name, en);
+        const r = h3.getBoundingClientRect();
+        heads.push({ name, lines: Math.round(r.height / oneLine), fits: panel.scrollWidth <= panel.clientWidth && r.right <= panel.getBoundingClientRect().right });
+      }
+      app.ui.info.close();
+    }
+    return { over, items: list.querySelectorAll('.build-item').length, heads };
+  });
   await wideFont.evaluate((el) => el.remove());
+  check('phone: long Latin names fit every build menu list, and in two lines at most the inspect panel\'s title', phoneNames.over.length === 0 && phoneNames.heads.length === 7 && phoneNames.heads.every((x) => x.fits && x.lines <= 2), JSON.stringify(phoneNames));
   check('phone: the Health, Education and Entertainment advisors open and fit the width', phoneTabs.every((t) => t.rows >= 3 && t.scrollW <= t.w && t.page <= 390 && t.tabsH < 120), JSON.stringify(phoneTabs));
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
   // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing

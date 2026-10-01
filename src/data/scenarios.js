@@ -71,8 +71,8 @@ import { GOD_KEYS } from './gods.js';
  * linen was the finest in the Mediterranean (Alexandria sells the most), and
  * Hispania's coast round Tarraco wove linen of its own; rich Capua and
  * Corinthus buy clothing. A mission whose homes can reach the Insula, where
- * clothing is first needed, also unlocks the Flax Farm, Linen Maker and
- * Clothing Maker (TIER4 on), so linen bought in only saves a flax field.
+ * clothing is first needed, also unlocks the Linarium, Textrinum and
+ * Taberna Vestiaria (TIER4 on), so linen bought in only saves a flax field.
  */
 export const TRADE_PARTNERS = Object.freeze({
   tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: at(1.25, 41.12), color: '#b8573a', sells: { timber: 1200, olives: 1000, linen: 600 }, buys: { wheat: 1500, pottery: 800 } },
@@ -176,10 +176,10 @@ export const SCENARIOS = Object.freeze([
     rank: 0, // Citizen (data/ranks.js)
     unlocks: BASIC, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
-      'Build Housing Plots next to the Imperial Road (or any road connected to it). Settlers arrive from the map edge.',
-      'Place a Well within 2 tiles of homes so tents can become Family Tents.',
-      'A Wheat Farm on meadow (the yellow-green land) feeds a Granary; a Market sends vendors to sell food to homes.',
-      'A Prefecture and an Engineer\'s Post keep fires and collapses away. Put them near your homes.',
+      'Mark housing plots (Area) next to the Imperial road, or any road (Via) joined to it. Settlers arrive from the map edge.',
+      'Place a Puteus (Well) within 2 tiles of homes so tents can become Family Tents.',
+      'A Seges (Wheat Farm) on meadow, the yellow-green land, feeds a Granarium (Granary); a Macellum (Market) sends vendors to sell food to homes.',
+      'An Excubitorium (Prefecture) and a Collegium Fabrum (Engineer\'s Post) keep fires and collapses away. Put them near your homes.',
       'The Forum sends tax collectors. Homes they have not visited pay nothing!',
       `Culture here comes from the temples: every home a priest visits counts. Peace grows a point a month while the city is content (a mood of ${CONFIG.PEACE_MOOD} or more): fed, housed, at work and not overtaxed.`,
       'Click any building for details. Homes tell you exactly what they need to grow.',
@@ -196,9 +196,9 @@ export const SCENARIOS = Object.freeze([
     rank: 1, // Clerk (data/ranks.js)
     unlocks: TIER2, partners: [], requests: false, crime: false, disease: false, majorWrath: false,
     hints: [
-      'A Reservoir placed next to water fills up. Fountains inside its piped area (10 tiles) supply homes within 4 tiles.',
-      'Aqueducts connect a full reservoir to other reservoirs farther inland.',
-      'Cottages need a fountain; above them homes want entertainment, then a school. A Theater needs actors: build an Actor Troupe nearby.',
+      'A Castellum Aquae (Reservoir) placed next to water fills up. A Lacus (Fountain) inside its piped area (10 tiles) supplies homes within 4 tiles.',
+      'An Aquaeductus (Aqueduct) connects a full reservoir to other reservoirs farther inland.',
+      'Cottages need a fountain; above them homes want entertainment, then a school. A Theatrum (Theater) needs actors: build a Grex (Actor Troupe) nearby.',
       'Prosperity grows with better homes, a profit, work for everyone and fair wages.',
       'Work is still scarce here: about 450 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
     ],
@@ -213,11 +213,11 @@ export const SCENARIOS = Object.freeze([
     rank: 2, // Engineer (data/ranks.js)
     unlocks: TIER3, partners: ['tarraco', 'aquileia'], requests: true,
     hints: [
-      'Clay Pits must be near water. Potters turn clay into pottery, which Merchant Houses and every home above them need, with Thermae nearby.',
-      'Warehouses store goods. Caravans only trade with warehouses.',
+      'A Cretifodina (Clay Pit) must be near water. A Figlina (Potter) turns clay into pottery, which Merchant Houses and every home above them need, with Balneae (Baths) nearby.',
+      'A Horreum (Warehouse) stores goods. Caravans only trade with warehouses.',
       'Open trade routes in the Trade advisor, then mark goods for import or export.',
       'Trade is work: what your partners buy keeps farms, clay pits and potters staffed. Let the town grow as its jobs do.',
-      'A Domus wants more shows than a theater gives: add an Amphitheater, with gladiators from a Gladiator School (and actors too, for its best shows).',
+      'A Domus wants more shows than a theater gives: add an Amphitheatrum (Amphitheater), with gladiators from a Ludus Gladiatorius (Gladiator School), and actors too for its best shows.',
     ],
   },
   {
@@ -232,11 +232,11 @@ export const SCENARIOS = Object.freeze([
     military: { first: 60, interval: [30, 40], base: 4 },
     distantBattles: [{ year: 3, city: 'placentia', enemy: 16 }],
     hints: [
-      'Bridges must start and end on land and run straight across water.',
-      'Massilia trades by sea: build a Dock on the river bank. Tarraco and Lugdunum send caravans along the Imperial road.',
-      'Apartment Houses need furniture (a Carpenter, from timber); Tenements, the first big homes, also need oil, a barber, and both a school and a library.',
-      'Insulae also need clothing: a Flax Farm on meadow, a Linen Maker and a Clothing Maker, or linen bought from Tarraco for the Clothing Maker.',
-      'Raiders roam these hills. A Barracks trains soldiers for your forts: legionaries need weapons (Weaponsmith), archers need arrows (Fletcher, from timber).',
+      'A Pons (Bridge) must start and end on land and run straight across water.',
+      'Massilia trades by sea: build an Emporium (Trade Dock) on the river bank. Tarraco and Lugdunum send caravans along the Imperial road.',
+      'Apartment Houses need furniture (an Officina Lignaria, the carpenter, from timber); Tenements, the first big homes, also need oil, a barber, and both a school and a library.',
+      'Insulae also need clothing: a Linarium (Flax Field) on meadow, a Textrinum (Linen Weaver) and a Taberna Vestiaria (Clothing Maker), or linen bought from Tarraco for the Taberna Vestiaria.',
+      'Raiders roam these hills. A Tirocinium (Barracks) trains soldiers for your forts: legionaries need weapons (Fabrica, the weaponsmith), archers need arrows (Officina Sagittaria, the fletcher, from timber and iron).',
     ],
   },
   {
@@ -252,9 +252,9 @@ export const SCENARIOS = Object.freeze([
     distantBattles: [{ year: 3, city: 'saguntum', enemy: 28 }],
     hints: [
       'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity.',
-      'From the Insula up homes need clothing. Alexandria\'s ships bring Egyptian linen for a Clothing Maker, and Corinthus buys clothing.',
+      'From the Insula up homes need clothing. Alexandria\'s ships bring Egyptian linen for a Taberna Vestiaria (Clothing Maker), and Corinthus buys clothing.',
       'The Emperor\'s favor drifts back toward 50: his requests, the yearly tribute and gifts raise it.',
-      'Cavalry needs horses. Breed them at a Horse Ranch on meadow (the herd grows over time), or import them from Cirta by sea.',
+      'Cavalry needs horses. Breed them at an Equaria (Horse Ranch) on meadow, where the herd grows over time, or import them from Cirta by sea.',
     ],
   },
   {
@@ -282,9 +282,9 @@ export const SCENARIOS = Object.freeze([
     military: { first: 36, interval: [14, 22], base: 8 },
     distantBattles: [{ year: 3, city: 'messana', enemy: 40 }, { year: 9, city: 'placentia', enemy: 52 }],
     hints: [
-      'Palatia need four gods, a Medicus and a Valetudinarium, wine from two sources (a staffed winery and an import route) and plenty of shows.',
-      'A Senate adds to culture and prosperity. Expect regular raids: walls with gates, towers and a mixed army keep the capital safe.',
-      'The Hippodrome (one per city, 15 x 5 tiles) races chariots from a Chariot Maker: its charioteers bring 30 entertainment to the homes they pass, and every home gains a little more.',
+      'Palatia need four gods, a Medicus (Physician) and a Valetudinarium (Hospital), wine from two sources (a staffed winery and an import route) and plenty of shows.',
+      'A Curia (Senate House) adds to culture and prosperity. Expect regular raids: walls with gates, towers and a mixed army keep the capital safe.',
+      'The Circus (Hippodrome, one per city, 15 x 5 tiles) races chariots from a Factio (Chariot Stable): its charioteers bring 30 entertainment to the homes they pass, and every home gains a little more.',
     ],
   },
 ]);

@@ -111,7 +111,7 @@ test('roads: a building with workers and no road says so once, after 8 days', ()
   game.runDays(1);
   const msgs = messagesAbout(game, pre);
   assert.equal(msgs.length, 1);
-  assert.equal(msgs[0].text, `The Prefecture at ${pre.x},${pre.y} has no road touching it: it gets no workers and does nothing.`);
+  assert.equal(msgs[0].text, `The Excubitorium at ${pre.x},${pre.y} has no road touching it: it gets no workers and does nothing.`);
   assert.equal(msgs[0].level, 'warn');
   assert.deepEqual([msgs[0].x, msgs[0].y], [pre.x, pre.y], 'click it to go there');
   // Never again, even after a road comes and goes.

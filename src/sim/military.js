@@ -31,6 +31,7 @@
 
 import { CONFIG } from '../config.js';
 import { UNIT_TYPES, FORT_CAPACITY, TRAIN_DAYS } from '../data/units.js';
+import { TOOLS } from '../data/buildings.js';
 import { RECRUIT_COST, RECRUIT_SOURCE, GOODS } from '../data/goods.js';
 import { Terrain, Road, Wall } from '../world/map.js';
 import { MinHeap } from '../world/pathfinding.js';
@@ -603,7 +604,7 @@ function damageWall(game, i, dmg, legion = false) {
   map.wall[i] = Wall.NONE;
   if (!map.road[i]) {
     map.rubble[i] = 1;
-    recordRuin(game, [i], 'Wall', legion ? 'legionWall' : 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
+    recordRuin(game, [i], TOOLS.wall.name, legion ? 'legionWall' : 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
   }
   map.touch();
   const now = game.time.totalDays;

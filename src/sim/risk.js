@@ -24,7 +24,7 @@ export function buildingLabel(b) {
   return b.house ? HOUSE_TIERS[b.house.tier].name : b.def.name;
 }
 
-/** "a Prefecture" / "an Archer Fort" */
+/** "a Horreum" / "an Excubitorium": the Latin names start with a vowel as often as not. */
 export function withArticle(label) {
   return `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label}`;
 }

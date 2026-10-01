@@ -8,19 +8,17 @@
  */
 
 import { CONFIG } from '../config.js';
-import { BUILDINGS, PERFORMER_NAMES, VENUE_SUPPLIERS } from '../data/buildings.js';
+import { BUILDINGS, PERFORMER_NAMES, VENUE_SUPPLIERS, pluralName } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
-import { COVERAGE_WORDS, CITY_HEALTH_VERDICTS, CITY_HEALTH_WARN, PLURAL_NAMES, SHOW_NAMES } from '../data/advisors.js';
+import { COVERAGE_WORDS, CITY_HEALTH_VERDICTS, CITY_HEALTH_WARN, SHOW_NAMES } from '../data/advisors.js';
 import { coverageBand, venueSlots, TRAINER_KINDS } from '../sim/coverage.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const homesText = (n) => plural(n, 'home');
 const nameOf = (type) => BUILDINGS[type].name;
 
-/** "Libraries", "Theaters" ... */
-export function pluralName(type) {
-  return PLURAL_NAMES[type] || `${nameOf(type)}s`;
-}
+/** "Bibliothecae", "Theatra" ... (the Latin plurals live with the names, data/buildings.js). */
+export { pluralName };
 
 /** "Good (72%)", or "No one needs it yet" when nobody does (pct null). */
 export function coverageText(pct) {
@@ -102,8 +100,8 @@ export function educationAdviceText(a) {
 }
 
 /**
- * Performers and who trains them: "actors (Actor Troupe) or gladiators
- * (Gladiator School)", for the given performer types (default: every kind
+ * Performers and who trains them: "actors (Grex) or gladiators
+ * (Ludus Gladiatorius)", for the given performer types (default: every kind
  * the venue takes).
  */
 export function performersText(venue, perfs = VENUE_SUPPLIERS[venue]) {
@@ -133,8 +131,8 @@ export function entertainmentAdviceText(a) {
 
 /**
  * A venue kind short of performers ({ type, perfs, silent }), in a sentence:
- * "Theaters stand without shows: they need actors (Actor Troupe)." or
- * "Amphitheaters lack plays: they need actors (Actor Troupe); a venue with
+ * "Theatra stand without shows: they need actors (Grex)." or
+ * "Amphitheatra lack plays: they need actors (Grex); a venue with
  * both kinds of show is worth more."
  */
 export function showsText(s) {

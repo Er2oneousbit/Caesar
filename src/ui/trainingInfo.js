@@ -7,6 +7,7 @@
  * ----------------------------------------------------------------------------
  */
 
+import { BUILDINGS } from '../data/buildings.js';
 import { trainsNow, trainedOf, academyFor, portusFor } from '../sim/training.js';
 import { waterOf } from '../sim/navy.js';
 
@@ -23,7 +24,7 @@ export function trainedText(game, post) {
 export function trainingNote(game, post) {
   const fort = post.def.kind === 'fort';
   const school = fort ? academyFor(game, post) : portusFor(game, post);
-  const name = fort ? 'Military Academy' : 'Portus';
+  const name = BUILDINGS[fort ? 'military_academy' : 'portus'].name;
   if (school) {
     return fort
       ? `Recruits train at the ${name} at ${school.x}, ${school.y} on their way here, and men at rest go over one at a time.`
@@ -33,8 +34,8 @@ export function trainingNote(game, post) {
   const any = [...game.buildings.values()].some((b) => b.def.kind === kind && (fort || waterOf(game, b) === waterOf(game, post)));
   if (any) return `No ${name}${fort ? '' : ' on this water'} is fully staffed: only one with every worker trains anyone.`;
   return fort
-    ? 'Build a Military Academy (fully staffed) to train these men: trained legionaries holding their ground shrug off missiles.'
-    : 'Build a Portus on this water (fully staffed) to train these crews: they row faster and ram harder.';
+    ? 'Build a Campus (Military Academy), fully staffed, to train these men: trained legionaries holding their ground shrug off missiles.'
+    : 'Build a Portus (Training Harbor) on this water, fully staffed, to train these crews: they row faster and ram harder.';
 }
 
 /** Status line for a Military Academy or a Portus (buildingStatus in ui/infoPanel.js), or null. */
@@ -44,7 +45,7 @@ export function schoolStatus(game, b) {
   if (!trainsNow(game, b)) return { level: 'warn', text: `Trains nobody until fully staffed: ${b.workers} of ${need} workers.` };
   if (b.def.kind === 'portus') {
     const station = [...game.buildings.values()].some((x) => x.def.kind === 'station' && waterOf(game, x) === waterOf(game, b));
-    if (!station) return { level: 'warn', text: 'No Naval Station on this water: its crews train elsewhere, or not at all.' };
+    if (!station) return { level: 'warn', text: 'No Statio (Naval Station) on this water: its crews train elsewhere, or not at all.' };
     return { level: 'good', text: 'Fully staffed: crews on this water train here.' };
   }
   return { level: 'good', text: 'Fully staffed: soldiers of the forts nearest it train here.' };

@@ -38,7 +38,7 @@ export function legionText(game) {
 /** The call for troops in lines: [{ text, cls }]. */
 export function battleLines(game, s) {
   const out = [];
-  const sea = s.sea ? (s.fleet ? ' It lies by the sea: Naval Stations switched to Empire service send their squadrons too.' : ' It lies by the sea, but no ship of yours can reach the sea from here.') : '';
+  const sea = s.sea ? (s.fleet ? ' It lies by the sea: naval stations switched to Empire service send their squadrons too.' : ' It lies by the sea, but no ship of yours can reach the sea from here.') : '';
   if (s.phase === 'pending') {
     out.push({ text: `${s.name} is threatened by ${s.words} of ${s.enemyName} (strength about ${s.enemy}). The battle is in ${plural(s.monthsLeft, 'month')}.${sea}` });
     if (s.sent) {
@@ -48,7 +48,7 @@ export function battleLines(game, s) {
     } else {
       out.push({ text: `Switch forts to Empire service below, then send them: every soldier of those forts goes, and they need about ${plural(s.march, 'month')} to get there (troops sent late march faster until they catch up). Ready now: strength ${s.ready.strength} (${plural(s.ready.men, 'soldier')}${s.ready.ships ? `, ${plural(s.ready.ships, 'liburnian')}` : ''}).`, cls: 'muted' });
       if (!s.inTime) out.push({ text: 'Sent now, they would come too late: the battle is too near.', cls: 'status warn' });
-      out.push({ text: `A legionary counts 2 (3 trained at a Military Academy), an archer or cavalryman 1 (2 trained), a liburnian 4 (6 trained). Win: +${CONFIG.BATTLE_FAVOR.won} favor and a triumphal arch. Too weak: ${CONFIG.BATTLE_FAVOR.weak} and all are lost. Too late: ${CONFIG.BATTLE_FAVOR.late}. Nobody sent: ${CONFIG.BATTLE_FAVOR.none}.`, cls: 'muted' });
+      out.push({ text: `A legionary counts 2 (3 trained at a Campus), an archer or cavalryman 1 (2 trained), a liburnian 4 (6 trained). Win: +${CONFIG.BATTLE_FAVOR.won} favor and a triumphal arch. Too weak: ${CONFIG.BATTLE_FAVOR.weak} and all are lost. Too late: ${CONFIG.BATTLE_FAVOR.late}. Nobody sent: ${CONFIG.BATTLE_FAVOR.none}.`, cls: 'muted' });
     }
   } else if (s.phase === 'returning') {
     out.push({ text: `${s.outcome === 'won' ? `Victory at ${s.name}!` : `Your troops came too late to ${s.name}.`} They are on their way home: ${plural(Math.max(1, s.homeIn), 'month')}.`, cls: s.outcome === 'won' ? 'status good' : 'status warn' });

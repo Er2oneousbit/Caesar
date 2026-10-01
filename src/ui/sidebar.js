@@ -8,11 +8,19 @@
  */
 
 import { h, mount, fmt } from './dom.js';
-import { CATEGORIES, BUILDINGS, TOOLS, LABOR_CATEGORIES, buildingsInCategory } from '../data/buildings.js';
+import { CATEGORIES, BUILDINGS, TOOLS, LABOR_CATEGORIES, buildingsInCategory, fullName } from '../data/buildings.js';
 import { iconCanvas } from './icons.js';
 import { Minimap } from '../render/minimap.js';
 import { planNoRoadWarning } from '../sim/construction.js';
 import { archesToBuild } from '../sim/battle.js';
+
+/**
+ * The English name under the Latin one (Castra, then "Legion Fort"), smaller
+ * and muted: none when they are the same word (Forum) or for Clear Land.
+ */
+function englishName(def) {
+  return def.en && def.en !== def.name ? h('span', { class: 'en' }, def.en) : null;
+}
 
 export class Sidebar {
   constructor(app, root) {
@@ -89,11 +97,12 @@ export class Sidebar {
         const cost = def.kind === 'arch' ? `Free (${this.archSig})` : def.cost ? `${def.cost} Dn` : '';
         return h('button', {
           class: `build-item${current === key ? ' active' : ''}${unlocked ? '' : ' locked'}`,
-          title: unlocked ? def.desc : 'Not available in this scenario',
+          dataset: { key }, // for the smoke test, which should not depend on the wording
+          title: `${fullName(def)}\n${unlocked ? def.desc : 'Not available in this scenario'}`,
           onclick: () => { if (unlocked) this.app.ui.selectTool(key); },
           onmouseenter: () => { if (!this.app.input?.tool) this.showToolInfo(key, true); },
           onmouseleave: () => { if (!this.app.input?.tool) this.showToolInfo(null); },
-        }, iconCanvas(key), h('span', { class: 'nm' }, def.name, unlocked ? null : h('div', { class: 'muted', style: { fontSize: '11px' } }, 'Locked')), h('span', { class: 'cost' }, cost));
+        }, iconCanvas(key), h('span', { class: 'nm' }, def.name, englishName(def), unlocked ? null : h('div', { class: 'muted', style: { fontSize: '11px' } }, 'Locked')), h('span', { class: 'cost' }, cost));
       }));
   }
 
@@ -114,10 +123,12 @@ export class Sidebar {
     if (def.workers) facts.push(`${def.workers} workers (${LABOR_CATEGORIES[def.labor] || 'Industry'})`);
     this.planEl = h('div', {});
     mount(this.infoEl,
-      h('h4', {}, def.name, preview ? '' : ''),
+      h('h4', {}, def.name, englishName(def)),
       facts.length ? h('div', { class: 'muted' }, facts.join(' · ')) : null,
-      h('div', { style: { marginTop: '3px' } }, def.desc),
+      // The plan (cost, why it cannot go here, warnings) above the
+      // description, so the fixed-height box never scrolls it out of sight.
       this.planEl,
+      h('div', { style: { marginTop: '3px' } }, def.desc),
     );
   }
 

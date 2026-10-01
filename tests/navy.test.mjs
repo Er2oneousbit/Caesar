@@ -254,7 +254,7 @@ test('navalia: it needs timber, iron and linen, and a staffed station with room,
   station.efficiency = 0;
   navalia.stock.timber = 300; navalia.stock.iron = 100; navalia.stock.linen = 100;
   updateNavalia(game, navalia);
-  assert.match(navalia.blocked, /No staffed Naval Station/);
+  assert.match(navalia.blocked, /No staffed Statio \(Naval Station\)/);
 });
 
 test('navalia: carts bring its timber only while a station has an empty berth; then the workshops get it', () => {
@@ -280,7 +280,7 @@ test('stations: a squadron of four berths beside its station; the fifth ship is 
   const ships = squadron(game, station.id);
   assert.equal(ships.length, STATION_CAPACITY);
   assert.equal(squadronCounts(game).get(station.id), STATION_CAPACITY);
-  assert.match(navalia.blocked, /No staffed Naval Station on this water has an empty berth/);
+  assert.match(navalia.blocked, /No staffed Statio \(Naval Station\) on this water has an empty berth/);
   const spots = stationSpots(game, station);
   for (const u of ships) {
     assert.equal(u.state, 'berthed', `${u.id} at its berth`);

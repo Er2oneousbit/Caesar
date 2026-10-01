@@ -160,7 +160,7 @@ test('the army marches on the residence and breaks it', () => {
   launchLegion(game, 6);
   for (let d = 0; d < 80 && game.buildings.has(house.id); d++) days(game, 1);
   assert.ok(!game.buildings.has(house.id), 'the residence fell');
-  assert.ok(said(game, /Caesar's legions have (set|torn down) a Governor's House/).length >= 1, 'in Caesar\'s name, not the raiders\'');
+  assert.ok(said(game, /Caesar's legions have (set|torn down) a Praetorium/).length >= 1, 'in Caesar\'s name, not the raiders\'');
 });
 
 // ---------------------------------------------------------------------------

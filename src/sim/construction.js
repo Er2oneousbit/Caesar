@@ -177,7 +177,7 @@ export function checkBuilding(game, type, x, y) {
     if (!yard) out.warnings.push('No shipyard on this water yet: the wharf needs a boat from one');
   }
   if (def.venue === 'hippodrome' && def.kind === 'venue' && !countOf(game, 'chariot_maker')) {
-    out.warnings.push('No Chariot Maker yet: build one, connected by road, to start the races');
+    out.warnings.push('No Factio (Chariot Stable) yet: build one, connected by road, to start the races');
   }
   return out;
 }
@@ -455,7 +455,7 @@ export function checkRoadblock(game, x, y) {
   if (!map.inBounds(x, y)) return fail('Outside the map');
   const i = map.idx(x, y);
   if (map.roadblock[i]) return fail('There is a roadblock here already');
-  if (!map.road[i]) return fail('Roadblocks go on a road');
+  if (!map.road[i]) return fail('A Claustra (Roadblock) goes on a road');
   if (map.road[i] === Road.BRIDGE) return fail('Not on a bridge');
   if (map.wall[i]) return fail('Not in a gate');
   if (map.aqueduct[i]) return fail('Not under an aqueduct');
@@ -524,7 +524,7 @@ function planBridge(game, x0, y0, x1, y1) {
     const endpoint = k === 0 || k === tiles.length - 1;
     if (endpoint) {
       const land = t !== Terrain.WATER && t !== Terrain.ROCK && !map.building[i] && !map.wall[i];
-      if (!land) { it.ok = false; it.reason = 'Bridges must start and end on open land'; }
+      if (!land) { it.ok = false; it.reason = 'A Pons (Bridge) must start and end on open land'; }
       else if (!map.road[i]) { it.cost = TOOLS.road.cost; cost += it.cost; count++; }
     } else {
       if (t !== Terrain.WATER || map.building[i]) { it.ok = false; it.reason = 'A bridge can only span open water'; }

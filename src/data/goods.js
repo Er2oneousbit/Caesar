@@ -74,7 +74,7 @@ export const LAND_FOODS = Object.freeze(['wheat', 'vegetables', 'fruit', 'meat']
 export const RECRUIT_COST = Object.freeze({ legionary: { weapons: 50 }, archer: { arrows: 50 }, cavalry: { horses: 100 } });
 
 /** Where each military input comes from (barracks status messages, help). */
-export const RECRUIT_SOURCE = Object.freeze({ weapons: 'Weaponsmith', arrows: 'Fletcher', horses: 'Horse Ranch' });
+export const RECRUIT_SOURCE = Object.freeze({ weapons: 'Fabrica', arrows: 'Officina Sagittaria', horses: 'Equaria' });
 
 /** "3 horses" style display for goods with a unit size, units otherwise. */
 export function formatAmount(good, units) {

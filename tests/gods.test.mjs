@@ -141,7 +141,7 @@ test('Mercury blesses the emptiest working granary with 600 of each food, as far
   assert.equal(sumStock(A), 1200, 'the others are left alone');
   assert.equal(sumStock(C), 0);
   const m = game.messages[0];
-  assert.match(m.text, /^Mercury is pleased! .*1900 units of food.*Granary at/);
+  assert.match(m.text, /^Mercury is pleased! .*1900 units of food.*Granarium at/);
   assert.deepEqual([m.x, m.y], [B.x, B.y], 'the message points at the granary');
   assert.equal(game.city.goodsFlow.meat.imported, 100, 'brought from afar: logged as imported');
 });
@@ -179,7 +179,7 @@ test('Mercury\'s wrath: the fullest storehouse loses 1600 units; angered again, 
   act(game, 'mercury', 'wrath');
   assert.deepEqual({ ...G.stock }, { wheat: 0, vegetables: 200, fruit: 400, meat: 0, fish: 0 }, 'wheat first, then vegetables');
   assert.equal(sumStock(W), 2000, 'the warehouse is spared');
-  assert.match(game.messages[0].text, /^Mercury is angry! 1600 units of goods vanish from the Granary at/);
+  assert.match(game.messages[0].text, /^Mercury is angry! 1600 units of goods vanish from the Granarium at/);
   assert.equal(game.city.gods.mercury.angered, true);
   assert.ok(game.city.gods.mercury.mood > CONFIG.GOD_WRATH_MOOD, 'the wrath spends some anger (+12)');
 
@@ -192,7 +192,7 @@ test('Mercury\'s wrath: the fullest storehouse loses 1600 units; angered again, 
   assert.ok(game.fires.has(game.map.idx(W.x, W.y)), 'a burning ruin, which can spread');
   assert.ok(game.buildings.has(G.id));
   const m = game.messages[0];
-  assert.match(m.text, /^Mercury is angry! Angered again, he sets the Warehouse at .* on fire/);
+  assert.match(m.text, /^Mercury is angry! Angered again, he sets the Horreum at .* on fire/);
   assert.deepEqual([m.x, m.y], [W.x, W.y]);
   assert.equal(game.messages.filter((x) => /burned down|Fire!/.test(x.text)).length, 0, 'one message, not a second "Fire!" one');
 });

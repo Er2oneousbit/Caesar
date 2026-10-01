@@ -150,7 +150,7 @@ export function briefing(app, s, onBegin = null) {
 // ---------------------------------------------------------------------------
 
 /** What the Sea raids switch does (sandbox setup and Settings). */
-const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids come by ship and land near the city; raider ships throw fire pots at boats and buildings by the shore. A Navalia and Naval Stations build and berth a fleet of liburnians to fight them. Off: every raid comes by land.`;
+const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids come by ship and land near the city; raider ships throw fire pots at boats and buildings by the shore. A Navalia and Stationes (naval stations) build and berth a fleet of liburnians to fight them. Off: every raid comes by land.`;
 
 export function sandboxMenu(app) {
   const state = {

@@ -44,7 +44,7 @@ export function riskRates(b) {
 export function updateRisk(game, b) {
   const { fire, damage: dmg } = riskRates(b);
   const { rng } = game;
-  const mult = game.difficulty.risk;
+  const mult = game.difficulty.risk * CONFIG.RISK_PACE;
   if (fire > 0) b.fireRisk += fire * mult * (0.6 + rng.next() * 0.8);
   if (dmg > 0) b.damageRisk += dmg * mult * (0.6 + rng.next() * 0.8);
   // Fire-proof (fire 0) and indestructible (damage 0) buildings never burn or

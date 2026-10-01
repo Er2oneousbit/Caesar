@@ -29,9 +29,11 @@ function requestableGoods(game) {
   return [...out];
 }
 
-export function scheduleNextRequest(game) {
+export function scheduleNextRequest(game, first = false) {
   const k = game.difficulty.requestInterval;
-  const [a, b] = CONFIG.REQUEST_INTERVAL_MONTHS;
+  // A new city's first request comes in its third year (FIRST_REQUEST_MONTHS):
+  // from month 14, as the later ones come, it caught a town still finding its feet.
+  const [a, b] = first ? CONFIG.FIRST_REQUEST_MONTHS : CONFIG.REQUEST_INTERVAL_MONTHS;
   game.city.nextRequestMonth = game.time.totalMonths + game.rng.range(Math.round(a * k), Math.round(b * k));
 }
 
@@ -48,7 +50,7 @@ export function updateEmperor(game) {
     scheduleNextRequest(game);
     return;
   }
-  if (c.request || now < c.nextRequestMonth || c.population < 150) return;
+  if (c.request || now < c.nextRequestMonth || c.population < CONFIG.REQUEST_MIN_POP) return;
   const goods = requestableGoods(game);
   const useMoney = goods.length === 0 || game.rng.chance(0.3);
   const scale = Math.max(1, Math.round(c.population / 400));

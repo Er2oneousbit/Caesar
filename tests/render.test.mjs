@@ -829,3 +829,13 @@ test('menu backdrop: the tour keeps the whole screen on the map', async () => {
   // A screen bigger than the map: no tour at this zoom (the app zooms in).
   assert.equal(fitTour(64, 64, worldOf(32, 32), 3000, 2000, 320, 112), null);
 });
+
+test('baths show their water: a full pool with piped water, a dry one without', async () => {
+  const { artState } = await import('../src/render/buildingArt.js');
+  const baths = { def: BUILDINGS.baths, hasWater: true };
+  assert.equal(artState(baths), 1, 'in a reservoir\'s reach: full');
+  baths.hasWater = false;
+  assert.equal(artState(baths), 0, 'out of reach: dry (it used to be drawn full)');
+  assert.equal(artState({ def: BUILDINGS.fountain, hasWater: false }), 0);
+  assert.equal(artState({ def: BUILDINGS.school, hasWater: false }), 0, 'buildings that need no water: one look');
+});

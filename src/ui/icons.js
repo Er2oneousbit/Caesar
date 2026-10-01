@@ -29,7 +29,7 @@ function specsFor(key) {
     default: {
       const def = BUILDINGS[key];
       if (!def) return null;
-      const state = def.kind === 'farm' ? 4 : def.kind === 'reservoir' || def.kind === 'fountain' ? 1 : 0;
+      const state = def.kind === 'farm' ? 4 : def.kind === 'reservoir' || def.kind === 'fountain' || def.needsPiped ? 1 : 0;
       return [buildingSpec(key, def.size, 0, state)];
     }
   }

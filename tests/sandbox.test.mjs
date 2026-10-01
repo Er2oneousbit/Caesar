@@ -436,3 +436,38 @@ test('demo city: every building that needs a road has one', async () => {
     assert.deepEqual(lacking.map((b) => `${b.type}@${b.x},${b.y}`), [], `${type} ${seed}`);
   }
 });
+
+test('the Emperor waits: his first request comes in the third year, and not before 400 people', () => {
+  const s = SCENARIOS.find((x) => x.requests);
+  const g = new Game({ scenario: withDifficulty(s, 'normal') });
+  const c = g.city;
+  const [a, b] = CONFIG.FIRST_REQUEST_MONTHS;
+  assert.ok(c.nextRequestMonth >= a && c.nextRequestMonth <= b, `first request at month ${c.nextRequestMonth}`);
+  for (let k = 0; k < 20; k++) { // and on Insane, sooner but never in the first year and a half
+    const ins = new Game({ scenario: withDifficulty(s, 'insane'), seed: `emp-${k}` });
+    assert.ok(ins.city.nextRequestMonth >= Math.round(a * DIFFICULTY.insane.requestInterval), `${ins.city.nextRequestMonth}`);
+  }
+  c.population = 1000;
+  g.time.totalMonths = 14; // where a first request could come before
+  updateEmperor(g);
+  assert.equal(c.request, null, 'not in the first year and a half');
+  g.time.totalMonths = c.nextRequestMonth;
+  c.population = CONFIG.REQUEST_MIN_POP - 1;
+  updateEmperor(g);
+  assert.equal(c.request, null, 'not in a small town');
+  c.population = CONFIG.REQUEST_MIN_POP;
+  updateEmperor(g);
+  assert.ok(c.request, 'then he asks');
+});
+
+test('fire and collapse run at the original pace: x RISK_PACE on the listed rates', () => {
+  const g = new Game({ scenario: sandboxScenario({ seed: 'pace' }) });
+  const b = addBuilding(g, 'prefecture', 10, 10, 1);
+  g.rng.next = () => 0.5; // the day's roll: x1.0, and no disaster
+  updateRisk(g, b);
+  assert.ok(Math.abs(b.fireRisk - b.def.fire * CONFIG.RISK_PACE) < 1e-9, `${b.fireRisk}`);
+  assert.ok(Math.abs(b.damageRisk - b.def.damage * CONFIG.RISK_PACE) < 1e-9);
+  // An ordinary building (1 a day) left alone on Normal: about 10 months.
+  const months = CONFIG.FIRE_THRESHOLD / (1 * CONFIG.RISK_PACE) / CONFIG.DAYS_PER_MONTH;
+  assert.ok(months > 9 && months < 11, `${months.toFixed(1)} months`);
+});

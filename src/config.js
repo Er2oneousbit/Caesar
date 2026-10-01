@@ -102,6 +102,11 @@ export const CONFIG = {
 
   // --- Risk ----------------------------------------------------------------
   FIRE_THRESHOLD: 100,
+  // Every building's fire and collapse rates (data/buildings.js, data/housing.js)
+  // run at this pace: the original's clock (research: a standard building there
+  // burns or falls in about 161 days unserved; Colonia's rates gave 103). The
+  // owner, v0.12.1 on Normal: fire still came too fast. x difficulty.risk on top.
+  RISK_PACE: 0.62,
   DAMAGE_THRESHOLD: 100,
   FIRE_BURN_DAYS: 6, // how long a burning ruin keeps burning
   FIRE_SPREAD_CHANCE: 0.02, // chance a building beside a fire catches, per day (once, however many burning tiles it touches)
@@ -189,7 +194,7 @@ export const CONFIG = {
   // At 0.5 a crowded home (40 people) scoring 20 that no physician visits
   // reaches the threshold in about 10 months on Normal; one scoring 80
   // (which takes health care) would need over 3 years, and gets visited.
-  DISEASE_RATE: 0.5,
+  DISEASE_RATE: 0.31, // was 0.5: slowed with fire and collapse (RISK_PACE; the owner found both too fast on Normal)
   DISEASE_CROWD_BASE: 0.5,
   DISEASE_CROWD_PEOPLE: 40,
   DISEASE_CROWD_MAX: 1.5,
@@ -282,6 +287,8 @@ export const CONFIG = {
 
   // --- Emperor -------------------------------------------------------------
   REQUEST_INTERVAL_MONTHS: [14, 26],
+  FIRST_REQUEST_MONTHS: [24, 36], // the Emperor's first request: in the third year (x difficulty.requestInterval; was 14-26 like the rest: too early, the owner said)...
+  REQUEST_MIN_POP: 400, // ...and not before the city has this many people (was 150)
   REQUEST_DEADLINE_MONTHS: 12,
   FAVOR_START: 50,
 };

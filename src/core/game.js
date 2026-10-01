@@ -103,7 +103,7 @@ export function newCityState(scenario, funds) {
     trade: newTradeState(scenario.partners || []),
     finance: { thisYear: newLedger(), lastYear: null },
     request: null,
-    nextRequestMonth: 12,
+    nextRequestMonth: CONFIG.FIRST_REQUEST_MONTHS[0], // set by scheduleNextRequest for a new game
     giftCooldown: 0,
     produced: {},
     foodFlow: { harvested: 0, stored: 0, toMarket: 0, sold: 0, eaten: 0, shortfall: 0 },
@@ -164,7 +164,7 @@ export class Game {
       this.nextWalkerId = 1;
       this.nextMessageId = 1;
       this.city = newCityState(scenario, flags.money ?? scenario.funds);
-      scheduleNextRequest(this);
+      scheduleNextRequest(this, true);
     }
     // Military state. `??=` keeps what a save restored and fills in defaults
     // for new games and for saves made before the military existed.

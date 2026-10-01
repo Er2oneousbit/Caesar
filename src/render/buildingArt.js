@@ -817,7 +817,8 @@ function clinicArt(ctx) {
   }
 }
 
-function bathsArt(ctx, S) {
+/** `filled`: piped water reaches it (the pool lies dry and cracked without). */
+function bathsArt(ctx, S, v, filled) {
   quad(ctx, 0.04, 0.04, S - 0.04, S - 0.04, 0, COL.paving);
   box(ctx, 0.12, 0.12, S - 0.24, 1.0, 0, 20, COL.cream);
   // dome
@@ -831,7 +832,17 @@ function bathsArt(ctx, S) {
   ctx.beginPath(); ctx.ellipse(x, y, 17, 4, 0, 0, Math.PI); ctx.fill();
   // outdoor pool
   quad(ctx, 0.25, 1.25, S - 0.25, S - 0.2, 0, '#dcd3c2');
-  quad(ctx, 0.35, 1.32, S - 0.35, S - 0.28, 0.5, COL.water);
+  quad(ctx, 0.35, 1.32, S - 0.35, S - 0.28, 0.5, filled ? COL.water : '#8a7d68');
+  if (!filled) {
+    // a dry basin: cracks across its floor
+    ctx.strokeStyle = 'rgba(70,58,44,0.6)';
+    ctx.lineWidth = 0.6;
+    for (const [a, b, c, d] of [[0.6, 1.5, 1.2, 1.9], [1.1, 1.45, 0.9, 2.1], [S - 0.7, 1.6, S - 1.1, 2.0]]) {
+      const [x1, y1] = P(a, b, 0.5);
+      const [x2, y2] = P(c, d, 0.5);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+  }
   colonnade(ctx, 0.2, 1.15, S - 0.2, 1.15, 5, 0, 13, COL.marble, 1.5);
 }
 
@@ -2190,6 +2201,9 @@ export function artState(b, resting = false) {
   if (b.herd !== undefined) return b.herd; // horse ranch: one sprite per herd size
   if (kind === 'dock') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
   if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20)) + (resting ? 5 : 0);
-  if (kind === 'reservoir' || kind === 'fountain') return b.hasWater ? 1 : 0;
+  // Water works and what runs on piped water (the baths) show it: a full
+  // pool, or a dry one (the baths were always drawn full, even out of a
+  // reservoir's reach, which said they worked when they did not).
+  if (kind === 'reservoir' || kind === 'fountain' || b.def.needsPiped) return b.hasWater ? 1 : 0;
   return 0;
 }

@@ -30,8 +30,9 @@ import { CONFIG } from '../config.js';
 import { LABOR_CATEGORIES, ENT_BASE_MAX, VENUE_SEATS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS, GOOD_KEYS, RECRUIT_SOURCE, formatAmount } from '../data/goods.js';
-import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
+import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
 import { threatSummary, garrisonCounts, recallFort } from '../sim/military.js';
+import { squadronCounts, recallStation, fleetSummary, navalNeed } from '../sim/navy.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
@@ -443,12 +444,17 @@ export class Advisors {
     const towers = all.filter((b) => b.def.kind === 'tower');
     let soldiers = 0;
     let pay = 0;
-    for (const u of g.units.values()) if (u.side === 'rome') { soldiers++; pay += UNIT_TYPES[u.type].upkeep; }
+    for (const u of g.units.values()) if (u.side === 'rome' && !UNIT_TYPES[u.type].naval) { soldiers++; pay += UNIT_TYPES[u.type].upkeep; }
     const st = m.stats;
+    const fleet = fleetSummary(g);
+    const stations = all.filter((b) => b.def.kind === 'station');
+    const yards = all.filter((b) => b.def.kind === 'navalia');
+    const seaOk = !!g.map.seaEntry;
     const threat = h('div', { class: 'card' },
       h('h4', {}, 'Threat'),
       h('div', { class: `status ${t.level === 'attack' ? 'bad' : t.level === 'warned' ? 'warn' : 'good'}` }, t.level === 'calm' ? 'Scouts see no warband near the province.' : t.text),
-      m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, 'Raiders come from the map edges. Scouts warn about 3 months ahead; warbands grow with your city.') : null,
+      m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Raiders come from the map edges${seaOk && m.seaRaids ? `, and about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids by sea` : ''}. Scouts warn about 3 months ahead; warbands grow with your city.`) : null,
+      m.settings && seaOk ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `Sea raids: ${m.seaRaids ? 'on' : 'off'} (Settings).`) : null,
       t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show me the raiders') : null,
       t.level === 'warned' ? h('button', { class: 'btn small', style: { marginTop: '6px' }, title: 'Where the warband is and the side it will enter by (E)', onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map') : null);
     const army = h('div', { class: 'card' },
@@ -459,6 +465,35 @@ export class Advisors {
       kv('Record', `${st.repelled} of ${st.raids} raids repelled`),
       kv('Raiders slain / soldiers lost', `${fmt(st.enemiesKilled)} / ${fmt(st.soldiersLost)}`),
       kv('Buildings lost to raids', fmt(st.buildingsLost)));
+    // The fleet: only where ships can sail, or once there is a ship.
+    const showFleet = seaOk || fleet.ships > 0 || stations.length > 0;
+    const fleetCard = showFleet ? h('div', { class: 'card' },
+      h('h4', {}, 'Fleet'),
+      kv('Liburnians', `${fmt(fleet.ships)} (${fmt(fleet.atSea)} at sea)`),
+      kv('Fleet pay', `${fmt(fleet.pay)} Dn / month`),
+      kv('Navalia / stations', `${yards.length} / ${stations.length}`),
+      kv('Raider ships sunk / liburnians lost', `${fmt(st.shipsSunk || 0)} / ${fmt(st.shipsLost || 0)}`),
+      kv('Raids by sea', fmt(st.seaRaids || 0)),
+      fleet.raiders ? h('div', { class: 'status bad' }, `${fleet.raiders} raider ship${fleet.raiders === 1 ? '' : 's'} in the province's waters.`) : null) : null;
+    const stationRows = stations.map((b) => {
+      const n = squadronCounts(g).get(b.id) || 0;
+      return h('tr', {},
+        h('td', {}, h('span', { style: { color: UNIT_TYPES.liburnian.color, fontWeight: 700 } }, '⛵ '), b.def.name),
+        h('td', { class: 'r num' }, `${n}/${STATION_CAPACITY}`),
+        h('td', { class: 'r num' }, pct(b.efficiency)),
+        h('td', {}, b.rally ? `Holding ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : 'At its berths'),
+        h('td', { class: 'r' },
+          h('button', { class: 'btn small', onclick: () => { this.app.ui.closeModal(); this.app.renderer.camera.glideToTile(b.x + 1, b.y + 1); this.app.ui.info.showBuilding(b.id); } }, 'Show'),
+          h('button', { class: 'btn small primary', disabled: n === 0, onclick: () => { this.app.ui.closeModal(); this.app.startDeploy(b.id); } }, 'Deploy'),
+          h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, 'Recall')));
+    });
+    const navalSupplies = yards.length ? h('table', { class: 'tbl' },
+      h('tr', {}, h('th', {}, 'Ship stores'), h('th', { class: 'r' }, 'Fleet needs'), h('th', { class: 'r' }, 'At the navalia'), h('th', { class: 'r' }, 'In storage')),
+      Object.keys(CONFIG.LIBURNIAN_COST).map((good) => h('tr', {},
+        h('td', {}, `${GOODS[good].icon} ${GOODS[good].name}`),
+        h('td', { class: 'r num' }, fmt(navalNeed(g, good))),
+        h('td', { class: 'r num' }, fmt(yards.reduce((sum, b) => sum + (b.stock[good] || 0), 0))),
+        h('td', { class: 'r num' }, fmt(cityStock(g, good)))))) : null;
     const need = m.demand || {};
     const supplies = h('table', { class: 'tbl' },
       h('tr', {}, h('th', {}, 'Supply'), h('th', { class: 'r' }, 'Forts need'), h('th', { class: 'r' }, 'At barracks'), h('th', { class: 'r' }, 'In storage'), h('th', {}, 'Made by')),
@@ -482,7 +517,7 @@ export class Advisors {
           h('button', { class: 'btn small', disabled: !f.rally, onclick: () => { recallFort(g, f.id); this.render(); } }, 'Recall')));
     });
     return [
-      h('div', { class: 'grid2' }, threat, army),
+      h('div', { class: 'grid2' }, threat, army, fleetCard),
       h('h4', {}, 'Forts'),
       forts.length
         ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Fort'), h('th', { class: 'r' }, 'Soldiers'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', {}, '')), fortRows)
@@ -491,6 +526,11 @@ export class Advisors {
       supplies,
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } },
         'Each recruit needs equipment at the Barracks: a legionary 50 weapons (Weaponsmith: iron), an archer 50 arrows (Fletcher: timber + iron), a cavalryman one horse (Horse Ranch on meadow, or imported). Carts deliver them automatically while forts have empty places.'),
+      showFleet ? h('h4', {}, 'Naval stations') : null,
+      showFleet ? (stations.length
+        ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Station'), h('th', { class: 'r' }, 'Liburnians'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', {}, '')), stationRows)
+        : h('div', { class: 'muted' }, `No naval stations yet. Build a Navalia and a Naval Station on the shore (Military menu): the Navalia builds liburnians from ${Object.entries(CONFIG.LIBURNIAN_COST).map(([gd, n]) => `${n} ${GOODS[gd].name.toLowerCase()}`).join(', ')}, and each station berths ${STATION_CAPACITY} of them to fight raider ships.`)) : null,
+      navalSupplies,
     ];
   }
 

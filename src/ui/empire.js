@@ -188,12 +188,18 @@ export class EmpireView {
     this.renderPanel(this.app.game);
   }
 
-  /** Close the map and look at the map edge a scouted warband will enter by. */
+  /** Close the map and look at the map edge a scouted warband will enter by (by sea: where it will land). */
   goToEdge(t) {
     const app = this.app;
     const g = app.game;
     if (!g || !t.origin) return;
     app.ui.closeModal();
+    const landing = t.sea ? g.military.warned?.landing : null;
+    if (landing) {
+      app.renderer.camera.glideToTile(landing.x, landing.y);
+      app.ui.messages.push({ text: `Scouts expect the warband of ${t.size} to come ashore here, ${t.months > 0 ? `in about ${t.months} month${t.months === 1 ? '' : 's'}` : 'any day now'}.`, level: 'warn', date: '' });
+      return;
+    }
     // A little inside the map from the edge tile, so the view is not half off the map.
     const x = Math.round(t.origin.x + (g.map.w / 2 - t.origin.x) * 0.15);
     const y = Math.round(t.origin.y + (g.map.h / 2 - t.origin.y) * 0.15);
@@ -227,14 +233,14 @@ export class EmpireView {
     const trade = this.travelers.filter((t) => t.kind === 'caravan' || t.kind === 'ship');
     const threats = this.travelers.filter((t) => t.kind === 'warband' || t.kind === 'raid');
     const anyOpen = Object.values(g.city.trade.routes).some((r) => r.open);
-    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months]), !!g.military.settings]), () => [
+    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea]), !!g.military.settings]), () => [
       h('h4', {}, 'Threats'),
       threats.length
         ? threats.map((t) => h('div', { class: 'empire-row' },
-          h('span', { class: 'empire-glyph' }, glyph((ctx) => drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid'), 5, 4.4)),
+          h('span', { class: 'empire-glyph' }, glyph((ctx) => drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid', !!t.sea), 5, 4.4)),
           h('span', { style: { flex: 1 } }, travelerLabel(t)),
           t.kind === 'warband'
-            ? h('button', { class: 'btn small', title: 'Close the map and look at the map edge it will enter by', onclick: () => this.goToEdge(t) }, 'Show the edge')
+            ? h('button', { class: 'btn small', title: t.sea ? 'Close the map and look at the shore where it will land' : 'Close the map and look at the map edge it will enter by', onclick: () => this.goToEdge(t) }, t.sea ? 'Show the landing' : 'Show the edge')
             : h('button', { class: 'btn small primary', onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show them')))
         : h('div', { class: 'muted' }, g.military.settings ? 'Scouts see no warband near the province. They warn about 3 months ahead.' : 'No raids in this province.'),
     ]);

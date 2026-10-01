@@ -22,13 +22,14 @@
  *   walker         roaming walker type spawned by the building
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
- *                  | 'shore' (beside navigable water: docks)
+ *                  | 'shore' (beside navigable water: docks, the navalia, naval stations)
  *                  | 'fishingShore' (beside water with fish: shipyards, wharves)
  *   kind           behavior family (drives sim dispatch):
  *                    service | farm | raw | workshop | granary | warehouse |
  *                    market | venue | training | water | reservoir |
  *                    fountain | well | decor | hospital | house | dock |
- *                    barracks | fort | tower | shipyard | wharf | part
+ *                    barracks | fort | tower | shipyard | wharf | part |
+ *                    navalia | station
  *   span           sections in a row along the map's x axis (the hippodrome:
  *                  3 of size x size). The first is the building itself, the
  *                  others are `part` buildings linked to it (sim/linked.js)
@@ -43,7 +44,8 @@
  *   venue          entertainment venue type (venues/training)
  *   needsPiped     requires piped water from a reservoir to operate
  *   inputs         goods a building accepts by cart for its own use
- *                  (barracks: weapons, arrows, horses), with inputCap units each
+ *                  (barracks: weapons, arrows, horses; navalia: timber, iron,
+ *                  linen), with inputCap units each
  *   unit           soldier type a fort garrisons (see data/units.js)
  *   hp             hit points against raiders (default: by size)
  *                  Forts never burn or decay (fire/damage 0): only raiders
@@ -501,6 +503,20 @@ export const BUILDINGS = Object.freeze({
     name: 'Watchtower', category: 'military', kind: 'tower', cost: 120, size: 2, workers: 6, labor: 'military',
     des: [-3, 1, 1, 2], fire: 0, damage: 0.5, hp: 500, needsRoad: true,
     desc: 'Archers on the tower shoot any raider within 8 tiles. Pairs well with walls.',
+  }),
+
+  // --- The fleet (sim/navy.js): like the barracks and its forts -------------
+  // On the bank of a river or sea that ships can sail, like a dock. Not in
+  // the original, which had no war at sea.
+  navalia: B({
+    name: 'Navalia', category: 'military', kind: 'navalia', cost: 400, size: 3, workers: 12, labor: 'military',
+    des: [-6, 1, 1, 3], fire: 1.2, damage: 1, placement: 'shore', inputs: ['timber', 'iron', 'linen'], inputCap: 400,
+    desc: 'The naval dockyard. Builds liburnians, light warships, from 300 timber, 100 iron and 100 linen each (carts bring them while a staffed Naval Station has an empty berth), and sends each to the emptiest station on its water. Build it on the bank of a river or sea that ships can sail.',
+  }),
+  naval_station: B({
+    name: 'Naval Station', category: 'military', kind: 'station', cost: 500, size: 3, workers: 10, labor: 'military',
+    des: [-6, 1, 1, 3], fire: 0, damage: 0, hp: 800, placement: 'shore',
+    desc: 'A stone quay with berths for a squadron of 4 liburnians, which fight raider ships near it. Click it and press Deploy to send its squadron anywhere on its water. Build it on the bank of a river or sea that ships can sail.',
   }),
 });
 

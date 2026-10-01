@@ -497,5 +497,5 @@ test('save: a version 9 city loads with the new goods at 0 everywhere, and plays
   const before = JSON.stringify([...fresh.buildings.values()].map((b) => b.stock || null));
   upgradeClothV9(fresh);
   assert.equal(JSON.stringify([...fresh.buildings.values()].map((b) => b.stock || null)), before);
-  assert.equal(CONFIG.SAVE_VERSION, 10);
+  assert.equal(CONFIG.SAVE_VERSION >= 10, true);
 });

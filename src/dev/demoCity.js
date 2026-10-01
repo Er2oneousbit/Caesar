@@ -901,3 +901,33 @@ export function buildDemoHarbor(game, center) {
   setTradeMode(game, 'pottery', 'export', 200);
   return { ok: true, dock, warehouse, routes };
 }
+
+// ---------------------------------------------------------------------------
+// The fleet (simulate.mjs --navy, the console's `navy`, screenshots, tests)
+// ---------------------------------------------------------------------------
+
+/**
+ * A Naval Station and a Navalia on the shore of the sea entry's water,
+ * nearest the city, joined by road to its streets, with a prefect and an
+ * engineer. With { stock: true } the Navalia gets the timber, iron and linen
+ * for a whole squadron (four liburnians) up front, so ships come quickly.
+ * @returns {{ok:boolean, station?:object, navalia?:object}}
+ */
+export function buildDemoNavy(game, center, opts = {}) {
+  const { map } = game;
+  if (!map.seaEntry || !game.isUnlocked('naval_station') || !game.isUnlocked('navalia')) return { ok: false };
+  const sea = map.navBody[map.idx(map.seaEntry.x, map.seaEntry.y)];
+  const onSea = (x, y) => {
+    const i = map.navigableBeside(x, y, 3);
+    return i >= 0 && map.navBody[i] === sea;
+  };
+  const station = placeJoined(game, 'naval_station', 3, center, 45, onSea);
+  if (!station) return { ok: false };
+  const navalia = placeJoined(game, 'navalia', 3, station, 30, onSea);
+  guard(game, station.x, station.y);
+  if (navalia) {
+    guard(game, navalia.x, navalia.y);
+    if (opts.stock) for (const [g, n] of Object.entries(CONFIG.LIBURNIAN_COST)) navalia.stock[g] = n * 4;
+  }
+  return { ok: !!navalia, station, navalia };
+}

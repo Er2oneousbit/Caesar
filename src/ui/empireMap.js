@@ -11,7 +11,7 @@
  *   open routes are drawn solid and bold, closed ones faint and broken
  *   travelers   a caravan or ship in the partner's color, partway along its
  *               route; a scouted warband as a banner with its size (in a
- *               boat where its side of the province is sea)
+ *               boat when it comes by sea, sim/navy.js, out on the sea)
  *
  * Travelers are drawn from timers the sim already keeps, never simulated:
  * a route's `nextVisit` day (sim/trade.js) and the raid schedule
@@ -162,11 +162,28 @@ export function routePoint(partnerId, frac) {
   return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
 }
 
-/** Where a warband from `dir` stands on the map, `frac` of the way in. */
-export function warbandPoint(dir, frac) {
-  const [dx, dy] = DIR_STEP[dir] || DIR_STEP.north;
-  const r = WARBAND_FAR + (WARBAND_NEAR - WARBAND_FAR) * frac;
-  return [HOME_POS[0] + dx * r, HOME_POS[1] + dy * r];
+/**
+ * Where a warband from `dir` stands on the map, `frac` of the way in. One
+ * that comes by sea (`sea`) sails on the sea: from `dir`, or the nearest
+ * direction round from it whose whole way in is sea.
+ */
+export function warbandPoint(dir, frac, sea = false) {
+  const at = (d) => {
+    const [dx, dy] = DIR_STEP[d] || DIR_STEP.north;
+    const r = WARBAND_FAR + (WARBAND_NEAR - WARBAND_FAR) * frac;
+    return [HOME_POS[0] + dx * r, HOME_POS[1] + dy * r];
+  };
+  if (!sea) return at(dir);
+  const order = Object.keys(DIR_STEP);
+  const k = Math.max(0, order.indexOf(dir));
+  for (const step of [0, 1, -1, 2, -2, 3, -3, 4]) {
+    const d = order[(k + step + 8) % 8];
+    const [dx, dy] = DIR_STEP[d];
+    const far = [HOME_POS[0] + dx * WARBAND_FAR, HOME_POS[1] + dy * WARBAND_FAR];
+    const near = [HOME_POS[0] + dx * WARBAND_NEAR, HOME_POS[1] + dy * WARBAND_NEAR];
+    if (!isLand(far) && !isLand(near)) return at(d);
+  }
+  return at(dir);
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -181,9 +198,10 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  *       The first trader of a route sets out from its city the day the route
  *       opens (it is due FIRST_VISIT_DAYS later, sooner than a far city's
  *       usual trip), so it is never seen appearing halfway along.
- *   { kind: 'warband', size, dir, origin, months, frac, pos }
+ *   { kind: 'warband', size, dir, origin, months, frac, pos, sea }
  *       the warband the scouts reported: `months` until it strikes (as the
- *       Military advisor counts them), `origin` = the map-edge tile it enters by.
+ *       Military advisor counts them), `origin` = the map-edge tile it enters
+ *       by (by sea: the sea entry), `sea` = it comes by ship.
  *   { kind: 'raid', size, pos }
  *       raiders in the province now (size = how many are left).
  *
@@ -213,7 +231,7 @@ export function empireTravelers(game) {
     const w = m.warned;
     const frac = clamp01(1 - (m.nextRaidMonth - nowMonths(game)) / SCOUT_MONTHS);
     const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, pos: warbandPoint(w.dir, frac) });
+    out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, pos: warbandPoint(w.dir, frac, !!w.sea) });
   }
   if (m && m.active) {
     const n = enemyCount(game);
@@ -231,7 +249,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** One line about a traveler: "Massilia ship: 6 days", "Warband of 14 from the north, in 3 months". */
 export function travelerLabel(t) {
-  if (t.kind === 'warband') return `Warband of ${t.size} from the ${t.dir}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
+  if (t.kind === 'warband') return `Warband of ${t.size} ${t.sea ? 'by sea ' : ''}from the ${t.dir}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
   if (t.kind === 'raid') return `Raiders in the province: ${t.size} left`;
   const what = `${t.name} ${t.kind}`;
   const when = t.days > 0 ? plural(t.days, 'day') : 'arriving';
@@ -345,7 +363,7 @@ export function drawEmpire(ctx, game, opts = {}) {
     const [x, y] = t.pos;
     if (t.kind === 'caravan') drawCaravan(ctx, x, y, t.color, k);
     else if (t.kind === 'ship') drawShip(ctx, x, y + Math.sin(time * 2 + x) * 0.15, t.color, k);
-    else if (t.kind === 'warband') drawBanner(ctx, x, y, t.size, k, false, !isLand(t.pos));
+    else if (t.kind === 'warband') drawBanner(ctx, x, y, t.size, k, false, !!t.sea);
     else if (t.kind === 'raid') drawBanner(ctx, x, y, t.size, k, true);
   }
   if (hover) {
@@ -641,8 +659,8 @@ export function drawShip(ctx, x, y, color, k = 1) {
 
 /**
  * A warband's banner: a pole with a pennant and the number of warriors on it.
- * Red and bold for raiders already in the province. `afloat`: its side of
- * the province is sea, so it comes by boat (a dark hull under the pole).
+ * Red and bold for raiders already in the province. `afloat`: it comes by
+ * sea (sim/navy.js), so it sails in a dark longship under the pole.
  */
 export function drawBanner(ctx, x, y, size, k = 1, attacking = false, afloat = false) {
   ctx.save();

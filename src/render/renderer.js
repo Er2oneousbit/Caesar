@@ -7,7 +7,7 @@
  *   1. Ground: terrain tiles, shorelines, roads, plazas, bridges, rubble and
  *      overlay tints. Flat things never overlap each other, so order is free.
  *   2. Objects: trees, rocks, aqueducts, walls, buildings, walkers, soldiers,
- *      raiders, missiles, rally flags, flames, overlay columns. Sorted
+ *      raiders, ships of war, missiles, rally flags, flames, overlay columns. Sorted
  *      back-to-front by "depth" (x + y of their front point).
  *
  * Multi-tile buildings are drawn as vertical strips half a tile wide. Each
@@ -51,6 +51,7 @@ import { Terrain, Road, WaterBits } from '../world/map.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { wallHpOf, TOWER_RANGE } from '../sim/military.js';
+import { waterOf, shoreBerth } from '../sim/navy.js';
 import { farmDormant } from '../sim/production.js';
 import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
@@ -67,6 +68,12 @@ import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.j
 import { Weather, seasonPalette } from './weather.js';
 import { hash01 } from './draw.js';
 import { overlayByKey, columnColor } from './overlays.js';
+
+/** A fort's or naval station's color: its rally standard and the ghost one while deploying. */
+function forceColor(b) {
+  if (b.def.kind === 'station') return UNIT_TYPES.liburnian.color;
+  return UNIT_TYPES[b.def.unit]?.color || '#a8322b';
+}
 
 const K_STRIP = 0;
 const K_WALKER = 1;
@@ -330,12 +337,14 @@ export class Renderer {
     this.tool = null;
     this.selectedId = 0;
     this.selectedWalker = 0; // walker shown in the info panel (ringed)
+    this.selectedUnit = 0; // ship shown in the info panel (ringed)
+    this.shipSpots = []; // where each warship and raider ship was drawn this frame, for clicks (pickShip)
     this.follow = null; // { id } of a walker the view follows (until the map is moved)
     this.walkerSpots = []; // where each walker was drawn this frame, for clicks (pickWalker)
     this.buildingBoxes = []; // footprint and height of each building drawn this frame (pickWalker)
     this.noRoadMarks = []; // buildings in view with no road to use, and their height (the red sign)
     this.noRoadSpots = []; // where those signs were drawn this frame (device px)
-    this.deployFort = 0; // fort id while the player picks a deployment tile
+    this.deployFort = 0; // fort or naval station id while the player picks a deployment tile
     this.time = 0;
     this.frame = 0;
     this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null, waterHint: null, noRoad: 0, ghostNoRoad: false, roadEdges: 0 };
@@ -375,6 +384,8 @@ export class Renderer {
     this.unsub = [];
     this.game = game;
     this.walkerSpots = [];
+    this.shipSpots = [];
+    this.selectedUnit = 0;
     this.camera.setMapBounds(game.map.w, game.map.h);
     this.stripCache = new WeakMap();
     this.effects = new Effects();
@@ -616,6 +627,7 @@ export class Renderer {
     // --- soldiers, raiders, missiles, rally flags ---------------------------
     const tick = game.time.totalTicks;
     const inView = (wx, wy) => wx >= x0w && wx <= x1w && wy >= y0w && wy <= vr.y + vr.h + 40;
+    this.shipSpots = [];
     for (const u of game.units.values()) {
       const fx = u.px + (u.x - u.px) * alpha;
       const fy = u.py + (u.y - u.py) * alpha;
@@ -623,7 +635,11 @@ export class Renderer {
       const wy = (fx + fy) * HALF_H;
       // u.walked already includes this tick's step; the drawing is (1 - alpha) of it behind.
       const stride = u.walked - (1 - alpha) * Math.hypot(u.x - u.px, u.y - u.py);
-      if (inView(wx, wy)) items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
+      // (Ships are big: in view a little farther out, so their masts do not pop in.)
+      const naval = UNIT_TYPES[u.type].naval;
+      if (!inView(wx, wy) && !(naval && inView(wx, wy - 60))) continue;
+      items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
+      if (naval) this.shipSpots.push({ id: u.id, wx, wy });
     }
     for (const p of game.projectiles) {
       const wx = (p.x - p.y) * HALF_W;
@@ -634,7 +650,7 @@ export class Renderer {
       if (!b.rally) continue;
       const wx = (b.rally.x - b.rally.y) * HALF_W;
       const wy = (b.rally.x + b.rally.y) * HALF_H;
-      if (inView(wx, wy)) items.push({ d: b.rally.x + b.rally.y + 0.002, kind: K_FLAG, wx, wy, color: UNIT_TYPES[b.def.unit]?.color || '#a8322b' });
+      if (inView(wx, wy)) items.push({ d: b.rally.x + b.rally.y + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b) });
     }
     // Map entrance and exit: a gateway over the Imperial road at the map edge.
     // Two items, so walkers on the tile pass between the pillars.
@@ -649,7 +665,9 @@ export class Renderer {
       items.push({ d: d - 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'back' });
       items.push({ d: d + 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'front' });
     }
-    const selFort = this.selectedId && game.buildings.get(this.selectedId)?.def.kind === 'fort' ? this.selectedId : 0;
+    // The selected fort's soldiers or naval station's ships are ringed.
+    const selKind = this.selectedId ? game.buildings.get(this.selectedId)?.def.kind : null;
+    const selFort = selKind === 'fort' || selKind === 'station' ? this.selectedId : 0;
 
     // --- pass 2: sorted objects --------------------------------------------
     items.sort((a, b) => a.d - b.d || a.kind - b.kind);
@@ -675,7 +693,7 @@ export class Renderer {
           this.drawExtra(it);
           break;
         case K_UNIT:
-          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, selFort !== 0 && it.u.fort === selFort, it.stride);
+          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, (selFort !== 0 && (it.u.fort === selFort || it.u.station === selFort)) || it.u.id === this.selectedUnit, it.stride);
           break;
         case K_PROJ:
           drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k);
@@ -735,6 +753,7 @@ export class Renderer {
         const water = WATER_AREA[b.def.kind];
         if (water) this.drawCoverage(this.squareTiles(b.x, b.y, b.size, water.r), null, water.colors);
         this.outlineFootprint(b.x, b.y, b.size, 'rgba(255,230,120,0.95)', 2);
+        if (b.def.kind === 'station') this.drawSeaGuard(b);
         if (b.rally) this.drawRallyLine(b);
         if (b.def.kind === 'tower') this.drawRange(b.x, b.y, b.size, TOWER_RANGE, 'rgba(255,120,60,0.12)');
       } else this.selectedId = 0;
@@ -742,7 +761,7 @@ export class Renderer {
     if (this.deployFort && this.hoverTile) {
       // Picking a deployment point: ghost standard under the cursor.
       const f = game.buildings.get(this.deployFort);
-      const color = f ? UNIT_TYPES[f.def.unit]?.color || '#a8322b' : '#a8322b';
+      const color = f ? forceColor(f) : '#a8322b';
       const { x, y } = this.hoverTile;
       this.outlineFootprint(x, y, 1, 'rgba(255,230,120,0.95)', 2);
       ctx.globalAlpha = 0.7;
@@ -1120,6 +1139,47 @@ export class Renderer {
       return !!b && b.def.kind === 'tower';
     };
     return (conn(x, y - 1) ? 1 : 0) | (conn(x + 1, y) ? 2 : 0) | (conn(x, y + 1) ? 4 : 0) | (conn(x - 1, y) ? 8 : 0);
+  }
+
+  /**
+   * The water a selected naval station's squadron guards: within
+   * STATION_GUARD of its berths, or STATION_GUARD_DEPLOYED of where it was
+   * sent, on its own water (sim/navy.js).
+   */
+  drawSeaGuard(b) {
+    const map = this.game.map;
+    const body = waterOf(this.game, b);
+    if (!body) return;
+    let a = b.rally;
+    if (!a) {
+      const i = shoreBerth(this.game, b);
+      a = { x: map.xOf(i) + 0.5, y: map.yOf(i) + 0.5 };
+    }
+    const r = b.rally ? CONFIG.STATION_GUARD_DEPLOYED : CONFIG.STATION_GUARD;
+    for (let y = Math.floor(a.y - r); y <= a.y + r; y++) {
+      for (let x = Math.floor(a.x - r); x <= a.x + r; x++) {
+        if (!map.inBounds(x, y) || map.navBody[map.idx(x, y)] !== body) continue;
+        if (Math.hypot(x + 0.5 - a.x, y + 0.5 - a.y) > r) continue;
+        this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, 'rgba(255,236,160,0.2)'); // (pale gold: blue would vanish on the water)
+      }
+    }
+  }
+
+  /** The ship (warship or raider ship) drawn under a screen point, or 0. */
+  pickShip(sx, sy) {
+    const cam = this.camera;
+    const p = cam.screenToWorld(sx, sy);
+    const css = cam.dpr / cam.scale; // world px per CSS px
+    let best = 0;
+    let bestD = Infinity;
+    for (const s of this.shipSpots) {
+      const dx = p.x - s.wx;
+      const dy = p.y - s.wy;
+      if (Math.abs(dx) > Math.max(24, 12 * css) || dy < -Math.max(44, 20 * css) || dy > Math.max(6, 4 * css)) continue;
+      const d = Math.hypot(dx, dy + 18);
+      if (d < bestD) { bestD = d; best = s.id; }
+    }
+    return best;
   }
 
   /** Dashed line from a deployed fort to its standard. */

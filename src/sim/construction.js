@@ -650,7 +650,7 @@ export function applyPlan(game, plan) {
         }
       }
       const b = addBuilding(game, plan.tool, it.x, it.y);
-      if (b.def.kind === 'dock') dockBerth(game, b); // berth + which side faces the water
+      if (b.def.placement === 'shore') dockBerth(game, b); // berth + which side faces the water (docks, the navalia, naval stations)
       if (b.def.placement === 'fishingShore') waterBeside(game, b); // slip or mooring + which side faces the water
       undo.ops.push({ op: 'building', id: b.id, tiles });
       if (span > 1) addSections(game, b, span, undo);

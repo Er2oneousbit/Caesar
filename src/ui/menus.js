@@ -146,6 +146,9 @@ export function briefing(app, s, onBegin = null) {
 // Sandbox setup
 // ---------------------------------------------------------------------------
 
+/** What the Sea raids switch does (sandbox setup and Settings). */
+const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids come by ship and land near the city; raider ships throw fire pots at boats and buildings by the shore. A Navalia and Naval Stations build and berth a fleet of liburnians to fight them. Off: every raid comes by land.`;
+
 export function sandboxMenu(app) {
   const state = {
     size: app.flags.map || 'medium',
@@ -154,6 +157,7 @@ export function sandboxMenu(app) {
     difficulty: app.difficultyPref(),
     funds: 8000,
     invasions: 'occasional',
+    seaRaids: app.settings.seaRaids !== false,
   };
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
@@ -175,7 +179,10 @@ export function sandboxMenu(app) {
         h('select', { onchange: (e) => { state.invasions = e.target.value; } },
           [['none', 'Peaceful (no raids)'], ['occasional', 'Occasional raids'], ['frequent', 'Frequent raids']].map(([k, n]) => h('option', { value: k, selected: k === state.invasions }, n))),
         // From the game's own numbers (this said 120 people long after the minimum became 300).
-        h('div', { class: 'muted', style: { fontSize: '12px' } }, `The first raid comes after about ${INVASION_PRESETS.occasional.first / 12} years (occasional) or ${INVASION_PRESETS.frequent.first / 12} (frequent), never before the city has ${RAID_MIN_POP} people, and scouts warn you about 3 months ahead.`))),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, `The first raid comes after about ${INVASION_PRESETS.occasional.first / 12} years (occasional) or ${INVASION_PRESETS.frequent.first / 12} (frequent), never before the city has ${RAID_MIN_POP} people, and scouts warn you about 3 months ahead.`)),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', checked: state.seaRaids, onchange: (e) => { state.seaRaids = e.target.checked; } }),
+        h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP)))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),
@@ -262,6 +269,16 @@ export function settingsMenu(app) {
     h('div', { class: 'field' }, h('label', {}, 'Sound effects volume'), vol,
       h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: s.volume, oninput: (e) => { s.volume = Number(e.target.value); vol.textContent = `${Math.round(s.volume * 100)}%`; app.applySettings(); } })),
     check('music', 'Music (M)', 'Original music played live by synthesized lyre, pipes and drums, changing with the day, the night, festivals and raids.'),
+    h('label', { class: 'check-row' },
+      h('input', {
+        type: 'checkbox', checked: s.seaRaids !== false, 'aria-label': 'Sea raids',
+        onchange: (e) => {
+          s.seaRaids = e.target.checked;
+          if (app.game) app.game.military.seaRaids = s.seaRaids; // the city being played too
+          app.applySettings();
+        },
+      }),
+      h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, `${SEA_RAIDS_HELP} For new games and the city you are playing.`))),
     h('div', { class: 'field' }, h('label', {}, 'Music volume'), mvol,
       h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: s.musicVolume ?? 0.35, 'aria-label': 'Music volume', oninput: (e) => { s.musicVolume = Number(e.target.value); mvol.textContent = `${Math.round(s.musicVolume * 100)}%`; app.applySettings(); } })),
     check('muted', 'Mute all sounds'),

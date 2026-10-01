@@ -5,7 +5,8 @@
  * where a cart should deliver its load.
  *
  * Delivery priority for a cart carrying good G:
- *   1. a barracks that needs G to equip recruits (weapons, arrows, horses)
+ *   1. a barracks that needs G to equip recruits (weapons, arrows, horses),
+ *      or a navalia that needs G for the fleet's next ship (timber, iron, linen)
  *   2. a workshop whose recipe uses G and has room (raw materials go straight in)
  *   3. a granary that accepts G (food only)
  *   4. a warehouse that accepts G
@@ -25,9 +26,12 @@ import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
+import { navalNeed, navaliaHasRoom } from './navy.js';
 
 /** Goods a barracks takes by cart (weapons, arrows, horses). */
 const BARRACKS_INPUTS = BUILDINGS.barracks.inputs;
+/** Goods a navalia takes by cart (timber, iron, linen: sim/navy.js). */
+const NAVALIA_INPUTS = BUILDINGS.navalia.inputs;
 
 export function isStorage(b) {
   const k = b.def.kind;
@@ -98,7 +102,7 @@ export function receiveGoods(b, good, amount, home = false) {
     b.stock[good] += amount; // a dock cart came back with undeliverable cargo
     return amount;
   }
-  if (kind === 'barracks' && b.stock[good] !== undefined) {
+  if ((kind === 'barracks' || kind === 'navalia') && b.stock[good] !== undefined) {
     const room = Math.max(0, b.def.inputCap - b.stock[good]);
     const n = Math.min(room, amount);
     b.stock[good] += n;
@@ -195,6 +199,14 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
       return b && barracksHasRoom(b, good, amount);
     });
   }
+  // The fleet comes before the workshops too, but only while a staffed
+  // station has an empty berth (so the Navalia never hoards the city's timber).
+  if (NAVALIA_INPUTS.includes(good) && navalNeed(game, good) > 0) {
+    attempts.push((id) => {
+      const b = buildings.get(id);
+      return b && navaliaHasRoom(b, good, amount);
+    });
+  }
   if (kind === 'raw') {
     attempts.push((id) => {
       const b = buildings.get(id);
@@ -220,12 +232,12 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
 
 /**
  * How much of a good a delivery target found by findDeliveryTarget can still
- * take, counting loads on their way: a barracks up to its input cap, a
+ * take, counting loads on their way: a barracks or navalia up to its input cap, a
  * workshop up to WORKSHOP_RAW_CAP, storage its free room.
  */
 export function deliveryRoom(b, good) {
   const kind = b.def.kind;
-  if (kind === 'barracks') return Math.max(0, b.def.inputCap - (b.stock[good] || 0) - (b.incoming[good] || 0));
+  if (kind === 'barracks' || kind === 'navalia') return Math.max(0, b.def.inputCap - (b.stock[good] || 0) - (b.incoming[good] || 0));
   if (kind === 'workshop') return Math.max(0, CONFIG.WORKSHOP_RAW_CAP - (b.stock[good] || 0) - (b.incoming[good] || 0));
   return storageSpaceFor(b, good);
 }

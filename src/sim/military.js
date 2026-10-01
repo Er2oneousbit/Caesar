@@ -21,10 +21,15 @@
  * Invasions are announced ~3 months ahead, then a warband spawns at a map
  * edge that can reach the city's homes. It flees when mostly destroyed, or
  * withdraws (with plunder if it reached the city) after a while, so an
- * undefended city is punished but not wiped out.
+ * undefended city is punished but not wiped out. Where ships can sail, about
+ * a third of raids come by sea instead: raider ships put the warband ashore
+ * near the city (sim/navy.js, which also runs the fleet). Ships are units
+ * too (`naval`), but sail and fight apart: soldiers, raiders and towers on
+ * land never see them.
  * ----------------------------------------------------------------------------
  */
 
+import { CONFIG } from '../config.js';
 import { UNIT_TYPES, FORT_CAPACITY, TRAIN_DAYS } from '../data/units.js';
 import { RECRUIT_COST, RECRUIT_SOURCE, GOODS } from '../data/goods.js';
 import { Terrain, Road, Wall } from '../world/map.js';
@@ -37,6 +42,7 @@ import { transact } from './economy.js';
 import { igniteBuilding, collapseBuilding, riskRates } from './risk.js';
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
+import { seaRaidPlan, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -78,8 +84,14 @@ export function newMilitaryState(scenario, time, flags = {}) {
     lastLossMessageDay: -99,
     lastWallMessageDay: -99,
     demand: { weapons: 0, arrows: 0, horses: 0 }, // see updateDemand()
+    navalDemand: { timber: 0, iron: 0, linen: 0 }, // what the stations' empty berths need (sim/navy.js)
     lastUpkeep: 0,
-    stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, buildingsLost: 0, trained: 0 },
+    // Sea raids (sim/navy.js): the switch. Off (the sandbox's setup, the
+    // Settings, a scenario's seaRaids: false or the flag searaids=off), every
+    // raid comes by land, exactly as before. The flag searaids=on (Settings'
+    // choice for a new mission) wins over the scenario.
+    seaRaids: flags.searaids === 'off' ? false : flags.searaids === 'on' ? true : scenario.seaRaids !== false,
+    stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
   };
 }
 
@@ -133,10 +145,25 @@ export function removeUnit(game, u, cause = 'died') {
   game.units.delete(u.id);
   const st = game.military.stats;
   if (cause === 'died') {
-    if (u.side === 'enemy') {
+    const inv = game.military.active;
+    const mine = inv && inv.id === u.invasion;
+    if (UNIT_TYPES[u.type].naval) {
+      // A sunk raider ship drowns the raiders still aboard: they count as slain.
+      const drowned = u.side === 'enemy' ? (u.crew || []).length : 0;
+      if (u.side === 'enemy') {
+        st.shipsSunk = (st.shipsSunk || 0) + 1;
+        st.enemiesKilled += drowned;
+        if (mine) { inv.killed += drowned; inv.shipsSunk = (inv.shipsSunk || 0) + 1; }
+        game.message(drowned ? `A raider ship has been sunk with ${drowned} raider${drowned === 1 ? '' : 's'} aboard!` : 'A raider ship has been sunk!', 'good', Math.floor(u.x), Math.floor(u.y));
+      } else {
+        st.shipsLost = (st.shipsLost || 0) + 1;
+        game.message('A liburnian has been sunk! The Navalia can build another.', 'bad', Math.floor(u.x), Math.floor(u.y));
+      }
+      u.crew = [];
+      game.events.emit('sound', { name: 'splash' });
+    } else if (u.side === 'enemy') {
       st.enemiesKilled++;
-      const inv = game.military.active;
-      if (inv && inv.id === u.invasion) inv.killed++;
+      if (mine) inv.killed++;
     } else {
       st.soldiersLost++;
     }
@@ -150,9 +177,20 @@ export function unitsOfFort(game, fortId) {
   return out;
 }
 
+/** Raiders in the province: on land, and still aboard their ships. */
 export function enemyCount(game) {
   let n = 0;
-  for (const u of game.units.values()) if (u.side === 'enemy') n++;
+  for (const u of game.units.values()) {
+    if (u.side !== 'enemy') continue;
+    n += UNIT_TYPES[u.type].naval ? (u.crew || []).length : 1;
+  }
+  return n;
+}
+
+/** Raider ships on the map (sailing in, offshore or leaving). */
+export function raiderShipCount(game) {
+  let n = 0;
+  for (const u of game.units.values()) if (u.side === 'enemy' && UNIT_TYPES[u.type].naval) n++;
   return n;
 }
 
@@ -160,7 +198,7 @@ export function enemyCount(game) {
 // Passability & movement
 // ---------------------------------------------------------------------------
 
-function passable(game, side, i) {
+export function passable(game, side, i) {
   const map = game.map;
   const t = map.terrain[i];
   if (t === Terrain.ROCK) return false;
@@ -392,6 +430,7 @@ export function garrisonCounts(game) {
  * ranks (weapons/arrows/horses, in units). Cached on game.military.demand.
  */
 export function updateDemand(game) {
+  updateNavalDemand(game); // the fleet's timber, iron and linen (sim/navy.js)
   const demand = { weapons: 0, arrows: 0, horses: 0 };
   const counts = garrisonCounts(game);
   for (const f of game.buildings.values()) {
@@ -493,12 +532,17 @@ export function buildingMaxHp(b) {
   return (b.house ? 45 : 80) * b.size * b.size;
 }
 
-function damageBuilding(game, b, dmg) {
+/**
+ * Raiders (or a raider ship's fire pot, `fromSea`) hurt a building; at 0 hit
+ * points it burns or collapses. Fire pots alone never let a raid carry off
+ * plunder: only raiders who reach the city on foot do.
+ */
+export function damageBuilding(game, b, dmg, { fromSea = false } = {}) {
   if (b.hp === undefined) b.hp = buildingMaxHp(b);
   b.hp -= dmg;
   b.lastRaided = game.time.totalDays;
   const inv = game.military.active;
-  if (inv) inv.reached = true; // the warband made it to the city: plunder is possible
+  if (inv && !fromSea) inv.reached = true; // the warband made it to the city: plunder is possible
   if (b.hp > 0) return;
   if (inv) inv.buildingsLost++;
   game.military.stats.buildingsLost++;
@@ -544,7 +588,7 @@ export function wallHpOf(game, i) {
 // ---------------------------------------------------------------------------
 
 /** Dijkstra from every building tile: cost for a raider to reach a building. */
-function computeField(game) {
+export function computeField(game) {
   const map = game.map;
   let field = game.enemyField;
   if (!field || field.length !== map.size) field = game.enemyField = new Float32Array(map.size);
@@ -557,7 +601,7 @@ function computeField(game) {
  * Raider travel cost from each tile to the nearest building for which
  * isSource(buildingId) is true (0 on those buildings, Infinity if cut off).
  */
-function fillField(game, field, isSource) {
+export function fillField(game, field, isSource) {
   const map = game.map;
   const n = map.size;
   field.fill(Infinity);
@@ -593,16 +637,16 @@ function fillField(game, field, isSource) {
 // ---------------------------------------------------------------------------
 
 /** Strength multiplier for a unit: raiders scale with difficulty, Rome's soldiers never do. */
-function enemyPower(game, u) {
+export function enemyPower(game, u) {
   return u.side === 'enemy' ? game.difficulty.enemy : 1;
 }
 
-function rollDamage(game, attDef, tgtDef, power = 1) {
+export function rollDamage(game, attDef, tgtDef, power = 1) {
   const raw = attDef.attack * power * (0.75 + game.rng.next() * 0.5) - tgtDef.defense * 0.5;
   return Math.max(2, raw);
 }
 
-function hurt(game, target, dmg) {
+export function hurt(game, target, dmg) {
   target.hp -= dmg;
   target.hitTick = game.time.totalTicks;
   if (target.hp <= 0) removeUnit(game, target, 'died');
@@ -730,12 +774,15 @@ function updateRaider(game, u, romans) {
   const map = game.map;
   const inv = game.military.active;
   if (!inv || inv.id !== u.invasion || inv.fleeing) {
-    // Run for the map edge and vanish there.
+    // Run for the map edge and vanish there. A warband that came by sea runs
+    // back to its landing and boards its ships, while one is still afloat.
     u.state = 'flee';
-    const o = inv && inv.id === u.invasion ? inv.origin : { x: u.x < map.w / 2 ? 0 : map.w - 1, y: u.y };
+    const own = inv && inv.id === u.invasion;
+    const ships = own && inv.sea && fleeingToShips(game, inv);
+    const o = own && (ships || !inv.sea) ? inv.origin : { x: u.x < map.w / 2 ? 0 : map.w - 1, y: u.y };
     moveToward(game, u, o.x + 0.5, o.y + 0.5, def.speed * 1.1);
     const edge = u.x < 1.5 || u.y < 1.5 || u.x > map.w - 1.5 || u.y > map.h - 1.5;
-    if (edge || u.stuck > 60) removeUnit(game, u, 'fled');
+    if (edge || (ships && landingReached(u, inv)) || u.stuck > 60) removeUnit(game, u, 'fled');
     return;
   }
   // Fight soldiers who come close.
@@ -804,6 +851,8 @@ function updateProjectiles(game) {
   if (!game.projectiles.length) return;
   const keep = [];
   for (const p of game.projectiles) {
+    // A raider ship's fire pot at a boat or a building (sim/navy.js).
+    if (p.pot) { if (!potHit(game, p)) keep.push(p); continue; }
     const t = game.units.get(p.target);
     if (!t) continue; // target gone: the missile falls harmlessly
     const dx = t.x - p.x;
@@ -842,10 +891,13 @@ export function updateMilitary(game) {
   if (game.units.size === 0 && game.projectiles.length === 0) return;
   const romans = [];
   const enemies = [];
+  const fleet = []; // liburnians
+  const pirates = []; // raider ships
   for (const u of game.units.values()) {
     u.px = u.x; // previous position: the renderer interpolates between ticks
     u.py = u.y;
-    (u.side === 'enemy' ? enemies : romans).push(u);
+    if (UNIT_TYPES[u.type].naval) (u.side === 'enemy' ? pirates : fleet).push(u);
+    else (u.side === 'enemy' ? enemies : romans).push(u);
   }
   // pressure = how many soldiers are on each raider (pickTarget spreads attacks)
   for (const e of enemies) e.pressure = 0;
@@ -867,6 +919,7 @@ export function updateMilitary(game) {
     if (u.cooldown > 0) u.cooldown--;
     updateRaider(game, u, romans);
   }
+  if (fleet.length || pirates.length) updateNavy(game, fleet, pirates);
   updateTowers(game, enemies.filter((e) => game.units.has(e.id)));
   updateProjectiles(game);
 }
@@ -946,31 +999,56 @@ export function militaryMonthly(game) {
     return;
   }
   if (!m.warned && now >= m.nextRaidMonth - 3) {
-    const origin = pickRaidOrigin(game);
-    m.warned = { origin, size: raidSize(game), dir: screenDirection(game.map, origin.x, origin.y) };
-    game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}. They will strike in about 3 months. Train soldiers and man your towers!`, 'warn', origin.x, origin.y);
+    // About a third of raids come by sea where ships can sail (sim/navy.js):
+    // decided now, on a random stream of its own, so a raid by land draws
+    // exactly what it always did.
+    const sea = seaRaidPlan(game);
+    if (sea) {
+      const size = raidSize(game);
+      const e = game.map.seaEntry;
+      m.warned = { origin: { x: e.x, y: e.y }, size, dir: screenDirection(game.map, e.x, e.y), sea: true, landing: { x: sea.x, y: sea.y } };
+      game.message(`Scouts report about ${size} raiders taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} in about 3 months. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y);
+    } else {
+      const origin = pickRaidOrigin(game);
+      m.warned = { origin, size: raidSize(game), dir: screenDirection(game.map, origin.x, origin.y) };
+      game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}. They will strike in about 3 months. Train soldiers and man your towers!`, 'warn', origin.x, origin.y);
+    }
     game.events.emit('sound', { name: 'horn' });
   } else if (m.warned && now >= m.nextRaidMonth) {
-    launchInvasion(game, m.warned.origin, m.warned.size);
+    launchInvasion(game, m.warned.origin, m.warned.size, { sea: !!m.warned.sea });
   }
 }
 
-/** Spawn a warband now. Returns the invasion record. */
-export function launchInvasion(game, origin, size) {
+/** One warrior of a warband, one roll: horsemen from 1,200 people, slingers from 700. */
+export function warbandType(game) {
+  const pop = game.city.population;
+  const roll = game.rng.next();
+  if (pop >= 1200 && roll < 0.22) return 'horseman';
+  if (pop >= 700 && roll > 0.8) return 'slinger';
+  return 'raider';
+}
+
+/**
+ * Spawn a warband now. Returns the invasion record. `sea`: it comes by sea
+ * (raider ships from the sea entry, sim/navy.js), if the switch is still on
+ * and a landing can still be found; else by land from a map edge (a sea
+ * entry is no place to walk in from, so the edge is picked again).
+ */
+export function launchInvasion(game, origin, size, { sea = false } = {}) {
   const m = game.military;
   const map = game.map;
-  if (!origin) origin = pickRaidOrigin(game);
+  if (sea && m.seaRaids) {
+    const inv = launchSeaInvasion(game, Math.max(1, size || raidSize(game)));
+    if (inv) return inv;
+  }
+  if (!origin || sea) origin = pickRaidOrigin(game);
   size = Math.max(1, size || raidSize(game));
   const inv = { id: m.nextInvasionId++, origin, size, killed: 0, buildingsLost: 0, startDay: game.time.totalDays, fleeing: false, reached: false };
   m.active = inv;
   m.warned = null;
   m.stats.raids++;
-  const pop = game.city.population;
   for (let k = 0; k < size; k++) {
-    let type = 'raider';
-    const roll = game.rng.next();
-    if (pop >= 1200 && roll < 0.22) type = 'horseman';
-    else if (pop >= 700 && roll > 0.8) type = 'slinger';
+    const type = warbandType(game);
     // Scatter around the origin on land.
     let x = origin.x;
     let y = origin.y;
@@ -994,23 +1072,32 @@ export function militaryDaily(game) {
   updateDemand(game);
   const inv = m.active;
   if (inv) {
+    // Alive: raiders ashore, and those still aboard their ships (a raid by
+    // sea is not over while its ships carry raiders).
     let alive = 0;
+    let ashore = 0;
     let camped = 0;
     for (const u of game.units.values()) {
       if (u.side !== 'enemy' || u.invasion !== inv.id) continue;
+      if (UNIT_TYPES[u.type].naval) { alive += (u.crew || []).length; continue; }
       alive++;
+      ashore++;
       if (u.state === 'camp') camped++;
     }
     // Everyone left is cut off from the city for a few days: give up.
-    inv.campDays = alive > 0 && camped === alive ? (inv.campDays || 0) + 1 : 0;
-    const days = game.time.totalDays - inv.startDay;
+    inv.campDays = ashore > 0 && camped === alive ? (inv.campDays || 0) + 1 : 0;
+    // A raid by sea counts its days from the landing (sim/navy.js).
+    const days = inv.sea ? seaRaidDays(game, inv) : game.time.totalDays - inv.startDay;
     if (alive === 0) {
       endInvasion(game, inv);
     } else if (!inv.fleeing) {
       if (inv.killed > 0 && alive <= Math.ceil(inv.size * 0.3)) {
         inv.fleeing = true;
         inv.repelled = true;
-        game.message('The raiders are fleeing! Your soldiers have broken the warband.', 'good');
+        game.message(inv.sea && !inv.landed ? 'The raider ships are turning back! Your fleet has broken them at sea.' : 'The raiders are fleeing! Your soldiers have broken the warband.', 'good');
+      } else if (inv.sea && !inv.landed && game.time.totalDays - inv.startDay > CONFIG.SEA_SAIL_MAX_DAYS) {
+        inv.fleeing = true; // they never got ashore: no plunder
+        game.message('The raider ships found no way ashore and sail away.', 'info');
       } else if (days > RAID_MAX_DAYS || inv.buildingsLost >= RAID_MAX_LOSSES || inv.campDays >= 4) {
         inv.fleeing = true;
         // Only a warband that reached the city carries anything off:
@@ -1060,10 +1147,11 @@ function endInvasion(game, inv) {
 export function threatSummary(game) {
   const m = game.military;
   const enemies = enemyCount(game);
-  if (enemies > 0) return { level: 'attack', text: `${enemies} raiders in the province`, enemies };
+  const ships = raiderShipCount(game);
+  if (enemies > 0) return { level: 'attack', text: `${enemies} raiders in the province${ships ? ` (${ships} raider ship${ships === 1 ? '' : 's'} offshore)` : ''}`, enemies, ships };
   if (m.warned) {
     const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    return { level: 'warned', text: `About ${m.warned.size} raiders expected from the ${m.warned.dir} in ~${months} months`, enemies: 0 };
+    return { level: 'warned', text: `About ${m.warned.size} raiders expected ${m.warned.sea ? 'by sea ' : ''}from the ${m.warned.dir} in ~${months} months`, enemies: 0, sea: !!m.warned.sea };
   }
   if (!m.settings) return { level: 'none', text: 'No raids in this province.', enemies: 0 };
   return { level: 'calm', text: 'No known threats.', enemies: 0 };

@@ -13,6 +13,8 @@
  *   range     attack reach in tiles (about 1 = melee)
  *   aggro     distance at which the unit notices and engages enemies
  *   siege     damage per hit against buildings and walls (raiders only)
+ *   naval     a ship: sails navigable water only and fights only ships
+ *             (sim/navy.js); land soldiers and raiders ignore it
  *   upkeep    Dn per month to keep one soldier (Roman units only). Kept low:
  *             forts and the barracks already cost wages for their staff.
  *   color     tunic/banner color (forts fly their soldiers' color)
@@ -52,7 +54,28 @@ export const UNIT_TYPES = Object.freeze({
     speed: 0.075, cooldown: 28, siege: 4, ranged: true,
     desc: 'Hurls stones from behind the warband.',
   },
+  // --- Ships (naval: they sail navigable water only, see sim/navy.js) ------------
+  // A liburnian beats one raider ship; five raider ships beat one liburnian.
+  //   ram  damage of a ram strike on a ship within RAM_REACH (every RAM_COOLDOWN ticks)
+  //   crew raiders a raider ship carries (pots: CONFIG.RAID_SHIP_POTS)
+  liburnian: {
+    name: 'Liburnian', side: 'rome', color: '#a8322b', hp: 180, attack: 13, defense: 6, range: 4.5, aggro: 10,
+    speed: 0.12, cooldown: 30, upkeep: 4, naval: true, ranged: true, ram: 45,
+    desc: 'A light warship of the provincial fleet: two banks of oars, a bronze ram. Its marines shoot raider ships, and it rams those it reaches. Built at a Navalia from timber, iron and linen; berths at a Naval Station.',
+  },
+  raider_ship: {
+    name: 'Raider Ship', side: 'enemy', color: '#3a2a1e', hp: 140, attack: 9, defense: 4, range: 5, aggro: 5,
+    speed: 0.09, cooldown: 40, naval: true, ranged: true, crew: 8,
+    desc: 'A dark, lean longship that brings a warband by sea. It throws fire pots at boats and buildings by the shore, puts its raiders ashore and waits offshore for them.',
+  },
 });
+
+/** Liburnians a Naval Station berths (its squadron). */
+export const STATION_CAPACITY = 4;
+
+/** A ram strike reaches this far (tiles) and comes this often (ticks). */
+export const RAM_REACH = 1.05;
+export const RAM_COOLDOWN = 60;
 
 /** Soldiers per fort. */
 export const FORT_CAPACITY = 8;

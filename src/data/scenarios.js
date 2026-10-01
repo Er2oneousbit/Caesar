@@ -27,6 +27,9 @@
  *                                 not burn the storehouse; sim/religion.js).
  *                                 The first two missions, as in the original,
  *                                 where a new player's one granary would burn
+ *   military                      invasion settings (INVASION_PRESETS), or none
+ *   seaRaids: false               every raid comes by land (missing = some come
+ *                                 by sea where ships can sail; sim/navy.js)
  *   difficulty                    key of data/difficulty.js (missing = normal;
  *                                 campaign missions get it from withDifficulty)
  *   hints: string[]               tips shown at start
@@ -119,11 +122,16 @@ export const INVASION_PRESETS = Object.freeze({
  * amphitheater for its Domus: a theater alone gives a home at most 16
  * entertainment (10 for a visit, 6 from the seat base), and a Domus needs 20.
  */
+/**
+ * The fleet (sim/navy.js): the missions with raids and water ships can sail
+ * (4, the river; 5, the coast; 7, a lake at the map's edge) and the sandbox.
+ */
+export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station']);
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school'];
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock', 'farm_flax', 'linen_ws', 'clothing_ws',
-  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall', 'shipyard', 'wharf'];
+  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall', 'shipyard', 'wharf', ...NAVY_KEYS];
 /**
  * Missions 5 and 6: every building and tool but the hippodrome and its
  * chariot maker, which wait for the last mission's great city (only it asks
@@ -132,6 +140,8 @@ const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 
  */
 const HIPPODROME_KEYS = ['hippodrome', 'hippodrome_part', 'chariot_maker'];
 const ALL_BUT_HIPPODROME = [...Object.keys(TOOLS), ...Object.keys(BUILDINGS)].filter((k) => !HIPPODROME_KEYS.includes(k));
+/** Mission 6's desert has no water a ship can sail: no fleet there (a test holds every mission's fleet to its water). */
+const ALL_BUT_HIPPODROME_AND_NAVY = ALL_BUT_HIPPODROME.filter((k) => !NAVY_KEYS.includes(k));
 
 export const SCENARIOS = Object.freeze([
   {
@@ -225,7 +235,7 @@ export const SCENARIOS = Object.freeze([
     funds: 10000, startYear: -210,
     goals: { population: 7000, culture: 60, prosperity: 55, peace: 65, favor: 60 },
     paceYears: 8.5,
-    unlocks: ALL_BUT_HIPPODROME, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
+    unlocks: ALL_BUT_HIPPODROME_AND_NAVY, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
     military: { first: 42, interval: [20, 30], base: 6 },
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
@@ -256,7 +266,7 @@ export function withDifficulty(scenario, difficulty = 'normal') {
 }
 
 /** Sandbox settings template. The New Game screen fills in the blanks. */
-export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional' } = {}) {
+export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true } = {}) {
   return {
     id: 'sandbox', name: 'Sandbox', title: 'Free Build',
     intro: 'No goals, no deadlines. Build the city you want.',
@@ -267,6 +277,7 @@ export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', f
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
     military: INVASION_PRESETS[invasions] ?? null,
     invasions,
+    seaRaids: seaRaids !== false, // some raids come by sea where ships can sail (sim/navy.js)
     difficulty,
     hints: ['Tip: press F1 for help at any time.'],
   };

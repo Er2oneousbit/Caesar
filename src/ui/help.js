@@ -13,7 +13,7 @@ import { HOUSE_TIERS, MAX_TIER } from '../data/housing.js';
 import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, ENT_SEATS_MAX, ENT_BASE_MAX } from '../data/buildings.js';
 import { GOODS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
-import { UNIT_TYPES } from '../data/units.js';
+import { UNIT_TYPES, STATION_CAPACITY } from '../data/units.js';
 import { KEY_HELP } from '../input/input.js';
 import { tierNeeds } from './advisors.js';
 import { CONSOLE_HELP } from './console.js';
@@ -55,6 +55,7 @@ export const URL_FLAGS = [
   ['speed=0-4', 'Starting game speed (0 = paused).'],
   ['unlockall=1', 'Every building and every campaign mission available.'],
   ['raids=off|occasional|frequent', 'Override raids for new games (testing).'],
+  ['searaids=off|on', 'Sea raids switch for new games (off: every raid comes by land).'],
   ['mute=1', 'Start with sound off.'],
 ];
 
@@ -170,13 +171,20 @@ function content(tab) {
         chain('Timber Yard + Iron Mine', 'Fletcher', 'Barracks', 'Archer'),
         chain('Horse Ranch (meadow)', 'Barracks', 'Cavalryman'),
         h('p', {}, 'A Horse Ranch starts with 2 breeding mares and gains one about every 30 staffed days, up to 8. Foals come faster as the herd grows, so build ranches early. Horses can also be imported by trade.'),
-        h('h4', {}, 'Soldiers'),
+        h('h4', {}, 'Soldiers and ships'),
         h('table', { class: 'tbl' }, Object.values(UNIT_TYPES).map((u) => h('tr', {}, h('td', {}, h('b', { style: { color: u.color } }, u.name)), h('td', { style: { fontSize: '12.5px' } }, `${u.desc}${u.upkeep ? ` Pay ${u.upkeep} Dn/month.` : ''}`)))),
         h('h4', {}, 'Orders'),
         h('p', {}, 'Garrisons guard the land around their fort (cavalry ride out farther). Click a fort and press Deploy, then click the map, to post its soldiers somewhere else: at a gate, a bridge or the edge of town. Recall brings them home.'),
         h('h4', {}, 'Defenses'),
         h('p', {}, 'Watchtowers shoot raiders within 8 tiles. Walls must be broken before raiders can pass; drag a wall across a road to build a gate that citizens can use but raiders cannot. Raiders take the cheapest way to your buildings, so a wall with a gap is just a detour.'),
         h('p', {}, 'Raiders burn or wreck what they reach, and a warband that is not driven off leaves with plunder from your treasury. Kill most of it and the survivors flee; repelling a raid raises Peace and the Emperor\'s favor.'),
+        h('h4', {}, 'Raids by sea'),
+        h('p', {}, `Where a river or the sea reaches the map edge, about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids come by ship (the Sea raids switch, on by default, in Settings and the sandbox setup). Scouts say so ("by sea, from the ..."), and the Empire map shows the warband in a longship. Raider ships sail in from the edge of the water, ${CONFIG.RAID_SHIP_CREW} raiders a ship, and put them ashore near the city, about ${CONFIG.LANDING_WALK} tiles' walk from the nearest home: from there they fight like any warband. The ships wait offshore and leave when the raid is over; fleeing raiders run back to them.`),
+        h('p', {}, `At sea each raider ship throws up to ${CONFIG.RAID_SHIP_POTS} fire pots, one every 2 days, at anything within 5 tiles of it: a fishing boat sinks; a building by the shore takes ${CONFIG.RAID_SHIP_POT_DAMAGE} damage (more on harder levels) and ${CONFIG.RAID_SHIP_FIRE_HEAT} points of fire risk, which a passing prefect clears. A ship sunk before it lands drowns its raiders.`),
+        h('h4', {}, 'The fleet'),
+        chain('Timber + Iron + Linen', 'Navalia', 'liburnian rows by water', 'Naval Station'),
+        h('p', {}, `The Navalia, a naval dockyard on the shore, builds a liburnian from ${Object.entries(CONFIG.LIBURNIAN_COST).map(([g, n]) => `${n} ${GOODS[g].name.toLowerCase()}`).join(', ')} in ${CONFIG.NAVALIA_BUILD_DAYS} days at full staff. Carts bring the materials while a staffed Naval Station on its water has an empty berth, and each new ship rows to the emptiest one. A Naval Station berths a squadron of ${STATION_CAPACITY}.`),
+        h('p', {}, `A squadron fights raider ships within ${CONFIG.STATION_GUARD} tiles of its berths: its marines shoot arrows, and it rams the ships it reaches. Click the station, press Deploy and click the water to send it elsewhere on its river or sea (it then guards ${CONFIG.STATION_GUARD_DEPLOYED} tiles around that spot); Recall brings it home. One liburnian beats one raider ship, but several raider ships together can sink it; the Navalia builds another. If a station is lost, its ships go to another station on the same water with an empty berth, and the rest are laid up.`),
       ];
     case 'debug':
       return [

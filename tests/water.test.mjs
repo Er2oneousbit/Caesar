@@ -431,8 +431,11 @@ test('unlocks: shipyard and wharf from mission 4; missions 5 and 6 have all but 
     assert.equal(has(byId[id], 'chariot_maker'), false, `${id}: no chariot maker`);
   }
   for (const id of ['c5', 'c6']) {
-    // Nothing else they had under 'all' is lost: every building and tool.
-    const lost = [...Object.keys(BUILDINGS)].filter((k) => !['hippodrome', 'hippodrome_part', 'chariot_maker'].includes(k) && !byId[id].unlocks.includes(k));
+    // Nothing else they had under 'all' is lost: every building and tool
+    // (mission 6's desert has no water a ship can sail, so no fleet there:
+    // tests/navy.test.mjs).
+    const navy = id === 'c6' ? ['navalia', 'naval_station'] : [];
+    const lost = [...Object.keys(BUILDINGS)].filter((k) => !['hippodrome', 'hippodrome_part', 'chariot_maker', ...navy].includes(k) && !byId[id].unlocks.includes(k));
     assert.deepEqual(lost, [], `${id}: every other building`);
     for (const t of ['road', 'plaza', 'bridge', 'roadblock', 'aqueduct', 'wall', 'clear']) assert.ok(byId[id].unlocks.includes(t), `${id}: ${t}`);
   }

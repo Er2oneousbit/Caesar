@@ -390,7 +390,13 @@ try {
     }
     // A slow press: the panel's timed rebuild (every 0.7 s) must wait for the
     // release, or the button is replaced under the pointer and the click lost.
-    const box = await page.locator(`#info-panel .order-btn[data-good="${store.good}"]`).boundingBox();
+    // The panel rebuilds every 0.7 s; a read that lands on a rebuild finds no
+    // button (it failed once that way): read again until one is there.
+    let box = null;
+    for (let k = 0; k < 10 && !box; k++) {
+      box = await page.locator(`#info-panel .order-btn[data-good="${store.good}"]`).boundingBox().catch(() => null);
+      if (!box) await page.waitForTimeout(100);
+    }
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.waitForTimeout(900);
@@ -722,33 +728,65 @@ try {
           return { x, y, ax: x + off, ay: y + off };
         }
       }
-      // No fertile spot beside a road anywhere near (the map's fields lie back
-      // from its roads): lay one road tile beside a fertile spot, as a player
-      // would lay a lane; this check is about the build menu, not roads.
-      const bare = (x, y) => {
-        let fertile = 0;
-        for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
-          const i = m.idx(x + dx, y + dy);
-          if (!m.isFree(x + dx, y + dy) || m.terrain[i] === 2) return false;
-          if (m.terrain[i] === 1) fertile++;
-        }
-        return (!meadow || fertile > 0) && m.inBounds(x, y - 1) && m.isFree(x, y - 1) && m.terrain[m.idx(x, y - 1)] !== 2;
+      // The menu's sandbox has a random seed: on some maps no free meadow
+      // touches a road. Then the free meadow nearest a road (walking over
+      // open land, at most 10 tiles) will do, and the test drags a road to
+      // it first (`link`: from a road tile to a tile beside the field).
+      if (!meadow) return null;
+      const free = (x, y) => {
+        for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) if (!m.inBounds(x + dx, y + dy) || !m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] !== 1) return false;
+        return true;
       };
-      for (let r = 2; r < 60; r++) {
-        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const x = home.x + dx; const y = home.y + dy;
-          if (!m.inBounds(x, y) || !m.inBounds(x + size, y + size) || !bare(x, y)) continue;
-          m.road[m.idx(x, y - 1)] = 1;
-          app.game.onMapEdited();
-          const off = Math.floor((size - 1) / 2);
-          app.renderer.camera.centerOnTile(x + off, y + off);
-          app.renderer.render(0, 0.016);
-          return { x, y, ax: x + off, ay: y + off, laidRoad: true };
+      // Breadth first from every road tile over open land: how far, and from which road tile.
+      const dist = new Map();
+      const from = new Map();
+      const queue = [];
+      for (let i = 0; i < m.size; i++) if (m.road[i]) { dist.set(i, 0); from.set(i, i); queue.push(i); }
+      for (let q = 0; q < queue.length; q++) {
+        const i = queue[q];
+        if (dist.get(i) >= 10) continue;
+        const x = m.xOf(i); const y = m.yOf(i);
+        for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+          if (!m.inBounds(nx, ny)) continue;
+          const j = m.idx(nx, ny);
+          if (dist.has(j) || !m.isFree(nx, ny) || m.terrain[j] === 2) continue;
+          dist.set(j, dist.get(i) + 1); from.set(j, from.get(i)); queue.push(j);
         }
       }
-      return null;
+      let best = null;
+      for (let y = 1; y < m.h - size - 1; y++) {
+        for (let x = 1; x < m.w - size - 1; x++) {
+          if (!free(x, y)) continue;
+          for (let k = 0; k < size; k++) {
+            for (const [lx, ly] of [[x + k, y - 1], [x + k, y + size], [x - 1, y + k], [x + size, y + k]]) {
+              const d = dist.get(m.idx(lx, ly));
+              if (d === undefined || d === 0 || (best && d >= best.d)) continue;
+              const r = from.get(m.idx(lx, ly));
+              best = { d, x, y, link: { x: lx, y: ly, rx: m.xOf(r), ry: m.yOf(r) } };
+            }
+          }
+        }
+      }
+      if (!best) return null;
+      const off = Math.floor((size - 1) / 2);
+      app.renderer.camera.centerOnTile(Math.round((best.link.x + best.link.rx) / 2), Math.round((best.link.y + best.link.ry) / 2));
+      app.renderer.render(0, 0.016);
+      return { x: best.x, y: best.y, ax: best.x + off, ay: best.y + off, link: best.link };
     }, { size, meadow: key === 'farm_flax' });
+    if (at && at.link) {
+      // Drag a road from the road tile out to the field's edge, then look at the field.
+      await page.evaluate(() => window.colonia.ui.selectTool('road'));
+      await page.waitForTimeout(100);
+      const a = await toScreen(at.link.rx, at.link.ry);
+      const b = await toScreen(at.link.x, at.link.y);
+      await page.mouse.move(a.x, a.y);
+      await page.mouse.down();
+      await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 5 });
+      await page.mouse.move(b.x, b.y, { steps: 5 });
+      await page.mouse.up();
+      await page.keyboard.press('Escape');
+      await page.evaluate(({ ax, ay }) => { window.colonia.renderer.camera.centerOnTile(ax, ay); window.colonia.renderer.render(0, 0.016); }, at);
+    }
     await page.click(`.cat-btn[title^="${cat}"]`);
     const listed = await page.isVisible(`.build-item:has-text("${name}")`);
     if (listed) await page.click(`.build-item:has-text("${name}")`);
@@ -929,16 +967,33 @@ try {
     const forts = [...g.buildings.values()].filter((b) => b.def.kind === 'fort');
     const soldiers = [...g.units.values()].filter((u) => u.side === 'rome').length;
     const fort = forts.find((f) => [...g.units.values()].some((u) => u.fort === f.id)) || forts[0];
-    return { out, forts: forts.length, soldiers, fortId: fort ? fort.id : 0, fx: fort ? fort.x : 0, fy: fort ? fort.y : 0 };
+    const bk = [...g.buildings.values()].find((b) => b.type === 'barracks');
+    const why = bk ? { eff: bk.efficiency, labor: bk.laborAccess, road: bk.accessRoad, stock: bk.stock, workforce: g.city.workforce, jobs: g.city.jobs, prio: g.city.laborPriority, fortsStaffed: forts.filter((f) => f.efficiency > 0).length } : { barracks: false };
+    return { out, forts: forts.length, soldiers, fortId: fort ? fort.id : 0, fx: fort ? fort.x : 0, fy: fort ? fort.y : 0, why, seed: g.seed };
   });
-  check('garrison: forts built and soldiers recruited', gar.forts >= 1 && gar.soldiers >= 1, `${gar.forts} forts, ${gar.soldiers} soldiers`);
+  check('garrison: forts built and soldiers recruited', gar.forts >= 1 && gar.soldiers >= 1, `${gar.forts} forts, ${gar.soldiers} soldiers; ${gar.out}; ${JSON.stringify(gar.why)}; seed ${gar.seed}`);
   if (gar.fortId) {
     await page.evaluate((id) => { window.colonia.renderer.camera.centerOnTile(window.colonia.game.buildings.get(id).x, window.colonia.game.buildings.get(id).y); window.colonia.ui.info.showBuilding(id); }, gar.fortId);
     await page.click('#info-panel button:has-text("Deploy")');
     check('deploy button enters deploy mode', await page.evaluate(() => window.colonia.deploying > 0));
+    // A free tile whose spot on screen shows the map: the first free tile
+    // could lie under the open info panel, and the click then hit the panel
+    // (seed 905205: no rally point set).
     const target = await page.evaluate(([fx, fy]) => {
-      const m = window.colonia.game.map;
-      for (let r = 5; r < 14; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r]]) if (m.isFree(fx + dx, fy + dy)) return { x: fx + dx, y: fy + dy };
+      const app = window.colonia;
+      const m = app.game.map;
+      const cam = app.renderer.camera;
+      const rect = app.canvas.getBoundingClientRect();
+      const onMap = (x, y) => {
+        const wx = (x + 0.5 - (y + 0.5)) * 32;
+        const wy = (x + 0.5 + (y + 0.5)) * 16;
+        const sx = rect.left + ((wx - cam.x) * cam.scale) / cam.dpr;
+        const sy = rect.top + ((wy - cam.y) * cam.scale) / cam.dpr;
+        return document.elementFromPoint(sx, sy) === app.canvas;
+      };
+      for (let r = 5; r < 14; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) {
+        if (m.isFree(fx + dx, fy + dy) && onMap(fx + dx, fy + dy)) return { x: fx + dx, y: fy + dy };
+      }
       return null;
     }, [gar.fx, gar.fy]);
     if (target) {
@@ -946,7 +1001,9 @@ try {
       await page.mouse.click(p.x, p.y);
       const rally = await page.evaluate((id) => window.colonia.game.buildings.get(id).rally, gar.fortId);
       check('clicking the map deploys the soldiers there', !!rally && Math.floor(rally.x) === target.x && Math.floor(rally.y) === target.y, JSON.stringify(rally));
-    }
+    } else check('clicking the map deploys the soldiers there', false, 'no free tile on screen near the fort');
+    // Never leave deploy mode on for the steps that follow.
+    await page.evaluate(() => { if (window.colonia.deploying) window.colonia.cancelDeploy(); });
   }
   // 5b2. The Empire map: E opens it and it draws (a scouted warband and a
   //      caravan on the way included), clicking the warband closes it and
@@ -1316,6 +1373,120 @@ try {
     const auto = await p2.evaluate(() => ({ playing: window.colonia.music.playing, mood: window.colonia.music.mood, gate: !!document.getElementById('title-gate') }));
     check('autoplay allowed: menu music starts at once, no gate', auto.playing && auto.mood === 'menu' && !auto.gate, JSON.stringify(auto));
     await b2.close();
+  }
+
+  // 6d. The fleet (sim/navy.js) on a coast: place a Naval Station and a
+  //     Navalia with the mouse, then a working fleet (console `navy`), its
+  //     squadron deployed by the station's Deploy button and a click on the
+  //     water, a ship's panel, the Military advisor's stations, a raid by sea.
+  {
+    const np = await ctx.newPage();
+    const nerrors = [];
+    np.on('pageerror', (e) => nerrors.push(`pageerror: ${e.message}`));
+    np.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) nerrors.push(m.text()); });
+    await np.goto(`${url}?skipmenu=1&maptype=coast&map=small&seed=demo&mute=1&money=90000`);
+    await np.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    await np.evaluate(() => { const app = window.colonia; app.paused = true; app.ui.console.run('demo 2'); app.ui.console.run('days 60'); app.renderer.camera.zoomIndex = 2; });
+    const nScreen = (tx, ty) => np.evaluate(([x, y]) => {
+      const cam = window.colonia.renderer.camera;
+      const wx = (x + 0.5 - (y + 0.5)) * 32;
+      const wy = (x + 0.5 + (y + 0.5)) * 16;
+      const r = window.colonia.canvas.getBoundingClientRect();
+      return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+    }, [tx, ty]);
+    // Two open 3x3 spots on the shore of the sea, apart from each other.
+    const spots = await np.evaluate(() => {
+      const g = window.colonia.game;
+      const m = g.map;
+      const out = [];
+      for (let y = 2; y < m.h - 5 && out.length < 2; y++) {
+        for (let x = 2; x < m.w - 5 && out.length < 2; x++) {
+          if (m.navigableBeside(x, y, 3) < 0) continue;
+          let ok = true;
+          for (let dy = 0; dy < 3 && ok; dy++) for (let dx = 0; dx < 3; dx++) if (!m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] === 2) { ok = false; break; }
+          if (ok && out.every((o) => Math.abs(o.x - x) > 4 || Math.abs(o.y - y) > 4)) out.push({ x, y });
+        }
+      }
+      if (out[0]) window.colonia.renderer.camera.centerOnTile(out[0].x + 1, out[0].y + 1);
+      return out;
+    });
+    check('fleet: open shore for a station and a navalia', spots.length === 2, JSON.stringify(spots));
+    const placed = [];
+    for (const [k, type] of [[0, 'naval_station'], [1, 'navalia']]) {
+      if (!spots[k]) break;
+      await np.evaluate(([s, t]) => { window.colonia.renderer.camera.centerOnTile(s.x + 1, s.y + 1); window.colonia.ui.selectTool(t); }, [spots[k], type]);
+      await np.waitForTimeout(250);
+      const p = await nScreen(spots[k].x + 1, spots[k].y + 1); // the cursor is the middle of a 3x3
+      await np.mouse.move(p.x - 5, p.y);
+      await np.mouse.move(p.x, p.y);
+      await np.mouse.click(p.x, p.y);
+      placed.push(await np.evaluate(([s, t]) => window.colonia.game.buildings.get(window.colonia.game.map.building[window.colonia.game.map.idx(s.x, s.y)])?.type === t, [spots[k], type]));
+    }
+    check('fleet: a click places a Naval Station and a Navalia on the shore', placed.length === 2 && placed.every(Boolean), JSON.stringify(placed));
+    await np.mouse.click(10, 300, { button: 'right' });
+    // A working fleet: stocked, staffed (military first), a few months on.
+    const fleet = await np.evaluate(() => {
+      const app = window.colonia;
+      const out = app.ui.console.run('navy');
+      app.game.city.laborPriority = ['military'];
+      app.ui.console.run('days 140');
+      const g = app.game;
+      const st = [...g.buildings.values()].filter((b) => b.def.kind === 'station').find((b) => [...g.units.values()].some((u) => u.station === b.id));
+      return { out, st: st ? { id: st.id, x: st.x, y: st.y } : null, ships: [...g.units.values()].filter((u) => u.type === 'liburnian').length };
+    });
+    check('fleet: the navalia builds liburnians that berth at a station', fleet.ships >= 1 && !!fleet.st, JSON.stringify(fleet));
+    if (fleet.st) {
+      await np.evaluate((s) => { window.colonia.renderer.camera.centerOnTile(s.x + 1, s.y + 1); window.colonia.ui.info.showBuilding(s.id); }, fleet.st);
+      await np.waitForTimeout(250);
+      await np.click('#info-panel button:has-text("Deploy")');
+      const water = await np.evaluate((s) => {
+        const m = window.colonia.game.map;
+        const st = window.colonia.game.buildings.get(s.id);
+        const body = m.navBody[st.berth];
+        for (let r = 5; r < 12; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r], [r, r], [-r, -r]]) {
+          const x = s.x + 1 + dx; const y = s.y + 1 + dy;
+          if (m.inBounds(x, y) && m.navBody[m.idx(x, y)] === body) return { x, y };
+        }
+        return null;
+      }, fleet.st);
+      if (water) {
+        const p = await nScreen(water.x, water.y);
+        await np.mouse.click(p.x, p.y);
+      }
+      const rally = await np.evaluate((id) => window.colonia.game.buildings.get(id).rally, fleet.st.id);
+      check('fleet: Deploy and a click on the water send the squadron there', !!water && !!rally && Math.abs(Math.floor(rally.x) - water.x) <= 2 && Math.abs(Math.floor(rally.y) - water.y) <= 2, JSON.stringify({ water, rally }));
+      await np.evaluate(() => { window.colonia.paused = false; window.colonia.ui.console.run('days 8'); window.colonia.paused = true; });
+      // Click a liburnian: its panel.
+      await np.evaluate(() => { const u = [...window.colonia.game.units.values()].find((v) => v.type === 'liburnian'); window.colonia.renderer.camera.centerOnTile(Math.floor(u.x), Math.floor(u.y)); });
+      await np.waitForTimeout(400);
+      const shipAt = await np.evaluate(() => {
+        const r = window.colonia.renderer;
+        const s = r.shipSpots.find((o) => window.colonia.game.units.get(o.id)?.type === 'liburnian');
+        if (!s) return null;
+        const cam = r.camera;
+        const rect = window.colonia.canvas.getBoundingClientRect();
+        return { x: rect.left + ((s.wx - cam.x) * cam.scale) / cam.dpr, y: rect.top + ((s.wy - 12 - cam.y) * cam.scale) / cam.dpr };
+      });
+      if (shipAt) await np.mouse.click(shipAt.x, shipAt.y);
+      await np.waitForTimeout(200);
+      const panel = await np.evaluate(() => ({ kind: window.colonia.ui.info.target?.kind, text: document.getElementById('info-panel').textContent }));
+      check('fleet: clicking a liburnian shows its panel', panel.kind === 'unit' && /Liburnian/.test(panel.text) && /Hull/.test(panel.text), JSON.stringify({ kind: panel.kind }));
+      if (shots) await np.screenshot({ path: path.join(shots, 'smoke-fleet.png') });
+    }
+    await np.keyboard.press('F2');
+    await np.click('.tab:has-text("Military")');
+    check('fleet: the Military advisor shows the fleet and its stations', await np.isVisible('.modal h4:has-text("Fleet")') && await np.isVisible('.modal th:has-text("Station")'));
+    await np.keyboard.press('Escape');
+    const raid = await np.evaluate(() => {
+      const app = window.colonia;
+      const said = app.ui.console.run('searaid 10');
+      app.ui.console.run('days 3');
+      const g = app.game;
+      return { said, sea: !!g.military.active?.sea, ships: [...g.units.values()].filter((u) => u.type === 'raider_ship').length };
+    });
+    check('fleet: a raid by sea sails in on raider ships', raid.sea && raid.ships >= 1, JSON.stringify(raid));
+    check('fleet: no errors on the coast', nerrors.length === 0, nerrors.join(' | '));
+    await np.close();
   }
 
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet

@@ -705,28 +705,26 @@ try {
   }
   check('rubble offers to rebuild what stood there, on the same spot', fell.rubble === 1 && !!rebuilt && rebuilt.standing && /^Rebuild the .+ \(\d+ Dn\)$/.test(rebuilt.label || ''), JSON.stringify({ fell, rebuilt }));
 
-  // 5a2c. Fishing and the hippodrome: built with the console's builders (the
-  //       player's construction API), their panels show the boat, the catch
-  //       and the races; a click on any section of the track opens the
-  //       hippodrome's panel.
+  // 5a2c. The hippodrome: built with the console's builder (the player's
+  //       construction API), its panel shows the races; a click on any
+  //       section of the track opens the hippodrome's panel. (Fishing is
+  //       checked on the fixed coast map below: this map's seed is random,
+  //       and some maps have no water with fishing grounds near the city.)
   const water = await page.evaluate(() => {
     const app = window.colonia;
     const g = app.game;
     const free = g.cheats.freeBuild;
     g.cheats.freeBuild = true;
-    const out = { fish: app.ui.console.run('fishing'), hip: app.ui.console.run('hippodrome') };
+    const out = { hip: app.ui.console.run('hippodrome') };
     g.cheats.freeBuild = free;
     const find = (k) => [...g.buildings.values()].find((b) => b.def.kind === k || b.type === k);
     const text = () => document.querySelector('#info-panel')?.textContent || '';
-    const wharf = find('wharf');
-    if (wharf) { app.ui.info.showBuilding(wharf.id); out.wharf = text(); }
     const part = find('hippodrome_part');
     if (part) { app.ui.info.showBuilding(part.id); out.target = app.ui.info.target?.id; out.main = part.main; out.hipPanel = text(); }
     app.ui.info.close();
     app.renderer.render(0, 0.016);
     return out;
   });
-  check('a wharf can be placed, and its panel shows its boat and catch', /Fishing/.test(water.wharf || '') && /Catch in store/.test(water.wharf || '') && errors.length === 0, JSON.stringify({ fish: water.fish, wharf: (water.wharf || '').slice(0, 160) }));
   check('a hippodrome can be placed; any section opens its panel with the races', !!water.main && water.target === water.main && /Races/.test(water.hipPanel || '') && errors.length === 0, JSON.stringify({ hip: water.hip, target: water.target, main: water.main }));
 
   // 5a2d. The cloth industry from the build menu: each of the three buildings
@@ -1616,6 +1614,23 @@ try {
     await np.goto(`${url}?skipmenu=1&maptype=coast&map=small&seed=demo&mute=1&money=90000`);
     await np.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
     await np.evaluate(() => { const app = window.colonia; app.paused = true; app.ui.console.run('demo 2'); app.ui.console.run('days 60'); app.renderer.camera.zoomIndex = 2; });
+    // Fishing, on this fixed coast map (the main game's random seed may have
+    // no water with fishing grounds near its city): the console's builder
+    // places a shipyard and wharves, and a wharf's panel shows its boat and
+    // catch. It runs before the fleet takes its two spots on the shore.
+    const fish = await np.evaluate(() => {
+      const app = window.colonia;
+      const g = app.game;
+      const free = g.cheats.freeBuild;
+      g.cheats.freeBuild = true;
+      const out = { fish: app.ui.console.run('fishing') };
+      g.cheats.freeBuild = free;
+      const wharf = [...g.buildings.values()].find((b) => b.type === 'wharf');
+      if (wharf) { app.ui.info.showBuilding(wharf.id); out.wharf = document.querySelector('#info-panel')?.textContent || ''; }
+      app.ui.info.close();
+      return out;
+    });
+    check('a wharf can be placed, and its panel shows its boat and catch', /Fishing/.test(fish.wharf || '') && /Catch in store/.test(fish.wharf || '') && nerrors.length === 0, JSON.stringify({ fish: fish.fish, wharf: (fish.wharf || '').slice(0, 160), nerrors }));
     const nScreen = (tx, ty) => np.evaluate(([x, y]) => {
       const cam = window.colonia.renderer.camera;
       const wx = (x + 0.5 - (y + 0.5)) * 32;

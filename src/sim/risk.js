@@ -17,6 +17,7 @@ import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { footprintTiles, removeBuilding, spawnWalker } from './entities.js';
 import { followPath, goHome } from './movement.js';
+import { recordRuin } from './ruins.js';
 
 /** Display name for messages: house tier name or building name. */
 export function buildingLabel(b) {
@@ -51,6 +52,9 @@ export function updateRisk(game, b) {
   }
 }
 
+/** What the rubble remembers for each way a building is set alight (sim/ruins.js). */
+const RUIN_OF_FIRE = { fire: 'fire', lightning: 'lightning', raid: 'raidFire', raidQuiet: 'raidFire', riot: 'riot', riotQuiet: 'riot' };
+
 /**
  * Burn a building down: it becomes a burning ruin.
  * @param {'fire'|'lightning'|'raid'|'raidQuiet'|'riot'|'riotQuiet'} cause
@@ -66,6 +70,7 @@ export function igniteBuilding(game, b, cause = 'fire') {
     game.map.rubble[i] = 1;
     game.fires.set(i, CONFIG.FIRE_BURN_DAYS);
   }
+  recordRuin(game, tiles, label, RUIN_OF_FIRE[cause] || 'fire');
   game.city.stats.fires++;
   const texts = {
     lightning: `Lightning struck ${aLabel}! It is burning.`,
@@ -88,9 +93,11 @@ export function igniteBuilding(game, b, cause = 'fire') {
  */
 export function collapseBuilding(game, b, cause = 'decay') {
   const tiles = footprintTiles(game.map, b.x, b.y, b.size);
-  const aLabel = withArticle(buildingLabel(b));
+  const label = buildingLabel(b);
+  const aLabel = withArticle(label);
   removeBuilding(game, b, 'collapse');
   for (const i of tiles) game.map.rubble[i] = 1;
+  recordRuin(game, tiles, label, cause === 'raid' || cause === 'raidQuiet' ? 'raid' : 'collapse');
   game.city.stats.collapses++;
   if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause !== 'raidQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y);

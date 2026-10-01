@@ -17,6 +17,7 @@ import { helpModal } from './help.js';
 import { mainMenu, pauseMenu, titleGate } from './menus.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { TERRAIN_NAMES } from '../world/map.js';
+import { planNoRoadWarning } from '../sim/construction.js';
 
 /** How long the leaving title gate still catches input (about a double-click). */
 const GATE_GUARD_MS = 500;
@@ -282,7 +283,10 @@ export class UI {
 
   /**
    * The overlay's legend (while an overlay with one is on) and its tooltip:
-   * what `overlay.tip` says about the building under the pointer.
+   * what `overlay.tip` says about the building under the pointer. While a
+   * building is being placed where no road would reach it, the same tooltip
+   * says so by the cursor in the warning style (the sidebar alone was easy
+   * to miss, and a building with no road does nothing at all).
    */
   updateOverlayHelp() {
     const app = this.app;
@@ -302,10 +306,17 @@ export class UI {
     const t = app.renderer.hoverTile;
     const m = app.input ? app.input.mouse : null;
     let text = null;
-    if (g && ov.tip && t && m && m.over && !app.input.tool && !this.hasModal()) {
-      const b = g.buildings.get(g.map.buildingAt(t.x, t.y));
-      if (b) text = ov.tip(g, b);
+    let warn = false;
+    if (g && t && m && m.over && !this.hasModal()) {
+      if (app.input.tool) {
+        const w = planNoRoadWarning(app.renderer.plan);
+        if (w) { text = `⚠ ${w}`; warn = true; }
+      } else if (ov.tip) {
+        const b = g.buildings.get(g.map.buildingAt(t.x, t.y));
+        if (b) text = ov.tip(g, b);
+      }
     }
+    this.tipEl.classList.toggle('warn', warn);
     this.tipEl.classList.toggle('hidden', !text);
     if (!text) return;
     if (this.tipEl.textContent !== text) this.tipEl.textContent = text;

@@ -43,6 +43,12 @@ Insane is for veterans: staff the Prefecture and Engineer's Post first (labor pr
 
 A Housing Plot costs 10 Dn. Settlers arrive when the city mood is at least 30, the plot is within 2 tiles of a road, and that road connects to the map entrance. A home uses the nearest road that reaches the entrance, even when an unconnected street runs closer; other buildings use a road touching them, again preferring one that reaches the entrance, so a stray bit of road laid against a building never cuts it off from its workers and walkers.
 
+**Road access, plainly.** Every building with workers must have a road touching one of its edges (wells, reservoirs, gardens, statues and the Oracle need no road). The door's side does not matter: any edge touching a road works. A road that only meets a corner does not count. Homes take a road within 2 tiles, corners included. A building with no road gets no workers and does nothing at all, so the game makes it hard to miss:
+
+* While you place it, the building is drawn in orange instead of green, the tiles along its edges where a road would serve it are picked out in yellow, and the warning shows by the cursor as well as in the sidebar.
+* Once built, a red sign with a crossed-out road floats over it, at every zoom and under every overlay, until a road reaches it (also over a home with no road within 2 tiles).
+* A building with workers that has had no road for 8 days says so once in a message (*The Prefecture at 30,41 has no road touching it: it gets no workers and does nothing.*); click it to go there. Its panel and the Problems overlay say the same.
+
 Homes follow the housing ladder of the original game: 20 levels, rebuilt with Colonia's own names and numbers (`src/data/housing.js`).
 
 * **Moving up:** each day a home checks the next level. As soon as it has everything that level needs, and its desirability is at least its own level's `up`, it moves up at once. Never more than one level a day.
@@ -267,6 +273,8 @@ At most 100, and at most 40 for a home whose level eats and that has no food at 
 ## Fire and collapse
 
 Every building gains fire and collapse risk daily (houses by level, industry faster; x0.5 Easy, x1.3 Hard, x1.5 Insane). At 100 there is a 25% chance per day of disaster. A burning ruin burns for 6 days and can spread: each building beside the flames gains 5 fire risk a day and has a 2% chance a day to catch, once a day however many burning tiles it touches. An unguarded fire in a dense block usually takes a handful of homes; a prefect on the way usually stops it at one or two. Prefects within 24 road tiles are dispatched automatically.
+
+Rubble remembers what stood there. Click it: *Ruins of a Prefecture, burned down in Iul 280 BC.* The causes are burned down, struck by lightning, burned by raiders, burned by rioters, collapsed, torn down by raiders, and (for a wall) broken down by raiders. Every tile of a fallen building keeps the record until it is cleared or built over. Rubble in a save made by an older version of the game says only *Rubble from a disaster*.
 
 ## Gods
 

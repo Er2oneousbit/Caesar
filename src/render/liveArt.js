@@ -10,6 +10,8 @@
  *   drawAltarFlame() the small fire on a temple's altar
  *   drawMapGate()    the gateway over the Imperial road at the map entrance
  *                    (green pennants) and exit (red pennants)
+ *   drawNoRoadSign() the red "no road" sign over a building that has no road
+ *                    touching it (sim/roadAccess.js)
  *
  * Like walkerArt.js, these work in device pixels: (ox, oy) is a building's
  * footprint top corner on screen and k the pixel scale (zoom * dpr). Local
@@ -206,6 +208,57 @@ export function drawAltarFlame(ctx, sx, sy, k, t, seed) {
     ctx.closePath();
     ctx.fill();
   }
+}
+
+/** Radius of the no-road sign's disc (art px, before scaling). */
+export const NO_ROAD_SIGN_R = 8.5;
+
+/**
+ * A "no road" sign floating over a building that cannot work for want of a
+ * road: a round white sign with a red rim, a short grey road with its
+ * dashed middle line, and a red bar struck across it, on a pointed tail
+ * that points down at the building. (sx, sy) is the tip of the tail in
+ * device px, s the size (device px per art px; the caller keeps it from
+ * getting too small to see when zoomed far out).
+ */
+export function drawNoRoadSign(ctx, sx, sy, s) {
+  const r = NO_ROAD_SIGN_R * s;
+  const cx = sx;
+  const cy = sy - r - 4 * s;
+  ctx.save();
+  // Tail and a dark rim, so the sign reads on grass, roofs and snow alike.
+  ctx.fillStyle = 'rgba(40,16,12,0.85)';
+  ctx.beginPath();
+  ctx.moveTo(cx - 3.2 * s, cy + r * 0.7);
+  ctx.lineTo(sx, sy);
+  ctx.lineTo(cx + 3.2 * s, cy + r * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 1.2 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d42a1e';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f6f1e6';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  // The road: a grey strip with a dashed white middle line.
+  ctx.fillStyle = '#6e665c';
+  ctx.fillRect(cx - r * 0.62, cy - r * 0.22, r * 1.24, r * 0.44);
+  ctx.fillStyle = '#f6f1e6';
+  for (let d = -2; d <= 1; d++) ctx.fillRect(cx + d * r * 0.3 + r * 0.04, cy - r * 0.04, r * 0.18, r * 0.08);
+  // The bar across it.
+  ctx.strokeStyle = '#d42a1e';
+  ctx.lineWidth = r * 0.24;
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.5, cy - r * 0.5);
+  ctx.lineTo(cx + r * 0.5, cy + r * 0.5);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Height of a map gate's pillars (art px, before scaling). */

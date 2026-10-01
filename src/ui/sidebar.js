@@ -11,6 +11,7 @@ import { h, mount, fmt } from './dom.js';
 import { CATEGORIES, BUILDINGS, TOOLS, LABOR_CATEGORIES, buildingsInCategory } from '../data/buildings.js';
 import { iconCanvas } from './icons.js';
 import { Minimap } from '../render/minimap.js';
+import { planNoRoadWarning } from '../sim/construction.js';
 
 export class Sidebar {
   constructor(app, root) {
@@ -127,7 +128,9 @@ export class Sidebar {
       if (plan.fertility !== undefined) parts.push(h('div', { class: plan.fertility >= 0.75 ? 'ok' : 'warn' }, `Fertility: ${Math.round(plan.fertility * 100)}%`));
     }
     if (plan.reason && plan.count === 0) parts.push(h('div', { class: 'err' }, plan.reason));
-    for (const w of plan.warnings || []) parts.push(h('div', { class: 'warn' }, `⚠ ${w}`));
+    // No road in reach: in the error style, because the building would do nothing.
+    const noRoad = planNoRoadWarning(plan);
+    for (const w of plan.warnings || []) parts.push(h('div', { class: w === noRoad ? 'err' : 'warn' }, `⚠ ${w}`));
     mount(this.planEl, parts);
   }
 

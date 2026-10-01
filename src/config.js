@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.11.1',
-  SAVE_VERSION: 6, // v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 7, // v7: storage orders (v6 saves load, accept flags mapped); v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------

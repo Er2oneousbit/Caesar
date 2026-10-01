@@ -20,6 +20,8 @@ import { WALKER_TYPES, ROADBLOCK_GROUPS } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall, ROADBLOCK } from '../world/map.js';
 import { walkerInfo } from './walkerTalk.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
+import { cycleOrder, setEmptying, orderGoods } from '../sim/storageOrders.js';
+import { ORDER_LABELS, orderLines } from './storageInfo.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
@@ -149,6 +151,19 @@ export class InfoPanel {
     root.appendChild(this.el);
     this.target = null; // { kind: 'building', id } | { kind: 'tile', x, y } | { kind: 'walker', id }
     this.timer = 0;
+    // A pointer held down in the panel (a press on a button, say): the timed
+    // rebuild waits, or it would replace the button between press and
+    // release and the click would be lost. It runs on the next frame after
+    // the release instead, once the click has landed.
+    this.pressed = false;
+    this.el.addEventListener('pointerdown', () => { this.pressed = true; });
+    const release = () => {
+      if (!this.pressed) return;
+      this.pressed = false;
+      this.timer = Math.max(this.timer, 0.7); // the frame after the click event
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
   }
 
   get open() { return !this.el.classList.contains('hidden'); }
@@ -195,6 +210,7 @@ export class InfoPanel {
     if (!this.open) return;
     this.timer += dt;
     if (this.timer < 0.7) return;
+    if (this.pressed) return; // a press in progress: rebuild after the release
     this.timer = 0;
     // Do not rebuild while the user is interacting with a control inside.
     if (this.el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
@@ -470,24 +486,41 @@ export class InfoPanel {
     mount(this.el, parts);
   }
 
+  /**
+   * Stock, and the orders: one button per good that cycles Accept, Refuse,
+   * Get (sim/storageOrders.js), the Empty switch, and what they are doing.
+   */
   storageSection(g, b) {
     const cap = storageCapacity(b);
     const used = storageUsed(b);
-    const keys = b.def.kind === 'granary' ? FOOD_TYPES : Object.keys(b.stock);
+    const granary = b.def.kind === 'granary';
+    const cycle = (k) => { cycleOrder(b, k); this.render(); };
     return h('div', { class: 'panel-sec' },
       h('h5', {}, 'Storage'),
       kv('Used', `${fmt(used)} / ${fmt(cap)}`), bar(used, cap),
+      orderLines(g, b).map((line) => h('div', { class: `status ${line.level}`, style: { marginTop: '6px' } }, line.text)),
+      h('div', { class: 'row', style: { marginTop: '6px', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        h('button', {
+          class: `btn small empty-btn${b.emptying ? ' active' : ''}`,
+          title: b.emptying ? 'Take deliveries again' : 'Take nothing in and send everything stored here elsewhere, one cart at a time',
+          onclick: () => { setEmptying(b, !b.emptying); this.render(); },
+        }, b.emptying ? 'Stop emptying' : `Empty the ${granary ? 'granary' : 'warehouse'}`),
+        h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Click an order to change it: Accept, Refuse, Get.')),
       h('table', { class: 'tbl', style: { marginTop: '6px' } },
-        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Stored'), h('th', { class: 'r' }, 'Accept')),
-        keys.map((k) => h('tr', {},
-          h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
-          h('td', { class: 'r num' }, fmt(b.stock[k])),
-          h('td', { class: 'r' }, h('input', {
-            type: 'checkbox',
-            checked: !!b.accept[k],
-            title: 'Accept deliveries of this good',
-            onchange: (e) => { b.accept[k] = e.target.checked; },
-          }))))));
+        h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Stored'), h('th', { class: 'r' }, 'Orders')),
+        orderGoods(b).map((k) => {
+          const state = b.orders[k] || 'accept';
+          const label = ORDER_LABELS[state];
+          return h('tr', {},
+            h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
+            h('td', { class: 'r num' }, fmt(b.stock[k])),
+            h('td', { class: 'r' }, h('button', {
+              class: `btn small order-btn ${state}`,
+              'data-good': k,
+              title: label.title,
+              onclick: () => cycle(k),
+            }, label.label)));
+        })));
   }
 
   /** A walker: who, from where, doing what, carrying what, and what it says. */

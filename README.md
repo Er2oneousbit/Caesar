@@ -25,6 +25,7 @@ Saved games stay in your browser. Use *Save game → Export to file* to keep a b
 * **Disease:** crowded, unhealthy homes can fall sick, lose people and pass it next door. A Medicus sends physicians to cure them, and baths, barbers, fountains, food and a hospital keep it away. The Disease overlay shows which homes are at risk.
 * **Four difficulties**, Easy to Insane.
 * **Trade** by land and sea with nine partner cities, and an empire map (E) that shows the caravans and ships on their way and the warbands your scouts have seen coming.
+* **Granary and warehouse orders:** per good, accept it, refuse it, or *get* it (the building's cart fetches it from other storage), and an *Empty* switch that sends everything elsewhere.
 * **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates.
 * **A living world:** day and night, four seasons with snow in winter, rain and thunderstorms, fluttering flags, busy markets, crowds at the shows.
 * **Music:** ten original tracks of a few minutes each for building and for the night, festival music, and war drums when raiders attack, all played live by synthesized lyre, pipes and drums.

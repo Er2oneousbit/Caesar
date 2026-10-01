@@ -35,6 +35,11 @@
  *      to a sick home. Version 5 (and 4) saves load: no home is sick, every
  *      risk starts at 0 and city health at its starting value, see
  *      upgradeV5().
+ *   7  storage orders: granaries and warehouses hold `orders` (per good
+ *      'accept', 'refuse' or 'get') and an Empty switch (`emptying`) in
+ *      place of the old `accept` flags; carts can be out fetching ('collect').
+ *      Version 6 (and older) saves load: each accept flag becomes Accept or
+ *      Refuse and nothing is emptying, see upgradeV6().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -292,7 +297,10 @@ export function deserializeGame(data, flags = {}) {
       continue;
     }
     const b = new Building(raw.id, raw.type, raw.x, raw.y, raw.size);
+    const freshOrders = b.orders;
     Object.assign(b, raw);
+    // A good added since the save was made gets its default order.
+    if (freshOrders && b.orders && b.orders !== freshOrders) b.orders = { ...freshOrders, ...b.orders };
     game.buildings.set(b.id, b);
     for (const i of footprintTiles(map, b.x, b.y, b.size)) map.building[i] = b.id;
     maxB = Math.max(maxB, b.id);
@@ -330,6 +338,7 @@ export function deserializeGame(data, flags = {}) {
 
   if (data.version < 5) upgradeV4(game);
   if (data.version < 6) upgradeV5(game);
+  if (data.version < 7) upgradeV6(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -365,6 +374,24 @@ function upgradeV5(game) {
     if (!h) continue;
     h.diseaseRisk = 0;
     h.sick = 0;
+  }
+}
+
+/**
+ * A version 6 save (before storage orders): a granary's or warehouse's
+ * accept flags become its orders (accepted: Accept, not: Refuse), with
+ * nothing on Get and Empty off, so the city works exactly as it did.
+ */
+function upgradeV6(game) {
+  for (const b of game.buildings.values()) {
+    const old = b.accept;
+    delete b.accept; // every building had the field (null outside storage)
+    if (!b.orders) continue; // not storage
+    if (old && typeof old === 'object') {
+      for (const good of Object.keys(b.orders)) if (good in old) b.orders[good] = old[good] ? 'accept' : 'refuse';
+    }
+    b.emptying = false;
+    b.orderNote = null;
   }
 }
 

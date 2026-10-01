@@ -603,6 +603,11 @@ try {
       check('Follow keeps a walker in view; closing the panel lets go', following && closed, JSON.stringify({ following, closed }));
       // The walker pressed on is the one clicked, even if it has walked on
       // by the release (at 4x it covers half a tile in a click).
+      // Paused while it aims: running (at 4x since step 5) a walker could
+      // walk out from under the pointer between finding it and the press,
+      // and the check failed now and then for that reason alone.
+      const wasPaused = await page.evaluate(() => { const app = window.colonia; const was = app.paused; if (!was) app.togglePause(); return was; });
+      await page.waitForTimeout(50);
       const fresh = await findWalker();
       if (fresh) {
         await page.mouse.move(fresh.x, fresh.y);
@@ -614,6 +619,7 @@ try {
         check('a walker pressed on is the one clicked, even if it walked on before the release', got?.kind === 'walker' && got.id === fresh.id, JSON.stringify({ got, want: fresh.id }));
         await page.mouse.click(fresh.x, fresh.y, { button: 'right' });
       }
+      if (!wasPaused) await page.evaluate(() => window.colonia.togglePause());
     }
   }
 

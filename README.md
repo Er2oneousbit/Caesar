@@ -25,7 +25,7 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 * **Disease:** crowded, unhealthy homes can fall sick, lose people and pass it next door. A Medicus sends physicians to cure them, and baths, barbers, fountains, food and a hospital keep it away. The Disease overlay shows which homes are at risk.
 * **The five gods of the original:** Ceres, Neptune, Mercury, Mars and Venus. Keep them content with temples and festivals and they bless the city (a bumper harvest, a trade windfall, food for the granaries, peace, a happier people); neglect them and they strike, and an angered Mercury or Venus strikes harder the second time.
 * **Four difficulties**, Easy to Insane.
-* **Trade** by land and sea with nine partner cities, and an empire map (E) that shows the caravans and ships on their way and the warbands your scouts have seen coming.
+* **Trade** by land and sea with nine partner cities, and an empire map (E) of the Mediterranean that shows the caravans and ships on their way and the warbands your scouts have seen coming.
 * **Granary and warehouse orders:** per good, accept it, refuse it, or *get* it (the building's cart fetches it from other storage), and an *Empty* switch that sends everything elsewhere.
 * **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates.
 * **A living world:** day and night, four seasons with snow in winter, rain and thunderstorms, fluttering flags, busy markets, crowds at the shows.

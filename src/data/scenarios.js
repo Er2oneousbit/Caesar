@@ -35,6 +35,7 @@
 
 import { CONFIG } from '../config.js';
 import { DIFFICULTY, difficultyOf } from './difficulty.js';
+import { at } from './empireGeo.js';
 
 /**
  * Trade partners.
@@ -43,23 +44,34 @@ import { DIFFICULTY, difficultyOf } from './difficulty.js';
  *                  navigable water: a river, the coast or a big edge lake).
  *   sells  goods the city can IMPORT from them (units/year)
  *   buys   goods the city can EXPORT to them (units/year)
- *   pos    [x, y] on the Trade advisor's empire map (0..100 x 0..60)
+ *   pos    [x, y] on the empire map (0..100 x 0..60), where the city really
+ *          is: at(longitude, latitude), see data/empireGeo.js. Carthago
+ *          sits just inland of its harbor; Cirta is inland too, and its
+ *          ships put in on the coast below it
  *   color  sail / banner color
  */
 export const TRADE_PARTNERS = Object.freeze({
-  tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: [14, 24], color: '#b8573a', sells: { timber: 1200, olives: 1000 }, buys: { wheat: 1500, pottery: 800 } },
-  massilia: { name: 'Massilia', route: 'sea', openCost: 700, pos: [30, 17], color: '#3f6fb0', sells: { clay: 1200, wine: 600 }, buys: { furniture: 800, vegetables: 1200, pottery: 600 } },
-  lugdunum: { name: 'Lugdunum', route: 'land', openCost: 800, pos: [30, 6], color: '#6d7480', sells: { iron: 1000, meat: 1200, arrows: 400 }, buys: { oil: 800, wine: 800, fruit: 1000 } },
-  aquileia: { name: 'Aquileia', route: 'land', openCost: 600, pos: [55, 8], color: '#7a9c5a', sells: { pottery: 600, vegetables: 1500 }, buys: { clay: 1200, olives: 1000, meat: 1000 } },
-  capua: { name: 'Capua', route: 'land', openCost: 700, pos: [57, 25], color: '#a38b3d', sells: { wheat: 1500, wine: 600 }, buys: { pottery: 800, furniture: 600, iron: 600 } },
-  carthago: { name: 'Carthago', route: 'sea', openCost: 1000, pos: [46, 42], color: '#8a3a9a', sells: { fruit: 1500, grapes: 1200, furniture: 500 }, buys: { weapons: 800, marble: 600, timber: 1000 } },
-  cirta: { name: 'Cirta', route: 'sea', openCost: 900, pos: [36, 49], color: '#c9962e', sells: { horses: 600, fruit: 800 }, buys: { weapons: 600, pottery: 800, oil: 600 } },
-  corinthus: { name: 'Corinthus', route: 'sea', openCost: 1200, pos: [76, 30], color: '#2f8a8a', sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000, arrows: 600 } },
-  alexandria: { name: 'Alexandria', route: 'sea', openCost: 1400, pos: [88, 50], color: '#d6ab3c', sells: { wheat: 2500, vegetables: 1000 }, buys: { wine: 800, oil: 800, weapons: 600, furniture: 600 } },
+  tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: at(1.25, 41.12), color: '#b8573a', sells: { timber: 1200, olives: 1000 }, buys: { wheat: 1500, pottery: 800 } },
+  massilia: { name: 'Massilia', route: 'sea', openCost: 700, pos: at(5.37, 43.29), color: '#3f6fb0', sells: { clay: 1200, wine: 600 }, buys: { furniture: 800, vegetables: 1200, pottery: 600 } },
+  lugdunum: { name: 'Lugdunum', route: 'land', openCost: 800, pos: at(4.83, 45.76), color: '#6d7480', sells: { iron: 1000, meat: 1200, arrows: 400 }, buys: { oil: 800, wine: 800, fruit: 1000 } },
+  aquileia: { name: 'Aquileia', route: 'land', openCost: 600, pos: at(13.37, 45.77), color: '#7a9c5a', sells: { pottery: 600, vegetables: 1500 }, buys: { clay: 1200, olives: 1000, meat: 1000 } },
+  capua: { name: 'Capua', route: 'land', openCost: 700, pos: at(14.25, 41.08), color: '#a38b3d', sells: { wheat: 1500, wine: 600 }, buys: { pottery: 800, furniture: 600, iron: 600 } },
+  carthago: { name: 'Carthago', route: 'sea', openCost: 1000, pos: at(10.25, 36.85), color: '#8a3a9a', sells: { fruit: 1500, grapes: 1200, furniture: 500 }, buys: { weapons: 800, marble: 600, timber: 1000 } },
+  cirta: { name: 'Cirta', route: 'sea', openCost: 900, pos: at(6.61, 36.37), color: '#c9962e', sells: { horses: 600, fruit: 800 }, buys: { weapons: 600, pottery: 800, oil: 600 } },
+  corinthus: { name: 'Corinthus', route: 'sea', openCost: 1200, pos: at(22.92, 37.9), color: '#2f8a8a', sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000, arrows: 600 } },
+  alexandria: { name: 'Alexandria', route: 'sea', openCost: 1400, pos: at(29.9, 31.15), color: '#d6ab3c', sells: { wheat: 2500, vegetables: 1000 }, buys: { wine: 800, oil: 800, weapons: 600, furniture: 600 } },
 });
 
-/** Where the player's province sits on the empire map. */
-export const HOME_POS = Object.freeze([48, 22]);
+/**
+ * Where the player's province sits on the empire map: the Etruscan coast by
+ * the mouth of the Arno (Pisae's country). The province is anyone's, but
+ * here it reads well: on the coast, so ships can come; on the peninsula, so
+ * caravans walk in from Gaul, over the Alps, along the Po and from Capua
+ * through Rome; north of Rome, so every route fans out from it without
+ * crossing Italy, and the south of the boot (heel and toe) stays clear.
+ * Moving it means moving the routes too (ROUTES_LL in data/empireGeo.js).
+ */
+export const HOME_POS = at(10.45, 43.72);
 
 /**
  * Invasion settings. `first` = months until the first raid, `interval` = months

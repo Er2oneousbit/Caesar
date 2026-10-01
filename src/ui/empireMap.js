@@ -1,16 +1,17 @@
 /**
  * empireMap.js
  * ----------------------------------------------------------------------------
- * The empire map: a stylized inland sea with your province, Rome, every trade
- * partner of the scenario, and who is on the way. One renderer serves both
- * the small map at the top of the Trade advisor and the full Empire screen
- * (ui/empire.js).
+ * The empire map: the Mediterranean world with your province, Rome, every
+ * trade partner of the scenario, and who is on the way. One renderer serves
+ * both the small map at the top of the Trade advisor and the full Empire
+ * screen (ui/empire.js).
  *
- *   land route  dashed brown line curving over land (caravans on the road)
- *   sea route   dotted blue line arcing across the water (merchant ships)
- *   open routes are drawn solid and bold, closed ones faint
+ *   land route  brown line along the roads (caravans on the road)
+ *   sea route   blue line along the sea lanes (merchant ships)
+ *   open routes are drawn solid and bold, closed ones faint and broken
  *   travelers   a caravan or ship in the partner's color, partway along its
- *               route; a scouted warband as a banner with its size
+ *               route; a scouted warband as a banner with its size (in a
+ *               boat where its side of the province is sea)
  *
  * Travelers are drawn from timers the sim already keeps, never simulated:
  * a route's `nextVisit` day (sim/trade.js) and the raid schedule
@@ -18,23 +19,26 @@
  * here changes game state, so the map is safe to draw paused or not.
  *
  * All shapes are drawn in a 100 x 60 "map unit" space and scaled to the
- * canvas. Original, hand-placed shapes (not a real map trace).
+ * canvas. The coasts, rivers, mountains and route lanes are real geography
+ * written down in data/empireGeo.js (drawn for this game, not traced).
  * ----------------------------------------------------------------------------
  */
 
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { TRADE_PARTNERS, HOME_POS } from '../data/scenarios.js';
-import { routeKind } from '../sim/trade.js';
+import {
+  MAP_W, MAP_H, SEA, ISLANDS, WATERS, RIVERS, NILE, DELTA, MOUNTAINS, REGIONS, ROUTES, at, isLand,
+} from '../data/empireGeo.js';
+import { routeKind, FIRST_VISIT_DAYS } from '../sim/trade.js';
 import { enemyCount } from '../sim/military.js';
 
-export const MAP_W = 100;
-export const MAP_H = 60;
+export { MAP_W, MAP_H };
 const W = MAP_W;
 const H = MAP_H;
 
-/** Rome on the map: on the coast south of the province, the Emperor's seat. */
-export const ROME_POS = Object.freeze([51, 27]);
+/** Rome on the map, the Emperor's seat on the Tiber. */
+export const ROME_POS = at(12.48, 41.9);
 
 /** Scouts report a warband this many months before it strikes (sim/military.js). */
 export const SCOUT_MONTHS = 3;
@@ -46,8 +50,8 @@ export const SCOUT_MONTHS = 3;
  */
 const MAX_TRIP_DAYS = CONFIG.CARAVAN_INTERVAL_DAYS[0];
 const MIN_TRIP_DAYS = 10;
-/** Days on the way per map unit of distance: far partners take longer. */
-const DAYS_PER_UNIT = 0.6;
+/** Days on the way per map unit along the route: far partners take longer. */
+const DAYS_PER_UNIT = 0.55;
 
 /** Where a scouted warband is first drawn, and where it stops (map units from the province). */
 const WARBAND_FAR = 9;
@@ -59,21 +63,66 @@ const DIR_STEP = {
   west: [-1, 0], 'south-west': [-Math.SQRT1_2, Math.SQRT1_2], south: [0, 1], 'south-east': [Math.SQRT1_2, Math.SQRT1_2],
 };
 
-/** Coastline of the stylized sea, clockwise from the western strait. */
-const SEA = [
-  [0, 33], [6, 31], [12, 30], [18, 27], [24, 23], [30, 21], [36, 22], [41, 24], [45, 27], [49, 31], [53, 36],
-  [57, 33], [60, 28], [58, 20], [56, 12], [60, 12], [64, 20], [68, 26], [72, 28], [74, 34], [78, 32], [82, 28],
-  [86, 32], [90, 30], [96, 34], [100, 38], [100, 46], [94, 48], [84, 48], [76, 47], [68, 46], [60, 48], [54, 44],
-  [50, 40], [46, 40], [42, 43], [34, 45], [24, 44], [14, 42], [6, 38], [0, 38],
-];
+// Map colors. The canvas keeps its own palette in both UI themes: parchment
+// and a light sea, so routes, labels and figures read the same everywhere.
+const LAND = '#e3d3ac';
+const SEA_FILL = '#9cc2dc';
+const SHORE = '#5f86a6';
 
-/** Some islands so the sea does not look empty. */
-const ISLANDS = [
-  [[44, 33], [46, 32], [47, 35], [45, 36]], // big island west of the toe
-  [[40, 30], [41.5, 29.5], [42, 32], [40.5, 32.5]],
-  [[82, 40], [86, 39.5], [85, 41], [81.5, 41]],
-  [[66, 38], [67, 37.5], [67.5, 38.6], [66.4, 39]],
-];
+// ---------------------------------------------------------------------------
+// Routes: a smooth curve through each route's waypoints (pure; tested headless)
+// ---------------------------------------------------------------------------
+
+/** Points per stretch between two waypoints when a route is turned into a line. */
+const CURVE_STEPS = 10;
+
+/**
+ * Centripetal Catmull-Rom curve through `pts`, as a polyline. Centripetal
+ * (rather than uniform) keeps the curve from overshooting or looping at
+ * sharp turns, so a lane threading a strait stays in it.
+ */
+function smoothLine(pts) {
+  if (pts.length < 3) return pts.map((p) => [p[0], p[1]]);
+  const ext = (a, b) => [2 * a[0] - b[0], 2 * a[1] - b[1]]; // mirror for the ends
+  const all = [ext(pts[0], pts[1]), ...pts, ext(pts[pts.length - 1], pts[pts.length - 2])];
+  const out = [[pts[0][0], pts[0][1]]];
+  for (let i = 1; i < all.length - 2; i++) {
+    const [p0, p1, p2, p3] = [all[i - 1], all[i], all[i + 1], all[i + 2]];
+    const knot = (a, b) => Math.max(1e-6, Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])));
+    const t1 = knot(p0, p1);
+    const t2 = t1 + knot(p1, p2);
+    const t3 = t2 + knot(p2, p3);
+    const lerp = (a, b, ta, tb, t) => [((tb - t) * a[0] + (t - ta) * b[0]) / (tb - ta), ((tb - t) * a[1] + (t - ta) * b[1]) / (tb - ta)];
+    for (let s = 1; s <= CURVE_STEPS; s++) {
+      const t = t1 + ((t2 - t1) * s) / CURVE_STEPS;
+      const a1 = lerp(p0, p1, 0, t1, t);
+      const a2 = lerp(p1, p2, t1, t2, t);
+      const a3 = lerp(p2, p3, t2, t3, t);
+      const b1 = lerp(a1, a2, 0, t2, t);
+      const b2 = lerp(a2, a3, t1, t3, t);
+      out.push(lerp(b1, b2, t1, t2, t));
+    }
+  }
+  return out;
+}
+
+const pathCache = new Map();
+
+/**
+ * A partner's route as drawn: { pts, cum, len }, a polyline from the partner
+ * (first point) to your province (last), with the distance run at each point.
+ */
+export function routePath(partnerId) {
+  let path = pathCache.get(partnerId);
+  if (path) return path;
+  const p = TRADE_PARTNERS[partnerId];
+  const pts = smoothLine([p.pos, ...(ROUTES[partnerId] || []), HOME_POS]);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  path = { pts, cum, len: cum[cum.length - 1] };
+  pathCache.set(partnerId, path);
+  return path;
+}
 
 // ---------------------------------------------------------------------------
 // Travelers: game state in, positions out (pure, no canvas; tested headless)
@@ -90,33 +139,27 @@ export function nowMonths(game) {
   return t.totalMonths + (t.day + t.tick / CONFIG.TICKS_PER_DAY) / CONFIG.DAYS_PER_MONTH;
 }
 
-/** Days a caravan or ship from this partner is shown on the way (by distance on the map). */
+/** Days a caravan or ship from this partner is shown on the way (by the length of its route). */
 export function tripDays(partnerId) {
-  const p = TRADE_PARTNERS[partnerId];
-  if (!p) return MAX_TRIP_DAYS;
-  const d = Math.hypot(p.pos[0] - HOME_POS[0], p.pos[1] - HOME_POS[1]);
+  if (!TRADE_PARTNERS[partnerId]) return MAX_TRIP_DAYS;
+  const d = routePath(partnerId).len;
   return Math.max(MIN_TRIP_DAYS, Math.min(MAX_TRIP_DAYS, Math.round(d * DAYS_PER_UNIT)));
-}
-
-/** Control point of a route's curve: sea routes bow out over the water (south), land routes over the land (north). */
-function routeControl(a, b, sea) {
-  const mx = (a[0] + b[0]) / 2;
-  const my = (a[1] + b[1]) / 2;
-  return [mx, sea ? Math.max(my + 6, 37) : Math.max(2, my - 7)];
 }
 
 /**
  * Point on a partner's route, `frac` of the way from the partner (0) to your
- * province (1). Follows the same curve the route is drawn with.
+ * province (1), measured along the route as drawn so travelers keep an even pace.
  */
 export function routePoint(partnerId, frac) {
-  const p = TRADE_PARTNERS[partnerId];
-  const a = HOME_POS;
-  const b = p.pos;
-  const c = routeControl(a, b, routeKind(partnerId) === 'sea');
-  const t = 1 - frac; // the curve runs from home (t = 0) to the partner (t = 1)
-  const u = 1 - t;
-  return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]];
+  const { pts, cum, len } = routePath(partnerId);
+  const want = Math.max(0, Math.min(1, frac)) * len;
+  let i = 1;
+  while (i < pts.length - 1 && cum[i] < want) i++;
+  const seg = cum[i] - cum[i - 1];
+  const u = seg > 0 ? (want - cum[i - 1]) / seg : 0;
+  const a = pts[i - 1];
+  const b = pts[i];
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
 }
 
 /** Where a warband from `dir` stands on the map, `frac` of the way in. */
@@ -135,6 +178,9 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  *       one per open route that ships can reach. `days` = whole days until it
  *       arrives; `onWay` = it has set out (the last `trip` days before its
  *       visit); `frac` = share of the trip done (0 while it has not set out).
+ *       The first trader of a route sets out from its city the day the route
+ *       opens (it is due FIRST_VISIT_DAYS later, sooner than a far city's
+ *       usual trip), so it is never seen appearing halfway along.
  *   { kind: 'warband', size, dir, origin, months, frac, pos }
  *       the warband the scouts reported: `months` until it strikes (as the
  *       Military advisor counts them), `origin` = the map-edge tile it enters by.
@@ -153,7 +199,10 @@ export function empireTravelers(game) {
     const sea = routeKind(id) === 'sea';
     if (sea && !seaOk) continue; // no ship ever comes (cannot be opened there anyway)
     const left = Math.max(0, r.nextVisit - now);
-    const trip = tripDays(id);
+    // No trader has reached the city yet: the one on the way set out when the
+    // route opened, FIRST_VISIT_DAYS before it is due. (Later ones are due at
+    // least MAX_TRIP_DAYS after the last, so they always set out from home.)
+    const trip = r.visits ? tripDays(id) : Math.min(tripDays(id), FIRST_VISIT_DAYS);
     const onWay = left <= trip;
     const frac = onWay ? clamp01(1 - left / trip) : 0;
     out.push({ kind: sea ? 'ship' : 'caravan', id, name: p.name, color: p.color, days: Math.ceil(left), trip, onWay, frac, pos: routePoint(id, frac) });
@@ -249,7 +298,7 @@ export function empireMapCanvas(game, cssWidth = 640) {
   if (!ctx) return canvas;
   const s = (cssWidth * dpr) / W; // px per map unit
   ctx.scale(s, s);
-  drawEmpire(ctx, game, { travelers: empireTravelers(game) });
+  drawEmpire(ctx, game, { travelers: empireTravelers(game), pxPerUnit: cssWidth / W });
   return canvas;
 }
 
@@ -266,30 +315,37 @@ export function empireMapCanvas(game, cssWidth = 640) {
 export function drawEmpire(ctx, game, opts = {}) {
   const { travelers = [], pxPerUnit = 6.4, selected = null, hover = null, time = 0 } = opts;
   const k = figureScale(pxPerUnit);
-  drawBase(ctx);
+  drawBase(ctx, pxPerUnit);
   const routes = game.city.trade.routes;
   const seaOk = !!game.map.seaEntry;
   // routes first, cities on top
   for (const [id, r] of Object.entries(routes)) {
-    const p = TRADE_PARTNERS[id];
-    if (!p) continue;
+    if (!TRADE_PARTNERS[id]) continue;
     const sea = routeKind(id) === 'sea';
-    drawRoute(ctx, HOME_POS, p.pos, sea, r.open, sea && !seaOk);
+    drawRoute(ctx, routePath(id).pts, sea, r.open, sea && !seaOk, pxPerUnit);
   }
-  drawRome(ctx, ROME_POS, k);
+  drawRome(ctx, ROME_POS, k, false);
   for (const [id, r] of Object.entries(routes)) {
     const p = TRADE_PARTNERS[id];
     if (!p) continue;
     if (id === selected) ring(ctx, p.pos, 2.2 * k, '#2a241c');
-    drawCity(ctx, p.pos, p.name, p.color, r.open, false, k);
+    drawCity(ctx, p.pos, null, p.color, r.open, false, k);
   }
-  drawCity(ctx, HOME_POS, game.city.name || 'Your province', '#a8322b', true, true, k);
+  drawCity(ctx, HOME_POS, null, '#a8322b', true, true, k);
+  // Names last, each where it clashes with no other name or marker (Italy
+  // is crowded: Rome, Capua and the province sit close together).
+  const names = [
+    { text: game.city.name || 'Your province', pos: HOME_POS, r: 2 * k, bold: true, sides: ['above', 'right', 'left', 'below'] },
+    { text: 'Rome', pos: ROME_POS, r: 1.2 * k, bold: true, sides: ['left', 'below', 'right', 'above'] },
+    ...Object.keys(routes).filter((id) => TRADE_PARTNERS[id]).map((id) => ({ text: TRADE_PARTNERS[id].name, pos: TRADE_PARTNERS[id].pos, r: 1.1 * k, bold: false, sides: ['above', 'below', 'right', 'left'] })),
+  ];
+  placeLabels(ctx, names, k);
   for (const t of travelers) {
     if (!isDrawn(t)) continue;
     const [x, y] = t.pos;
     if (t.kind === 'caravan') drawCaravan(ctx, x, y, t.color, k);
     else if (t.kind === 'ship') drawShip(ctx, x, y + Math.sin(time * 2 + x) * 0.15, t.color, k);
-    else if (t.kind === 'warband') drawBanner(ctx, x, y, t.size, k, false);
+    else if (t.kind === 'warband') drawBanner(ctx, x, y, t.size, k, false, !isLand(t.pos));
     else if (t.kind === 'raid') drawBanner(ctx, x, y, t.size, k, true);
   }
   if (hover) {
@@ -298,73 +354,147 @@ export function drawEmpire(ctx, game, opts = {}) {
   }
 }
 
-function drawBase(ctx) {
+/** A closed polygon as a path (appended to the current path). */
+function polyPath(ctx, pts) {
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+}
+
+/** An open line as a new path. */
+function linePath(ctx, pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+}
+
+/** The land, the sea and what is on them, under the routes and cities. */
+function drawBase(ctx, pxPerUnit) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+  ctx.clip();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
   // parchment land
-  ctx.fillStyle = '#e3d3ac';
+  ctx.fillStyle = LAND;
   ctx.fillRect(0, 0, W, H);
-  // a few faint hills
-  ctx.fillStyle = 'rgba(150,120,70,0.18)';
-  for (const [x, y] of [[20, 10], [40, 12], [70, 10], [88, 18], [30, 54], [70, 56], [12, 50]]) {
-    ctx.beginPath();
-    ctx.moveTo(x - 3, y + 1.5);
-    ctx.lineTo(x, y - 1.5);
-    ctx.lineTo(x + 3, y + 1.5);
-    ctx.fill();
-  }
-  // sea with a soft shore line
-  smoothPath(ctx, SEA);
-  ctx.fillStyle = '#8fb8d6';
+  // the green of the Nile: its valley along the river and the delta's fan
+  ctx.fillStyle = 'rgba(128,156,84,0.38)';
+  ctx.beginPath();
+  polyPath(ctx, DELTA);
   ctx.fill();
-  ctx.lineWidth = 0.45;
-  ctx.strokeStyle = '#5f86a6';
+  ctx.strokeStyle = 'rgba(128,156,84,0.38)';
+  ctx.lineWidth = 1.1;
+  linePath(ctx, NILE);
   ctx.stroke();
-  for (const isl of ISLANDS) {
-    smoothPath(ctx, isl);
-    ctx.fillStyle = '#e3d3ac';
+  // mountains: a row of small peaks along each range
+  ctx.fillStyle = 'rgba(140,108,62,0.22)';
+  ctx.strokeStyle = 'rgba(120,92,52,0.35)';
+  ctx.lineWidth = 0.18;
+  for (const [x, y] of MOUNTAINS) {
+    ctx.beginPath();
+    ctx.moveTo(x - 0.9, y + 0.5);
+    ctx.lineTo(x, y - 0.6);
+    ctx.lineTo(x + 0.9, y + 0.5);
     ctx.fill();
-    ctx.lineWidth = 0.3;
-    ctx.strokeStyle = '#5f86a6';
     ctx.stroke();
   }
-  // compass
-  ctx.fillStyle = '#6b5a3a';
-  ctx.font = '2.4px serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('N', 96, 4.5);
+  // the sea, the islands on it, and the gulfs and lakes on the land
   ctx.beginPath();
-  ctx.moveTo(96, 5.5); ctx.lineTo(95, 9); ctx.lineTo(97, 9);
+  polyPath(ctx, SEA);
+  ctx.fillStyle = SEA_FILL;
   ctx.fill();
+  ctx.beginPath();
+  for (const w of WATERS) polyPath(ctx, w);
+  ctx.fill();
+  ctx.beginPath();
+  for (const isl of ISLANDS) polyPath(ctx, isl);
+  ctx.fillStyle = LAND;
+  ctx.fill();
+  // shallows: a pale band just off every shore (clipped to the water)
+  ctx.save();
+  ctx.beginPath();
+  polyPath(ctx, SEA);
+  for (const isl of ISLANDS) polyPath(ctx, isl);
+  ctx.clip('evenodd');
+  ctx.beginPath();
+  polyPath(ctx, SEA);
+  for (const isl of ISLANDS) polyPath(ctx, isl);
+  ctx.strokeStyle = 'rgba(232,242,248,0.45)';
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+  ctx.restore();
+  // shore lines
+  ctx.beginPath();
+  polyPath(ctx, SEA);
+  for (const isl of ISLANDS) polyPath(ctx, isl);
+  for (const w of WATERS) polyPath(ctx, w);
+  ctx.strokeStyle = SHORE;
+  // about a pixel wide whatever the canvas size
+  ctx.lineWidth = Math.max(0.16, Math.min(0.3, 1.1 / pxPerUnit));
+  ctx.stroke();
+  // rivers
+  ctx.strokeStyle = 'rgba(80,128,170,0.75)';
+  ctx.lineWidth = Math.max(0.14, Math.min(0.25, 1 / pxPerUnit));
+  for (const r of RIVERS) {
+    linePath(ctx, r);
+    ctx.stroke();
+  }
+  drawRegions(ctx, pxPerUnit);
+  ctx.restore();
+  drawCompass(ctx);
   // frame
   ctx.strokeStyle = '#8a6a44';
   ctx.lineWidth = 0.6;
   ctx.strokeRect(0.3, 0.3, W - 0.6, H - 0.6);
 }
 
-/** Closed curve through the midpoints of a polygon's edges (rounded coast). */
-function smoothPath(ctx, pts) {
-  const n = pts.length;
-  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  ctx.beginPath();
-  const m0 = mid(pts[n - 1], pts[0]);
-  ctx.moveTo(m0[0], m0[1]);
-  for (let i = 0; i < n; i++) {
-    const p = pts[i];
-    const m = mid(p, pts[(i + 1) % n]);
-    ctx.quadraticCurveTo(p[0], p[1], m[0], m[1]);
+/**
+ * Faint names of the lands and seas, under everything else. Never smaller
+ * than 8 px (on a phone they grow a little with the map's figures).
+ */
+function drawRegions(ctx, pxPerUnit) {
+  const size = Math.max(1.9, 8 / pxPerUnit); // under the cities' 2.3
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const r of REGIONS) {
+    ctx.save();
+    if (r.kind === 'sea') {
+      ctx.font = `italic ${(size * 0.95).toFixed(2)}px serif`;
+      ctx.fillStyle = 'rgba(38,78,112,0.5)';
+    } else {
+      ctx.font = `${size.toFixed(2)}px serif`;
+      ctx.fillStyle = 'rgba(105,82,48,0.5)';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = `${(size * 0.24).toFixed(2)}px`; // spaced capitals, as old maps letter a land
+    }
+    ctx.fillText(r.text, r.pos[0], r.pos[1]);
+    ctx.restore();
   }
-  ctx.closePath();
+  ctx.textBaseline = 'alphabetic';
+}
+
+/** North arrow in the Atlantic, the map's one empty corner. */
+function drawCompass(ctx) {
+  ctx.fillStyle = '#4f5f6b';
+  ctx.font = '2.4px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', 3.6, 4.4);
+  ctx.beginPath();
+  ctx.moveTo(3.6, 5.3); ctx.lineTo(2.6, 8.8); ctx.lineTo(4.6, 8.8);
+  ctx.fill();
 }
 
 /**
- * A route's line, in the style of its kind (see the header). The legend
- * passes its own `control` point to draw a short straight sample.
+ * A route's line, in the style of its kind (see the header), through `pts`
+ * (map units). The legend passes two points for a short straight sample.
+ * With `pxPerUnit` the line keeps about the same width on screen at any
+ * map size (else it is drawn in map units, as in the legend).
  */
-export function drawRoute(ctx, a, b, sea, open, blocked, control = null) {
-  const [cx, cy] = control || routeControl(a, b, sea);
-  ctx.beginPath();
-  ctx.moveTo(a[0], a[1]);
-  ctx.quadraticCurveTo(cx, cy, b[0], b[1]);
+export function drawRoute(ctx, pts, sea, open, blocked, pxPerUnit = 0) {
+  linePath(ctx, pts);
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   if (sea) {
     ctx.setLineDash(open ? [] : [0.3, 1.2]);
     ctx.strokeStyle = blocked ? 'rgba(120,120,120,0.6)' : open ? '#1f5f99' : 'rgba(31,95,153,0.75)';
@@ -372,7 +502,8 @@ export function drawRoute(ctx, a, b, sea, open, blocked, control = null) {
     ctx.setLineDash(open ? [] : [1.6, 1.1]);
     ctx.strokeStyle = open ? '#7a4a1e' : 'rgba(122,74,30,0.7)';
   }
-  ctx.lineWidth = open ? 0.75 : 0.45;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  ctx.lineWidth = !pxPerUnit ? (open ? 0.75 : 0.45) : open ? clamp(2.8 / pxPerUnit, 0.35, 0.75) : clamp(1.8 / pxPerUnit, 0.24, 0.45);
   ctx.stroke();
   ctx.setLineDash([]);
 }
@@ -402,7 +533,7 @@ export function drawCity(ctx, pos, name, color, open, home, k = 1) {
   if (name) label(ctx, name, x, y - 2.2 * k, k, home);
 }
 
-/** Rome: a purple square with a gold rim. */
+/** Rome: a purple square with a gold rim, named to its left over the sea (Capua's name is above and to the right). */
 export function drawRome(ctx, pos, k = 1, named = true) {
   const [x, y] = pos;
   const s = 1.2 * k;
@@ -411,12 +542,46 @@ export function drawRome(ctx, pos, k = 1, named = true) {
   ctx.lineWidth = 0.45;
   ctx.fillRect(x - s, y - s, s * 2, s * 2);
   ctx.strokeRect(x - s, y - s, s * 2, s * 2);
-  if (named) label(ctx, 'Rome', x, y + 4.3 * k, k, true);
+  if (named) label(ctx, 'Rome', x - s - 0.6 * k, y + 0.8 * k, k, true, 'right');
 }
 
-function label(ctx, text, x, y, k, bold) {
+/**
+ * Draw city names, each on the first side of its marker (in its `sides`
+ * order) where it overlaps no marker, no name already placed and stays on
+ * the map; if every side clashes, the first. Earlier names win.
+ * @param {{text:string, pos:number[], r:number, bold:boolean, sides:string[]}[]} names
+ */
+function placeLabels(ctx, names, k) {
+  const taken = names.map(({ pos: [x, y], r }) => [x - r, y - r, x + r, y + r]); // the markers
+  const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const size = 2.3 * k;
+  names.forEach((n, i) => {
+    ctx.font = `${n.bold ? 'bold ' : ''}${size.toFixed(2)}px serif`;
+    const w = ctx.measureText(n.text).width;
+    const [x, y] = n.pos;
+    const gap = 0.45 * k;
+    // [text x, baseline y, align] for each side, and the box the text fills
+    const spots = {
+      above: [x, y - n.r - gap - 0.25 * size, 'center'],
+      below: [x, y + n.r + gap + 0.8 * size, 'center'],
+      right: [x + n.r + gap, y + 0.35 * size, 'left'],
+      left: [x - n.r - gap, y + 0.35 * size, 'right'],
+    };
+    const box = ([tx, by, align]) => {
+      const x0 = align === 'center' ? tx - w / 2 : align === 'left' ? tx : tx - w;
+      return [x0, by - 0.8 * size, x0 + w, by + 0.22 * size];
+    };
+    const fits = (b) => b[0] >= 0.5 && b[2] <= W - 0.5 && b[1] >= 0.5 && b[3] <= H - 0.5 && !taken.some((t, j) => j !== i && hits(b, t));
+    const side = n.sides.find((s) => fits(box(spots[s]))) || n.sides[0];
+    const [tx, by, align] = spots[side];
+    taken.push(box(spots[side]));
+    label(ctx, n.text, tx, by, k, n.bold, align);
+  });
+}
+
+function label(ctx, text, x, y, k, bold, align = 'center') {
   ctx.font = `${bold ? 'bold ' : ''}${(2.3 * k).toFixed(2)}px serif`;
-  ctx.textAlign = 'center';
+  ctx.textAlign = align;
   ctx.lineWidth = 0.5 * k;
   ctx.strokeStyle = 'rgba(243,234,210,0.9)';
   ctx.strokeText(text, x, y);
@@ -476,12 +641,20 @@ export function drawShip(ctx, x, y, color, k = 1) {
 
 /**
  * A warband's banner: a pole with a pennant and the number of warriors on it.
- * Red and bold for raiders already in the province.
+ * Red and bold for raiders already in the province. `afloat`: its side of
+ * the province is sea, so it comes by boat (a dark hull under the pole).
  */
-export function drawBanner(ctx, x, y, size, k = 1, attacking = false) {
+export function drawBanner(ctx, x, y, size, k = 1, attacking = false, afloat = false) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(k, k);
+  if (afloat) {
+    ctx.fillStyle = '#2e2218';
+    ctx.beginPath();
+    ctx.moveTo(-3.1, 0.2); ctx.lineTo(2.3, 0.2); ctx.lineTo(1.6, 1.1); ctx.lineTo(-2.5, 1.1);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.fillStyle = '#3a2a1a';
   ctx.fillRect(-1.6, -3.4, 0.25, 3.8); // pole
   ctx.fillStyle = attacking ? '#b3261e' : '#7a1f1a';

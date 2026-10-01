@@ -52,6 +52,9 @@ export function newTradeState(partnerIds) {
   return { routes, settings, log: [] };
 }
 
+/** Days from opening a route to its first caravan or ship (the empire map sends that one out from its city on the day). */
+export const FIRST_VISIT_DAYS = 8;
+
 /** Open a trade route. @returns {{ok:boolean, reason?:string}} */
 export function openRoute(game, id) {
   const route = game.city.trade.routes[id];
@@ -62,7 +65,7 @@ export function openRoute(game, id) {
   if (game.city.treasury < p.openCost && !game.cheats.freeBuild) return { ok: false, reason: 'Not enough money.' };
   transact(game, 'other', -p.openCost);
   route.open = true;
-  route.nextVisit = game.time.totalDays + 8;
+  route.nextVisit = game.time.totalDays + FIRST_VISIT_DAYS;
   const how = routeKind(id) === 'sea' ? 'Their ships will call at your Dock soon.' : 'Their caravans will arrive along the Imperial road soon.';
   game.message(`Trade route to ${p.name} is open. ${how}`, 'good');
   return { ok: true };

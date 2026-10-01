@@ -308,9 +308,9 @@ function legend() {
     row((ctx) => drawCity(ctx, [2.5, 2], null, '#a8322b', true, true), 'Your province'),
     row((ctx) => drawRome(ctx, [2.5, 2], 1, false), 'Rome'),
     row((ctx) => drawCity(ctx, [2.5, 2], null, TRADE_PARTNERS.capua.color, true, false), 'Trade partner (grey while its route is closed)'),
-    row((ctx) => drawRoute(ctx, [0.5, 2], [6.5, 2], false, true, false, [3.5, 2]), 'Land route: caravans', 7),
-    row((ctx) => drawRoute(ctx, [0.5, 2], [6.5, 2], true, true, false, [3.5, 2]), 'Sea route: merchant ships', 7),
-    row((ctx) => drawRoute(ctx, [0.5, 2], [6.5, 2], false, false, false, [3.5, 2]), 'Faint and broken: not open yet', 7),
+    row((ctx) => drawRoute(ctx, [[0.5, 2], [6.5, 2]], false, true, false), 'Land route: caravans', 7),
+    row((ctx) => drawRoute(ctx, [[0.5, 2], [6.5, 2]], true, true, false), 'Sea route: merchant ships', 7),
+    row((ctx) => drawRoute(ctx, [[0.5, 2], [6.5, 2]], false, false, false), 'Faint and broken: not open yet', 7),
     row((ctx) => drawCaravan(ctx, 2.5, 2.6, TRADE_PARTNERS.tarraco.color), 'Caravan, in its city\'s color'),
     row((ctx) => drawShip(ctx, 2.5, 3, TRADE_PARTNERS.massilia.color), 'Ship, in its city\'s color'),
     row((ctx) => drawBanner(ctx, 3.1, 3.8, null), 'Warband and its size'));

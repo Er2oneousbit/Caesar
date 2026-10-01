@@ -323,7 +323,7 @@ Open items only; each keeps its number (#n) for good, so the release notes and t
 * **#9** **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 * **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 * **#16** **Triumphal arches**, awarded for battles won.
-* **#17** **Military academy**: trains soldiers who fight better.
+* **#17** **Military academy**: trains soldiers who fight better. With it, Colonia's own naval counterpart (not in the original, which had no war at sea): the **Portus**, a sheltered training harbor after the one Agrippa cut near Naples to train his crews, where liburnian crews learn to row in time (Rome's first war fleet, in 260 BC, trained its rowers on benches on dry land while the ships were built) and come out faster and harder-hitting.
 * **#18** **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
 * **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
@@ -432,6 +432,10 @@ Ideas that would change the original's economy or rules; each would come as an o
 * **Housing**: the original's 20 levels, with Colonia's own names and numbers. Done in v0.7, ahead of disease and crime. Where the original has a plain bug, Colonia does not copy it and makes no option of it; behavior that is odd but possibly meant stays as the original had it.
 * **Crime, disease and events**: on at every difficulty, as they always were in the original, and gentler on Easy.
 * **Localization**: not planned.
+* **Caesar's anger** (items 1, #1): as in the original, favor at 0 no longer recalls the governor. At favor 10 or less Caesar warns and sends his legions after 12 months (shown marching on the empire map); recovering favor sends them home, and the mission is lost only if they overrun the city.
+* **Gifts and rank** (item 2, #6): the governor draws a salary by rank into personal savings, carried from mission to mission; gifts to Caesar come from those savings, as in the original. One rank per mission for now (Citizen in mission 1); the top ranks come with the longer campaign.
+* **The fleet in distant battles** (Colonia's own): when the threatened city lies on a sea route, Naval Station squadrons can be sent with the forts' soldiers and count toward the battle.
+* **Names**: every building shows a Latin name, with its English name in the build menu and the inspect panel.
 * **Music**: about 10 tracks of a few minutes for day, night and the menu, picked at random; festivals and raids keep their own music, also a few minutes long. The settings do not name the tracks; the console does (`music`, `music tracks`).
 * **Saves**: until 1.0 a release may stop loading older saves (always with a readable message).
 * **Version numbers**: after 0.9 comes 0.10; 1.0 only when the game is ready for it.

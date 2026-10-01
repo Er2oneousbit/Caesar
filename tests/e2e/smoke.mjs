@@ -608,17 +608,35 @@ try {
       // and the check failed now and then for that reason alone.
       const wasPaused = await page.evaluate(() => { const app = window.colonia; const was = app.paused; if (!was) app.togglePause(); return was; });
       await page.waitForTimeout(50);
-      const fresh = await findWalker();
-      if (fresh) {
+      // A walker can finish its trip during the press (it then leaves the map,
+      // and the click rightly finds nothing: a failure once in about ten
+      // runs). Such a try does not count; another walker is pressed instead.
+      let press = null;
+      for (let attempt = 0; attempt < 3 && !press; attempt++) {
+        const fresh = await findWalker();
+        if (!fresh) break;
         await page.mouse.move(fresh.x, fresh.y);
+        // What the click logic sees at the press (in the detail on failure).
+        const seen = await page.evaluate(({ x, y }) => {
+          const app = window.colonia;
+          const r = app.renderer;
+          const rect = app.canvas.getBoundingClientRect();
+          const sx = x - rect.left;
+          const sy = y - rect.top;
+          const t = r.camera.screenToTile(sx, sy);
+          const m = app.game.map;
+          return { strict: r.pickWalker(sx, sy, false), loose: r.pickWalker(sx, sy, true), tool: app.input.tool || null, tile: t, building: m.inBounds(t.x, t.y) ? m.buildingAt(t.x, t.y) : -1, paused: app.paused };
+        }, fresh);
         await page.mouse.down();
         await page.evaluate(() => { const app = window.colonia; for (let k = 0; k < 12; k++) app.game.tick(); app.renderer.render(0, 0.016); });
         await page.mouse.up();
         await page.waitForTimeout(150);
         const got = await page.evaluate(() => window.colonia.ui.info.target);
-        check('a walker pressed on is the one clicked, even if it walked on before the release', got?.kind === 'walker' && got.id === fresh.id, JSON.stringify({ got, want: fresh.id }));
+        const stayed = await page.evaluate((id) => window.colonia.game.walkers.has(id), fresh.id);
         await page.mouse.click(fresh.x, fresh.y, { button: 'right' });
+        if (stayed) press = { got, want: fresh.id, seen, attempt };
       }
+      check('a walker pressed on is the one clicked, even if it walked on before the release', !!press && press.got?.kind === 'walker' && press.got.id === press.want, JSON.stringify(press));
       if (!wasPaused) await page.evaluate(() => window.colonia.togglePause());
     }
   }
@@ -678,12 +696,17 @@ try {
       const app = window.colonia;
       const m = app.game.map;
       const home = [...app.game.buildings.values()].find((b) => b.house && b.house.pop > 0);
-      // Top-left corners of free land (meadow for the farm) with a road along an edge.
+      // Top-left corners of free land with a road along an edge; a farm needs
+      // some meadow under it, as the game's own rule says (asking for all nine
+      // tiles found no spot on maps whose fields lie back from the roads).
       const fits = (x, y) => {
+        let fertile = 0;
         for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
           const i = m.idx(x + dx, y + dy);
-          if (!m.isFree(x + dx, y + dy) || m.terrain[i] === 2 || (meadow && m.terrain[i] !== 1)) return false;
+          if (!m.isFree(x + dx, y + dy) || m.terrain[i] === 2) return false;
+          if (m.terrain[i] === 1) fertile++;
         }
+        if (meadow && fertile === 0) return false;
         for (let k = 0; k < size; k++) if (m.hasRoad(x + k, y - 1) || m.hasRoad(x + k, y + size) || m.hasRoad(x - 1, y + k) || m.hasRoad(x + size, y + k)) return true;
         return false;
       };
@@ -697,6 +720,31 @@ try {
           app.renderer.camera.centerOnTile(x + off, y + off);
           app.renderer.render(0, 0.016);
           return { x, y, ax: x + off, ay: y + off };
+        }
+      }
+      // No fertile spot beside a road anywhere near (the map's fields lie back
+      // from its roads): lay one road tile beside a fertile spot, as a player
+      // would lay a lane; this check is about the build menu, not roads.
+      const bare = (x, y) => {
+        let fertile = 0;
+        for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+          const i = m.idx(x + dx, y + dy);
+          if (!m.isFree(x + dx, y + dy) || m.terrain[i] === 2) return false;
+          if (m.terrain[i] === 1) fertile++;
+        }
+        return (!meadow || fertile > 0) && m.inBounds(x, y - 1) && m.isFree(x, y - 1) && m.terrain[m.idx(x, y - 1)] !== 2;
+      };
+      for (let r = 2; r < 60; r++) {
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = home.x + dx; const y = home.y + dy;
+          if (!m.inBounds(x, y) || !m.inBounds(x + size, y + size) || !bare(x, y)) continue;
+          m.road[m.idx(x, y - 1)] = 1;
+          app.game.onMapEdited();
+          const off = Math.floor((size - 1) / 2);
+          app.renderer.camera.centerOnTile(x + off, y + off);
+          app.renderer.render(0, 0.016);
+          return { x, y, ax: x + off, ay: y + off, laidRoad: true };
         }
       }
       return null;

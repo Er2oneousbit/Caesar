@@ -16,7 +16,8 @@
  *   culture     rises at most CULTURE_STEP a month
  *   prosperity  rises at most PROSPERITY_STEP a month
  *   peace       rises PEACE_PER_MONTH a month from PEACE_START
- *   favor       gifts buy it at once: it takes money, not time
+ *   favor       requests met and gifts from the governor's savings buy it:
+ *               it takes those, not time
  * ----------------------------------------------------------------------------
  */
 

@@ -67,6 +67,15 @@ export function salaryFavor(rank, paid) {
   return gap < 0 ? 1 : 0;
 }
 
+/**
+ * How many months' salary the year so far holds when the month step runs in
+ * `month` (0-11): the payment made as Ianuarius begins is December's, so it
+ * closes the old year (game.onMonth runs before game.onYear).
+ */
+export function salaryMonthsSoFar(month) {
+  return month === 0 ? 12 : month;
+}
+
 /** Set the salary to a rank's rate. @returns {{ok:boolean, reason?:string}} */
 export function setSalary(game, salaryRank) {
   const gv = game.city.governor;
@@ -94,7 +103,10 @@ export function salaryNewYear(game) {
   const c = game.city;
   const gv = c.governor;
   const paid = gv.paidThisYear;
-  const d = c.victory ? 0 : salaryFavor(gv.rank, paid);
+  let d = c.victory ? 0 : salaryFavor(gv.rank, paid);
+  // Rome thanks a governor who chose less than his rank's pay, not one whose
+  // treasury could not pay him (paySalary skips a month it cannot cover).
+  if (d > 0 && gv.salaryRank >= gv.rank) d = 0;
   gv.paidThisYear = 0;
   if (!d) return 0;
   const r = c.ratings;
@@ -115,6 +127,38 @@ export function salaryOutlook(game) {
   const left = game.city.victory ? 0 : 12 - game.time.month;
   const paid = gv.paidThisYear + salaryOf(gv.salaryRank) * left;
   return { paid, worth: rankForYearPay(paid), favor: game.city.victory ? 0 : salaryFavor(gv.rank, paid) };
+}
+
+/**
+ * On victory (the month step, before any New Year): the year so far is never
+ * weighed at a New Year, since the salary stops with the mission won, so
+ * what the governor paid himself above his rank's rate this year is taken
+ * back from his savings before they go on to the next mission. Without it,
+ * drawing Caesar's pay from New Year to the victory cost nothing and
+ * carried up to 1,100 Dn into the next mission.
+ * @returns {number} Dn taken back
+ */
+export function salaryAtVictory(game) {
+  const gv = game.city.governor;
+  if (!gv) return 0;
+  const due = salaryOf(gv.rank) * salaryMonthsSoFar(game.time.month);
+  const over = Math.min(gv.savings, Math.max(0, gv.paidThisYear - due));
+  if (over <= 0) return 0;
+  gv.savings -= over;
+  gv.paidThisYear -= over;
+  game.message(`Rome has taken back ${over} Dn of this year's salary: more than ${withArticle(RANKS[gv.rank].name)}'s pay.`, 'bad');
+  return over;
+}
+
+/**
+ * The campaign progress's savings record, made a plain object if it is
+ * missing or damaged (a number or an array in a hand-edited or corrupted
+ * record stopped the victory screen from opening).
+ */
+export function savingsRecord(progress) {
+  const r = progress.savings;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) progress.savings = {};
+  return progress.savings;
 }
 
 /** Move savings into the treasury. @returns {{ok:boolean, reason?:string, amount?:number}} */

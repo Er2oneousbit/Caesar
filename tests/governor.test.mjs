@@ -25,8 +25,9 @@ import { pickRiotTarget, riotRank } from '../src/sim/crime.js';
 import { ledgerNet } from '../src/sim/economy.js';
 import {
   newGovernorState, salaryOf, rankForYearPay, salaryFavor, setSalary, paySalary, salaryNewYear,
-  salaryOutlook, donate, residenceOf, storeCampaignSavings, campaignSavings,
+  salaryOutlook, donate, residenceOf, storeCampaignSavings, campaignSavings, salaryAtVictory, salaryMonthsSoFar, savingsRecord,
 } from '../src/sim/governor.js';
+import { checkOutcome } from '../src/sim/ratings.js';
 import { GIFT_SIZES, GIFT_MEMORY_MONTHS, giftCost, giftFavor, sendGift, giftsMonth } from '../src/sim/emperor.js';
 import {
   rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, briefingGovernorLine, victoryGovernorLine, salaryNow,
@@ -166,6 +167,55 @@ test('salary: Rome stops it once the mission is won, and judges no more', () => 
   assert.equal(salaryNewYear(game), 0);
   assert.equal(game.city.governor.paidThisYear, 0);
   assert.equal(salaryNow(game), 'none (mission won)');
+});
+
+test('salary: what was drawn above the rank in the year of victory is taken back before the savings go on', () => {
+  // The year of victory is never weighed at a New Year (the salary stops),
+  // so Caesar's pay from New Year to the victory once cost nothing and went
+  // on to the next mission. A Quaestor (12 Dn) won in Iunius (month 5): five
+  // months' pay are due him, 60 Dn.
+  const game = governed({ rank: 4, savings: 1000 });
+  const c = game.city;
+  assert.equal(salaryMonthsSoFar(5), 5);
+  assert.equal(salaryMonthsSoFar(0), 12, 'the payment as Ianuarius begins is December\'s');
+  game.time.month = 5;
+  c.governor.paidThisYear = 500; // Caesar's 100 Dn for five months
+  assert.equal(salaryAtVictory(game), 440);
+  assert.equal(c.governor.savings, 560);
+  assert.ok(game.messages.some((m) => /taken back 440 Dn/.test(m.text)));
+  c.governor.paidThisYear = 60;
+  assert.equal(salaryAtVictory(game), 0, 'his own rank\'s pay is his');
+  // checkOutcome does it as it declares the victory.
+  const won = governed({ rank: 4, savings: 1000 });
+  won.time.month = 5;
+  won.city.governor.paidThisYear = 500;
+  won.scenario.goals = { population: 1 };
+  won.city.population = 10;
+  checkOutcome(won);
+  assert.equal(won.city.victory, true);
+  assert.equal(won.city.governor.savings, 560);
+});
+
+test('salary: a treasury too poor to pay him earns no thanks for a modest salary', () => {
+  const game = governed({ rank: 5 }); // a Procurator drawing his own 20 Dn
+  game.city.governor.paidThisYear = 100; // paid only five months
+  assert.equal(salaryNewYear(game), 0);
+  assert.equal(salaryMessages(game).length, 0);
+  setSalary(game, 3); // chose an Architect's pay
+  game.city.governor.paidThisYear = 96;
+  assert.equal(salaryNewYear(game), 1);
+});
+
+test('savings: a damaged campaign record is replaced, so the victory screen still opens', () => {
+  for (const bad of [5, '5', [], null, undefined]) {
+    const progress = { savings: bad };
+    const rec = savingsRecord(progress);
+    assert.deepEqual(rec, {});
+    assert.equal(storeCampaignSavings(rec, 'c1', 300), 'c2');
+    assert.equal(progress.savings.c2, 300);
+  }
+  const ok = { savings: { c3: 90 } };
+  assert.equal(savingsRecord(ok).c3, 90, 'a sound record is kept');
 });
 
 test('salary: set to any rank\'s rate, nothing else', () => {

@@ -34,7 +34,7 @@ import { applyPlan as applyConstruction, canUndo as canUndoConstruction, undoLas
 import { findScenario, sandboxScenario, withDifficulty, SCENARIOS } from './data/scenarios.js';
 import { DIFFICULTY, DIFFICULTY_ORDER } from './data/difficulty.js';
 import { farmSeasonNotice } from './sim/production.js';
-import { campaignSavings, storeCampaignSavings } from './sim/governor.js';
+import { campaignSavings, storeCampaignSavings, savingsRecord } from './sim/governor.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort, enemyCount } from './sim/military.js';
@@ -325,7 +325,7 @@ export class App {
     // The governor's savings go with him to the next mission (sim/governor.js).
     // Each mission keeps what it was started with, so replaying it later
     // starts from the same savings, as the original's career did.
-    storeCampaignSavings(this.progress.savings ||= {}, id, this.game.city.governor.savings);
+    storeCampaignSavings(savingsRecord(this.progress), id, this.game.city.governor.savings);
     writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
     this.sfx.play('victory');
     this.musicOverride = 'festival';

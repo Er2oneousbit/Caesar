@@ -36,7 +36,7 @@
  * crimePeace and disease (and Easy a longer devolveDays); Insane pulls on all
  * of them.
  *
- * Crime and peace (the owner's call): none on Easy, a little on Normal, some on
+ * Crime and peace: none on Easy, a little on Normal, some on
  * Hard, a lot on Insane. Protests only cost on Insane, and only every fifth:
  * even a well-run Insane city sees about 17 a year, so a cost for each would
  * take peace down faster than its 12 a year can grow; one in five costs about
@@ -111,7 +111,7 @@ export const DIFFICULTY = Object.freeze({
     crimePeace: 3, protestPeaceEvery: 5,
     disease: 1.5,
     loanInterest: 0.4,
-    winterTrade: 2, // the owner's idea: winter roads and seas halve trade
+    winterTrade: 2, // winter roads and seas halve trade
   }),
 });
 

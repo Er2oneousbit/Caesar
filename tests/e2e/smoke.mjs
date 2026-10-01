@@ -546,8 +546,23 @@ try {
     const placed = await page.evaluate(({ x, y }) => window.colonia.game.map.roadblock[window.colonia.game.map.idx(x, y)], rbSpot);
     check('the Roadblock tool places a roadblock on a road', placed === 128, `layer ${placed}`);
     await page.mouse.click(rp.x, rp.y, { button: 'right' });
+    // A click on a walker's figure picks the walker, and walkers cross the
+    // roadblock all the time (a slow CI machine clicked one): step the paused
+    // game until no figure stands at the point, then click the roadblock.
+    const rbWasPaused = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      const was = app.paused;
+      app.paused = true; // still until the click is done
+      const rect = app.canvas.getBoundingClientRect();
+      for (let k = 0; k < 60 && app.renderer.pickWalker(x - rect.left, y - rect.top, false); k++) {
+        for (let t = 0; t < 4; t++) app.game.tick();
+        app.renderer.render(0, 0.016);
+      }
+      return was;
+    }, rp);
     await page.mouse.click(rp.x, rp.y);
     const rbPanel = await page.isVisible('#info-panel h3:has-text("Roadblock")');
+    await page.evaluate((was) => { window.colonia.paused = was; }, rbWasPaused);
     await page.click('#info-panel label:has-text("Priests") input');
     const allowed = await page.evaluate(({ x, y }) => window.colonia.game.map.roadblock[window.colonia.game.map.idx(x, y)], rbSpot);
     check('clicking a roadblock shows who it lets through; ticking a group lets it pass', rbPanel && allowed === (128 | 2), `panel ${rbPanel}, layer ${allowed}`);
@@ -1165,7 +1180,11 @@ try {
     app.game.time.month = month;
     return out;
   });
-  check('snow cover whitens ground, trees and roofs; the new look swaps in within 30 frames', /n3$/.test(snowy.key) && snowy.frames <= 30 && snowy.pending === 0 && snowy.snowSprites > 0 && snowy.buildings > 0, JSON.stringify(snowy));
+  // The new look is prepared a slice of time each frame, so a slower machine
+  // needs more frames: 30 was enough until the new buildings' snowy art came
+  // in (277 sprites; 37 frames at a 4x slower CPU, which failed CI). What
+  // matters is that it swaps in whole, within about a second and a half.
+  check('snow cover whitens ground, trees and roofs; the new look swaps in within 90 frames', /n3$/.test(snowy.key) && snowy.frames <= 90 && snowy.pending === 0 && snowy.snowSprites > 0 && snowy.buildings > 0, JSON.stringify(snowy));
   // Snow levels arriving a few frames apart (0 -> 1 -> 2, and a flip back):
   // every frame draws the ground in a single look, and the change completes.
   // (Only ground: a tree's sway frame never drawn in the old look has no

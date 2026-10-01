@@ -291,7 +291,27 @@ export class InfoPanel {
     this.timer = 0;
     // Do not rebuild while the user is interacting with a control inside.
     if (this.el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
-    this.render();
+    this.refresh();
+  }
+
+  /**
+   * The timed refresh: the panel is rebuilt off-screen and swapped in only
+   * when something in it changed. Replacing it every 0.7 s whatever happened
+   * pulled buttons out from under the pointer: on a slow machine a button
+   * (a storehouse's order, say) was never still long enough to be clicked.
+   */
+  refresh() {
+    const live = this.el;
+    const scratch = live.cloneNode(false);
+    this.el = scratch;
+    try {
+      this.render();
+    } finally {
+      this.el = live;
+    }
+    if (!this.target) { this.close(); return; } // render closed it (the building is gone)
+    if (scratch.innerHTML === live.innerHTML) return;
+    live.replaceChildren(...scratch.childNodes);
   }
 
   render() {

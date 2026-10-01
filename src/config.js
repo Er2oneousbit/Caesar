@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.13.0',
+  VERSION: '0.13.1',
   SAVE_VERSION: 11, // v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v10 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -34,7 +34,7 @@ export const CONFIG = {
   // Real-time pace only: the balance is all per tick/day, so this sets how
   // fast everything looks. At 20 people walked 2 tiles a second (a jog for
   // their size); at 12 they walk 1.2 and a month takes about 27 s at 1x.
-  TICKS_PER_SECOND: 8, // a year in 8 minutes at 1x (was 12: 5.3 minutes, and seasons flew by, the owner said); nothing in game time changes
+  TICKS_PER_SECOND: 8, // a year in 8 minutes at 1x (was 12: 5.3 minutes, and seasons went by too fast); nothing in game time changes
   TICKS_PER_DAY: 20,
   DAYS_PER_MONTH: 16,
   MONTHS_PER_YEAR: 12,
@@ -91,7 +91,7 @@ export const CONFIG = {
   DEFAULT_WAGE: 24, // Dn per worker per year
   BASE_WAGE: 24, // the wage citizens consider "fair"
   TAX_K: 5, // Dn per resident per year for each point of a tier's `tax`, at the default tax rate.
-  // 5, not 2 (v0.11.1, the owner's call): with 2 only a city of Apartment Houses paid its
+  // 5, not 2 (v0.11.1): with 2 only a city of Apartment Houses paid its
   // wages (a worker costs BASE_WAGE, WORKFORCE_RATIO of the people work), so every smaller one
   // lost money on every difficulty. With 5 a Cottage town about pays its way (npm run sweep).
   CLEAR_TREE_COST: 2,
@@ -104,8 +104,8 @@ export const CONFIG = {
   FIRE_THRESHOLD: 100,
   // Every building's fire and collapse rates (data/buildings.js, data/housing.js)
   // run at this pace: the original's clock (research: a standard building there
-  // burns or falls in about 161 days unserved; Colonia's rates gave 103). The
-  // owner, v0.12.1 on Normal: fire still came too fast. x difficulty.risk on top.
+  // burns or falls in about 161 days unserved; Colonia's rates gave 103, and
+  // fire came too fast in v0.12.1 playtests on Normal). x difficulty.risk on top.
   RISK_PACE: 0.62,
   DAMAGE_THRESHOLD: 100,
   FIRE_BURN_DAYS: 6, // how long a burning ruin keeps burning
@@ -194,7 +194,7 @@ export const CONFIG = {
   // At 0.5 a crowded home (40 people) scoring 20 that no physician visits
   // reaches the threshold in about 10 months on Normal; one scoring 80
   // (which takes health care) would need over 3 years, and gets visited.
-  DISEASE_RATE: 0.2, // was 0.5, then 0.31: the owner found disease too fast on Normal (v0.12.1, then a 5-year sandbox save: 37 outbreaks)
+  DISEASE_RATE: 0.2, // was 0.5, then 0.31: disease came too fast on Normal (v0.12.1 playtests, then a 5-year sandbox save: 37 outbreaks)
   DISEASE_CROWD_BASE: 0.5,
   DISEASE_CROWD_PEOPLE: 40,
   DISEASE_CROWD_MAX: 1.5,
@@ -339,7 +339,7 @@ export const CONFIG = {
 
   // --- Emperor -------------------------------------------------------------
   REQUEST_INTERVAL_MONTHS: [14, 26],
-  FIRST_REQUEST_MONTHS: [36, 48], // the Emperor's first request: in the fourth year (x difficulty.requestInterval; was 14-26 like the rest, then 24-36: still too early for a city to get going, the owner said)...
+  FIRST_REQUEST_MONTHS: [36, 48], // the Emperor's first request: in the fourth year (x difficulty.requestInterval; was 14-26 like the rest, then 24-36: still too early for a city to get going)...
   REQUEST_MIN_POP: 500, // ...and not before the city has this many people (was 150, then 400)
   REQUEST_DEADLINE_MONTHS: 12,
   FAVOR_START: 50,

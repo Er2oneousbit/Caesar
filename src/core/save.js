@@ -564,8 +564,8 @@ export function upgradeNavyV10(game) {
 
 /**
  * The two gods of Colonia's own that saves before version 7 have, and the
- * original's gods that took their places (the owner's call: their moods,
- * temples and priests carry over).
+ * original's gods that took their places (their moods, temples and
+ * priests carry over).
  */
 export const OLD_GODS = Object.freeze({ jupiter: 'mercury', vesta: 'venus' });
 

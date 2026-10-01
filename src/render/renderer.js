@@ -213,7 +213,7 @@ const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(
  * The reservoirs' piped area in teal, not blue: placing a fountain shows the
  * piped area under the existing fountains' reach, and in the same pale blue
  * the two ran together, so a player could not see where fountains already
- * gave water (the owner's playtest of mission 2).
+ * gave water (found in a playtest of mission 2).
  */
 const PIPED_STRONG = Object.freeze({ fill: 'rgba(16,150,128,0.34)', edge: 'rgba(8,110,92,0.95)' });
 const PIPED_PALE = Object.freeze({ fill: 'rgba(110,220,190,0.26)', edge: 'rgba(60,180,150,0.8)' });
@@ -1546,7 +1546,7 @@ export class Renderer {
    * The walker drawn at CSS pixel (sx, sy) of the screen, or 0: the figure
    * nearest the point among those whose box holds it. The box is the figure
    * itself (a little bigger, never under about 12 x 22 CSS px) or, with
-   * `generous`, never under about 22 x 36 CSS px (the owner: people were
+   * `generous`, never under about 22 x 36 CSS px (people were
    * hard to click; zoomed out a figure is a few pixels wide). The generous
    * box only wins on open ground (app.js clickTile): on a building or a
    * roadblock it would steal clicks meant for them. Where a building stands

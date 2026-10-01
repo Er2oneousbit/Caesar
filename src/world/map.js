@@ -97,6 +97,7 @@ export class GameMap {
     this.roadNet = new Int32Array(this.size); // road network component id (0 = no road)
     this.waterDist = new Uint8Array(this.size); // distance to nearest water tile (capped 255)
     this.navigable = new Uint8Array(this.size); // 1 = water that ships can sail (reaches the map edge)
+    this.navBody = new Int32Array(this.size); // which navigable water (1, 2, ...): ships never leave theirs (computeNavigation)
     this.fishBody = new Int32Array(this.size); // water body with fish (1, 2, ...), 0 = land or a pond (computeFishing)
 
     /** Edge water tile where merchant ships appear and leave, or null (no sea access). */
@@ -182,7 +183,8 @@ export class GameMap {
   /**
    * Mark navigable water: every body of water that touches the map edge and
    * is big enough to be a river or sea (not a tiny pond in a corner). Ships
-   * sail under bridges. Also picks `seaEntry`, the edge tile of the largest
+   * sail under bridges. Each such body gets its own number in navBody
+   * (warships and raider ships stay on theirs). Also picks `seaEntry`, the edge tile of the largest
    * such body where ships come and go (middle of its longest edge stretch).
    * Water never changes after map generation, so this runs once per game.
    */
@@ -190,6 +192,7 @@ export class GameMap {
     const { w, h, size } = this;
     const nav = this.navigable;
     nav.fill(0);
+    this.navBody.fill(0);
     this.seaEntry = null;
     const label = new Int32Array(size);
     const queue = new Int32Array(size);
@@ -218,7 +221,10 @@ export class GameMap {
         }
       }
       if (tail < minTiles) continue;
-      for (let k = 0; k < tail; k++) nav[queue[k]] = 1;
+      for (let k = 0; k < tail; k++) {
+        nav[queue[k]] = 1;
+        this.navBody[queue[k]] = next;
+      }
       if (!best || tail > best.count) best = { count: tail, edgeTiles };
     }
     if (best) {

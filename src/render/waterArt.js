@@ -23,25 +23,25 @@ const NET = 'rgba(70,60,45,0.75)';
 const FISH = '#a9bec7';
 
 /** (u, v) as designed (water on +u) to (u, v) on the footprint, for the edge facing the water. */
-function turner(S, side) {
+export function turner(S, side) {
   return (u, v) => (side === 1 ? [u, v] : side === 3 ? [S - u, v] : side === 2 ? [v, u] : [v, S - u]);
 }
 
 /** A box given in designed coordinates, turned into place (its corners re-sorted). */
-function turnedRect(T, u0, v0, du, dv) {
+export function turnedRect(T, u0, v0, du, dv) {
   const a = T(u0, v0);
   const b = T(u0 + du, v0 + dv);
   return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])];
 }
 
 /** Draw the queued pieces back to front by where they stand on screen. */
-function paint(items) {
+export function paint(items) {
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
 }
 
 /** A short wooden post standing at (x, y), `h` px tall. */
-function post(ctx, x, y, h, w = 1.4, color = WOOD_DARK) {
+export function post(ctx, x, y, h, w = 1.4, color = WOOD_DARK) {
   ctx.fillStyle = color;
   ctx.fillRect(x - w / 2, y - h, w, h);
 }

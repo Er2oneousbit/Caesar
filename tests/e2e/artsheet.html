@@ -22,6 +22,7 @@
   sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)  carts=1 (the carts only; scale=1 is the default zoom)
   water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
   cloth=1 (the cloth industry only: the flax farm as it grows and rests, the two workshops, the carts)
+  navy=1 (the fleet only: the navalia and naval station on each side, liburnians and raider ships)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
@@ -29,6 +30,7 @@
   import { buildingSpec } from '../../src/render/buildingArt.js';
   import { HOUSE_TIERS } from '../../src/data/housing.js';
   import { drawWalker, drawChariot } from '../../src/render/walkerArt.js';
+  import { drawUnit } from '../../src/render/militaryArt.js';
   import { drawGulls } from '../../src/render/waterArt.js';
   import { LED_GOODS } from '../../src/render/cargoArt.js';
   import { GOOD_KEYS } from '../../src/data/goods.js';
@@ -39,7 +41,8 @@
   // carts=1 shows only the carts (an empty tier list skips every home level)
   const water = !!q.get('water');
   const cloth = !!q.get('cloth');
-  const only = q.get('carts') || water || cloth ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const navy = !!q.get('navy');
+  const only = q.get('carts') || water || cloth || navy ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -138,7 +141,44 @@
       chariot(1, '#2f6db5', 'charioteer'), chariot(-1, '#2f6db5', 'facing left'), chariot(1, '#b8573a', 'team'),
     ]);
   }
-  if ((!only || q.get('extras') || q.get('carts') || cloth) && !water) {
+  if (!only || q.get('extras') || navy) {
+    // The fleet: the Navalia turned to each side of the water (empty slip,
+    // frames, planked hull with its ram) and the Naval Station on each side,
+    // water drawn under each; then the ships on the water.
+    const onWater = (spec, side, S) => ({ ...spec, w: spec.w + 70, h: spec.h + 34, ax: spec.ax + 35, draw(ctx) {
+      const pts = [[S, 0, S + 0.9, S], [0, S, S, S + 0.9], [-0.9, 0, 0, S], [0, -0.9, S, 0]];
+      const [u0, v0, u1, v1] = [pts[3], pts[0], pts[1], pts[2]][side];
+      const P = (u, v) => [(u - v) * 32, (u + v) * 16];
+      ctx.fillStyle = '#4a90c8';
+      ctx.beginPath();
+      for (const [u, v] of [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]) ctx.lineTo(...P(u, v));
+      ctx.fill();
+      spec.draw(ctx);
+    } });
+    section('Navalia: the water on each side; empty slip, frames, planked hull with its ram', [0, 1, 2, 3].flatMap((side) => [0, 1, 2].map((stage) => [`side ${side}, hull ${stage}`, onWater(buildingSpec('navalia', 3, 0, side + 4 * stage), side, 3)])));
+    section('Naval Station: the water on each side', [0, 1, 2, 3].map((side) => [`side ${side}`, onWater(buildingSpec('naval_station', 3, 0, side), side, 3)]));
+    const shipSpec = (u, label) => [label, { w: 120, h: 80, ax: 60, ay: 58, draw(ctx) {
+      ctx.fillStyle = '#4a90c8';
+      ctx.fillRect(-60, -58, 120, 80);
+      drawUnit(ctx, { id: 5, hp: 180, maxHp: 180, facing: 1, moving: false, walked: 0, strikeTick: -99, hitTick: -99, crew: [], pots: 10, ...u }, 0, 0, 1, 0.4, 100, false, u.walked || 0);
+    } }];
+    section('Liburnian: rowing (two strokes), facing left, in battle (sail furled, shooting), at its berth (oars shipped), damaged', [
+      shipSpec({ type: 'liburnian', state: 'sail', moving: true, walked: 0.1 }, 'rowing'),
+      shipSpec({ type: 'liburnian', state: 'sail', moving: true, walked: 0.45 }, 'rowing, mid-stroke'),
+      shipSpec({ type: 'liburnian', state: 'sail', moving: true, facing: -1, walked: 0.3 }, 'facing left'),
+      shipSpec({ type: 'liburnian', state: 'engage', moving: true, strikeTick: 98, walked: 0.2 }, 'in battle'),
+      shipSpec({ type: 'liburnian', state: 'berthed' }, 'at its berth'),
+      shipSpec({ type: 'liburnian', state: 'engage', hp: 70, hitTick: 99 }, 'damaged'),
+    ]);
+    section('Raider ship: sailing in with its warband, throwing a fire pot, facing left, offshore (sail furled), damaged', [
+      shipSpec({ type: 'raider_ship', state: 'sail', moving: true, crew: ['raider', 'raider', 'slinger', 'raider', 'horseman'], hp: 140, maxHp: 140, walked: 0.2 }, 'sailing in'),
+      shipSpec({ type: 'raider_ship', state: 'sail', moving: true, crew: ['raider', 'raider'], hp: 140, maxHp: 140, strikeTick: 97, walked: 0.5 }, 'throwing'),
+      shipSpec({ type: 'raider_ship', state: 'sail', moving: true, facing: -1, crew: ['raider', 'raider', 'raider'], hp: 140, maxHp: 140, walked: 0.3 }, 'facing left'),
+      shipSpec({ type: 'raider_ship', state: 'offshore', hp: 140, maxHp: 140 }, 'offshore'),
+      shipSpec({ type: 'raider_ship', state: 'leave', moving: true, hp: 40, maxHp: 140 }, 'damaged, leaving'),
+    ]);
+  }
+  if ((!only || q.get('extras') || q.get('carts') || cloth) && !water && !navy) {
     // Carts: every good at a part load (100 of a hand cart's 200) and a full
     // load, facing right then left; farm wagons at 100 and 400; horses led;
     // caravan mules coming in (bales) and going out with what they bought.

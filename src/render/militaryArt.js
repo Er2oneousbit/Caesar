@@ -6,7 +6,8 @@
  *   wallSpec()        cached sprite for a wall or gate tile (connects to
  *                     neighboring walls, gates and watchtowers)
  *   drawUnit()        soldiers and raiders, drawn live every frame like walkers
- *   drawProjectile()  arrows and sling stones in flight
+ *                     (ships of war: shipArt.js)
+ *   drawProjectile()  arrows, sling stones and raider ships' fire pots in flight
  *   drawRallyFlag()   the standard planted where a fort's troops are deployed
  *
  * Live drawing works in device pixels: (sx, sy) are the feet, k is the pixel
@@ -17,6 +18,7 @@
 import { CONFIG, HALF_W } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { P, poly, quad, box, shade, horse } from './draw.js';
+import { drawWarship } from './shipArt.js';
 
 const TH = CONFIG.TILE_H;
 const STONE = '#b9ad92';
@@ -136,6 +138,7 @@ const BARB_HAIR = ['#c9a14a', '#a0522d', '#7a5a3a', '#d8c07a'];
  */
 export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride = u.walked || 0) {
   const def = UNIT_TYPES[u.type];
+  if (def.naval) { drawWarship(ctx, u, sx, sy, k, t, tick, highlight, stride); return; }
   const face = u.facing < 0 ? -1 : 1;
   // Legs step with the distance marched (still when halted or paused, quicker when running).
   const phase = u.moving ? Math.sin(stride * (def.mounted ? HOOF_RAD : STEP_RAD) + u.id) : 0;
@@ -353,6 +356,18 @@ function drawHealth(ctx, u, sx, y, k, tick) {
 
 /** An arrow (short shaft pointing along its flight) or a sling stone. */
 export function drawProjectile(ctx, p, sx, sy, k) {
+  if (p.kind === 'firepot') {
+    // a clay pot trailing flame
+    ctx.fillStyle = 'rgba(255,150,40,0.75)';
+    ctx.beginPath();
+    ctx.ellipse(sx - (p.vx - p.vy || 0) * 6 * k, sy - 1.5 * k, 1.4 * k, 2.4 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5a3c22';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1.6 * k, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
   if (p.kind === 'stone') {
     ctx.fillStyle = '#6f675c';
     ctx.beginPath();

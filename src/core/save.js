@@ -75,6 +75,14 @@
  *      upgradeClothV9(); their Tenements and better homes start with three
  *      months of clothing, and fall back after that unless a market brings
  *      more.
+ *  11  sea raids and the fleet (sim/navy.js): military.seaRaids (the
+ *      switch), the fleet's demand and new stats; navalia (stock, progress)
+ *      and naval stations (rally); liburnians (station, slot) and raider
+ *      ships (crew, pots, route) are units; a raid by sea has `sea`,
+ *      `landing`, `landed` and `landedDay`. Older saves load with no fleet,
+ *      the switch on (the default) and any raid the scouts already saw
+ *      coming by land as it was; the raids after it may come by sea, see
+ *      upgradeNavyV10().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -383,6 +391,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 8) upgradeShipsV7(game);
   if (data.version < 9) upgradeFishV8(game);
   if (data.version < 10) upgradeClothV9(game);
+  if (data.version < 11) upgradeNavyV10(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -535,6 +544,22 @@ export function upgradeClothV9(game) {
   }
   const settings = game.city.trade && game.city.trade.settings;
   if (settings) for (const g of CLOTH_GOODS) settings[g] ??= { mode: 'none', level: 400 };
+}
+
+/**
+ * A save before version 11 (before sea raids and the fleet): the Sea raids
+ * switch takes the scenario's choice (on, unless a sandbox said no; no older
+ * sandbox did), the fleet needs nothing yet and its counts start at 0. A raid
+ * already warned of or under way has no `sea` and stays a raid by land; the
+ * next one is decided by the new rule.
+ */
+export function upgradeNavyV10(game) {
+  const m = game.military;
+  if (!m) return;
+  m.seaRaids ??= game.scenario.seaRaids !== false;
+  m.navalDemand ??= { timber: 0, iron: 0, linen: 0 };
+  const st = m.stats || (m.stats = {});
+  for (const k of ['seaRaids', 'shipsSunk', 'shipsLost', 'shipsBuilt', 'boatsSunk']) st[k] ??= 0;
 }
 
 /**

@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.12.2',
-  SAVE_VERSION: 10, // v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v9 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 11, // v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v10 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -298,6 +298,33 @@ export const CONFIG = {
   FISH_GROUNDS_PER_BODY: 4,
   FISH_GROUNDS_MAX: 8, // on the whole map (the original's limit), bigger bodies first
   FISH_GROUND_SPACING: 12, // tiles (Chebyshev) between two grounds on the same water
+
+  // --- Sea raids and the fleet (sim/navy.js; ships' fighting numbers: data/units.js) ---
+  // Not in the original, which had no war at sea. On a map whose navigable
+  // water reaches the sea entry, with the Sea raids switch on, each raid comes
+  // by sea with this chance (rolled when the scouts see it, on a random
+  // stream of its own: a raid that comes by land is the raid it always was).
+  SEA_RAID_SHARE: 1 / 3,
+  RAID_SHIP_CREW: 8, // raiders a ship carries: a warband of 14 comes in 2 ships...
+  RAID_SHIP_MAX: 5, // ...and never more than this many
+  LANDING_WALK: 6, // the landing: the shore whose walk to the nearest home is closest to this (tiles)...
+  LANDING_MIN_WALK: 3, // ...and never closer than this
+  SEA_SAIL_MAX_DAYS: 60, // ships that have not put their raiders ashore by then give up
+  // Fire pots: what makes a raid by sea dangerous before it lands. Each ship
+  // throws at most RAID_SHIP_POTS (one every 2 days, range 5): at a fishing
+  // boat (it sinks) or a building by the shore (damage x the difficulty's
+  // enemy strength, and fire risk if it can burn: prefects clear that as
+  // always). Ten pots are 200 damage: four huts, or half a dock, per ship.
+  RAID_SHIP_POTS: 10,
+  RAID_SHIP_POT_DAMAGE: 20,
+  RAID_SHIP_FIRE_HEAT: 25,
+  // The Navalia builds a liburnian from these (by cart, only while a staffed
+  // Naval Station has an empty berth) in this many days at full staff.
+  LIBURNIAN_COST: { timber: 300, iron: 100, linen: 100 },
+  NAVALIA_BUILD_DAYS: 30,
+  STATION_GUARD: 12, // a squadron at its berth fights raider ships this close to it (tiles)...
+  STATION_GUARD_DEPLOYED: 8, // ...deployed, this close to its rally point...
+  STATION_CHASE: 4, // ...and chases one at most this much farther
 
   // --- Ratings ------------------------------------------------------------
   // Culture and prosperity move toward what the city deserves by at most

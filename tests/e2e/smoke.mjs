@@ -1270,6 +1270,120 @@ try {
     await b2.close();
   }
 
+  // 6d. The fleet (sim/navy.js) on a coast: place a Naval Station and a
+  //     Navalia with the mouse, then a working fleet (console `navy`), its
+  //     squadron deployed by the station's Deploy button and a click on the
+  //     water, a ship's panel, the Military advisor's stations, a raid by sea.
+  {
+    const np = await ctx.newPage();
+    const nerrors = [];
+    np.on('pageerror', (e) => nerrors.push(`pageerror: ${e.message}`));
+    np.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) nerrors.push(m.text()); });
+    await np.goto(`${url}?skipmenu=1&maptype=coast&map=small&seed=demo&mute=1&money=90000`);
+    await np.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    await np.evaluate(() => { const app = window.colonia; app.paused = true; app.ui.console.run('demo 2'); app.ui.console.run('days 60'); app.renderer.camera.zoomIndex = 2; });
+    const nScreen = (tx, ty) => np.evaluate(([x, y]) => {
+      const cam = window.colonia.renderer.camera;
+      const wx = (x + 0.5 - (y + 0.5)) * 32;
+      const wy = (x + 0.5 + (y + 0.5)) * 16;
+      const r = window.colonia.canvas.getBoundingClientRect();
+      return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+    }, [tx, ty]);
+    // Two open 3x3 spots on the shore of the sea, apart from each other.
+    const spots = await np.evaluate(() => {
+      const g = window.colonia.game;
+      const m = g.map;
+      const out = [];
+      for (let y = 2; y < m.h - 5 && out.length < 2; y++) {
+        for (let x = 2; x < m.w - 5 && out.length < 2; x++) {
+          if (m.navigableBeside(x, y, 3) < 0) continue;
+          let ok = true;
+          for (let dy = 0; dy < 3 && ok; dy++) for (let dx = 0; dx < 3; dx++) if (!m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] === 2) { ok = false; break; }
+          if (ok && out.every((o) => Math.abs(o.x - x) > 4 || Math.abs(o.y - y) > 4)) out.push({ x, y });
+        }
+      }
+      if (out[0]) window.colonia.renderer.camera.centerOnTile(out[0].x + 1, out[0].y + 1);
+      return out;
+    });
+    check('fleet: open shore for a station and a navalia', spots.length === 2, JSON.stringify(spots));
+    const placed = [];
+    for (const [k, type] of [[0, 'naval_station'], [1, 'navalia']]) {
+      if (!spots[k]) break;
+      await np.evaluate(([s, t]) => { window.colonia.renderer.camera.centerOnTile(s.x + 1, s.y + 1); window.colonia.ui.selectTool(t); }, [spots[k], type]);
+      await np.waitForTimeout(250);
+      const p = await nScreen(spots[k].x + 1, spots[k].y + 1); // the cursor is the middle of a 3x3
+      await np.mouse.move(p.x - 5, p.y);
+      await np.mouse.move(p.x, p.y);
+      await np.mouse.click(p.x, p.y);
+      placed.push(await np.evaluate(([s, t]) => window.colonia.game.buildings.get(window.colonia.game.map.building[window.colonia.game.map.idx(s.x, s.y)])?.type === t, [spots[k], type]));
+    }
+    check('fleet: a click places a Naval Station and a Navalia on the shore', placed.length === 2 && placed.every(Boolean), JSON.stringify(placed));
+    await np.mouse.click(10, 300, { button: 'right' });
+    // A working fleet: stocked, staffed (military first), a few months on.
+    const fleet = await np.evaluate(() => {
+      const app = window.colonia;
+      const out = app.ui.console.run('navy');
+      app.game.city.laborPriority = ['military'];
+      app.ui.console.run('days 140');
+      const g = app.game;
+      const st = [...g.buildings.values()].filter((b) => b.def.kind === 'station').find((b) => [...g.units.values()].some((u) => u.station === b.id));
+      return { out, st: st ? { id: st.id, x: st.x, y: st.y } : null, ships: [...g.units.values()].filter((u) => u.type === 'liburnian').length };
+    });
+    check('fleet: the navalia builds liburnians that berth at a station', fleet.ships >= 1 && !!fleet.st, JSON.stringify(fleet));
+    if (fleet.st) {
+      await np.evaluate((s) => { window.colonia.renderer.camera.centerOnTile(s.x + 1, s.y + 1); window.colonia.ui.info.showBuilding(s.id); }, fleet.st);
+      await np.waitForTimeout(250);
+      await np.click('#info-panel button:has-text("Deploy")');
+      const water = await np.evaluate((s) => {
+        const m = window.colonia.game.map;
+        const st = window.colonia.game.buildings.get(s.id);
+        const body = m.navBody[st.berth];
+        for (let r = 5; r < 12; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r], [r, r], [-r, -r]]) {
+          const x = s.x + 1 + dx; const y = s.y + 1 + dy;
+          if (m.inBounds(x, y) && m.navBody[m.idx(x, y)] === body) return { x, y };
+        }
+        return null;
+      }, fleet.st);
+      if (water) {
+        const p = await nScreen(water.x, water.y);
+        await np.mouse.click(p.x, p.y);
+      }
+      const rally = await np.evaluate((id) => window.colonia.game.buildings.get(id).rally, fleet.st.id);
+      check('fleet: Deploy and a click on the water send the squadron there', !!water && !!rally && Math.abs(Math.floor(rally.x) - water.x) <= 2 && Math.abs(Math.floor(rally.y) - water.y) <= 2, JSON.stringify({ water, rally }));
+      await np.evaluate(() => { window.colonia.paused = false; window.colonia.ui.console.run('days 8'); window.colonia.paused = true; });
+      // Click a liburnian: its panel.
+      await np.evaluate(() => { const u = [...window.colonia.game.units.values()].find((v) => v.type === 'liburnian'); window.colonia.renderer.camera.centerOnTile(Math.floor(u.x), Math.floor(u.y)); });
+      await np.waitForTimeout(400);
+      const shipAt = await np.evaluate(() => {
+        const r = window.colonia.renderer;
+        const s = r.shipSpots.find((o) => window.colonia.game.units.get(o.id)?.type === 'liburnian');
+        if (!s) return null;
+        const cam = r.camera;
+        const rect = window.colonia.canvas.getBoundingClientRect();
+        return { x: rect.left + ((s.wx - cam.x) * cam.scale) / cam.dpr, y: rect.top + ((s.wy - 12 - cam.y) * cam.scale) / cam.dpr };
+      });
+      if (shipAt) await np.mouse.click(shipAt.x, shipAt.y);
+      await np.waitForTimeout(200);
+      const panel = await np.evaluate(() => ({ kind: window.colonia.ui.info.target?.kind, text: document.getElementById('info-panel').textContent }));
+      check('fleet: clicking a liburnian shows its panel', panel.kind === 'unit' && /Liburnian/.test(panel.text) && /Hull/.test(panel.text), JSON.stringify({ kind: panel.kind }));
+      if (shots) await np.screenshot({ path: path.join(shots, 'smoke-fleet.png') });
+    }
+    await np.keyboard.press('F2');
+    await np.click('.tab:has-text("Military")');
+    check('fleet: the Military advisor shows the fleet and its stations', await np.isVisible('.modal h4:has-text("Fleet")') && await np.isVisible('.modal th:has-text("Station")'));
+    await np.keyboard.press('Escape');
+    const raid = await np.evaluate(() => {
+      const app = window.colonia;
+      const said = app.ui.console.run('searaid 10');
+      app.ui.console.run('days 3');
+      const g = app.game;
+      return { said, sea: !!g.military.active?.sea, ships: [...g.units.values()].filter((u) => u.type === 'raider_ship').length };
+    });
+    check('fleet: a raid by sea sails in on raider ships', raid.sea && raid.ships >= 1, JSON.stringify(raid));
+    check('fleet: no errors on the coast', nerrors.length === 0, nerrors.join(' | '));
+    await np.close();
+  }
+
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];

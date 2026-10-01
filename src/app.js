@@ -37,11 +37,12 @@ import { farmSeasonNotice } from './sim/production.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort, enemyCount } from './sim/military.js';
+import { deployStation } from './sim/navy.js';
 
 /** Input events that count as a user activation (HTML spec) in some browser. */
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
 
-const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true, difficulty: 'normal' };
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true, difficulty: 'normal', seaRaids: true };
 
 /** Does the player's system ask for less motion (accessibility setting)? */
 function prefersReducedMotion() {
@@ -204,11 +205,19 @@ export class App {
     writeJson(`${CONFIG.STORAGE_PREFIX}settings`, this.settings);
   }
 
+  /**
+   * Flags for a new game: the debug flags, and Settings' Sea raids switch
+   * (off: every raid comes by land; the URL flag searaids= wins).
+   */
+  newGameFlags(seaRaids = this.settings.seaRaids !== false) {
+    return this.flags.searaids ? this.flags : { ...this.flags, searaids: seaRaids ? 'on' : 'off' };
+  }
+
   /** Start a campaign scenario by id, at a difficulty (default: Normal). */
   newScenario(id, difficulty = 'normal') {
     const scenario = withDifficulty(findScenario(id), difficulty);
     if (!scenario) { this.ui.toastError(`Unknown scenario ${id}`); return; }
-    this.startGame(new Game({ scenario, flags: this.flags }));
+    this.startGame(new Game({ scenario, flags: this.newGameFlags() }));
     for (const hint of scenario.hints || []) this.game.message(hint, 'info');
     farmSeasonNotice(this.game, true); // Insane: missions start in winter, when nothing grows
   }
@@ -222,8 +231,9 @@ export class App {
       funds: opts.funds || 8000,
       difficulty: opts.difficulty || 'normal',
       invasions: opts.invasions || 'occasional',
+      seaRaids: opts.seaRaids !== false,
     });
-    this.startGame(new Game({ scenario, flags: this.flags }));
+    this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
     farmSeasonNotice(this.game, true); // Insane: the city is founded in winter, when nothing grows
   }
@@ -232,8 +242,9 @@ export class App {
   restart() {
     if (!this.game) return;
     const scenario = this.game.scenario;
+    const seaRaids = this.game.military.seaRaids !== false; // the restarted city keeps its switch
     this.ui.closeModal();
-    this.startGame(new Game({ scenario, flags: { ...this.flags, seed: this.game.seed } }));
+    this.startGame(new Game({ scenario, flags: { ...this.newGameFlags(seaRaids), seed: this.game.seed } }));
     farmSeasonNotice(this.game, true);
   }
 
@@ -600,14 +611,15 @@ export class App {
   }
 
   // ------------------------------------------------------------ military
-  /** Start picking a tile where a fort's soldiers should stand. */
+  /** Start picking a tile where a fort's soldiers should stand (or a station's ships should go). */
   startDeploy(fortId) {
     const f = this.game?.buildings.get(fortId);
     if (!f) return;
     this.input.setTool(null);
     this.deploying = fortId;
     this.renderer.deployFort = fortId;
-    this.ui.messages.push({ text: `Click where the ${f.def.name}'s soldiers should stand. Right-click or Esc cancels.`, level: 'info', date: '' });
+    const what = f.def.kind === 'station' ? `Click the water where the ${f.def.name}'s squadron should go` : `Click where the ${f.def.name}'s soldiers should stand`;
+    this.ui.messages.push({ text: `${what}. Right-click or Esc cancels.`, level: 'info', date: '' });
   }
 
   cancelDeploy() {
@@ -642,9 +654,12 @@ export class App {
     if (this.deploying && g) {
       const id = this.deploying;
       this.cancelDeploy();
-      if (g.map.inBounds(x, y) && deployFort(g, id, x, y)) {
+      const naval = g.buildings.get(id)?.def.kind === 'station';
+      if (g.map.inBounds(x, y) && (naval ? deployStation(g, id, x, y) : deployFort(g, id, x, y))) {
         this.sfx.play('horn');
-        this.ui.messages.push({ text: `Soldiers are marching to ${x}, ${y}.`, level: 'info', date: '' });
+        this.ui.messages.push({ text: naval ? `The squadron is rowing to ${x}, ${y}.` : `Soldiers are marching to ${x}, ${y}.`, level: 'info', date: '' });
+      } else if (naval) {
+        this.ui.toastError('Liburnians sail only on the water by their station: click the river or sea there.');
       }
       if (g.buildings.has(id)) this.ui.info.showBuilding(id);
       return;
@@ -653,6 +668,9 @@ export class App {
     this.sfx.play('click');
     const alive = (id) => (id && g.walkers.has(id) ? id : 0);
     const r = this.renderer;
+    // A ship of war under the click (a liburnian or a raider ship) shows its panel.
+    const ship = screen ? r.pickShip(screen.x, screen.y) : 0;
+    if (ship && g.units.has(ship)) { this.ui.info.showUnit(ship); return; }
     const strict = alive(pressed?.strict) || (screen ? r.pickWalker(screen.x, screen.y, false) : 0);
     const onSomething = g.map.buildingAt(x, y) || g.map.roadblock[g.map.idx(x, y)];
     const wid = strict || (onSomething ? 0 : alive(pressed?.loose) || (screen ? r.pickWalker(screen.x, screen.y, true) : 0));

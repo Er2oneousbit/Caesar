@@ -10,14 +10,15 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy } from '../dev/demoCity.js';
 import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
+import { squadronCounts, shipStatus } from '../sim/navy.js';
 import { commitCrime, crimeChance, criminalsAbout, unhappiestHomes, crimeEnabled } from '../sim/crime.js';
 import { outbreak, sickHomes, riskiestHomes, diseaseEnabled } from '../sim/disease.js';
-import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
+import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
 import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
 import { MOODS, TRACKS } from '../audio/composer.js';
@@ -47,8 +48,10 @@ export const CONSOLE_HELP = [
   ['grounds', 'List the fishing grounds, and every wharf and its boat'],
   ['hippodrome', 'Build a hippodrome and a chariot maker beside the city'],
   ['cloth', 'Build the cloth industry beside the city: a flax farm, a linen maker, a clothing maker and a warehouse'],
+  ['navy', 'Build a naval station and a navalia on the shore, stocked for a squadron of liburnians (river/coast maps)'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
-  ['army', 'List forts, soldiers, barracks stock and the raid schedule'],
+  ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
+  ['army', 'List forts, naval stations, soldiers, ships, barracks and navalia stock and the raid schedule'],
   ['win', 'Trigger victory'],
   ['stats', 'Print city statistics'],
   ['goto <x> <y>', 'Center the view on a tile'],
@@ -274,13 +277,26 @@ export class DebugConsole {
         }
         return lines.join('\n');
       }
-      case 'invade': {
+      case 'navy': {
+        need();
+        const center = cityCenter(g);
+        if (!center) return 'Build some homes first (try: demo 2).';
+        const res = buildDemoNavy(g, center, { stock: true });
+        if (res.station) app.renderer.camera.centerOnTile(res.station.x, res.station.y);
+        if (res.ok) return `Fleet built: a Naval Station and a Navalia stocked for ${STATION_CAPACITY} liburnians (one every ${CONFIG.NAVALIA_BUILD_DAYS} days at full staff; military labor may need to go first).`;
+        return res.station ? 'A Naval Station was built, but no room for a Navalia on its water.' : 'No shore near the city that ships can reach (try a river or coast map), or the fleet is locked in this mission.';
+      }
+      case 'invade':
+      case 'searaid': {
         need();
         if (g.military.active) return 'A raid is already under way.';
         const n = args[0] ? Math.max(1, Math.min(60, Number(args[0]) || 0)) : 0;
-        const inv = launchInvasion(g, null, n || undefined);
+        const sea = cmd === 'searaid';
+        if (sea && !g.military.seaRaids) return 'Sea raids are off in this city (Settings).';
+        const inv = launchInvasion(g, null, n || undefined, { sea });
         app.renderer.camera.centerOnTile(inv.origin.x, inv.origin.y);
-        return `Raid of ${inv.size} launched from ${inv.origin.x},${inv.origin.y}.`;
+        if (sea && !inv.sea) return `No landing could be found, so a raid of ${inv.size} came by land from ${inv.origin.x},${inv.origin.y}.`;
+        return inv.sea ? `Raid of ${inv.size} by sea in ${inv.ships} ship${inv.ships === 1 ? '' : 's'}, landing at ${inv.origin.x},${inv.origin.y}.` : `Raid of ${inv.size} launched from ${inv.origin.x},${inv.origin.y}.`;
       }
       case 'army': {
         need();
@@ -292,12 +308,19 @@ export class DebugConsole {
             lines.push(`${b.def.name} #${b.id} at ${b.x},${b.y}: ${counts.get(b.id) || 0}/${FORT_CAPACITY} ${UNIT_TYPES[b.def.unit].name.toLowerCase()}s, ${b.recruiting || 0} on the way, staff ${Math.round(b.efficiency * 100)}%${b.rally ? `, deployed to ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : ''}`);
           } else if (b.def.kind === 'barracks') {
             lines.push(`Barracks #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, training ${Math.round(b.trainProgress || 0)}%${b.blocked ? ` (${b.blocked})` : ''}`);
+          } else if (b.def.kind === 'station') {
+            lines.push(`${b.def.name} #${b.id} at ${b.x},${b.y}: ${squadronCounts(g).get(b.id) || 0}/${STATION_CAPACITY} liburnians, staff ${Math.round(b.efficiency * 100)}%${b.rally ? `, deployed to ${Math.floor(b.rally.x)},${Math.floor(b.rally.y)}` : ''}`);
+          } else if (b.def.kind === 'navalia') {
+            lines.push(`Navalia #${b.id}: ${Object.entries(b.stock).map(([k, v]) => `${k} ${v}`).join(', ')}, building ${Math.round(b.progress || 0)}%, ${b.built || 0} launched${b.blocked ? ` (${b.blocked})` : ''}`);
           }
+        }
+        for (const u of g.units.values()) {
+          if (UNIT_TYPES[u.type].naval) lines.push(`${UNIT_TYPES[u.type].name} #${u.id} at ${Math.floor(u.x)},${Math.floor(u.y)}: ${shipStatus(g, u)}, hull ${Math.ceil(u.hp)}/${u.maxHp}`);
         }
         if (!lines.length) lines.push('No forts or barracks.');
         lines.push(`Raiders on the map: ${enemyCount(g)}. ${threatSummary(g).text}`);
-        lines.push(m.settings ? `Next raid: month ${m.nextRaidMonth} (now ${g.time.totalMonths}).` : 'Raids are off in this game.');
-        lines.push(`Record: ${m.stats.raids} raids, ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.trained} trained.`);
+        lines.push(m.settings ? `Next raid: month ${m.nextRaidMonth} (now ${g.time.totalMonths}); sea raids ${m.seaRaids ? 'on' : 'off'}${g.map.seaEntry ? '' : ' (no water from the sea here)'}.` : 'Raids are off in this game.');
+        lines.push(`Record: ${m.stats.raids} raids (${m.stats.seaRaids || 0} by sea), ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.trained} trained; ${m.stats.shipsBuilt || 0} liburnians built, ${m.stats.shipsLost || 0} lost, ${m.stats.shipsSunk || 0} raider ships sunk, ${m.stats.boatsSunk || 0} fishing boats lost.`);
         return lines.join('\n');
       }
       case 'win':

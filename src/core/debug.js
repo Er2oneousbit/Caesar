@@ -19,6 +19,7 @@
  *   speed=N        starting speed index (0-4)
  *   unlockall=1    every building available in every scenario
  *   raids=MODE     off | occasional | frequent  (override invasions for new games)
+ *   searaids=off   every raid comes by land (new games; sim/navy.js)
  *   nofog=1        reserved for future use
  *   mute=1         start with sound off
  *
@@ -43,6 +44,7 @@ export function parseFlags(source) {
     speed: null,
     unlockall: false,
     raids: null,
+    searaids: null,
     mute: false,
   };
   let params;
@@ -72,6 +74,7 @@ export function parseFlags(source) {
   if (get('speed') !== undefined && get('speed') !== null && Number.isInteger(speed)) flags.speed = speed;
   flags.unlockall = truthy(get('unlockall'));
   if (['off', 'occasional', 'frequent'].includes(get('raids'))) flags.raids = get('raids');
+  if (['off', 'on'].includes(get('searaids'))) flags.searaids = get('searaids');
   flags.mute = truthy(get('mute'));
   return flags;
 }

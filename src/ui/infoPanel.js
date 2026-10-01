@@ -2,10 +2,12 @@
  * infoPanel.js
  * ----------------------------------------------------------------------------
  * The "what is this and what does it need" panel shown when you click a
- * building, a walker or a tile. For houses it spells out exactly which needs
- * block the next tier, which is the most important feedback loop in the
- * game. A roadblock's tile shows who it lets through; a walker shows where it
- * comes from, what it is doing and what it has to say (ui/walkerTalk.js).
+ * building, a walker, a ship of war or a tile. For houses it spells out
+ * exactly which needs block the next tier, which is the most important
+ * feedback loop in the game. A roadblock's tile shows who it lets through; a
+ * walker shows where it comes from, what it is doing and what it has to say
+ * (ui/walkerTalk.js); a liburnian or raider ship its hull, its work and its
+ * station or raid.
  * ----------------------------------------------------------------------------
  */
 
@@ -14,7 +16,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX, ENT_SEATS_MAX } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
-import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX } from '../data/units.js';
+import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX, STATION_CAPACITY } from '../data/units.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { WALKER_TYPES, ROADBLOCK_GROUPS } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall, ROADBLOCK } from '../world/map.js';
@@ -28,6 +30,7 @@ import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
 import { dockBerth, dockUsed } from '../sim/trade.js';
 import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat } from '../sim/fishing.js';
+import { squadronCounts, recallStation, waterOf, shipStatus } from '../sim/navy.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
@@ -128,8 +131,17 @@ export function buildingStatus(game, b) {
       break;
     }
     case 'barracks':
+    case 'navalia':
       if (b.blocked) return { level: 'warn', text: b.blocked };
       break;
+    case 'station': {
+      if (!waterOf(game, b)) return { level: 'bad', text: 'Not beside water that ships can sail.' };
+      const n = squadronCounts(game).get(b.id) || 0;
+      if (n >= STATION_CAPACITY) return { level: 'good', text: `Squadron at full strength (${STATION_CAPACITY} liburnians).` };
+      const yard = [...game.buildings.values()].some((x) => x.def.kind === 'navalia' && waterOf(game, x) === waterOf(game, b));
+      if (!yard) return { level: 'bad', text: 'No Navalia on this water: build one on its shore to build liburnians for this station.' };
+      break;
+    }
     case 'wharf': {
       if (!wharfBoat(game, b)) {
         const yard = [...game.buildings.values()].some((x) => x.def.kind === 'shipyard' && bodyOf(game, x) === bodyOf(game, b));
@@ -241,14 +253,26 @@ export class InfoPanel {
   showWalker(id) {
     this.target = { kind: 'walker', id };
     this.app.renderer.selectedId = 0;
+    this.app.renderer.selectedUnit = 0;
     this.app.renderer.selectedWalker = id;
     this.app.renderer.follow = null;
     this.el.classList.remove('hidden');
     this.render();
   }
 
+  /** Show a ship of war (a liburnian or a raider ship); the renderer rings it. */
+  showUnit(id) {
+    this.target = { kind: 'unit', id };
+    this.unselectWalker();
+    this.app.renderer.selectedId = 0;
+    this.app.renderer.selectedUnit = id;
+    this.el.classList.remove('hidden');
+    this.render();
+  }
+
   unselectWalker() {
     this.app.renderer.selectedWalker = 0;
+    this.app.renderer.selectedUnit = 0;
     this.app.renderer.follow = null;
   }
 
@@ -275,6 +299,7 @@ export class InfoPanel {
     if (!g || !this.target) { this.close(); return; }
     if (this.target.kind === 'tile') { this.renderTile(g); return; }
     if (this.target.kind === 'walker') { this.renderWalker(g); return; }
+    if (this.target.kind === 'unit') { this.renderUnit(g); return; }
     const b = g.buildings.get(this.target.id);
     if (!b) { this.close(); return; }
     if (b.house) this.renderHouse(g, b);
@@ -544,6 +569,31 @@ export class InfoPanel {
           h('div', { class: 'muted' }, `A boat takes ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff and needs no materials. It goes to the nearest staffed wharf on this water that has none; the yard keeps one spare ready and builds no more until a wharf takes it.`)));
         break;
       }
+      case 'navalia': {
+        const cost = CONFIG.LIBURNIAN_COST;
+        parts.push(sec('Materials in store',
+          def.inputs.map((good) => kv(`${GOODS[good].icon} ${GOODS[good].name}`, `${fmt(b.stock[good] || 0)} / ${fmt(cost[good])}${b.incoming[good] ? ` (+${fmt(b.incoming[good])} on the way)` : ''}`)),
+          h('div', { class: 'muted' }, `One liburnian needs ${Object.entries(cost).map(([g, n]) => `${n} ${GOODS[g].name.toLowerCase()}`).join(', ')}. Carts bring them while a staffed Naval Station on this water has an empty berth.`)));
+        parts.push(sec('Shipbuilding',
+          kv('Next liburnian', pct((b.progress || 0) / 100)), bar(b.progress || 0, 100),
+          kv('Takes', `${CONFIG.NAVALIA_BUILD_DAYS} days at full staff`),
+          kv('Launched here', fmt(b.built || 0))));
+        break;
+      }
+      case 'station': {
+        const unit = UNIT_TYPES.liburnian;
+        const n = squadronCounts(g).get(b.id) || 0;
+        parts.push(sec('Squadron',
+          kv('Liburnians', `${n} / ${STATION_CAPACITY}`), bar(n, STATION_CAPACITY),
+          kv('Orders', b.rally ? `Holding the water at ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding its berths'),
+          kv('Guards', `raider ships within ${b.rally ? CONFIG.STATION_GUARD_DEPLOYED : CONFIG.STATION_GUARD} tiles (chases ${CONFIG.STATION_CHASE} more)`),
+          kv('Pay', `${fmt(unit.upkeep * n)} Dn / month`),
+          h('div', { class: 'muted' }, unit.desc),
+          h('div', { class: 'row', style: { marginTop: '6px' } },
+            h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the water where they should go', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
+            h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, '↩ Recall'))));
+        break;
+      }
       case 'tower':
         parts.push(sec('Watchtower',
           kv('Range', `${TOWER_RANGE} tiles`),
@@ -625,6 +675,28 @@ export class InfoPanel {
   }
 
   /** A walker: who, from where, doing what, carrying what, and what it says. */
+  /** A liburnian or a raider ship: its hull, what it is doing, its station or raid. */
+  renderUnit(g) {
+    const u = g.units.get(this.target.id);
+    if (!u) { this.close(); return; }
+    const def = UNIT_TYPES[u.type];
+    const ours = u.side === 'rome';
+    const st = ours ? g.buildings.get(u.station) : null;
+    mount(this.el,
+      this.head(def.name, ours ? 'Fleet' : 'Enemy'),
+      h('div', { class: 'muted' }, def.desc),
+      kv('Hull', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
+      kv('Doing', shipStatus(g, u)),
+      ours ? kv('Station', st ? `${st.def.name} at ${st.x}, ${st.y}` : 'None') : null,
+      ours ? kv('Arms', `arrows (range ${def.range} tiles) and a bronze ram (${def.ram} damage)`) : null,
+      ours ? kv('Pay', `${def.upkeep} Dn / month`) : null,
+      !ours ? kv('Raiders aboard', fmt((u.crew || []).length)) : null,
+      !ours ? kv('Fire pots left', `${fmt(u.pots || 0)} of ${CONFIG.RAID_SHIP_POTS}`) : null,
+      h('div', { class: 'panel-sec row' },
+        st ? h('button', { class: 'btn small', onclick: () => this.showBuilding(st.id) }, 'Its station') : null,
+        h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${u.id} at ${Math.floor(u.x)},${Math.floor(u.y)}`)));
+  }
+
   renderWalker(g) {
     const w = g.walkers.get(this.target.id);
     if (!w || w.dead) { this.close(); return; }

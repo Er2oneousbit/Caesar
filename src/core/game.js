@@ -56,6 +56,7 @@ import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
+import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
 import { DIFFICULTY, difficultyOf } from '../data/difficulty.js';
 import { closeGoodsMonth } from '../sim/goodsLedger.js';
 import { updateHomeMoods } from '../sim/mood.js';
@@ -183,6 +184,7 @@ export class Game {
     this.enemyField = null; // raider flow field (derived, see military.js)
     this.events.on('buildingRemoved', ({ building }) => {
       if (building.def.kind === 'fort') disbandFort(this, building);
+      if (building.def.kind === 'station') stationLost(this, building); // its ships go to another station, or are laid up
     });
     this.pf = new PathFinder(this.map);
     this.processRoadChanges();
@@ -273,6 +275,8 @@ export class Game {
         case 'training': updateTraining(this, b); break;
         case 'venue': updateVenue(this, b); break;
         case 'barracks': updateBarracks(this, b); break;
+        case 'navalia': updateNavalia(this, b); break;
+        case 'station': shoreBerth(this, b); break; // (its berths, cached; the squadron sails in sim/navy.js)
         case 'dock': updateDock(this, b); break;
         case 'shipyard': updateShipyard(this, b); break;
         case 'wharf': updateWharf(this, b); break;

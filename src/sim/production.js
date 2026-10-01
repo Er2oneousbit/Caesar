@@ -23,7 +23,8 @@
  *   already in store. farmSeasonNotice() tells the player.
  *
  *   Warehouses also forward weapons, arrows and horses to barracks when the
- *   forts need recruits.
+ *   forts need recruits, and timber, iron and linen to a navalia while a
+ *   naval station has an empty berth (sim/navy.js).
  * ----------------------------------------------------------------------------
  */
 
@@ -38,6 +39,7 @@ import { spawnWalker } from './entities.js';
 import { followPath } from './movement.js';
 import { findDeliveryTarget, findDeliveryFit, takeGoods } from './storage.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
+import { navalNeed, navaliaHasRoom } from './navy.js';
 import { logGoods } from './goodsLedger.js';
 
 /** Number of cart pushers this building has out. */
@@ -217,7 +219,8 @@ export function updateWorkshop(game, b) {
 
 /**
  * Daily: a warehouse sends one cart per day where it is needed most:
- *   1. weapons / arrows / horses to a barracks equipping recruits
+ *   1. weapons / arrows / horses to a barracks equipping recruits, then
+ *      timber / iron / linen to a navalia building the fleet's next ship
  *   2. raw materials to the nearest workshop running low on them
  */
 export function updateWarehouseSupply(game, b) {
@@ -230,6 +233,14 @@ export function updateWarehouseSupply(game, b) {
     const found = pf.findNearest(b.accessRoad, (id) => {
       const x = buildings.get(id);
       return !!x && barracksHasRoom(x, good, lot);
+    }, 100, b.id);
+    if (found && sendSupplyCart(game, b, buildings.get(found.id), good, found.path)) return;
+  }
+  for (const good of BUILDINGS.navalia.inputs) {
+    if ((b.stock[good] || 0) < lot || navalNeed(game, good) <= 0) continue;
+    const found = pf.findNearest(b.accessRoad, (id) => {
+      const x = buildings.get(id);
+      return !!x && navaliaHasRoom(x, good, lot);
     }, 100, b.id);
     if (found && sendSupplyCart(game, b, buildings.get(found.id), good, found.path)) return;
   }

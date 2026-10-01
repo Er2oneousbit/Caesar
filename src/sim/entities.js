@@ -155,6 +155,15 @@ function initKind(b, def) {
       b.recruiting = 0; // recruits walking here right now
       b.rally = null; // deploy point {x, y} or null = stand at the fort
       break;
+    case 'navalia': // sim/navy.js
+      b.stock = emptyStock(def.inputs); // timber, iron, linen for the next liburnian
+      b.incoming = emptyStock(def.inputs);
+      b.built = 0; // liburnians launched here
+      b.blocked = ''; // what is holding it up (info panel)
+      break;
+    case 'station': // sim/navy.js
+      b.rally = null; // where its squadron is deployed {x, y} (on the water), or null = at its berths
+      break;
     case 'tower':
       b.shotTimer = 0;
       break;

@@ -49,6 +49,48 @@ export function tileOfWorld(wx, wy) {
   return { x: (u + v) / 2, y: (v - u) / 2 };
 }
 
+/** Is the world point on the map (a mapW x mapH diamond of tiles)? */
+function onMap(mapW, mapH, wx, wy) {
+  const t = tileOfWorld(wx, wy);
+  return t.x >= 0 && t.y >= 0 && t.x <= mapW && t.y <= mapH;
+}
+
+/**
+ * A tour for the menu's backdrop that never shows the dark beyond the map:
+ * the view (halfW x halfH world px each side of its center) swings up to
+ * (ax, ay) around a center, so the whole box it sweeps must lie on the map
+ * (a diamond, so its four corners are enough). Starts at the town (`want`)
+ * with the full swing; if that shows the edge, the center steps toward the
+ * map's middle, as far as the town stays well on screen all the tour long,
+ * then the swing shrinks. Failing that, any spot nearer the middle that
+ * fits. Null when even a still view at the map's middle shows the edge
+ * (zoom in and try again).
+ * @returns {{x:number, y:number, scale:number}|null} center and swing scale (0-1)
+ */
+export function fitTour(mapW, mapH, want, halfW, halfH, ax, ay) {
+  const mid = worldOf(mapW / 2, mapH / 2);
+  const fits = (x, y, s) => {
+    const w = halfW + ax * s;
+    const h = halfH + ay * s;
+    return onMap(mapW, mapH, x - w, y - h) && onMap(mapW, mapH, x + w, y - h) && onMap(mapW, mapH, x - w, y + h) && onMap(mapW, mapH, x + w, y + h);
+  };
+  const at = (t) => ({ x: want.x + (mid.x - want.x) * t, y: want.y + (mid.y - want.y) * t });
+  // The town stays in the middle 60% of the screen wherever the tour goes.
+  const townShown = (c, s) => Math.abs(c.x - want.x) + ax * s <= halfW * 0.6 && Math.abs(c.y - want.y) + ay * s <= halfH * 0.6;
+  for (const s of [1, 0.6, 0.3, 0]) {
+    for (let t = 0; t <= 1.0001; t += 0.05) {
+      const c = at(t);
+      if (!townShown(c, s)) break; // further in only loses the town
+      if (fits(c.x, c.y, s)) return { x: c.x, y: c.y, scale: s };
+    }
+  }
+  for (let t = 0; t <= 1.0001; t += 0.05) {
+    const c = at(t);
+    for (const s of [1, 0.6, 0.3, 0]) if (fits(c.x, c.y, s)) return { x: c.x, y: c.y, scale: s };
+  }
+  return null;
+}
+
 const clampIndex = (i) => Math.max(0, Math.min(CONFIG.ZOOM_LEVELS.length - 1, Math.round(i) || 0));
 
 export class Camera {

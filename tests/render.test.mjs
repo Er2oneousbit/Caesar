@@ -805,3 +805,27 @@ test('carts: every carter with every load draws in both facings', () => {
     assert.ok(log.paints > 0);
   }
 });
+
+test('menu backdrop: the tour keeps the whole screen on the map', async () => {
+  const { fitTour, worldOf, tileOfWorld } = await import('../src/render/camera.js');
+  const onMap = (W, H, x, y) => { const t = tileOfWorld(x, y); return t.x >= 0 && t.y >= 0 && t.x <= W && t.y <= H; };
+  const sweptOnMap = (W, H, f, hw, hh, ax, ay) => {
+    const w = hw + ax * f.scale;
+    const h = hh + ay * f.scale;
+    return [[-w, -h], [w, -h], [-w, h], [w, h]].every(([dx, dy]) => onMap(W, H, f.x + dx, f.y + dy));
+  };
+  // A town in the middle of a 96 map, a laptop screen: the town is the
+  // middle and the full swing fits.
+  const mid = worldOf(48, 48);
+  const a = fitTour(96, 96, mid, 640, 400, 320, 112);
+  assert.deepEqual([a.x, a.y, a.scale], [mid.x, mid.y, 1]);
+  // A town by the map's edge (where the menu used to open with a third of
+  // the screen dark): the tour moves inward until the screen is all land.
+  const edge = worldOf(80, 20);
+  const b = fitTour(96, 96, edge, 960, 540, 320, 112);
+  assert.ok(b, 'a 1920x1080 screen fits a 96 map');
+  assert.ok(Math.hypot(b.x - edge.x, b.y - edge.y) > 0, 'moved off the edge');
+  assert.ok(sweptOnMap(96, 96, b, 960, 540, 320, 112), 'everything the tour shows is on the map');
+  // A screen bigger than the map: no tour at this zoom (the app zooms in).
+  assert.equal(fitTour(64, 64, worldOf(32, 32), 3000, 2000, 320, 112), null);
+});

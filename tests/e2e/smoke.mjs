@@ -77,21 +77,30 @@ try {
   await page.waitForTimeout(450);
   const shown = await page.evaluate(() => ({ opacity: getComputedStyle(document.querySelector('#main-menu .menu-card')).opacity, inert: !!document.getElementById('main-menu').inert }));
   check('the menu card fades in and takes input after the gate', shown.opacity === '1' && !shown.inert, JSON.stringify(shown));
-  // 1a (cont.) The menu's backdrop tours its town and never drifts off it:
-  // ten minutes of drift later the view is still within its loop.
+  // 1a (cont.) The menu's backdrop tours its town and never shows the dark
+  // beyond the map: ten minutes of drift, every corner of the screen on land.
   const tour = await page.evaluate(() => {
     const app = window.colonia;
     if (!app.menuOrbit) return null;
-    const c0 = app.menuOrbit.c;
+    const cam = app.renderer.camera;
+    const map = app.menuGame.map;
+    const vw = cam.viewW / cam.dpr;
+    const vh = cam.viewH / cam.dpr;
+    const c0 = { x: app.menuOrbit.fit.x, y: app.menuOrbit.fit.y };
     let far = 0;
+    let off = 0;
     for (let k = 0; k < 600; k++) {
       app.menuDrift(1);
-      const c = app.renderer.camera.center();
+      const c = cam.center();
       far = Math.max(far, Math.hypot(c.x - c0.x, c.y - c0.y));
+      for (const [sx, sy] of [[0, 0], [vw - 1, 0], [0, vh - 1], [vw - 1, vh - 1]]) {
+        const t = cam.screenToTile(sx, sy);
+        if (t.x < 0 || t.y < 0 || t.x >= map.w || t.y >= map.h) off++;
+      }
     }
-    return { far: Math.round(far) };
+    return { far: Math.round(far), off, swing: app.menuOrbit.fit.scale, zoom: cam.zoomIndex };
   });
-  check('the menu backdrop tours its town and never drifts off the map', !!tour && tour.far > 50 && tour.far <= 400, JSON.stringify(tour));
+  check('the menu backdrop tours its town and never shows the dark beyond the map', !!tour && tour.off === 0 && tour.far > 50 && tour.far <= 400, JSON.stringify(tour));
   // 1b. The rest of the gesture never presses a menu button: the second click
   //     of a double-click on the gate, or a held Enter key (auto-repeat).
   {

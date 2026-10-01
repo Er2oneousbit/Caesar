@@ -17,6 +17,7 @@
  */
 
 import { CONFIG } from './config.js';
+import { worldOf, fitTour } from './render/camera.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
 import { saveToSlot, readSlot, deserializeGame, exportToFile, exportSlotToFile, importFromFile, serializeGame, canDownloadFiles } from './core/save.js';
@@ -67,6 +68,9 @@ function writeJson(key, value) {
 /** The menu background's tour: its reach from the town's middle (world px) and pace (radians a second). */
 const MENU_ORBIT = 320;
 const MENU_ORBIT_SPEED = 0.04;
+/** The menu backdrop's map: room around its town so the view stays on land. */
+const MENU_MAP_SIZE = 96;
+const MENU_ZOOM = 2; // CONFIG.ZOOM_LEVELS index: 1x
 
 export class App {
   /**
@@ -434,24 +438,52 @@ export class App {
     const o = this.menuOrbit;
     if (!o) return;
     o.t += dt;
+    const cam = this.renderer.camera;
+    // Fit the tour to the screen again whenever its size changes (a resize,
+    // a phone turned): the view must never reach past the map's edge.
+    const sig = `${cam.viewW}x${cam.viewH}@${cam.dpr}`;
+    if (o.sig !== sig) this.fitMenuTour(sig);
     const a = o.t * MENU_ORBIT_SPEED;
-    this.renderer.camera.setCenter(o.c.x + Math.sin(a) * MENU_ORBIT, o.c.y + Math.sin(2 * a) * MENU_ORBIT * 0.35);
+    const r = MENU_ORBIT * o.fit.scale;
+    cam.setCenter(o.fit.x + Math.sin(a) * r, o.fit.y + Math.sin(2 * a) * r * 0.35);
+  }
+
+  /**
+   * Choose the tour's middle, swing and zoom for this screen (fitTour): the
+   * town at the middle where the map allows, otherwise nearer the map's
+   * middle or a smaller swing, and a closer zoom if the map is smaller than
+   * the screen. The menu used to open on a town by the map's edge with a
+   * third of the screen dark.
+   */
+  fitMenuTour(sig) {
+    const o = this.menuOrbit;
+    const cam = this.renderer.camera;
+    const map = this.menuGame.map;
+    o.sig = sig;
+    for (let z = MENU_ZOOM; z < CONFIG.ZOOM_LEVELS.length; z++) {
+      cam.zoomIndex = z;
+      const halfW = cam.viewW / cam.scale / 2;
+      const halfH = cam.viewH / cam.scale / 2;
+      const fit = fitTour(map.w, map.h, o.c, halfW, halfH, MENU_ORBIT, MENU_ORBIT * 0.35);
+      if (fit) { o.fit = fit; return; }
+    }
+    o.fit = { x: o.c.x, y: o.c.y, scale: 0 }; // a screen bigger than the map at every zoom: hold still
   }
 
   startMenuBackground() {
     try {
       const types = ['river', 'lakes', 'coast'];
-      const scenario = sandboxScenario({ size: 64, type: types[Math.floor(Math.random() * types.length)], seed: `menu-${Math.floor(Math.random() * 1000)}` });
+      const scenario = sandboxScenario({ size: MENU_MAP_SIZE, type: types[Math.floor(Math.random() * types.length)], seed: `menu-${Math.floor(Math.random() * 1000)}` });
       const g = new Game({ scenario, flags: { unlockall: true, money: 100000 } });
       g.log = { ...log, info() {}, debug() {} };
       const res = buildDemoCity(g, { level: 2 });
       g.runDays(16 * 5);
       this.menuGame = g;
       this.renderer.attach(g);
-      this.renderer.camera.zoomIndex = 2;
-      if (res.center) this.renderer.camera.centerOnTile(res.center.x, res.center.y);
-      else this.renderer.camera.centerOnTile(32, 32);
-      this.menuOrbit = { c: this.renderer.camera.center(), t: 0 };
+      this.renderer.camera.zoomIndex = MENU_ZOOM;
+      const town = res.center || { x: MENU_MAP_SIZE / 2, y: MENU_MAP_SIZE / 2 };
+      this.menuOrbit = { c: worldOf(town.x + 0.5, town.y + 0.5), t: 0, sig: null, fit: null };
+      this.menuDrift(0); // fit the tour to this screen and take its first spot
     } catch (err) {
       log.warn('Menu background failed (harmless):', err);
       this.menuGame = null;

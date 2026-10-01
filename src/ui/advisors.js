@@ -3,7 +3,8 @@
  * ----------------------------------------------------------------------------
  * The Advisors window: one tab per area of city management.
  *
- *   Overview   scenario goals, city mood and what drives it, trend charts
+ *   Overview   scenario goals, the city at a glance (with its health and
+ *              crime lines), city mood and what drives it, trend charts
  *   Labor      workforce, wages, hiring priorities per category
  *   Population housing tiers, immigration
  *   Production goods made and used last month, idle buildings and why,
@@ -11,6 +12,12 @@
  *   Finance    tax rate and the yearly ledger
  *   Trade      trade routes and import/export settings per good
  *   Military   threats, forts and their orders, supplies, battle record
+ *   Health     city health, disease this year and last, the health
+ *              buildings' reach and the needs they meet, advice
+ *   Education  schools, libraries, academies: reach, needs met, advice
+ *   Entertainment  venues and their shows and seats, training buildings,
+ *              the city-wide base, advice (numbers: sim/coverage.js,
+ *              words: ui/coverageInfo.js)
  *   Religion   gods' moods and festivals
  *   Ratings    culture / prosperity / peace / favor explained
  *   Imperial   the Emperor's requests and gifts
@@ -20,7 +27,7 @@
 
 import { h, mount, fmt, pct, bar, kv } from './dom.js';
 import { CONFIG } from '../config.js';
-import { LABOR_CATEGORIES } from '../data/buildings.js';
+import { LABOR_CATEGORIES, ENT_BASE_MAX, VENUE_SEATS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS, GOOD_KEYS, RECRUIT_SOURCE, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY } from '../data/units.js';
@@ -37,6 +44,12 @@ import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } fro
 import { productionReport } from './production.js';
 import { homesWithFood } from '../sim/population.js';
 import { loanTerms, takeLoan } from '../sim/loans.js';
+import { healthReport, educationReport, entertainmentReport, crimeNow, HEALTH_KINDS, EDUCATION_KINDS, VENUE_KINDS, TRAINER_KINDS } from '../sim/coverage.js';
+import { sickHomes } from '../sim/disease.js';
+import {
+  coverageText, healthVerdict, healthIsLow, cityHealthLine, crimeLine, healthAdviceText, educationAdviceText,
+  entertainmentAdviceText, pluralName, educationLadderText,
+} from './coverageInfo.js';
 
 export const ADVISOR_TABS = [
   ['overview', 'Overview'],
@@ -46,6 +59,9 @@ export const ADVISOR_TABS = [
   ['finance', 'Finance'],
   ['trade', 'Trade'],
   ['military', 'Military'],
+  ['health', 'Health'],
+  ['education', 'Education'],
+  ['entertainment', 'Entertainment'],
   ['religion', 'Religion'],
   ['ratings', 'Ratings'],
   ['imperial', 'Imperial'],
@@ -113,7 +129,7 @@ export class Advisors {
   /** Build the modal element (UI puts it in the modal root). */
   element(tab) {
     if (tab) this.tab = tab;
-    this.tabsEl = h('div', { class: 'tabs' });
+    this.tabsEl = h('div', { class: 'tabs advisor-tabs' });
     this.body = h('div', { class: 'modal-body' });
     const modal = h('div', { class: 'modal' },
       h('div', { class: 'modal-head' }, h('h2', {}, 'Advisors'), h('button', { class: 'panel-close', title: 'Close (Esc)', onclick: () => this.app.ui.closeModal() }, '×')),
@@ -155,6 +171,8 @@ export class Advisors {
     const goals = goalStatus(g);
     const f = c.sentimentFactors || {};
     const food = homesWithFood(g);
+    const health = cityHealthLine(healthReport(g));
+    const crime = crimeLine(crimeNow(g));
     return [
       h('div', { class: 'grid2' },
         h('div', { class: 'card' },
@@ -169,6 +187,8 @@ export class Advisors {
           kv('Workforce / jobs', `${fmt(c.workforce)} / ${fmt(c.jobs)}`),
           kv('Unemployment', pct(c.unemploymentRate)),
           kv('Homes with food', food.homes ? `${fmt(food.withFood)} of ${fmt(food.homes)} (${pct(food.withFood / food.homes)})` : 'No homes yet'),
+          this.tabLink(kv('City health', health.text, health.low ? 'no' : ''), 'health', 'Open the Health advisor'),
+          kv('Crime', crime.text, crime.level === 'bad' ? 'no' : ''),
           kv('Free housing space', fmt(c.vacancies || 0)),
           kv('Emperor\'s favor', `${Math.round(c.ratings.favor)}`))),
       trendCharts(c.history || []),
@@ -224,19 +244,40 @@ export class Advisors {
     ];
   }
 
+  /**
+   * A "Show" button's press: close the advisors and go to the next building
+   * of the group `key` (each press the next one), with its panel open.
+   */
+  showNextOf(g, key, ids) {
+    if (!ids.length) return;
+    const i = (this.showNext.get(key) || 0) % ids.length;
+    this.showNext.set(key, i + 1);
+    const b = g.buildings.get(ids[i]);
+    if (!b) return;
+    this.app.ui.closeModal();
+    this.app.renderer.camera.glideToTile(b.x + (b.size - 1) / 2, b.y + (b.size - 1) / 2);
+    this.app.ui.info.showBuilding(b.id);
+  }
+
+  /**
+   * A building type's name in a coverage table: a link that goes to each of
+   * `ids` in turn (as a Show button would), or plain text when none is built.
+   */
+  nameLink(g, key, name, ids) {
+    if (!ids.length) return name;
+    return h('button', { class: 'linkbtn', title: ids.length > 1 ? `Show one (each press the next of ${ids.length})` : 'Show it', onclick: () => this.showNextOf(g, key, ids) }, name);
+  }
+
+  /** A small "Show" button that goes to each of `ids` in turn, or null when there are none. */
+  showButton(g, key, ids, label = 'Show') {
+    if (!ids.length) return null;
+    return h('button', { class: 'btn small', title: ids.length > 1 ? 'Each press shows the next one' : 'Go there', onclick: () => this.showNextOf(g, key, ids) }, label);
+  }
+
   tab_production(g) {
     const rep = productionReport(g);
     const num = (v) => (v ? fmt(Math.round(v)) : '');
-    const show = (grp) => {
-      const k = `${grp.name}|${grp.text}`;
-      const i = (this.showNext.get(k) || 0) % grp.ids.length;
-      this.showNext.set(k, i + 1);
-      const b = g.buildings.get(grp.ids[i]);
-      if (!b) return;
-      this.app.ui.closeModal();
-      this.app.renderer.camera.glideToTile(b.x + (b.size - 1) / 2, b.y + (b.size - 1) / 2);
-      this.app.ui.info.showBuilding(b.id);
-    };
+    const show = (grp) => this.showNextOf(g, `${grp.name}|${grp.text}`, grp.ids);
     return [
       h('div', { class: 'card' },
         h('h4', {}, 'Bottlenecks'),
@@ -453,6 +494,140 @@ export class Advisors {
     ];
   }
 
+  /** Make a row open another tab when clicked or on Enter (the Overview's health line). */
+  tabLink(el, tab, title) {
+    el.classList.add('link');
+    el.title = title;
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.addEventListener('click', () => this.switchTab(tab));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.switchTab(tab); } });
+    return el;
+  }
+
+  /**
+   * Health and Education: one row per building type: built and staffed, the
+   * people its walkers reached, and the needs of homes it meets; its name
+   * goes to each building of the type in turn.
+   */
+  serviceTable(g, rows, kinds) {
+    return h('table', { class: 'tbl coverage' },
+      h('tr', {}, h('th', {}, 'Building'), h('th', { class: 'r' }, 'Staffed'), h('th', { class: 'r' }, 'Reach'), h('th', {}, 'Homes\' needs')),
+      kinds.map((k) => {
+        const r = rows[k];
+        const dry = r.staffed - r.working;
+        return h('tr', { dataset: { kind: k } },
+          h('td', {}, this.nameLink(g, `service|${k}`, r.name, r.ids), dry > 0 ? h('div', { class: 'no sub' }, `${dry} without water`) : null),
+          h('td', { class: `r num${r.built && !r.staffed ? ' no' : ''}`, title: 'Staffed buildings of those built' }, `${r.staffed} of ${r.built}`),
+          h('td', { class: 'r num', title: 'Residents of the homes it reached' }, fmt(r.reach), h('div', { class: 'muted sub' }, `${r.reachPct ?? 0}% of all`)),
+          h('td', { title: 'Of the people whose homes need it to keep or reach their level, how many have it' },
+            h('span', { class: coverageClass(r.pct) }, coverageText(r.pct)),
+            r.need ? h('div', { class: 'muted sub num' }, `${fmt(r.served)} of ${fmt(r.need)} people`) : null));
+      }));
+  }
+
+  /** One advice line, in a status box: good when nothing is wrong. */
+  adviceBox(text, fine) {
+    return h('div', { class: `status ${fine ? 'good' : 'warn'} advice`, style: { margin: '8px 0' } }, text);
+  }
+
+  tab_health(g) {
+    const rep = healthReport(g);
+    const { city, sick, year, lastYear } = rep;
+    const last = (k) => (lastYear ? fmt(lastYear[k] || 0) : '-');
+    const sickIds = sickHomes(g).map((b) => b.id);
+    const trend = { rising: `rising toward ${city.target}`, falling: `falling toward ${city.target}`, steady: 'holding steady' }[city.trend];
+    const healthCard = h('div', { class: 'card' },
+      h('h4', {}, 'City health'),
+      city.judged ? [
+        kv(healthVerdict(city.value), `${city.value} / 100`, healthIsLow(city.value) ? 'no' : ''),
+        bar(city.value, 100),
+        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `${trend[0].toUpperCase()}${trend.slice(1)}: it moves ${CONFIG.HEALTH_STEP} points a month toward the homes' average health score, ${city.target} last month.`),
+      ] : h('div', { class: 'muted' }, `Too small to judge: a city's health counts from ${CONFIG.DISEASE_MIN_POP} people.`),
+      city.disease ? null : h('div', { class: 'muted sub', style: { marginTop: '4px' } }, 'There is no disease in this province.'));
+    const diseaseCard = h('div', { class: 'card' },
+      h('h4', {}, 'Disease'),
+      h('div', { class: 'row' },
+        h('div', { style: { flex: 1 } }, kv('Sick homes now', sick.homes ? `${fmt(sick.homes)} (${fmt(sick.people)} people)` : 'None', sick.homes ? 'no' : '')),
+        this.showButton(g, 'sick', sickIds)),
+      h('table', { class: 'tbl' },
+        h('tr', {}, h('th', {}, ''), h('th', { class: 'r' }, 'This year'), h('th', { class: 'r' }, 'Last year')),
+        [['Outbreaks', 'outbreaks'], ['Deaths', 'deaths'], ['Cured by physicians', 'cured']].map(([label, k]) => h('tr', {},
+          h('td', {}, label), h('td', { class: 'r num' }, fmt(year[k] || 0)), h('td', { class: 'r num' }, last(k))))));
+    return [
+      h('div', { class: 'grid2' }, healthCard, diseaseCard),
+      this.adviceBox(healthAdviceText(rep.advice), rep.advice.key === 'fine'),
+      h('h4', {}, 'Health buildings'),
+      this.serviceTable(g, rep.rows, HEALTH_KINDS),
+      h('div', { class: 'muted sub', style: { marginTop: '4px' } },
+        `Reach: the residents of homes its walkers visited in the last ${CONFIG.ACCESS_DAYS} days (a hospital: homes within ${CONFIG.HOSPITAL_RADIUS} tiles while it is staffed). Every one of them scores higher on health and falls sick less. `
+        + 'Homes\' needs: of the people whose homes need it to keep or reach their level, how many have it. A home that needs only some health care is served by a medicus or a hospital.'),
+    ];
+  }
+
+  tab_education(g) {
+    const rep = educationReport(g);
+    const low = rep.shortest;
+    return [
+      h('div', { class: 'card' },
+        kv('Population', fmt(rep.people)),
+        low && low.pct < 100 ? kv('Shortest', `${pluralName(low.type)}: ${coverageText(low.pct)}`, 'no') : null,
+        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `${educationLadderText()} Everyone reached also counts toward culture (Ratings).`)),
+      this.adviceBox(educationAdviceText(rep.advice), rep.advice.key === 'fine' || rep.advice.key === 'noDemand'),
+      h('h4', {}, 'Schools, libraries and academies'),
+      this.serviceTable(g, rep.rows, EDUCATION_KINDS),
+      h('div', { class: 'muted sub', style: { marginTop: '4px' } },
+        `Reach: the residents of homes a teacher, librarian or scholar visited in the last ${CONFIG.ACCESS_DAYS} days; a building serves every home its walker passes, however many. Homes' needs: of the people whose homes need it to keep or reach their level, how many have it (a library also serves a home that needs only a school or a library).`),
+    ];
+  }
+
+  tab_entertainment(g) {
+    const rep = entertainmentReport(g);
+    const c = g.city;
+    const venueRows = VENUE_KINDS.map((k) => {
+      const v = rep.venues[k];
+      return h('tr', { dataset: { kind: k } },
+        h('td', {}, this.nameLink(g, `venue|${k}`, v.name, v.ids)),
+        h('td', { class: `r num${v.built && !v.staffed ? ' no' : ''}`, title: 'Staffed venues of those built' }, `${v.staffed} of ${v.built}`),
+        h('td', { class: `r num${v.staffed && v.playing < v.slots ? ' no' : ''}`, title: 'Kinds of show booked at the staffed venues, of those they can stage' }, `${v.playing} of ${v.slots}`),
+        h('td', { title: `Seats of the venues with shows (${fmt(VENUE_SEATS[k])} each), as a share of the population` }, fmt(v.seats), h('div', { class: 'muted sub' }, coverageText(v.cover))),
+        h('td', { class: 'r num', title: 'Residents of the homes its entertainers visited lately' }, fmt(v.reach)));
+    });
+    const trainerRows = TRAINER_KINDS.map((k) => {
+      const t = rep.trainers[k];
+      return h('tr', { dataset: { kind: k } },
+        h('td', {}, this.nameLink(g, `trainer|${k}`, t.name, t.ids)),
+        h('td', { class: `r num${t.built && !t.staffed ? ' no' : ''}` }, `${t.staffed} of ${t.built}`),
+        h('td', { class: 'muted' }, t.supplies.map((v) => pluralName(v)).join(', ')));
+    });
+    const shortHomes = rep.short.none + rep.short.more;
+    return [
+      h('div', { class: 'grid2' },
+        h('div', { class: 'card' },
+          h('h4', {}, 'City-wide entertainment'),
+          kv('Every home gets', `+${rep.base} of ${ENT_BASE_MAX}`), bar(rep.base, ENT_BASE_MAX),
+          h('div', { class: 'muted sub', style: { marginTop: '4px' } }, 'From the seats of venues with shows: the share of the people each kind of venue can seat, averaged over the three kinds and divided by 5.')),
+        h('div', { class: 'card' },
+          h('h4', {}, 'Homes'),
+          kv('Average entertainment', fmt(rep.average)),
+          kv('Short of their next level', shortHomes ? `${fmt(shortHomes)} home${shortHomes === 1 ? '' : 's'}` : 'None', shortHomes ? 'no' : ''),
+          shortHomes ? kv('...with no entertainer\'s visit', fmt(rep.short.none)) : null,
+          h('div', { class: 'row', style: { marginTop: '6px' } },
+            h('span', { class: 'muted sub', style: { flex: 1 } }, c.festivalCooldown > 0 ? `Festivals lift the mood: the next is possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.` : 'Festivals lift the mood: one can be held now.'),
+            h('button', { class: 'btn small', onclick: () => this.switchTab('religion') }, 'Festivals')))),
+      this.adviceBox(entertainmentAdviceText(rep.advice), rep.advice.key === 'fine' || rep.advice.key === 'noDemand'),
+      h('h4', {}, 'Venues'),
+      h('table', { class: 'tbl coverage' },
+        h('tr', {}, h('th', {}, 'Venue'), h('th', { class: 'r' }, 'Staffed'), h('th', { class: 'r' }, 'Shows'), h('th', {}, 'Seats'), h('th', { class: 'r' }, 'Reach')),
+        venueRows),
+      h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Shows: the kinds of show booked at the staffed venues, of those they can stage (a theater plays; an amphitheater stages plays and bouts, a colosseum bouts and beasts, worth more with both). Seats: theater ${fmt(VENUE_SEATS.theater)}, amphitheater ${fmt(VENUE_SEATS.amphitheater)}, colosseum ${fmt(VENUE_SEATS.colosseum)} each.`),
+      h('h4', {}, 'Training'),
+      h('table', { class: 'tbl coverage' },
+        h('tr', {}, h('th', {}, 'Building'), h('th', { class: 'r' }, 'Staffed'), h('th', {}, 'Sends performers to')),
+        trainerRows),
+    ];
+  }
+
   tab_religion(g) {
     const c = g.city;
     return [
@@ -528,6 +703,12 @@ export class Advisors {
       onclick: () => { if (m.x !== undefined) { this.app.renderer.camera.glideToTile(m.x, m.y); this.app.ui.closeModal(); } },
     }, h('span', { class: 'date' }, m.date), m.text)));
   }
+}
+
+/** The color of a coverage figure: green when everyone who needs it has it, red under half. */
+function coverageClass(pct) {
+  if (pct === null || pct === undefined) return '';
+  return pct >= 100 ? 'ok' : pct < 50 ? 'no' : '';
 }
 
 /**

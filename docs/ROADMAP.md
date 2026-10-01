@@ -16,6 +16,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.12.1)
+
+* **The main menu never shows the dark beyond the map** (the owner: it opened with a lot of black on the screen). Its town was built on a 64-tile map, often near the edge, and the view centered on it; the menu map is now 96 tiles and its slow tour is fitted to the screen: the town in the middle where the map allows, else the tour moves inward (keeping the town in view) and swings less, and a screen bigger than the map zooms in, fitted again when the window changes size. Probed at 1920x1080, 1280x800, 2560x1440 and a phone over six random menu maps: no screen corner off the map in five minutes of drift
+* The roadmap's open lists hold open work only: done parity items leave the list (each open one keeps its number), and partly done items say what is left
+* 310 unit tests (+1), 98 browser checks
+
 ## Done (v0.12.0)
 
 Trade, storage and the gods (parity items 10, 12 and 14), and fixes from the owner's playtests of missions 1 and 2:

@@ -421,3 +421,18 @@ test('top bar: unemployment shows beside the mood and turns amber once it costs 
   g.city.unemploymentRate = CONFIG.UNEMPLOYMENT_MOOD_FREE + 0.05;
   assert.ok(computeSentiment(g).unemployment < 0);
 });
+
+test('demo city: every building that needs a road has one', async () => {
+  // Its streets lie on fixed rows; rock or water could break one and leave
+  // the buildings beside it with no road (no workers, no-road signs on the
+  // main menu's town). The last pass joins or clears them.
+  const { buildDemoCity } = await import('../src/dev/demoCity.js');
+  const sites = [['river', 'menu-9', 96, 2], ['river', 'menu-4', 96, 2], ['river', 'demo', 64, 3]];
+  for (const [type, seed, size, level] of sites) {
+    const g = new Game({ scenario: sandboxScenario({ size, type, seed }), flags: { unlockall: true, money: 100000 } });
+    assert.ok(buildDemoCity(g, { level }).ok);
+    g.runDays(1);
+    const lacking = [...g.buildings.values()].filter((b) => (b.def.needsRoad && b.def.workers && b.accessRoad < 0) || (b.house && b.accessRoad < 0));
+    assert.deepEqual(lacking.map((b) => `${b.type}@${b.x},${b.y}`), [], `${type} ${seed}`);
+  }
+});

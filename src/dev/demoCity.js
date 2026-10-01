@@ -250,8 +250,42 @@ export function buildDemoCity(game, opts = {}) {
 
   // Farms + granary on the best meadow within reach.
   const farms = can('farm_wheat') ? placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2) : 0;
+  roadEveryBuilding(game);
   const c = at(W / 2, D / 2);
   return { ok: true, center: c, farms };
+}
+
+/**
+ * Last pass: every building that needs a road has one. The plan lays its
+ * streets on fixed rows, and on some sites rock or water breaks a street, or a
+ * service moved to a free slot lands away from one; those buildings never got
+ * workers (four of mission 1's level 3 town, fountains among them, so its
+ * homes lacked water), and the menu's town showed no-road signs. Each is
+ * joined to the nearest road that reaches the map entry, from the middle of
+ * each side in turn; one that cannot be joined is cleared (full refund), as a
+ * player would. A home is kept if a road lies within its 2 tiles, else cleared.
+ */
+function roadEveryBuilding(game) {
+  const { map } = game;
+  game.processRoadChanges();
+  const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
+  for (const b of [...game.buildings.values()]) {
+    if (!game.buildings.has(b.id)) continue;
+    const S = b.size;
+    if (b.house) {
+      if (b.accessRoad < 0) build(game, 'clear', b.x, b.y, b.x + S - 1, b.y + S - 1);
+      continue;
+    }
+    if (!b.def.needsRoad || !b.def.workers || b.accessRoad >= 0) continue;
+    const mid = Math.floor(S / 2);
+    for (const [x, y] of [[b.x + mid, b.y + S], [b.x + S, b.y + mid], [b.x + mid, b.y - 1], [b.x - 1, b.y + mid]]) {
+      if (b.accessRoad >= 0) break;
+      connectToRoad(game, x, y, entryNet);
+      game.processRoadChanges();
+    }
+    if (b.accessRoad < 0) build(game, 'clear', b.x, b.y, b.x + S - 1, b.y + S - 1);
+  }
+  game.processRoadChanges();
 }
 
 /**

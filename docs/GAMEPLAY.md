@@ -173,9 +173,17 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 | Corinthus (1200) | sea | marble, oil | wine, wheat, iron, arrows |
 | Alexandria (1400) | sea | wheat, vegetables | wine, oil, weapons, furniture |
 
+**The Empire map** (E, the compass in the top bar, or the button under the Trade advisor's small map) shows the whole inland sea: your province (the red star), Rome, every partner of the scenario with its route (solid when open, faint and broken while closed, grey where ships cannot reach you), and who is on the way:
+
+* A caravan or ship sets out from its city 10 to 32 days before it arrives (longer from far cities: Capua 10, Tarraco 20, Alexandria 29) and moves along its route in its city's color. Point at it (or tap it) for the days left: *Massilia ship: 6 days*. The side panel lists those on the way and those coming later (*sets out in 12 days*). A ship that found no free staffed Dock comes back 6 days later, so it shows 6 days out again.
+* A warband the scouts have seen shows as a red banner with its size, closing in from the side it will enter by over its last 3 months: *Warband of 14 from the north, in 3 months*. Click it (or *Show the edge*) to close the map and look at the map edge it will come from. Raiders already in the province show at your city; click them to look at them.
+* Click a city (or its caravan or ship) for what it sells and buys, this year's amounts, and the button to open its route.
+
+The map only reads the game: the game keeps running while it is open (pause with Space), and nothing on it changes trade or raids.
+
 ## Military
 
-**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. The first raid comes after about 5 years with occasional raids and 3 with frequent ones (campaign missions: 5 years in mission 4, then 4, 3.5 and 3), 25% sooner on Insane, and none while the city has fewer than 300 people. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar). A warband has about `base + population / 450 + raids so far` warriors (x0.7 Easy, x1.3 Hard, x1.5 Insane; 3 to 40; on Insane raiders also have 15% more health and attack, and come 25% sooner), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
+**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. The first raid comes after about 5 years with occasional raids and 3 with frequent ones (campaign missions: 5 years in mission 4, then 4, 3.5 and 3), 25% sooner on Insane, and none while the city has fewer than 300 people. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar); the Empire map shows the warband closing in, its size, and the map edge it will enter by. A warband has about `base + population / 450 + raids so far` warriors (x0.7 Easy, x1.3 Hard, x1.5 Insane; 3 to 40; on Insane raiders also have 15% more health and attack, and come 25% sooner), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
 
 Repelling a raid: +8 peace, +3 favor. Each building lost: -1 peace.
 

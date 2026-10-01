@@ -2,7 +2,7 @@
  * hud.js
  * ----------------------------------------------------------------------------
  * The top bar: menu button, city name, treasury, population, date, mood,
- * speed controls, overlay picker, advisors and help buttons.
+ * speed controls, overlay picker, empire map, advisors and help buttons.
  * Refreshed a few times per second by UI.update().
  * ----------------------------------------------------------------------------
  */
@@ -48,6 +48,7 @@ export class Hud {
       h('div', { class: 'speed-group' }, this.speedBtns),
       h('span', { class: 'hud-spacer' }),
       this.overlaySel,
+      h('button', { class: 'hud-btn', id: 'hud-empire', title: 'Empire map (E)', 'aria-label': 'Empire map', onclick: () => app.ui.openEmpire() }, '🧭'),
       h('button', { class: 'hud-btn', title: 'Advisors (F2)', onclick: () => app.ui.openAdvisors() }, '📜 Advisors'),
       h('button', { class: 'hud-btn', title: 'Messages', onclick: () => app.ui.openAdvisors('messages') }, '✉'),
       h('button', { class: 'hud-btn', title: 'Help (F1)', onclick: () => app.ui.openHelp() }, '?'),

@@ -102,10 +102,11 @@ function content(tab) {
         h('p', {}, 'Raw materials go straight to a workshop that needs them, otherwise to a warehouse, which later sends them to workshops that run low.'),
         h('p', {}, 'Something not working? The Problems overlay (top bar) raises a column over every home that cannot grow, colored by what it lacks, and over every building that does not work; point at one to see why. The Production advisor shows what was made and used last month, lists the idle buildings with a button to go to each, and names the bottlenecks.'),
         h('h4', {}, 'Trade'),
-        h('p', {}, 'Open routes in the Trade advisor, then mark goods for export (keep a reserve) or import (up to a target). The empire map there shows every partner and how they trade:'),
+        h('p', {}, 'Open routes in the Trade advisor or on the Empire map, then mark goods for export (keep a reserve) or import (up to a target) in the Trade advisor. Partners trade in two ways:'),
         h('ul', {},
           h('li', {}, h('b', {}, 'Land routes: '), 'caravans walk in along the Imperial road to a staffed warehouse, trade, and leave by the exit.'),
           h('li', {}, h('b', {}, 'Sea routes: '), 'merchant ships sail in from the map edge to a staffed Dock. Docks must stand on the bank of a river, the coast or a big lake that reaches the map edge (ships sail under bridges). Ships unload imports onto the quay, dock workers cart them to warehouses, granaries or workshops, and ships buy exports from warehouses near the dock. Desert and plains provinces often have no sea access.')),
+        h('p', {}, 'The Empire map (E, or the compass in the top bar) shows your province, Rome and every partner with its route. Caravans and ships on their way move along their routes in their city\'s color; point at one (or tap it) for the days until it arrives. Click a city for what it buys and sells, and to open its route. The game keeps running while it is open.'),
         h('p', {}, 'Prices per 100 units:'),
         h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'Import cost'), h('th', { class: 'r' }, 'Export price')),
           Object.entries(GOODS).map(([, g]) => h('tr', {}, h('td', {}, `${g.icon} ${g.name}`), h('td', { class: 'r num' }, g.buy), h('td', { class: 'r num' }, g.sell)))),
@@ -134,6 +135,7 @@ function content(tab) {
     case 'military':
       return [
         h('p', {}, `Some provinces are raided by barbarian warbands. Scouts warn you about three months before a raid (the ⚠ alert in the top bar), and raiders never come before the city has ${RAID_MIN_POP} people. Warbands grow as your city grows.`),
+        h('p', {}, 'Once scouts have seen a warband, the Empire map (E) shows it closing in from its side, with its size and the months left. Click it to look at the map edge it will enter by, where your towers and soldiers should wait.'),
         h('h4', {}, 'Recruiting'),
         chain('Barracks', 'recruit walks by road', 'Fort'),
         h('p', {}, 'A staffed Barracks trains a recruit every few days and sends him to the emptiest staffed fort. Each fort holds 8 soldiers. Recruits need equipment at the Barracks, delivered by cart from workshops, ranches and warehouses:'),

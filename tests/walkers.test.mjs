@@ -285,3 +285,26 @@ test('a roamer weighs a way by where it leads: an empty road on to a dead end, a
   addBuilding(game, 'house', cx + 6, cy + 1, 1);
   assert.equal(streetValue(map, w, cx + 1, cy, E), e, 'homes beyond the roadblock change nothing');
 });
+
+test('a carter is picked by a click on his cart as well as on him', async () => {
+  const { cartReach } = await import('../src/render/renderer.js');
+  const cam = new Camera();
+  cam.setMapBounds(64, 64);
+  cam.resize(800, 600, 1);
+  cam.centerOnTile(32, 32);
+  const w = { id: 5, x: 32, y: 32, tx: 33, ty: 32, progress: 0, moving: false, speed: 0.1, kind: 'carrier' };
+  const at = walkerWorld(w, 0);
+  const r = { camera: cam, walkerSpots: [{ id: 5, ...at, ship: false, ahead: cartReach(null) }] };
+  const pick = (sx, sy, generous) => Renderer.prototype.pickWalker.call(r, sx, sy, generous);
+  const screenOf = (dx, up) => { const s = cam.toScreen(at.wx + dx, at.wy - up); return { x: s.x / cam.dpr, y: s.y / cam.dpr }; };
+  const cart = screenOf(12, 6); // the middle of a hand cart, ahead of him
+  assert.equal(pick(cart.x, cart.y, false), 5, 'a click on the cart picks the carter');
+  assert.equal(pick(cart.x, cart.y, true), 5);
+  // Behind him there is no cart: no pick there beyond his own figure.
+  const behind = screenOf(-12, 6);
+  assert.equal(pick(behind.x, behind.y, false), 0);
+  // Without a cart (any other walker) the same spot ahead is not his.
+  r.walkerSpots[0].ahead = 0;
+  assert.equal(pick(cart.x, cart.y, false), 0, 'old behavior: the cart was not clickable');
+  assert.ok(cartReach({ kind: 'farm' }) > cartReach(null), 'a wagon and its ox reach farther');
+});

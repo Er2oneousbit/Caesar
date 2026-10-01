@@ -61,6 +61,7 @@ import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLen
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
 import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
 import { drawWalker, drawChariot } from './walkerArt.js';
+import { isWagon } from './cargoArt.js';
 import { drawGulls } from './waterArt.js';
 import { Effects, drawFlames, drawSpray, drawGlint } from './effects.js';
 import { Ambient } from './ambient.js';
@@ -320,6 +321,14 @@ export function walkerWorld(w, alpha) {
   const fx = w.x + (w.tx - w.x) * p + 0.5;
   const fy = w.y + (w.ty - w.y) * p + 0.5;
   return { fx, fy, wx: (fx - fy) * HALF_W, wy: (fx + fy) * HALF_H };
+}
+
+/**
+ * How far ahead of a carter (world px, at zoom 1) his cart reaches: a hand
+ * cart's far end, or a farm wagon and its ox (walkerArt.js drawCart).
+ */
+export function cartReach(originDef) {
+  return isWagon(originDef) ? 30 : 15;
 }
 
 export class Renderer {
@@ -615,13 +624,16 @@ export class Renderer {
       if (overlayOn && ov.walkers && !ov.walkers.includes(w.type)) continue;
       const { fx, fy, wx, wy } = walkerWorld(w, alpha);
       if (wx < x0w || wx > x1w || wy < y0w || wy > vr.y + vr.h + 30) continue;
-      this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship' });
       const ddx = (w.tx - w.x) - (w.ty - w.y);
       const ddy = (w.tx - w.x) + (w.ty - w.y);
       const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
       // A cart's look depends on who sent it (a farm's wagon, a warehouse's single lot).
       const origin = w.type === 'cart' ? game.buildings.get(w.origin)?.def || null : null;
-      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
+      const dirX = ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx);
+      // A carter's cart (and a wagon's ox) is drawn ahead of him and is most
+      // of what the eye sees: clicks on it pick the carter (cartReach).
+      this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
+      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -1574,8 +1586,12 @@ export class Renderer {
       const bottom = generous ? Math.max(5, 6 * css) : Math.max(4, 3 * css);
       const dx = p.x - s.wx;
       const dy = p.y - s.wy;
-      if (Math.abs(dx) > hw || dy < -top || dy > bottom) continue;
-      const d = Math.hypot(dx, dy + top / 2);
+      // The box runs from the figure to the far end of its cart, if it has one.
+      const near = Math.min(0, s.ahead || 0);
+      const far = Math.max(0, s.ahead || 0);
+      if (dx < near - hw || dx > far + hw || dy < -top || dy > bottom) continue;
+      const ex = dx < near ? dx - near : dx > far ? dx - far : 0;
+      const d = Math.hypot(ex, dy + top / 2);
       if (d < bestD && !covers(s.wy)) { bestD = d; best = s.id; }
     }
     return best;

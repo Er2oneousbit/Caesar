@@ -15,6 +15,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.13.3)
+
+* **Carters are clickable on their carts**: a click on a cart (or on a farm wagon and its ox) picks the carter pushing it. The click target covered only the figure, while the cart drawn ahead of him is most of what the eye sees
+* 429 unit tests
+
 ## Done (v0.13.2)
 
 * **The Health, Education and Entertainment advisors fit a phone in any font**: with wider fonts (Linux's defaults, Verdana) the Entertainment advisor's Venues table ran 15 px past a 390 px screen and scrolled sideways. On narrow screens the coverage tables now tighten and their figures may wrap. The browser check measures the three tabs in Verdana too, so it catches this on any machine (it failed on the old styles)

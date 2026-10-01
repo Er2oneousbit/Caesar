@@ -516,7 +516,8 @@ export class App {
   }
 
   // ------------------------------------------------------------- actions
-  blockingModal() { return this.ui.mainMenuOpen || (this.ui.hasModal() && this.ui.modalKind !== 'advisors'); }
+  // The Advisors and the Empire map let the game run and keep the keyboard shortcuts.
+  blockingModal() { return this.ui.mainMenuOpen || (this.ui.hasModal() && this.ui.modalKind !== 'advisors' && this.ui.modalKind !== 'empire'); }
 
   applyPlan(plan) {
     if (!this.game || !plan) return;

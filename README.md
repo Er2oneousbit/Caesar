@@ -24,7 +24,7 @@ Saved games stay in your browser. Use *Save game → Export to file* to keep a b
 * **Crime:** unhappy homes send out protesters, thieves who rob the Forum or a market, and in a city at the end of its patience, rioters who burn their way toward its finest buildings. Prefects patrol as police and chase criminals down. The Crime overlay shows where trouble is brewing and why.
 * **Disease:** crowded, unhealthy homes can fall sick, lose people and pass it next door. A Medicus sends physicians to cure them, and baths, barbers, fountains, food and a hospital keep it away. The Disease overlay shows which homes are at risk.
 * **Four difficulties**, Easy to Insane.
-* **Trade** by land and sea with nine partner cities, and an empire map.
+* **Trade** by land and sea with nine partner cities, and an empire map (E) that shows the caravans and ships on their way and the warbands your scouts have seen coming.
 * **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates.
 * **A living world:** day and night, four seasons with snow in winter, rain and thunderstorms, fluttering flags, busy markets, crowds at the shows.
 * **Music:** ten original tracks of a few minutes each for building and for the night, festival music, and war drums when raiders attack, all played live by synthesized lyre, pipes and drums.
@@ -54,6 +54,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | H / R / X | Housing / Road / Clear tool |
 | Ctrl+Z | Undo the last construction (full refund, for a few days) |
 | O, Shift+O | Next overlay, overlays off |
+| E | Empire map |
 | F1 / F2 | Help / Advisors |
 | F5 / F9 | Quick save / quick load |
 | M | Music on / off |

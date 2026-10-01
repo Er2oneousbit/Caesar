@@ -12,6 +12,7 @@ import { Sidebar } from './sidebar.js';
 import { InfoPanel } from './infoPanel.js';
 import { Messages } from './messages.js';
 import { Advisors } from './advisors.js';
+import { EmpireView } from './empire.js';
 import { DebugConsole } from './console.js';
 import { helpModal } from './help.js';
 import { mainMenu, pauseMenu, titleGate } from './menus.js';
@@ -31,6 +32,7 @@ export class UI {
     this.info = new InfoPanel(app, root);
     this.messages = new Messages(app, root);
     this.advisors = new Advisors(app);
+    this.empire = new EmpireView(app);
     this.console = new DebugConsole(app, root);
     this.debugEl = h('div', { id: 'debug-hud', class: 'hidden' });
     // Overlay helpers: a tooltip over the building under the pointer, and a legend.
@@ -219,6 +221,19 @@ export class UI {
     this.showModal(this.advisors.element(tab), { pause: false, kind: 'advisors' });
   }
 
+  /** The Empire screen: runs with the game, like the Advisors, so travelers move. */
+  openEmpire() {
+    if (!this.app.game) return;
+    this.showModal(this.empire.element(), { pause: false, kind: 'empire' });
+    this.empire.update(0); // drawn before the next frame, not one frame late
+  }
+
+  /** E: open the Empire screen, or close it when it is open. */
+  toggleEmpire() {
+    if (this.modalKind === 'empire') this.closeModal();
+    else this.openEmpire();
+  }
+
   openPauseMenu() {
     if (!this.app.game) return;
     this.showModal(pauseMenu(this.app), { pause: true, kind: 'pause' });
@@ -276,6 +291,7 @@ export class UI {
     if (this.app.game) this.sidebar.update(now);
     this.info.update(dt);
     if (this.modalKind === 'advisors') this.advisors.update(dt);
+    if (this.modalKind === 'empire') this.empire.update(dt);
     this.updateOverlayHelp();
     this.updateDebug(dt);
   }

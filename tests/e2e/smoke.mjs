@@ -576,6 +576,78 @@ try {
       check('clicking the map deploys the soldiers there', !!rally && Math.floor(rally.x) === target.x && Math.floor(rally.y) === target.y, JSON.stringify(rally));
     }
   }
+  // 5b2. The Empire map: E opens it and it draws (a scouted warband and a
+  //      caravan on the way included), clicking the warband closes it and
+  //      looks at the map edge it will enter by, Escape closes it.
+  await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const r0 = g.city.trade.routes.tarraco;
+    window.__empireSaved = { warned: g.military.warned, next: g.military.nextRaidMonth, open: r0.open, visit: r0.nextVisit, paused: app.paused };
+    app.paused = true; // hold the timers still while the test reads them
+    // The middle of the x = 0 edge, which is north-west on screen (as the sim's scouts name it).
+    g.military.warned = { origin: { x: 0, y: Math.floor(g.map.h / 2) }, size: 14, dir: 'north-west' };
+    g.military.nextRaidMonth = g.time.totalMonths + 2;
+    const r = g.city.trade.routes.tarraco;
+    r.open = true;
+    r.nextVisit = g.time.totalDays + 5;
+  });
+  await page.keyboard.press('e');
+  await page.waitForSelector('canvas.empire-full', { timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  const empire = await page.evaluate(() => {
+    const c = document.querySelector('canvas.empire-full');
+    if (!c) return null;
+    // Not blank: the parchment, the sea, the routes and figures give many colors.
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const colors = new Set();
+    for (let i = 0; i < d.length; i += 4 * 37) colors.add(`${d[i] >> 4},${d[i + 1] >> 4},${d[i + 2] >> 4},${d[i + 3] >> 6}`);
+    const ui = window.colonia.ui;
+    return {
+      kind: ui.modalKind, w: c.width, h: c.height, colors: colors.size,
+      list: [...document.querySelectorAll('.empire-side .empire-row')].map((e) => e.textContent).filter((t) => /days|month/.test(t)),
+      hudBtn: !!document.getElementById('hud-empire'),
+    };
+  });
+  check('E opens the empire map and it draws', !!empire && empire.kind === 'empire' && empire.w > 300 && empire.colors > 12 && empire.hudBtn, JSON.stringify(empire && { ...empire, list: undefined }));
+  check('the empire map lists the caravan and the warband with their time left', !!empire && empire.list.some((t) => /Tarraco caravan: 5 days/.test(t)) && empire.list.some((t) => /Warband of 14 from the north-west, in 2 months/.test(t)), JSON.stringify(empire && empire.list));
+  // Hovering the warband reads it out; clicking it pans the city view to its edge.
+  const band = await page.evaluate(() => {
+    const view = window.colonia.ui.empire;
+    const t = view.travelers.find((o) => o.kind === 'warband');
+    return t ? view.clientPoint(t) : null;
+  });
+  if (band) {
+    await page.mouse.move(band.x, band.y);
+    await page.waitForTimeout(100);
+    const readout = await page.textContent('.empire-readout');
+    check('pointing at the warband reads it out', /Warband of 14 from the north-west, in 2 months/.test(readout), readout);
+    const before = await page.evaluate(() => { const c = window.colonia.renderer.camera; const r = window.colonia.canvas.getBoundingClientRect(); return c.screenToTile(r.width / 2, r.height / 2); });
+    await page.mouse.click(band.x, band.y);
+    await page.waitForTimeout(1200);
+    const after = await page.evaluate(() => { const c = window.colonia.renderer.camera; const r = window.colonia.canvas.getBoundingClientRect(); return { kind: window.colonia.ui.modalKind, at: c.screenToTile(r.width / 2, r.height / 2) }; });
+    // Its edge is x = 0 in tile terms: the view moved toward it.
+    check('clicking the warband closes the map and looks at its map edge', after.kind === null && after.at.x < before.x - 3, JSON.stringify({ before, after }));
+  } else {
+    check('the scouted warband is on the empire map', false);
+  }
+  await page.click('#hud-empire');
+  await page.waitForTimeout(150);
+  const viaButton = await page.evaluate(() => window.colonia.ui.modalKind);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(100);
+  const closed = await page.evaluate(() => ({ kind: window.colonia.ui.modalKind, canvas: !!document.querySelector('canvas.empire-full') }));
+  check('the top-bar compass opens the empire map and Escape closes it', viaButton === 'empire' && closed.kind === null && !closed.canvas, JSON.stringify({ viaButton, closed }));
+  await page.evaluate(() => {
+    const g = window.colonia.game;
+    const was = window.__empireSaved; // put the raid schedule and the route back as they were
+    g.military.warned = was.warned;
+    g.military.nextRaidMonth = was.next;
+    g.city.trade.routes.tarraco.open = was.open;
+    g.city.trade.routes.tarraco.nextVisit = was.visit;
+    window.colonia.paused = was.paused;
+  });
+
   await page.evaluate(() => window.colonia.ui.console.run('invade 4'));
   await page.waitForTimeout(600);
   const threat = await page.evaluate(() => { const el = document.querySelector('.hud-btn.threat'); return el ? { hidden: el.classList.contains('hidden'), text: el.textContent } : null; });
@@ -873,6 +945,20 @@ try {
   check('phone: no horizontal scroll', layout.scrollW <= layout.w, `${layout.scrollW} <= ${layout.w}`);
   check('phone: build menu docked at the bottom', layout.sbTop > 400, `top ${Math.round(layout.sbTop)}`);
   if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone.png') });
+  // The Empire map on a phone: the compass opens it, the map fits the width
+  // with the panel below it, and nothing scrolls sideways.
+  await phone.tap('#hud-empire');
+  await phone.waitForSelector('canvas.empire-full', { timeout: 3000 }).catch(() => {});
+  await phone.waitForTimeout(200);
+  const pe = await phone.evaluate(() => {
+    const c = document.querySelector('canvas.empire-full');
+    const side = document.querySelector('.empire-side');
+    if (!c || !side) return null;
+    const cr = c.getBoundingClientRect();
+    return { w: Math.round(cr.width), right: Math.round(cr.right), vw: window.innerWidth, sideTop: Math.round(side.getBoundingClientRect().top), mapBottom: Math.round(cr.bottom), scrollW: document.documentElement.scrollWidth };
+  });
+  check('phone: the empire map opens from the top bar and fits the screen', !!pe && pe.w > 250 && pe.right <= pe.vw && pe.scrollW <= pe.vw && pe.sideTop >= pe.mapBottom, JSON.stringify(pe));
+  if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone-empire.png') });
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
   // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing
   //     may query the page before the tap: Playwright's evaluate() counts as a

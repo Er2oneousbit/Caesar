@@ -65,6 +65,40 @@ const MOOD_LABELS = {
   difficulty: 'Difficulty',
 };
 
+/**
+ * One trade partner's card: route kind, open or not (with the button to open
+ * it), what it sells and buys with this year's amounts, and what the route
+ * needs. Shared by the Trade advisor and the Empire map (ui/empire.js).
+ * `onChange` runs after the player opened the route.
+ */
+export function tradeRouteCard(app, g, id, onChange) {
+  const p = TRADE_PARTNERS[id];
+  const r = g.city.trade.routes[id];
+  const sea = routeKind(id) === 'sea';
+  const seaOk = !!g.map.seaEntry;
+  const docks = [...g.buildings.values()].filter((b) => b.def.kind === 'dock');
+  const staffedDock = docks.some((b) => b.efficiency > 0);
+  const list = (obj, used) => Object.entries(obj).map(([good, cap]) => h('span', { class: 'chip', title: `${fmt(used[good] || 0)} of ${fmt(cap)} this year` }, `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)}`));
+  let how;
+  if (!sea) how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Caravans come along the Imperial road to a staffed warehouse.');
+  else if (!seaOk) how = h('div', { class: 'status bad', style: { fontSize: '12px' } }, 'Unreachable: no river or coast connects this province to the sea.');
+  else if (!docks.length) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Ships need a Dock: build one on the bank of the river or sea.');
+  else if (!staffedDock) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Your Dock has no workers: ships cannot tie up.');
+  else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships call at your Dock and buy from warehouses near it.');
+  return h('div', { class: 'card' },
+    h('div', { class: 'row' },
+      h('h4', { style: { flex: 1 } }, h('span', { style: { color: p.color } }, '● '), p.name),
+      h('span', { class: 'chip', title: sea ? 'Sea route: merchant ships and a Dock' : 'Land route: caravans on the Imperial road' }, sea ? '⛵ Sea' : '🐪 Land'),
+      r.open ? h('span', { class: 'chip ok' }, 'Open') : h('button', {
+        class: 'btn small primary',
+        disabled: sea && !seaOk,
+        onclick: () => { const res = openRoute(g, id); if (!res.ok) app.ui.toastError(res.reason); onChange(); },
+      }, `Open route (${fmt(p.openCost)} Dn)`)),
+    how,
+    h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought)),
+    h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(p.buys, r.sold)));
+}
+
 export class Advisors {
   constructor(app) {
     this.app = app;
@@ -321,31 +355,7 @@ export class Advisors {
     const partners = Object.entries(t.routes);
     if (!partners.length) return h('div', { class: 'muted' }, 'No trade partners are available in this scenario.');
     const seaOk = !!g.map.seaEntry;
-    const docks = [...g.buildings.values()].filter((b) => b.def.kind === 'dock');
-    const staffedDock = docks.some((b) => b.efficiency > 0);
-    const routeCards = partners.map(([id, r]) => {
-      const p = TRADE_PARTNERS[id];
-      const sea = routeKind(id) === 'sea';
-      const list = (obj, used) => Object.entries(obj).map(([good, cap]) => h('span', { class: 'chip', title: `${fmt(used[good] || 0)} of ${fmt(cap)} this year` }, `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)}`));
-      let how;
-      if (!sea) how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Caravans come along the Imperial road to a staffed warehouse.');
-      else if (!seaOk) how = h('div', { class: 'status bad', style: { fontSize: '12px' } }, 'Unreachable: no river or coast connects this province to the sea.');
-      else if (!docks.length) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Ships need a Dock: build one on the bank of the river or sea.');
-      else if (!staffedDock) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Your Dock has no workers: ships cannot tie up.');
-      else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships call at your Dock and buy from warehouses near it.');
-      return h('div', { class: 'card' },
-        h('div', { class: 'row' },
-          h('h4', { style: { flex: 1 } }, h('span', { style: { color: p.color } }, '● '), p.name),
-          h('span', { class: 'chip', title: sea ? 'Sea route: merchant ships and a Dock' : 'Land route: caravans on the Imperial road' }, sea ? '⛵ Sea' : '🐪 Land'),
-          r.open ? h('span', { class: 'chip ok' }, 'Open') : h('button', {
-            class: 'btn small primary',
-            disabled: sea && !seaOk,
-            onclick: () => { const res = openRoute(g, id); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
-          }, `Open route (${fmt(p.openCost)} Dn)`)),
-        how,
-        h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought)),
-        h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(p.buys, r.sold)));
-    });
+    const routeCards = partners.map(([id]) => tradeRouteCard(this.app, g, id, () => this.render()));
     const tradeable = GOOD_KEYS.filter((k) => partners.some(([id]) => TRADE_PARTNERS[id].sells[k] || TRADE_PARTNERS[id].buys[k]));
     const rows = tradeable.map((k) => {
       const s = t.settings[k];
@@ -370,7 +380,9 @@ export class Advisors {
     return [
       h('div', { class: 'card empire-card' },
         empireMapCanvas(g),
-        h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } }, '╌ land route (caravans)   ··· sea route (ships)   solid = open. ', seaOk ? 'Ships can reach this province.' : 'No ships can reach this province: only land routes work here.')),
+        h('div', { class: 'row', style: { fontSize: '12px', marginTop: '4px' } },
+          h('span', { class: 'muted', style: { flex: 1 } }, '╌ land route (caravans)   ··· sea route (ships)   solid = open. ', seaOk ? 'Ships can reach this province.' : 'No ships can reach this province: only land routes work here.'),
+          h('button', { class: 'btn small', title: 'Who is on the way, and when (E)', onclick: () => this.app.ui.openEmpire() }, 'Empire map'))),
       h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships unload imports at a staffed Dock (dock workers cart them to storage) and buy exports from warehouses near it. Prices are per 100 units.'),
       h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
       h('h4', {}, 'Goods'),
@@ -395,7 +407,8 @@ export class Advisors {
       h('h4', {}, 'Threat'),
       h('div', { class: `status ${t.level === 'attack' ? 'bad' : t.level === 'warned' ? 'warn' : 'good'}` }, t.level === 'calm' ? 'Scouts see no warband near the province.' : t.text),
       m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, 'Raiders come from the map edges. Scouts warn about 3 months ahead; warbands grow with your city.') : null,
-      t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show me the raiders') : null);
+      t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show me the raiders') : null,
+      t.level === 'warned' ? h('button', { class: 'btn small', style: { marginTop: '6px' }, title: 'Where the warband is and the side it will enter by (E)', onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map') : null);
     const army = h('div', { class: 'card' },
       h('h4', {}, 'Army'),
       kv('Soldiers', fmt(soldiers)),

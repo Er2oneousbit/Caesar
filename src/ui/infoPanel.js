@@ -22,6 +22,7 @@ import { walkerInfo } from './walkerTalk.js';
 import { storageCapacity, storageUsed } from '../sim/storage.js';
 import { cycleOrder, setEmptying, orderGoods } from '../sim/storageOrders.js';
 import { ORDER_LABELS, orderLines } from './storageInfo.js';
+import { dockShipText, dockRows, dockHint } from './dockInfo.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
@@ -120,6 +121,7 @@ export function buildingStatus(game, b) {
       if (!game.map.seaEntry) return { level: 'bad', text: 'No river or sea here reaches the map edge: ships cannot come.' };
       if (dockBerth(game, b) < 0) return { level: 'bad', text: 'Not beside water that ships can sail.' };
       if (b.noStorage && dockUsed(b) > 0) return { level: 'warn', text: 'Imports are piling up: no warehouse, granary or workshop with room is reachable by road.' };
+      if (dockHint(game, b)) return { level: 'warn', text: dockHint(game, b) };
       break;
     case 'fort': {
       const n = garrisonCounts(game).get(b.id) || 0;
@@ -466,16 +468,15 @@ export class InfoPanel {
         break;
       }
       case 'dock': {
-        const ship = b.shipId ? g.walkers.get(b.shipId) : null;
-        const shipText = !ship ? 'None at the moment' : `${TRADE_PARTNERS[ship.partner]?.name || 'A'} ship ${ship.state === 'docked' ? 'tied up, loading' : ship.state === 'toDock' ? 'on its way' : 'leaving'}`;
         const goods = Object.entries(b.stock).filter(([, v]) => v > 0);
         const open = Object.entries(g.city.trade.routes).filter(([id, r]) => r.open && TRADE_PARTNERS[id]?.route === 'sea').map(([id]) => TRADE_PARTNERS[id].name);
         parts.push(sec('Harbor',
-          kv('Ship', shipText),
+          kv('Ship', dockShipText(g, b)),
+          ...dockRows(g, b).map(([k, v]) => kv(k, v)),
           kv('Sea routes open', open.join(', ') || 'None (open them in the Trade advisor)'),
           kv('On the quay', `${fmt(dockUsed(b))} / ${fmt(CONFIG.DOCK_CAPACITY)}`), bar(dockUsed(b), CONFIG.DOCK_CAPACITY),
           goods.length ? h('div', {}, goods.map(([k, v]) => h('span', { class: 'chip' }, `${GOODS[k].icon} ${GOODS[k].name} ${fmt(v)}`))) : null,
-          h('div', { class: 'muted' }, `Ships unload imports here; dock workers cart them to storage. Ships buy exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles.`)));
+          h('div', { class: 'muted' }, `A ship waits here while it trades. The crane lands its imports on the quay (you pay as they land) and dock workers cart them to storage; they fetch exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles (you are paid as each load goes aboard). The ship sails when both are done, or after ${CONFIG.SHIP_MAX_STAY_DAYS} days: keep storage near the Dock.`)));
         break;
       }
       case 'tower':

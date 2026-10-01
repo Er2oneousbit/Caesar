@@ -165,7 +165,7 @@ test('ruins: a save keeps them, one entry per fallen building', () => {
   collapseBuilding(game, b);
   const data = JSON.parse(JSON.stringify(serializeGame(game)));
   assert.equal(data.version, CONFIG.SAVE_VERSION);
-  assert.equal(CONFIG.SAVE_VERSION, 7);
+  assert.ok(CONFIG.SAVE_VERSION >= 7, 'ruins are saved since version 7');
   assert.equal(data.ruins.length, 2);
   const copy = deserializeGame(data);
   const ai = copy.map.idx(a.x, a.y);

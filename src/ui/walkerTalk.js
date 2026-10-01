@@ -21,6 +21,7 @@ import { GODS, GOD_KEYS } from '../data/gods.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { PERFORMER_NAMES } from '../data/buildings.js';
+import { daysMoored } from '../sim/trade.js';
 
 /** Days a walker keeps saying the same thing. */
 const LINE_DAYS = 8;
@@ -92,6 +93,7 @@ function workLines(game, w) {
     }
     case 'cart':
       if (w.state === 'collect') return ['Off to fetch more. They want it kept in stock here.', 'Empty there, full on the way back.'];
+      if (w.state === 'dockFetch') return ['The ship will not wait for ever. Off to the warehouse!', 'Load the ship, then home for a cup of wine.'];
       if (w.cargo) return [`${amountText(w.cargo.good, w.cargo.amount)} on board. Mind the wheels!`, 'Heavy load, but it pays.'];
       return ['Back for the next load.'];
     case 'buyer': return w.load && Object.keys(w.load).length ? ['A full basket for the market. My back will not thank me.'] : ['The market needs stock. Off to the storehouse.'];
@@ -206,12 +208,21 @@ function the(b) {
   return n ? `the ${n}` : 'somewhere';
 }
 
+/** "the Massilia ship": the ship a dock worker's claim is for. */
+function shipName(game, w) {
+  const ship = w.claim ? game.walkers.get(w.claim.ship) : null;
+  const p = ship ? TRADE_PARTNERS[ship.partner] : null;
+  return p ? `the ${p.name} ship` : 'the ship';
+}
+
 /** What the walker is doing, in a few words. */
 export function walkerDoing(game, w) {
   const target = w.target ? game.buildings.get(w.target) : null;
   switch (w.state) {
     case 'roam': return 'Walking the streets';
-    case 'return': return w.type === 'cart' || w.type === 'buyer' ? `Heading back to ${the(game.buildings.get(w.origin))}` : 'Heading home';
+    case 'return':
+      if (w.claim && w.cargo) return `Bringing ${amountText(w.cargo.good, w.cargo.amount)} to ${shipName(game, w)}`;
+      return w.type === 'cart' || w.type === 'buyer' ? `Heading back to ${the(game.buildings.get(w.origin))}` : 'Heading home';
     case 'toFire': return 'Running to a fire';
     case 'toSick': return `Hurrying to ${target ? `a sick ${nameOf(target)}` : 'a sick home'}`;
     case 'treat': return 'Treating the sick';
@@ -229,7 +240,11 @@ export function walkerDoing(game, w) {
     case 'toFort': return `Marching to ${the(target)}`;
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;
-    case 'docked': return 'Trading at the dock';
+    case 'docked':
+      if (w.unload && Object.values(w.unload).some((n) => n > 0)) return 'Unloading at the dock';
+      if (w.wants && Object.values(w.wants).some((n) => n > 0)) return w.wantsStuck ? 'Waiting for goods' : 'Loading at the dock';
+      return 'Casting off';
+    case 'dockFetch': return `Fetching ${w.want ? GOODS[w.want].name.toLowerCase() : 'goods'} for ${shipName(game, w)}`;
     case 'protest': return 'Protesting in the street';
     case 'steal': return target ? `Sneaking toward ${the(target)}` : 'Up to no good';
     case 'riot': return w.waitTicks > 0 ? 'Setting the street alight' : `Rioting${target ? `, heading for ${the(target)}` : ''}`;
@@ -242,12 +257,25 @@ export function walkerDoing(game, w) {
  * A caravan's or ship's business. After trading: what it bought from the city
  * and sold to it, with the money (sim/trade.js keeps it as w.deal). On its way
  * in: what it comes for, from the partner's wants and your export and import
- * settings (it may still find nothing to spare, or no room or money).
+ * settings (it may still find nothing to spare, or no room or money). A ship
+ * at the dock: what it still has to unload and to buy, the deal so far, and
+ * its days there.
  * @returns {[string, string][]}
  */
 export function tradeRows(game, w) {
   const list = (goods) => goods.map((g) => GOODS[g].name.toLowerCase()).join(', ');
-  const items = (o) => Object.entries(o).map(([g, n]) => amountText(g, n)).join(', ');
+  const items = (o) => Object.entries(o).filter(([, n]) => n > 0).map(([g, n]) => amountText(g, n)).join(', ');
+  if (w.type === 'ship' && w.state === 'docked' && w.deal) {
+    const d = w.deal;
+    const days = daysMoored(game, w);
+    return [
+      ['Still to unload', items(w.unload || {}) || 'Nothing'],
+      ['Still to buy', items(w.wants || {}) || 'Nothing'],
+      ['Bought here so far', Object.keys(d.sold).length ? `${items(d.sold)} (you earned ${d.earned} Dn)` : 'Nothing yet'],
+      ['Sold here so far', Object.keys(d.bought).length ? `${items(d.bought)} (you paid ${d.spent} Dn)` : 'Nothing yet'],
+      ['Days at the dock', `${days} (sails by day ${CONFIG.SHIP_MAX_STAY_DAYS} at the latest)`],
+    ];
+  }
   if (w.deal) {
     const d = w.deal;
     return [

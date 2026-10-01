@@ -4,10 +4,11 @@
  * Run:  npm test
  *
  * Covers navigable water detection, dock placement rules, sea routes being
- * refused where ships cannot come, ships unloading at a dock and buying
- * exports from nearby warehouses, dock workers carting imports to storage,
- * caravans leaving with packs of what they bought, and the scenario data staying consistent (no sea partner on a map without
- * sea access).
+ * refused where ships cannot come, a ship waiting at a demo city's dock
+ * while its imports land and go to storage and its exports are fetched,
+ * caravans leaving with packs of what they bought, and the scenario data
+ * staying consistent (no sea partner on a map without sea access). The
+ * rules of a ship's stay at the dock are in dock.test.mjs.
  * ----------------------------------------------------------------------------
  */
 
@@ -22,8 +23,7 @@ import { SCENARIOS, TRADE_PARTNERS } from '../src/data/scenarios.js';
 import { addBuilding, spawnWalker } from '../src/sim/entities.js';
 import { GOODS } from '../src/data/goods.js';
 import { planAction } from '../src/sim/construction.js';
-import { openRoute, setTradeMode, tradeAtDock, updateDock, dockBerth, routeKind, caravanArrive, caravanPacks } from '../src/sim/trade.js';
-import { updateWalkers } from '../src/sim/walkers.js';
+import { openRoute, setTradeMode, shipArrive, dockBerth, routeKind, caravanArrive, caravanPacks } from '../src/sim/trade.js';
 import { buildDemoCity, buildDemoHarbor } from '../src/dev/demoCity.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -88,36 +88,42 @@ test('sea routes are refused where ships cannot come; land routes still work', (
   assert.ok(openRoute(game, 'tarraco').ok, 'land route opens');
 });
 
-test('a ship trades at the dock: imports onto the quay, exports from nearby warehouses', () => {
+test('a ship waits at the dock: imports land on the quay and go to storage, exports come from a warehouse near it', () => {
   const game = newGame({ type: 'coast', seed: 'beach' });
-  const res = buildDemoCity(game, { level: 1 });
+  const res = buildDemoCity(game, { level: 2 });
   assert.ok(res.ok, res.reason);
+  game.runDays(16 * 6); // people to staff the harbor
   const harbor = buildDemoHarbor(game, res.center);
   assert.ok(harbor.ok && harbor.dock && harbor.warehouse, 'dock and warehouse built');
   const { dock, warehouse: wh } = harbor;
   assert.ok(dock.accessRoad >= 0 && wh.accessRoad >= 0, 'both on the road');
-  dock.efficiency = 1;
-  wh.efficiency = 1;
+  for (const r of Object.values(game.city.trade.routes)) r.nextVisit = 1e9; // only the ship sent below
   for (const k of Object.keys(wh.stock)) wh.stock[k] = 0;
   wh.stock.pottery = 800;
   setTradeMode(game, 'pottery', 'export', 0);
   setTradeMode(game, 'wine', 'import', 600);
   setTradeMode(game, 'fruit', 'none');
+  for (let d = 0; d < 40 && !(dock.efficiency >= 0.75 && wh.efficiency > 0); d++) game.runDays(1);
+  assert.ok(dock.efficiency >= 0.75 && wh.efficiency > 0, 'the city staffs the dock and the warehouse');
+  const ship = spawnWalker(game, 'ship', dockBerth(game, dock), null, { partner: 'massilia', target: dock.id, state: 'toDock', speed: CONFIG.SHIP_SPEED });
+  dock.shipId = ship.id;
   const before = game.city.treasury;
-  const out = tradeAtDock(game, 'massilia', dock);
-  assert.ok(out.sold.pottery > 0, 'exported pottery from the warehouse');
-  assert.equal(out.bought.wine, 600, 'imported wine');
-  assert.equal(dock.stock.wine, 600, 'wine waits on the quay');
-  assert.equal(wh.stock.pottery, 800 - out.sold.pottery);
-  assert.equal(game.city.treasury, before + out.earned - out.spent);
+  shipArrive(game, ship);
+  assert.equal(ship.state, 'docked');
+  assert.deepEqual(ship.unload, { wine: 600 }, 'it brings the wine you import');
+  assert.deepEqual(ship.wants, { pottery: 600 }, 'and wants the pottery you export, up to Massilia\'s 600 a year');
+  assert.equal(game.city.treasury, before, 'nothing changes hands on arrival');
+  for (let d = 0; d < CONFIG.SHIP_MAX_STAY_DAYS + 1 && ship.state === 'docked'; d++) game.runDays(1);
+  assert.notEqual(ship.state, 'docked', 'it sailed');
+  assert.equal(ship.deal.sold.pottery, 600, 'pottery went aboard');
+  assert.equal(ship.deal.bought.wine, 600, 'wine landed');
+  assert.equal(wh.stock.pottery, 200);
+  const entry = game.city.trade.log[0];
+  assert.ok(entry && entry.kind === 'sea' && entry.earned === ship.deal.earned && entry.spent === ship.deal.spent, 'one log entry when it sailed');
   // Dock workers cart the wine to storage (the warehouse, the nearest place with room).
-  for (let day = 0; day < 8 && dock.stock.wine > 0; day++) {
-    updateDock(game, dock);
-    for (let t = 0; t < CONFIG.TICKS_PER_DAY * 3; t++) updateWalkers(game);
-  }
-  for (let t = 0; t < CONFIG.TICKS_PER_DAY * 8; t++) updateWalkers(game);
+  game.runDays(16);
   assert.equal(dock.stock.wine, 0, 'quay emptied');
-  assert.equal(wh.stock.wine, 600, 'wine reached the warehouse');
+  assert.ok(wh.stock.wine > 0, 'wine reached the warehouse');
 });
 
 test('a caravan leaves with packs of what it bought, biggest lot first (for the art)', () => {

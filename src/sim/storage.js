@@ -219,6 +219,33 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
 }
 
 /**
+ * How much of a good a delivery target found by findDeliveryTarget can still
+ * take, counting loads on their way: a barracks up to its input cap, a
+ * workshop up to WORKSHOP_RAW_CAP, storage its free room.
+ */
+export function deliveryRoom(b, good) {
+  const kind = b.def.kind;
+  if (kind === 'barracks') return Math.max(0, b.def.inputCap - (b.stock[good] || 0) - (b.incoming[good] || 0));
+  if (kind === 'workshop') return Math.max(0, CONFIG.WORKSHOP_RAW_CAP - (b.stock[good] || 0) - (b.incoming[good] || 0));
+  return storageSpaceFor(b, good);
+}
+
+/**
+ * The best place for up to `amount` units of a good when a smaller lot will
+ * do (a dock worker's wagon of DOCK_LOAD): the target is chosen for one
+ * CART_CAPACITY, so a workshop or barracks with room for less than the whole
+ * load still comes first, and the amount is what it can take.
+ * @returns {{id:number, goal:number, path:number[], amount:number}|null}
+ */
+export function findDeliveryFit(game, fromIdx, good, amount, excludeId = 0) {
+  const t = findDeliveryTarget(game, fromIdx, good, CONFIG.CART_CAPACITY, excludeId);
+  if (!t) return null;
+  const room = deliveryRoom(game.buildings.get(t.id), good);
+  const n = Math.floor(Math.min(amount, room) / CONFIG.CART_CAPACITY) * CONFIG.CART_CAPACITY;
+  return n > 0 ? { ...t, amount: n } : null;
+}
+
+/**
  * Find the nearest storage holding at least `min` units of a good.
  * Food prefers granaries; anything else comes from warehouses.
  */

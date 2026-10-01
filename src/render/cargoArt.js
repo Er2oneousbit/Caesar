@@ -29,8 +29,8 @@ export const CARGO_STEPS = 4;
  * How much a cart can carry, by the building that sent it: farm wagons haul
  * the whole harvest; storage carts the most their orders move (a warehouse's
  * Get load, a granary's; a routine lot or an Empty load shows part full);
- * everyone else (quarries, workshops, docks) up to CART_LOAD. A bigger load
- * counts as full.
+ * dock workers a DOCK_LOAD; everyone else (quarries, workshops) up to
+ * CART_LOAD. A bigger load counts as full.
  * @param {object|null} originDef  the sending building's def, null if gone
  * @param {number} [amount]        units on board
  */
@@ -39,7 +39,8 @@ export function cartCapacity(originDef, amount = 0) {
   const cap = kind === 'farm' ? CONFIG.FARM_CART_LOAD
     : kind === 'warehouse' ? WAREHOUSE_GET_LOAD
       : kind === 'granary' ? GRANARY_GET_LOAD
-        : CONFIG.CART_LOAD;
+        : kind === 'dock' ? CONFIG.DOCK_LOAD
+          : CONFIG.CART_LOAD;
   return Math.max(cap, amount || 0);
 }
 

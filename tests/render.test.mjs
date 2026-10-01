@@ -714,7 +714,7 @@ test('carts: what a cart holds follows who sent it', () => {
   assert.equal(cartCapacity(BUILDINGS.granary), GRANARY_GET_LOAD, 'a granary cart: up to a Get load');
   assert.equal(cartCapacity(BUILDINGS.pottery_ws), CONFIG.CART_LOAD, 'workshops');
   assert.equal(cartCapacity(BUILDINGS.clay_pit), CONFIG.CART_LOAD, 'raw producers');
-  assert.equal(cartCapacity(BUILDINGS.dock), CONFIG.CART_LOAD, 'dock carts');
+  assert.equal(cartCapacity(BUILDINGS.dock), CONFIG.DOCK_LOAD, 'dock workers: a wagon of DOCK_LOAD');
   assert.equal(cartCapacity(null), CONFIG.CART_LOAD, 'sender gone: a hand cart');
   assert.equal(cartCapacity(BUILDINGS.pottery_ws, 300), 300, 'never less than what is on board');
   // Only a farm's cart is an ox wagon, whatever the load: a granary's Get

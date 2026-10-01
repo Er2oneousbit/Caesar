@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.12.1',
-  SAVE_VERSION: 7, // v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v6 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 8, // v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v6 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -272,9 +272,15 @@ export const CONFIG = {
   CARAVAN_MAX_TRADE: 800, // units bought + sold per visit (each direction)
   SHIP_MAX_TRADE: 2400, // units each way per ship: twice the old 1,200, so half as many ships still carry a route's yearly trade (Corinthus buys 4,600 a year)
   SHIP_SPEED: 0.06, // tiles per tick
-  SHIP_DOCK_TICKS: 120, // how long a ship stays tied up (loading/unloading)
+  // A moored ship waits while the Dock's workers carry goods both ways (sim/trade.js):
+  // a full exchange (2,400 each way in wagons of 400) takes 18 / 25 / 38 days with the
+  // warehouse 5 / 10 / 15 road tiles from the dock (measured), near the original's
+  // 23 / 33 / 44 (research: dock-trade spec).
+  SHIP_MAX_STAY_DAYS: 48, // a ship casts off after this many days moored, whatever is left (a full exchange fits with storage up to about 18 road tiles away)
+  DOCK_LOAD: 400, // units a dock worker's wagon carries each trip (two of the original's loads: Colonia's carts walk half its pace)
+  DOCK_UNLOAD_DAYS: 3, // days the dock's crane takes to land DOCK_LOAD from the ship onto the quay (the original's 1.6 days a load)
   DOCK_CAPACITY: 2400, // units of unloaded imports a dock can hold (a whole ship's load)
-  DOCK_REACH: 60, // road tiles: warehouses this close to a dock sell exports to ships
+  DOCK_REACH: 60, // road tiles: dock workers fetch exports from staffed warehouses this close to the dock (a trip must also end before the stay limit)
 
   // --- Ratings ------------------------------------------------------------
   // Culture and prosperity move toward what the city deserves by at most

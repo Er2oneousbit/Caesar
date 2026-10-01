@@ -415,10 +415,10 @@ test('save: a version 6 city (Jupiter and Vesta) loads with Mercury and Venus in
   for (const p of priests) assert.ok(GODS[p.god], `a priest of ${p.god}`);
   assert.ok(priests.some((p) => p.god === 'mercury') && priests.some((p) => p.god === 'venus'));
 
-  // It plays on, and saves as version 7.
+  // It plays on, and saves as the current version.
   for (let t = 0; t < TICKS_PER_MONTH; t++) game.tick();
   const again = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
-  assert.equal(serializeGame(again).version, 7);
+  assert.equal(serializeGame(again).version, CONFIG.SAVE_VERSION);
   assert.ok([...again.buildings.values()].some((b) => b.type === 'temple_mercury'));
 });
 

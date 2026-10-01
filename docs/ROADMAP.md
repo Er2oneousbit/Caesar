@@ -254,37 +254,33 @@ Fixes from a review of v0.6:
 
 ## Caesar III parity: what the original had that Colonia does not (yet)
 
-1. **The Emperor's legions** marching on a governor whose favor collapses, which gives the favor rating real teeth; distant battles the Emperor asks you to send troops to.
-2. **Water industry**: fishing wharves (fish as a food) and shipyards.
-3. **Crime**: done in v0.10.0 (protesters, thieves who rob the Forum or a market, riots; prefects as police; a crime overlay).
-4. **Disease**: done in v0.11.0 (local outbreaks on the fire machinery: a health score for every home, disease risk that a physician clears, sick homes that lose people and can pass it next door, a medicus sending physicians, hospitals cutting the deaths; a Disease overlay).
-5. **Hippodrome** (chariot races) as a fourth entertainment venue, with a chariot maker to supply it.
-6. **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary), and the **rank ladder** from Citizen to Caesar.
-7. **Map rotation** (view the city from 4 angles).
-8. **Scenario/map editor**, which doubles as modding (missions saved as data files).
-9. **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
-10. **Warehouse/granary orders**: done in v0.12.0 (Accept, Refuse or Get per good in every granary and warehouse, and an Empty switch; Get fetches from other storage on the building's roads, warehouses keeping 5 to 8 loads and granaries filling up, never between two buildings on Get; Empty sends one cart load at a time to wherever a cart would take it and skips a good with nowhere to go; the Emperor takes from storage not on Get first; the info panel cycles the orders and says what Get and Empty are doing). Not yet: the original's routine **warehouse-to-granary food push** (a warehouse's cart also takes food to a granary with room for 12 loads, or one set to Get it). It moves food to the markets faster, so it waits for a balance run (`npm run sim` and `npm run sweep` before and after).
-11. **Walker click-to-inspect**: done in v0.9.0 (who it is, where it came from, what it is doing and carrying, and what it thinks of the city, in lines of Colonia's own).
-12. **Empire map** (done in v0.12.0): a full map screen of the province and the lands around it, showing where the city lies, Rome, every trade partner and its route (open or not, what it buys and sells, with the button to open it), caravans and ships on their way with how many days until they arrive, and scouted warbands marching in with their size, the map edge they will enter by and the months left. Drawn from state the sim already keeps, without changing balance or saves: each route's `nextVisit` day (`sim/trade.js`), and the raid schedule `nextRaidMonth` and `warned` { origin, size, dir } (`sim/military.js`); the Trade advisor's small map shares the renderer (`ui/empireMap.js`, the screen in `ui/empire.js`). Decided: it opens with E, the compass in the top bar, and buttons in the Trade and Military advisors; clicking a warband closes the map and pans the city view to its entry edge. Links from raid and trade messages are left out for now: a message's only click action is "go to its map spot" (the raid warning already goes to the warband's edge), and a second kind of action would be a new field in the saved messages.
-13. **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
-14. **The original's five gods**: done in v0.12.0. Ceres, Neptune, Mercury, Mars and Venus, in the original's order; Mercury took Jupiter's place in the first mission's unlocks and Venus Vesta's in the second; every temple costs 50. Mercury blesses the working granary with the least food (of those that take food) with 600 of each food; his wrath takes 1600 units from the fullest granary or warehouse. Venus's blessing lifts every home's mood by 25 and adds a fading "Venus" factor (+15) to the city mood; her wrath caps home moods at 50 (then -5) and takes 5 from the city mood. A god that strikes stays angered until its mood is back above 50, and if Mercury or Venus strikes again before then the wrath is harder: Mercury burns that storehouse; Venus caps homes at 45 (then -10), takes 10 from the city mood and, where disease is on, adds disease risk to every home by how poorly it is cared for. The first two missions are spared the harder wraths (`majorWrath: false`). Version 6 saves load with Jupiter's and Vesta's temples, moods, priests and every home's access moved to Mercury and Venus. Jupiter's and Vesta's art is gone; each temple's pediment and priests wear its god's color, and the five read apart in the build menu. Not done from the original: Venus's curses lowering city health (it is shown only, and would show a false number for years), the favourite and neglected god, two-level wrath for Ceres, Neptune and Mars.
-15. **Health, Education and Entertainment advisors**, and a **Problems overlay** (the overlay done in v0.9.1, with the reason behind each problem).
-16. **Triumphal arches**, awarded for battles won.
-17. **Military academy**: trains soldiers who fight better.
-18. **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
-19. **Wolves** on wild land that attack walkers until soldiers clear them.
-20. **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
-21. **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
-22. **Hall of Fame** for the best career scores.
-23. **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.
+Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0).
+
+* **#1** **The Emperor's legions** marching on a governor whose favor collapses, which gives the favor rating real teeth; distant battles the Emperor asks you to send troops to.
+* **#2** **Water industry**: fishing wharves (fish as a food) and shipyards.
+* **#5** **Hippodrome** (chariot races) as a fourth entertainment venue, with a chariot maker to supply it.
+* **#6** **Governor's residence and personal salary** (a personal fund for gifts, rank-based salary), and the **rank ladder** from Citizen to Caesar.
+* **#7** **Map rotation** (view the city from 4 angles).
+* **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
+* **#9** **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
+* **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
+* **#15** **Health, Education and Entertainment advisors** (the Problems overlay, its other half, came in v0.9.1).
+* **#16** **Triumphal arches**, awarded for battles won.
+* **#17** **Military academy**: trains soldiers who fight better.
+* **#18** **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).
+* **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
+* **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
+* **#21** **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
+* **#22** **Hall of Fame** for the best career scores.
+* **#23** **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.
 
 ## Modernization: from the community engines
 
 What Augustus (4.0) added to the original, checked against its manual and release notes, adapted to Colonia:
 
-* **Roadblocks** (done in v0.9.0, except the permissions on gates, bridges, granaries and warehouses): only roaming service walkers are stopped. Anything with a destination (carts, caravans, settlers, market buyers) passes, so service coverage becomes a puzzle instead of a dice roll. Each roadblock carries a permission per group of walkers: maintenance (engineers and prefects), priests, the market vendor, entertainers, education, medicine, tax collectors, labor seekers, missionaries and watchmen, plus everyone else. Gates, bridges, granaries and warehouses can carry the same permissions. Roadblocks default to denying everyone.
+* **Roadblock permissions on gates, bridges, granaries and warehouses** (roadblocks themselves came in v0.9.0): only roaming service walkers are stopped. Anything with a destination (carts, caravans, settlers, market buyers) passes, so service coverage becomes a puzzle instead of a dice roll. Each roadblock carries a permission per group of walkers: maintenance (engineers and prefects), priests, the market vendor, entertainers, education, medicine, tax collectors, labor seekers, missionaries and watchmen, plus everyone else. Gates, bridges, granaries and warehouses can carry the same permissions. Roadblocks default to denying everyone.
 * **Market special orders**: each market switches every good on or off (all on by default). The buyer only fetches goods that are on, and the vendor only hands out goods that are on and that the house's next level uses.
-* **Partial warehouse storage**: per good in each warehouse or granary, a state (not accepting, accepting up to a limit, getting from other storage, and later versions add maintaining a reserve) and a limit counted in loads.
+* **Partial warehouse storage** (Accept, Refuse and Get per good came in v0.12.0): a limit per good counted in loads (accept up to it, get up to it), and later versions' "maintain a reserve".
 * **Supply posts**: fort soldiers eat. One post per map; its quartermaster fetches food from granaries, and shortages cut morale (an option; the original's rule is the default).
 * **Monuments**: Grand Temples (one per god, and how many a city may build is an option, 2 by default), a Pantheon and a Lighthouse. You pay to place the footprint, then a work camp hauls goods from warehouses and an architect's guild (called the engineer's guild in Augustus 2.0) sends architects who advance each stage. Finished monuments never burn or collapse and cost monthly upkeep. A late-game goal and a place to spend surplus goods.
 * **Caravanserai**: the land counterpart of the Lighthouse; when it is staffed and fed, disruptions to land trade last half as long, and a trade policy (seller, buyer or quantity) can be set.
@@ -293,24 +289,23 @@ What Augustus (4.0) added to the original, checked against its manual and releas
 * **Extended campaign**: after victory, the player can accept the promotion again or extend the regency, indefinitely.
 * **Monthly levies**: some buildings (monuments) cost upkeep in denarii.
 * **Also in Augustus 4.0, candidates for later**: the **Cart Depot** (ox carts move goods between storage buildings on orders: source, destination, good, condition), the **Tavern** (wine, meat and fish give entertainment), the **Watchtower** (a cheaper tower that needs no weapons but needs a barracks), the **Highway** (a fast road that only destination walkers can use, with a cost per tile), and new materials (stone, sand, bricks, concrete, gold) with a **City Mint**.
-* Already in Colonia: zoom, much bigger maps (Uber), a console and roadblocks.
+* Already in Colonia: zoom, much bigger maps (Uber), a console, roadblocks, and per-good Accept, Refuse and Get orders with an Empty switch for granaries and warehouses.
 
 ## Modernization: Colonia's own
 
 Seeing why:
 
-* **Reasons in the Problems overlay**: done in v0.9.1.
-* **Production and logistics stats**: done in v0.9.1 (the Production advisor and the trend charts). Still to come: charts per good over time.
+* **Charts per good over time** (the Production advisor and the trend charts came in v0.9.1).
 * **Production calculator**: turns a target into building counts (feeding 1,000 people takes about 3 full wheat farms).
 * **Walker traffic heat map**: where walkers actually go, which shows where roadblocks belong.
 * **Year in review** and a **city chronicle**: a yearly report card with charts, and an auto-written history of the city ("297 BC: the great fire of the east quarter took 14 homes").
 
 * **The late missions need more jobs** (found when mission 1's goal of 1,200 people met a town with about 100 jobs; missions 1 and 2 now ask for 300 and 450, measured). Missions 3 to 7 keep their goals, but `npm run sim -- --capacity` says their buildings cannot employ that many: at 10% unemployment a sensibly built city of mission 3 employs about 980 people (goal 3,500), mission 4 2,470 (5,000), mission 5 4,070 (6,500), mission 6 2,880 (7,000) and mission 7 4,810 (12,000); a lean one fewer still (740, 1,520, 2,970, 1,860, 3,430). These numbers lean on the sensible profile's 2 home tiles per tile of a walker's roam, a chosen figure: at the demo city's denser 1.2 they would be far higher (mission 5 would fit), so measure a late mission by play before trusting either. Two limits: each partner buys only so much a year (its `buys`), which caps exports and the farms and workshops behind them, and villa residents do not work, so the model leaves them out. The economy needs more jobs before these goals can be checked again: bigger export demand (more partners, larger or growing yearly purchases), job-rich buildings, or villa quarters the model counts (a patrician district raises the people a city holds without adding to its workforce). Then set each goal from the model, take the mission off `KNOWN_OVER` in `tests/campaign.test.mjs`, and set its `paceYears` again.
 
-From playtesting (mission 3 on Insane, three attempts, all lost within about 15 months; the owner decides which to take):
+From playtesting (mission 3 on Insane; the owner decides which to take):
 
 * **The new city's mood bonus ends as a 20-point cliff** at month 12; on Insane it lands just when the economy is weakest. A taper over several months would be kinder and easier to read.
-* **Early cash flow on Insane**: fixed in v0.11.1 (taxes x2.5 for every difficulty, measured with `npm run sweep`). Still to watch: Insane's mood after the new-city bonus (about 30, so peace cannot grow) and early missions for Hard and Insane, which the sweep's demo city finds harsh.
+* **The early missions on Hard and Insane**: the sweep's demo city finds them harsh, partly because it builds what those missions do not unlock (`npm run sim -- --unlocks` builds only what they allow); measure again with it before changing anything.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
 
@@ -348,7 +343,7 @@ The sim is deterministic (seeded RNG, never `Math.random`), so the same seed plu
 * **Desirability after loading**: a loaded game works out every home's desirability at once, while a running game does so only when the map changes, so a home's desirability can differ between a save and the game it came from (the random numbers stay in step; found reviewing v0.11.0). Work it out on the same schedule in both, or save it.
 * **Sim fuzzer**: thousands of game-days of random building, demolishing and speed changes, checking invariants: the books balance, no stock goes negative, save and reload gives the same game, no walker is stuck forever. It finds bugs before players do.
 * **Save corpus in CI**: keep a save from every release and prove each one still loads.
-* **`npm run sweep`**: done in v0.11.1 (every difficulty on every campaign map). Still to add: sandbox landscapes and seeds, and a garrison run.
+* **More in `npm run sweep`** (it runs every difficulty on every campaign map since v0.11.1): sandbox landscapes and seeds, and a garrison run.
 
 ## Beyond the original (optional, later)
 

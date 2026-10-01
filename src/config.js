@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.11.1',
-  SAVE_VERSION: 7, // v7: storage orders (v6 saves load, accept flags mapped); v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 7, // v7: storage orders (v6 saves load, accept flags mapped) and rubble that remembers what fell; v6: disease; v5: home mood and crime (v4 and v5 saves load with fresh defaults); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -49,6 +49,7 @@ export const CONFIG = {
   ACCESS_DAYS: 96, // how long a house "remembers" a service visit (six months)
   TAX_ACCESS_DAYS: 48, // how long a tax collector's visit keeps a house registered
   LABOR_ACCESS_DAYS: 24, // grace period: labor access lingers this long after housing disappears
+  NO_ROAD_NOTICE_DAYS: 8, // a building that employs people says so once after this many days with no road touching it
   DEFAULT_ROAM: 26, // tiles a roaming walker travels before heading home
   MAX_WALKERS: 3000,
 

@@ -31,6 +31,10 @@ import { removeBuilding } from '../sim/entities.js';
 import { farmDormant, daysToNextMare } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
+import { ruinAt } from '../sim/ruins.js';
+import { lacksRoad } from '../sim/roadAccess.js';
+import { withArticle } from '../sim/risk.js';
+import { MONTH_SHORT, formatYear } from '../sim/time.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -61,10 +65,30 @@ export function describeNeed(m) {
   }
 }
 
+/** How the panel words each cause of a ruin (sim/ruins.js RUIN_CAUSES). */
+const RUIN_WORDS = {
+  fire: 'burned down',
+  lightning: 'struck by lightning',
+  raidFire: 'burned by raiders',
+  riot: 'burned by rioters',
+  collapse: 'collapsed',
+  raid: 'torn down by raiders',
+  raidWall: 'broken down by raiders',
+};
+
+/**
+ * "Ruins of a Prefecture, burned down in Iul 280 BC." for a rubble record,
+ * or null for rubble without one (from a save before version 7).
+ */
+export function ruinText(rec) {
+  if (!rec) return null;
+  return `Ruins of ${withArticle(rec.what)}, ${RUIN_WORDS[rec.cause] || 'fallen'} in ${MONTH_SHORT[rec.month]} ${formatYear(rec.year)}.`;
+}
+
 /** Status line for any non-house building. */
 export function buildingStatus(game, b) {
   const def = b.def;
-  if (def.needsRoad && b.accessRoad < 0) return { level: 'bad', text: 'No road access. Build a road touching this building.' };
+  if (lacksRoad(b)) return { level: 'bad', text: 'No road touches this building, so it gets no workers and does nothing. Build a road along any of its edges (any side works; a corner does not).' };
   if (def.workers && b.laborAccess <= 0) return { level: 'bad', text: `Cannot find workers: no occupied housing within ${CONFIG.LABOR_RANGE} tiles along the roads.` };
   if (def.workers && b.efficiency <= 0) return { level: 'bad', text: 'No workers available. The city needs more people, or change labor priorities.' };
   if (def.needsPiped && !b.hasWater) return { level: 'bad', text: 'No piped water. It must sit inside a full reservoir\'s area.' };
@@ -586,7 +610,7 @@ export class InfoPanel {
     if (map.fixedRoad[i]) notes.push('The Imperial road connects the city to the rest of the Empire.');
     if (x === map.entry.x && y === map.entry.y) notes.push('Map entrance (green pennants): settlers and trade caravans arrive here.');
     if (x === map.exit.x && y === map.exit.y) notes.push('Map exit (red pennants): people leaving the city, and trade caravans heading home, go this way.');
-    if (map.rubble[i]) notes.push('Rubble from a disaster. Clear it before building.');
+    if (map.rubble[i]) notes.push(`${ruinText(ruinAt(g, i)) || 'Rubble from a disaster.'} Clear it before building.`);
     if (g.fires.has(i)) notes.push('Burning! Prefects are on their way.');
     const wall = map.wall[i];
     if (wall) notes.push(wall === Wall.GATE ? 'A gate: citizens pass freely, raiders must break it down.' : 'A wall: raiders must break through it (or find a way around).');

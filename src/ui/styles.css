@@ -558,6 +558,12 @@ canvas.trend { display: block; margin: 2px 0; }
   box-shadow: var(--shadow);
   border: 1px solid var(--bronze);
 }
+/* Placing a building where no road would reach it: hard to miss. */
+#tooltip.warn {
+  border: 2px solid var(--bad);
+  background: color-mix(in srgb, var(--bad) 22%, var(--hud));
+  font-weight: 600;
+}
 
 /* ---------- crash screen ----------------------------------------------------- */
 #crash {

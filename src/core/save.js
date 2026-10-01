@@ -9,7 +9,7 @@
  *     meta:   { city, scenarioId, date, population, treasury, difficulty, savedAt },
  *     scenario (sandbox: in full; campaign: { id }), flags, difficulty,
  *     rng, time, seed, map (base64 layers), buildings[], walkers[], fires[],
- *     units[], military, wallHp[], city, messages[], nextIds, camera
+ *     ruins[], units[], military, wallHp[], city, messages[], nextIds, camera
  *   }
  *
  * Version history:
@@ -40,6 +40,10 @@
  *      place of the old `accept` flags; carts can be out fetching ('collect').
  *      Version 6 (and older) saves load: each accept flag becomes Accept or
  *      Refuse and nothing is emptying, see upgradeV6().
+ *   7  ruins: rubble remembers what stood there, why it fell and when
+ *      (ruins[]: one entry per fallen building with the tiles it still
+ *      covers, see sim/ruins.js). Older saves load with rubble that has no
+ *      record; its info panel says what it always said.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -64,6 +68,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario, withDifficulty } from '../data/scenarios.js';
+import { serializeRuins, restoreRuins } from '../sim/ruins.js';
 import { log } from './debug.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
@@ -232,6 +237,7 @@ export function serializeGame(game, extra = {}) {
     buildings,
     walkers,
     fires: [...game.fires],
+    ruins: serializeRuins(game),
     units,
     military: game.military,
     wallHp: [...game.wallHp],
@@ -323,6 +329,7 @@ export function deserializeGame(data, flags = {}) {
   for (const b of game.buildings.values()) b.walkers = (b.walkers || []).filter((id) => game.walkers.has(id));
 
   for (const [i, d] of data.fires || []) game.fires.set(i, d);
+  restoreRuins(game, data.ruins); // (none before version 7)
 
   // Soldiers and raiders
   let maxU = 0;

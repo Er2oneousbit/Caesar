@@ -233,6 +233,72 @@ try {
     check('clicking a house opens the info panel', await page.isVisible('#info-panel'));
   }
 
+  // 3b. No road, made obvious: a Prefecture placed where no road touches it.
+  //     The ghost turns orange with the edge tiles a road would serve picked
+  //     out and the warning by the cursor; once built, a red sign floats over
+  //     it (counted by the renderer, and red pixels where it says it drew).
+  //     Undone afterwards, so the demo city below has its land.
+  const lone = await page.evaluate(() => {
+    const app = window.colonia;
+    const m = app.game.map;
+    const c = app.renderer.camera.screenToTile(app.canvas.width / app.renderer.camera.dpr / 2, app.canvas.height / app.renderer.camera.dpr / 2);
+    // Two tiles side by side (x and x + 3), each with nothing but open land within 3 tiles.
+    const open = (x, y) => {
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (!m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] === 2) return false;
+      return true;
+    };
+    for (let r = 0; r < 30; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = Math.round(c.x) + dx; const y = Math.round(c.y) + dy;
+        if (open(x, y) && open(x + 3, y)) { app.renderer.camera.centerOnTile(x + 1, y); return { x, y }; }
+      }
+    }
+    return null;
+  });
+  check('found open land away from roads for the no-road test', !!lone);
+  if (lone) {
+    await page.evaluate(() => window.colonia.ui.selectTool('prefecture'));
+    await page.waitForTimeout(100);
+    const lp = await toScreen(lone.x, lone.y);
+    await page.mouse.move(lp.x - 6, lp.y);
+    await page.mouse.move(lp.x, lp.y);
+    await page.waitForTimeout(200);
+    const ghost = await page.evaluate(() => {
+      const t = document.getElementById('tooltip');
+      const st = window.colonia.renderer.stats;
+      return { noRoad: st.ghostNoRoad, edges: st.roadEdges, tip: !t.classList.contains('hidden') && t.classList.contains('warn'), text: t.textContent, side: !!document.querySelector('#tool-info .err') };
+    });
+    check('placing with no road: orange ghost, the 4 edge tiles picked out, the warning by the cursor and in the sidebar', ghost.noRoad && ghost.edges === 4 && ghost.tip && /No road touches it/.test(ghost.text) && ghost.side, JSON.stringify(ghost));
+    await page.mouse.click(lp.x, lp.y);
+    const lp2 = await toScreen(lone.x + 3, lone.y);
+    await page.mouse.move(lp2.x, lp2.y, { steps: 3 }); // the ghost beside it, for the screenshot
+    await page.waitForTimeout(200);
+    const sign = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      const b = [...app.game.buildings.values()].find((v) => v.type === 'prefecture' && v.x === x && v.y === y);
+      if (!b) return { placed: false };
+      const r = app.renderer;
+      const spot = r.noRoadSpots.find((s) => s.id === b.id);
+      if (!spot) return { placed: true, count: r.stats.noRoad, spot: null };
+      // Red pixels in the sign's disc, read back from the canvas.
+      const ctx = app.canvas.getContext('2d');
+      const n = Math.ceil(spot.r);
+      const px = ctx.getImageData(Math.round(spot.x - n), Math.round(spot.y - n), 2 * n, 2 * n).data;
+      let red = 0;
+      for (let q = 0; q < px.length; q += 4) if (px[q] > 170 && px[q + 1] < 90 && px[q + 2] < 90) red++;
+      return { placed: true, count: r.stats.noRoad, spot: true, red, of: px.length / 4 };
+    }, lone);
+    check('a building with no road gets the red no-road sign over it', sign.placed && sign.count >= 1 && sign.spot && sign.red > sign.of * 0.15, JSON.stringify(sign));
+    if (shots) await page.screenshot({ path: path.join(shots, 'smoke-noroad.png') });
+    await page.keyboard.press('Escape');
+    const gone = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      app.undo();
+      return ![...app.game.buildings.values()].some((v) => v.type === 'prefecture' && v.x === x && v.y === y);
+    }, lone);
+    check('the lone prefecture is undone again', gone);
+  }
+
   // 4. Menus and advisors via keyboard
   await page.keyboard.press('F2');
   check('F2 opens advisors', await page.isVisible('text=Advisors'));

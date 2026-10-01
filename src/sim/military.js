@@ -35,6 +35,7 @@ import { spawnWalker, killWalker, STRIDE_WRAP } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
 import { igniteBuilding, collapseBuilding } from './risk.js';
+import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
@@ -518,7 +519,10 @@ function damageWall(game, i, dmg) {
   if (hp > 0) { game.wallHp.set(i, hp); return; }
   game.wallHp.delete(i);
   map.wall[i] = Wall.NONE;
-  if (!map.road[i]) map.rubble[i] = 1;
+  if (!map.road[i]) {
+    map.rubble[i] = 1;
+    recordRuin(game, [i], 'Wall', 'raidWall');
+  }
   map.touch();
   const now = game.time.totalDays;
   if (now - game.military.lastWallMessageDay >= 5) {

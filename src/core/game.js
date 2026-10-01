@@ -12,10 +12,10 @@
  *      (spreads work evenly across the day instead of spiking at midnight;
  *      a home's disease risk comes after its fire risk)
  *      then criminals: prefects and soldiers catch them, prefects hunt
- *   4. on a new day:   labor, water, desirability, city stats, entertainment
- *                      base, wine sources, mid-month goods use, immigration,
- *                      fires, sick homes, home moods (day 8), trade, raid
- *                      progress
+ *   4. on a new day:   labor, no-road notices, water, desirability, city
+ *                      stats, entertainment base, wine sources, mid-month
+ *                      goods use, immigration, fires, sick homes, home moods
+ *                      (day 8), trade, raid progress
  *   5. on a new month: consumption, finances, army pay, raid warnings,
  *                      city mood, home moods, religion, ratings, city health,
  *                      Emperor, farm season notice
@@ -42,6 +42,7 @@ import { updateMarketBuyer } from '../sim/market.js';
 import { updateTraining, updateVenue, updateEntertainmentBase } from '../sim/entertainment.js';
 import { updateServiceSpawns, updateLaborAccess } from '../sim/services.js';
 import { updateRisk, updateFires } from '../sim/risk.js';
+import { updateRoadNotices } from '../sim/roadAccess.js';
 import { updateLabor } from '../sim/labor.js';
 import { updateWater } from '../sim/water.js';
 import { updateDesirability } from '../sim/desirability.js';
@@ -168,6 +169,7 @@ export class Game {
     this.units ??= new Map(); // unit id -> Unit (soldiers and raiders)
     this.nextUnitId ??= 1;
     this.wallHp ??= new Map(); // tile index -> remaining hp of a damaged wall/gate
+    this.ruins ??= new Map(); // rubble tile index -> what fell there, why and when (sim/ruins.js)
     this.military ??= newMilitaryState(scenario, this.time, flags);
     this.city.crime ??= newCrimeState(); // saves from before crime (v4)
     this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
@@ -281,6 +283,7 @@ export class Game {
   onDay() {
     if (this.dirty.roads) this.processRoadChanges();
     updateLabor(this);
+    updateRoadNotices(this); // after labor: the same day's access roads
     updateWater(this);
     if (this.dirty.des) {
       updateDesirability(this);

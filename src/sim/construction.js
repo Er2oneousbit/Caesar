@@ -33,6 +33,7 @@ import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
 import { addBuilding, perimeterTiles, removeBuilding } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
+import { clearRuin, restoreRuin } from './ruins.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -55,8 +56,23 @@ export function dragMode(tool) {
 // ---------------------------------------------------------------------------
 
 /**
+ * The placement warnings for a spot with no road a building could use. The
+ * build ghost turns the warning color and shows them by the cursor
+ * (render/renderer.js, ui/ui.js), so they cannot be missed.
+ */
+export const NO_ROAD_WARNING = 'No road touches it: it gets no workers and does nothing until a road runs along one of its edges (a corner does not count)';
+export const HOUSE_NO_ROAD_WARNING = 'Too far from a road: settlers cannot reach it (a home needs a road within 2 tiles)';
+
+/** The no-road warning to show by the cursor for a plan, or null when every spot has a road. */
+export function planNoRoadWarning(plan) {
+  if (!plan || !plan.items || !plan.items.some((it) => it.ok && it.noRoad)) return null;
+  return BUILDINGS[plan.tool]?.kind === 'house' ? HOUSE_NO_ROAD_WARNING : NO_ROAD_WARNING;
+}
+
+/**
  * Validate placing building `type` with its top-left corner at (x, y).
- * @returns {{ok:boolean, reason?:string, cost:number, warnings:string[], fertility?:number}}
+ * `noRoad`: the spot has no road the building could use (see the warnings above).
+ * @returns {{ok:boolean, reason?:string, cost:number, warnings:string[], noRoad?:boolean, fertility?:number}}
  */
 export function checkBuilding(game, type, x, y) {
   const def = BUILDINGS[type];
@@ -113,16 +129,23 @@ export function checkBuilding(game, type, x, y) {
   }
   if (!canAfford(game, cost)) return fail('Not enough money', cost);
   // Soft warnings (placement allowed, but it will not work well).
-  if (def.needsRoad && def.kind !== 'house') {
+  // (A building with no workers, the Oracle, works without a road.)
+  if (def.needsRoad && def.kind !== 'house' && def.workers > 0) {
     const hasRoad = perimeterTiles(map, x, y, S).some((i) => map.road[i]);
-    if (!hasRoad) out.warnings.push('No road access: it will not work until a road touches it');
+    if (!hasRoad) {
+      out.warnings.push(NO_ROAD_WARNING);
+      out.noRoad = true;
+    }
   }
   if (def.kind === 'house') {
     let near = false;
     for (let ty = y - 2; ty <= y + 2 && !near; ty++) {
       for (let tx = x - 2; tx <= x + 2; tx++) if (map.hasRoad(tx, ty)) { near = true; break; }
     }
-    if (!near) out.warnings.push('Too far from a road: settlers cannot reach it');
+    if (!near) {
+      out.warnings.push(HOUSE_NO_ROAD_WARNING);
+      out.noRoad = true;
+    }
   }
   // Wells and reservoirs need no road, but they wear out like everything else,
   // and an engineer only repairs what lies within reach of the road he walks.
@@ -168,7 +191,7 @@ export function planAction(game, tool, x0, y0, x1, y1) {
   return {
     tool,
     kind: 'building',
-    items: [{ x: a.x, y: a.y, size: BUILDINGS[tool]?.size || 1, ok: chk.ok, reason: chk.reason, cost: chk.cost }],
+    items: [{ x: a.x, y: a.y, size: BUILDINGS[tool]?.size || 1, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad }],
     cost: chk.ok ? chk.cost : 0,
     count: chk.ok ? 1 : 0,
     warnings: chk.warnings,
@@ -204,7 +227,7 @@ function planBuildingArea(game, tool, x0, y0, x1, y1) {
       count++;
       for (const w of chk.warnings) warnings.add(w);
     }
-    items.push({ x, y, size: 1, ok, reason, cost: chk.cost });
+    items.push({ x, y, size: 1, ok, reason, cost: chk.cost, noRoad: !!chk.noRoad });
   }
   // Only show "not enough money" style reasons when nothing at all is valid.
   const firstBad = items.find((i) => !i.ok);
@@ -452,10 +475,12 @@ export function applyPlan(game, plan) {
   const undo = { tool: plan.tool, day: game.time.totalDays, cost: 0, ops: [] };
   let spent = 0;
   let done = 0;
-  const saveTile = (i) => ({ i, terrain: map.terrain[i], rubble: map.rubble[i], wall: map.wall[i] });
+  // `ruin`: what the rubble remembered (sim/ruins.js), so an undo gives it back.
+  const saveTile = (i) => ({ i, terrain: map.terrain[i], rubble: map.rubble[i], wall: map.wall[i], ruin: game.ruins.get(i) || null });
   const clearTile = (i) => {
     if (map.terrain[i] === Terrain.TREES) map.terrain[i] = Terrain.GRASS;
     map.rubble[i] = 0;
+    clearRuin(game, i);
   };
 
   if (plan.tool === 'clear') {
@@ -593,21 +618,24 @@ export function undoLast(game) {
     if (op.op === 'building') {
       const b = game.buildings.get(op.id);
       if (b) removeBuilding(game, b, 'undo');
-      for (const t of op.tiles) { map.terrain[t.i] = t.terrain; map.rubble[t.i] = t.rubble; }
+      for (const t of op.tiles) { map.terrain[t.i] = t.terrain; map.rubble[t.i] = t.rubble; restoreRuin(game, t.i, t.ruin); }
     } else if (op.op === 'road') {
       map.road[op.i] = Road.NONE;
       map.terrain[op.i] = op.terrain;
       map.rubble[op.i] = op.rubble;
+      restoreRuin(game, op.i, op.ruin);
       map.wall[op.i] = op.wall || Wall.NONE; // a gate cut through a wall becomes wall again
     } else if (op.op === 'wall') {
       map.wall[op.i] = op.wall || Wall.NONE;
       map.terrain[op.i] = op.terrain;
       map.rubble[op.i] = op.rubble;
+      restoreRuin(game, op.i, op.ruin);
       game.wallHp.delete(op.i);
     } else if (op.op === 'aqueduct') {
       map.aqueduct[op.i] = 0;
       map.terrain[op.i] = op.terrain;
       map.rubble[op.i] = op.rubble;
+      restoreRuin(game, op.i, op.ruin);
     } else if (op.op === 'plaza') {
       map.road[op.i] = Road.ROAD;
     } else if (op.op === 'roadblock') {

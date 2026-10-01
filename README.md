@@ -35,7 +35,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 ## Getting started
 
 1. **Roads first.** Walkers only move on roads, and your city must connect to the Imperial road. The gateway with green pennants is the map entrance, where settlers arrive.
-2. **Housing plots** (H) beside the roads attract settlers, who pitch tents.
+2. **Housing plots** (H) beside the roads attract settlers, who pitch tents. Every building with workers needs a road touching one of its edges (any side; a corner does not count), or it gets no workers: a red sign with a crossed-out road floats over any building that has none.
 3. **Water:** a Well turns tents into family tents. Later, a Reservoir pipes water to Fountains for better homes. With the Housing tool in hand, a faint blue shows where homes would get water.
 4. **Safety:** Prefectures (against fire, and as police against thieves and rioters) and Engineer's Posts (against collapse) must send walkers past every building.
 5. **Food:** Wheat Farm on meadow → Granary → Market. Market vendors sell door to door.
@@ -74,6 +74,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | Night too dark, or rain distracting | Switch off *Day and night* or *Weather* in *Settings* (both are purely visual). |
 | In debt and cannot build | Ask Rome for a loan in the Finance advisor (F2): the money comes at once and is repaid monthly with interest. |
 | Tax income is falling | Click a home: its tax line says whether a tax collector has registered it, and for how long. A lone Forum's collector can wander off along the Imperial road; a second Forum, or roadblocks at the ends of your blocks, keep collectors on your streets. |
+| A building never gets workers | No road touches it. A red sign with a crossed-out road floats over it, and after 8 days a message says where it is. Run a road along any of its edges; a road that only meets a corner does not count. |
 | Fountains or baths ran dry | A reservoir may have collapsed. Keep reservoirs and wells within 2 tiles of a road so engineers can repair them (the game warns when you place one too far). |
 | Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Dock on its bank. Use land routes on maps without one. |
 | "Something broke in the city" screen | Click *Copy report* and include it in a bug report. *Download emergency save* keeps your city. |

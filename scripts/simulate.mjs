@@ -22,6 +22,8 @@
  *   npm run sim -- --pace       (how long the campaign's goals take, no city)
  *   npm run sim -- --capacity   (how many people each mission's buildings employ, no city)
  *   npm run sim -- --scenario c1 --unlocks --homes 40   (mission 1 as a player could build it)
+ *   npm run sim -- --type coast --fishing 2   (two fishing wharves and a shipyard: fish a year per wharf)
+ *   npm run sim -- --level 3 --venues --hippodrome   (the big venues and the hippodrome: entertainment scores)
  *
  * Campaign runs build every building unless --unlocks is given (then only
  * what the mission unlocks), so their numbers stay comparable with earlier
@@ -34,12 +36,13 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoFishery, buildDemoVenues, buildDemoHippodrome } from '../src/dev/demoCity.js';
 import { log } from '../src/core/debug.js';
 import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
 import { sickHomes } from '../src/sim/disease.js';
-import { planAction, applyPlan } from '../src/sim/construction.js';
+import { planAction, applyPlan, anchorOffset } from '../src/sim/construction.js';
+import { BUILDINGS } from '../src/data/buildings.js';
 import { missionCapacity, landOf } from '../src/sim/capacity.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
@@ -62,6 +65,9 @@ Options:
   --years <n>       years to simulate (default 3)
   --level <1-3>     demo city complexity (default 2)
   --garrison        also build a barracks, forts, towers and a wall (equipped)
+  --fishing <n>     also build a shipyard and n fishing wharves (and a granary by them)
+  --venues          also build an amphitheater, a colosseum, a gladiator school and a menagerie
+  --hippodrome      also build a hippodrome and a chariot maker
   --caretaker       rebuild whatever burns or collapses, as a player would (npm run sweep)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --json            print a JSON summary at the end
@@ -72,7 +78,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity };
+  const o = { scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -86,6 +92,9 @@ function parse(argv) {
     else if (a === '--difficulty') o.difficulty = next();
     else if (a === '--json') o.json = true;
     else if (a === '--garrison') o.garrison = true;
+    else if (a === '--fishing') o.fishing = Number(next());
+    else if (a === '--venues') o.venues = true;
+    else if (a === '--hippodrome') o.hippodrome = true;
     else if (a === '--raids') o.raids = next();
     else if (a === '--verbose') o.verbose = true;
     else if (a === '--pace') o.pace = true;
@@ -151,6 +160,16 @@ if (opts.garrison) {
   const gar = buildDemoGarrison(game, res.center, { stock: true });
   console.log(`Garrison: ${gar.forts.length} forts, barracks ${gar.barracks ? 'yes' : 'no'}, ${gar.towers.length} towers, ${gar.wall} wall tiles`);
 }
+const fishery = opts.fishing > 0 ? buildDemoFishery(game, res.center, { wharves: opts.fishing }) : null;
+if (fishery) console.log(`Fishery: shipyard ${fishery.shipyard ? 'yes' : 'no'}, ${fishery.wharves.length} wharves, granary ${fishery.granary ? 'yes' : 'no'}; ${game.map.fishingGrounds.length} fishing grounds on the map`);
+if (opts.venues) {
+  const v = buildDemoVenues(game, res.center);
+  console.log(`Venues: ${Object.entries(v).map(([k, b]) => `${k} ${b ? 'yes' : 'no'}`).join(', ')}`);
+}
+if (opts.hippodrome) {
+  const hip = buildDemoHippodrome(game, res.center);
+  console.log(`Hippodrome: ${hip.hippodrome ? 'yes' : 'no'}, chariot maker ${hip.maker ? 'yes' : 'no'}`);
+}
 console.log(`Map ${scenario.map.type} ${scenario.map.size} seed=${game.seed}  difficulty=${game.difficultyKey}  buildings=${game.buildings.size}  farms=${res.farms}  treasury=${Math.round(game.city.treasury)}`);
 
 // --caretaker: a player's minimum. The demo city never rebuilds, so on the
@@ -166,8 +185,8 @@ function caretake() {
     for (let dy = 0; dy < k.size && !taken; dy++) for (let dx = 0; dx < k.size; dx++) if (game.map.buildingAt(k.x + dx, k.y + dy)) { taken = true; break; }
     if (taken) continue; // standing (a home may have grown into a block), or something else is there
     applyPlan(game, planAction(game, 'clear', k.x, k.y, k.x + k.size - 1, k.y + k.size - 1));
-    const off = Math.floor((k.size - 1) / 2);
-    const plan = planAction(game, k.type, k.x + off, k.y + off, k.x + off, k.y + off);
+    const off = anchorOffset(k.type); // (a hippodrome is held by the middle of its 15 tiles)
+    const plan = planAction(game, k.type, k.x + off.x, k.y + off.y, k.x + off.x, k.y + off.y);
     if (plan && plan.count > 0 && applyPlan(game, plan).ok) rebuilt++;
   }
 }
@@ -223,9 +242,22 @@ if (opts.scenario) {
 }
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
+// Fishing: what each wharf landed, against a pig farm's yearly harvest at full
+// staff and fertility on this difficulty (the land food fish stands in for).
+let fishing = null;
+if (fishery) {
+  const wharves = [...game.buildings.values()].filter((b) => b.def.kind === 'wharf');
+  const catches = wharves.map((b) => (b.catches || 0) * CONFIG.FISH_CATCH);
+  const perYear = catches.map((n) => Math.round(n / opts.years));
+  const pigYear = Math.round((CONFIG.CART_CAPACITY * CONFIG.DAYS_PER_MONTH * CONFIG.MONTHS_PER_YEAR * game.difficulty.production) / BUILDINGS.farm_pig.productionDays);
+  const yard = [...game.buildings.values()].find((b) => b.def.kind === 'shipyard');
+  const staff = wharves.map((b) => Math.round(b.efficiency * 100));
+  fishing = { wharves: wharves.length, perYear, staff, boatsBuilt: yard ? yard.boatsBuilt || 0 : 0, fishMade: c.produced.fish || 0, pigFarmYear: pigYear };
+  console.log(`Fishing: ${wharves.length} wharves (staff ${staff.join('%, ')}%), fish a year per wharf ${perYear.join(', ')} (${BUILDINGS.wharf.workers} workers each); a pig farm at full staff and fertility: ${pigYear} a year (${BUILDINGS.farm_pig.workers} workers); boats built ${fishing.boatsBuilt}`);
+}
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
 const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
-if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment }));
+if (opts.json) console.log(JSON.stringify({ population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(fishing ? { fishing } : {}) }));
 
 /** The highest disease risk of any occupied home (sim/disease.js). */
 function peakRisk(g) {

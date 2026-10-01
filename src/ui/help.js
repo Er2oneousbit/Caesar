@@ -9,8 +9,8 @@
 
 import { h, mount } from './dom.js';
 import { CONFIG } from '../config.js';
-import { HOUSE_TIERS } from '../data/housing.js';
-import { BUILDINGS } from '../data/buildings.js';
+import { HOUSE_TIERS, MAX_TIER } from '../data/housing.js';
+import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, ENT_SEATS_MAX, ENT_BASE_MAX } from '../data/buildings.js';
 import { GOODS } from '../data/goods.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { KEY_HELP } from '../input/input.js';
@@ -94,6 +94,8 @@ function content(tab) {
         h('h4', {}, 'Food'),
         chain('Farm (on meadow)', 'Granary', 'Market buyer', 'Market vendor', 'Homes'),
         h('p', { class: 'muted' }, 'Farms need meadow (yellow-green land). Fertility = share of meadow under the field. On Insane nothing grows in winter (December to Februarius): stock up the granaries before it comes.'),
+        chain('Shipyard (boats)', 'Fishing Wharf', 'Granary', 'Market', 'Homes (Fish)'),
+        h('p', {}, `Fish is a food of its own, a fifth kind beside wheat, vegetables, fruit and meat, so a city by the water can skip a farm for its two- and three-food homes. Wharves and shipyards stand on the bank of a river, the sea or a big lake (a pond has no fish); gulls circle over the fishing grounds. A Shipyard builds a boat in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff, from nothing, and sends it to the nearest staffed wharf on its water that has none; it keeps one spare ready. The wharf's boat sails to the nearest fishing ground, fishes ${CONFIG.FISH_DAYS} days and brings back ${CONFIG.FISH_CATCH} fish, about one load a month when the ground is near; carts take the catch to a granary. Fewer workers mean a longer wait between trips. The sea does not freeze: wharves fish all winter, even on Insane. Neptune's wrath sinks every boat, and the shipyards must build new ones.`),
         h('h4', {}, 'Goods'),
         chain('Clay Pit (near water)', 'Potter', 'Warehouse', 'Market', 'Homes (Pottery)'),
         chain('Timber Yard (near forest)', 'Carpenter', 'Warehouse', 'Market', 'Homes (Furniture)'),
@@ -127,7 +129,9 @@ function content(tab) {
         return h('tr', {}, h('td', {}, h('b', {}, d.name)), h('td', { style: { fontSize: '12.5px' } }, d.desc));
       };
       return [
-        h('table', { class: 'tbl' }, ['well', 'fountain', 'reservoir', 'prefecture', 'engineer_post', 'market', 'granary', 'warehouse', 'dock', 'temple_ceres', 'school', 'library', 'academy', 'theater', 'actor_troupe', 'amphitheater', 'gladiator_school', 'colosseum', 'menagerie', 'barber', 'clinic', 'baths', 'hospital', 'forum', 'senate', 'garden', 'oracle'].map(row)),
+        h('table', { class: 'tbl' }, ['well', 'fountain', 'reservoir', 'prefecture', 'engineer_post', 'market', 'granary', 'warehouse', 'dock', 'shipyard', 'wharf', 'temple_ceres', 'school', 'library', 'academy', 'theater', 'actor_troupe', 'amphitheater', 'gladiator_school', 'colosseum', 'menagerie', 'hippodrome', 'chariot_maker', 'barber', 'clinic', 'baths', 'hospital', 'forum', 'senate', 'garden', 'oracle'].map(row)),
+        h('h4', {}, 'Entertainment'),
+        h('p', {}, `A home's entertainment is the points of every venue whose entertainer passed by lately (theater ${VENUE_POINTS.theater}, amphitheater ${VENUE_POINTS.amphitheater} or ${VENUE_POINTS.amphitheater + VENUE_BOTH_BONUS.amphitheater} with plays and gladiators, colosseum ${VENUE_POINTS.colosseum} or ${VENUE_POINTS.colosseum + VENUE_BOTH_BONUS.colosseum} with gladiators and beasts, the hippodrome's charioteer ${VENUE_POINTS.hippodrome}), plus a share for every home of how well the venues' seats cover the city: up to ${ENT_SEATS_MAX}, or ${ENT_BASE_MAX} with races at the hippodrome, which seats the whole city. Venues only send entertainers while shows are booked. The Hippodrome (one per city, 15 × 5 tiles; click to place it by its middle) gets its races from a Chariot Maker: each team books 32 days. Its charioteer drives twice as fast and twice as far as other entertainers, and prosperity rises a little while races run. The top two homes need ${HOUSE_TIERS[MAX_TIER - 1].ent} and ${HOUSE_TIERS[MAX_TIER].ent}: the Imperial Palatium needs the hippodrome.`),
         h('h4', {}, 'Gods'),
         h('p', {}, `Five gods watch over the city, each with a temple of its own. Each wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens; towns under 800 people are left alone. A content god (mood ${CONFIG.GOD_BLESS_MOOD} or more, which takes festivals or oracles) blesses the city; a neglected one (${CONFIG.GOD_WRATH_MOOD} or less) strikes. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}, and Mercury and Venus strike harder if angered again (not in the first two campaign missions). The Religion advisor shows each god's mood.`),
         h('table', { class: 'tbl' }, GOD_KEYS.map((k) => h('tr', {}, h('td', {}, h('b', { style: { color: GODS[k].color } }, GODS[k].name)), h('td', { style: { fontSize: '12.5px' } }, `${GODS[k].domain}. Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`)))),

@@ -79,7 +79,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_BOTH_SHOWS, VENUE_SEATS, VENUE_SUPPLIERS, ENT_BASE_MAX } from '../data/buildings.js';
+import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_BOTH_SHOWS, VENUE_SEATS, VENUE_SUPPLIERS, ENT_BASE_MAX, ENT_SEATS_MAX, ENT_SEAT_KINDS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { FOOD_TYPES } from '../data/goods.js';
 import { GOD_KEYS } from '../data/gods.js';
@@ -105,7 +105,10 @@ export const LAND_FOR_HOMES = 0.5;
 /** Share of the meadow a city can farm (fields come in patches a 3x3 farm does not fill). */
 export const MEADOW_FARMED = 2 / 3;
 
-const VENUE_KINDS = Object.keys(VENUE_POINTS);
+// The three seat kinds. The hippodrome is left out of the model: one per
+// city, it cannot be multiplied to reach every home, and the levels the
+// model plans for need at most 30 entertainment.
+const VENUE_KINDS = Object.keys(VENUE_SEATS);
 const PER_MONTH = CONFIG.DAYS_PER_MONTH;
 const PER_YEAR = CONFIG.DAYS_PER_MONTH * CONFIG.MONTHS_PER_YEAR;
 
@@ -118,12 +121,18 @@ export function unlockedBuildings(s) {
   return new Set(s.unlocks === 'all' ? Object.keys(BUILDINGS) : s.unlocks.filter((k) => BUILDINGS[k]));
 }
 
-/** The unlocked building that makes `good` (the one with the fewest workers per unit), or null. */
+/**
+ * The unlocked building that makes `good` (the one with the fewest workers
+ * per unit), or null. Food comes from farms only: fishing wharves depend on
+ * the water and a shipyard, so the model leaves them out (fish is extra food
+ * on water maps, never counted on).
+ */
 function producerOf(keys, good) {
   let best = null;
   for (const k of keys) {
     const d = BUILDINGS[k];
     if (d.produces !== good) continue;
+    if (d.kind === 'wharf') continue;
     if (!best || d.workers * d.productionDays < best.workers * best.productionDays) best = { key: k, ...d };
   }
   return best;
@@ -142,7 +151,7 @@ export function goodsAvailable(s) {
   for (let pass = 0; pass < 2; pass++) {
     for (const k of keys) {
       const d = BUILDINGS[k];
-      if (!d.produces) continue;
+      if (!d.produces || d.kind === 'wharf') continue; // fish depends on the water: never counted on
       if (d.recipe && !Object.keys(d.recipe).every((r) => made.has(r) || bought.has(r))) continue;
       made.add(d.produces);
     }
@@ -168,7 +177,7 @@ function trainerOf(keys, performer) {
  * kind, over 5) at `seatShare` coverage of each kind in the set.
  */
 function entertainmentOf(keys, set, seatShare = 1) {
-  let score = Math.min(ENT_BASE_MAX, Math.floor((set.length * seatShare * 100) / VENUE_KINDS.length / 5));
+  let score = Math.min(ENT_SEATS_MAX, Math.floor((set.length * seatShare * 100) / ENT_SEAT_KINDS / 5));
   for (const v of set) {
     score += VENUE_POINTS[v];
     if (bothShows(keys, v)) score += VENUE_BOTH_BONUS[v] || 0;
@@ -214,7 +223,9 @@ function offers(s) {
     health: (keys.has('clinic') ? 1 : 0) + (keys.has('hospital') ? 1 : 0),
     // A working winery, and each partner selling wine (data/housing.js `wine`).
     wine: (keys.has('wine_ws') && goods.made.has('wine') ? 1 : 0) + s.partners.filter((id) => TRADE_PARTNERS[id].sells.wine).length,
-    ent: bestEntertainment(keys),
+    // The hippodrome counts only for which levels can be reached at all (its
+    // points and its seats): the model never plans one (see VENUE_KINDS).
+    ent: bestEntertainment(keys) + (keys.has('hippodrome') && keys.has('chariot_maker') ? VENUE_POINTS.hippodrome + ENT_BASE_MAX - ENT_SEATS_MAX : 0),
   };
 }
 
@@ -378,8 +389,8 @@ function venuePlan(keys, want, tiles, people, reach) {
     let seatShare = 0;
     if (visits < want) {
       const base = want - visits;
-      seatShare = (base * 5 * VENUE_KINDS.length) / (set.length * 100);
-      if (seatShare > 1 || base > ENT_BASE_MAX) continue;
+      seatShare = (base * 5 * ENT_SEAT_KINDS) / (set.length * 100);
+      if (seatShare > 1 || base > ENT_SEATS_MAX) continue;
     }
     const items = [];
     const shows = {};

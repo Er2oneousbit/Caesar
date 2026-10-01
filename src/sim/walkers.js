@@ -23,6 +23,7 @@ import { collectArrive } from './storageOrders.js';
 import { recruitArrive } from './military.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
 import { physicianArrive, physicianAfterWait } from './disease.js';
+import { boatArrive, boatAfterWait } from './fishing.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
 /** Advance every walker by one tick. */
@@ -51,6 +52,7 @@ function stepWalker(game, w) {
       const what = w.afterWait;
       w.afterWait = null;
       if (what === 'shipLeave') shipLeave(game, w);
+      else if (w.type === 'fishing_boat') boatAfterWait(game, w, what);
       else if (w.kind === 'criminal') criminalAfterWait(game, w, what);
       else if (what === 'nextSick') physicianAfterWait(game, w);
       else afterWait(game, w, what);
@@ -185,6 +187,11 @@ function onPathEnd(game, w) {
       break;
     case 'toDock':
       shipArrive(game, w);
+      break;
+    case 'toWharf':
+    case 'toGround':
+    case 'homeWithCatch':
+      boatArrive(game, w);
       break;
     case 'steal':
       thiefArrive(game, w);

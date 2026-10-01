@@ -52,6 +52,13 @@
  *        (ruins[]: one entry per fallen building with the tiles it still
  *        covers, see sim/ruins.js). Older saves load with rubble that has no
  *        record; its info panel says what it always said.
+ *   8  fish and the hippodrome: fish is a fifth food (every food list,
+ *      granary, warehouse, market and dock stock and trade setting has it);
+ *      shipyards, wharves and fishing boats (walkers) keep their state; a
+ *      hippodrome is three linked buildings (`parts`, `main`); homes have
+ *      hippodrome access and venues a hippodrome show count. Fishing grounds
+ *      are derived from the terrain at load, never saved. Older saves load
+ *      with no fish, no boats and the new keys at 0, see upgradeFishV7().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -356,6 +363,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 5) upgradeV4(game);
   if (data.version < 6) upgradeV5(game);
   if (data.version < 7) upgradeOrdersV6(game);
+  if (data.version < 8) upgradeFishV7(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -410,6 +418,34 @@ function upgradeOrdersV6(game) {
     b.emptying = false;
     b.orderNote = null;
   }
+}
+
+/**
+ * A save before version 8 (before fish and the hippodrome): every food list
+ * gets fish at 0 (homes' pantries, granaries, warehouses, markets and docks,
+ * and what is on its way to them), the trade settings get fish (no trade),
+ * homes get hippodrome access at 0 and venues a hippodrome show count at 0.
+ * Granary and warehouse orders for fish were filled in with their defaults
+ * as the buildings were read (Accept in a granary, Refuse in a warehouse).
+ * There are no boats, wharves or hippodromes yet, so nothing else changes.
+ */
+export function upgradeFishV7(game) {
+  for (const b of game.buildings.values()) {
+    const h = b.house;
+    if (h) {
+      if (h.food) h.food.fish ??= 0;
+      if (h.ent) h.ent.hippodrome ??= 0;
+      continue;
+    }
+    const kind = b.def.kind;
+    if (kind === 'granary' || kind === 'warehouse' || kind === 'market' || kind === 'dock') {
+      if (b.stock) b.stock.fish ??= 0;
+      if (b.incoming) b.incoming.fish ??= 0;
+    }
+    if (b.shows) b.shows.hippodrome ??= 0;
+  }
+  const settings = game.city.trade && game.city.trade.settings;
+  if (settings) settings.fish ??= { mode: 'none', level: 400 };
 }
 
 /**

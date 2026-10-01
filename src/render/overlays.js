@@ -106,10 +106,10 @@ export const OVERLAYS = [
   },
   {
     key: 'entertainment', name: 'Entertainment',
-    show: (b) => b.def.kind === 'venue' || b.def.kind === 'training',
-    // The score the home had at its last daily check (80 = the top level's need).
-    house: (b) => Math.min(1, ((b.house.levels && b.house.levels.ent) || 0) / 80),
-    walkers: ['entertainer', 'performer'],
+    show: (b) => b.def.kind === 'venue' || b.def.kind === 'training' || b.def.kind === 'part', // (part: the hippodrome's other sections)
+    // The score the home had at its last daily check (95 = the top level's need).
+    house: (b) => Math.min(1, ((b.house.levels && b.house.levels.ent) || 0) / 95),
+    walkers: ['entertainer', 'charioteer', 'performer'],
   },
   {
     key: 'education', name: 'Education',
@@ -146,9 +146,9 @@ export const OVERLAYS = [
   },
   {
     key: 'food', name: 'Food supply',
-    show: (b) => b.type === 'market' || b.type === 'granary' || b.def.kind === 'farm',
+    show: (b) => b.type === 'market' || b.type === 'granary' || b.def.kind === 'farm' || b.def.kind === 'wharf' || b.def.kind === 'shipyard',
     house: (b) => FOOD_TYPES.reduce((n, f) => n + (b.house.food[f] > 0.01 ? 1 : 0), 0) / 3,
-    walkers: ['vendor', 'buyer', 'cart'],
+    walkers: ['vendor', 'buyer', 'cart', 'fishing_boat'],
   },
   {
     key: 'tax', name: 'Tax collection',

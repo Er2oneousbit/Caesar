@@ -10,7 +10,7 @@
  *                (deliver/collect), then returns home. (carts, market buyers)
  *     'traveler' walks to a destination and disappears there.
  *                (immigrants, emigrants, performers, caravans)
- *     'ship'     sails over navigable water, not roads. (merchant ships)
+ *     'ship'     sails over water, not roads. (merchant ships, fishing boats)
  *     'criminal' bred by an unhappy home (sim/crime.js): stands in the street,
  *                sneaks to the Forum, or (rioters) crosses open land.
  *                (protesters, thieves, rioters)
@@ -18,6 +18,7 @@
  *   group:     roamers: which roadblock permission lets them pass (ROADBLOCK_GROUPS)
  *   tunic/skin/item: drawing hints for render/walkerArt.js
  *   roam:      tiles walked before turning home (roamers only)
+ *   speed:     x WALKER_SPEED (default 1)
  * ----------------------------------------------------------------------------
  */
 
@@ -32,6 +33,8 @@ export const WALKER_TYPES = Object.freeze({
   physician: { name: 'Physician', kind: 'roamer', group: 'health', effect: 'clinic', tunic: '#3f8f5a', item: 'bag', roam: 26, desc: 'Treats the sick in their homes.' },
   bather: { name: 'Bath Attendant', kind: 'roamer', group: 'health', effect: 'baths', tunic: '#5fa8c8', item: 'towel', roam: 24, desc: 'Invites citizens to the public baths.' },
   entertainer: { name: 'Entertainer', kind: 'roamer', group: 'entertainment', effect: 'venue', tunic: '#d4573b', item: 'mask', roam: 26, desc: 'Announces shows at the local venue.' },
+  // Twice as fast and twice as far as the other entertainers, as in the original.
+  charioteer: { name: 'Charioteer', kind: 'roamer', group: 'entertainment', effect: 'venue', tunic: '#2f6db5', item: 'chariot', roam: 52, speed: 2, desc: 'Drives a racing chariot through the streets to bring people to the races.' },
   taxman: { name: 'Tax Collector', kind: 'roamer', group: 'tax', effect: 'tax', tunic: '#3d3d6b', item: 'purse', roam: 30, desc: 'Registers households for taxation.' },
   vendor: { name: 'Market Vendor', kind: 'roamer', group: 'market', effect: 'market', tunic: '#b86b2a', item: 'basket', roam: 30, desc: 'Sells food and goods door to door.' },
 
@@ -45,6 +48,7 @@ export const WALKER_TYPES = Object.freeze({
   recruit: { name: 'Recruit', kind: 'traveler', tunic: '#a8322b', item: 'spear', desc: 'A freshly trained soldier marching to his fort.' },
   caravan: { name: 'Trade Caravan', kind: 'traveler', tunic: '#6b4a2a', item: 'mule', desc: 'Merchants from a distant city, travelling overland.' },
   ship: { name: 'Merchant Ship', kind: 'ship', tunic: '#6b4a2a', item: null, desc: 'A trading ship on a sea route. Sails from the map edge to a Dock and back.' },
+  fishing_boat: { name: 'Fishing Boat', kind: 'ship', tunic: '#7a5a3a', item: 'net', desc: 'Built at a Shipyard, it works for one Fishing Wharf: out to the fishing grounds, 4 days with the nets, home with 100 fish.' },
 
   // Unhappy homes breed these (sim/crime.js). Prefects and soldiers catch them.
   protester: { name: 'Protester', kind: 'criminal', tunic: '#8a7a62', item: 'placard', desc: 'An unhappy citizen airing his grievances in the street. Harmless, but a sign of unrest.' },

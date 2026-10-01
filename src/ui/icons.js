@@ -7,6 +7,7 @@
  * ----------------------------------------------------------------------------
  */
 
+import { HALF_W, HALF_H } from '../config.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { buildingSpec } from '../render/buildingArt.js';
 import { roadSpec, plazaSpec, aqueductSpec, bridgeSpec, waterTileSpec, groundTileSpec, roadblockSpec } from '../render/terrainArt.js';
@@ -26,6 +27,18 @@ function specsFor(key) {
     case 'wall': return [groundTileSpec(Terrain.GRASS, 1), wallSpec(2 | 8, false, false)];
     case 'clear': return null;
     case 'house': return [buildingSpec('house', 1, 1, 4)];
+    // Waterside buildings with their water edge to the lower right; the yard with a hull on its slip.
+    case 'shipyard': return [buildingSpec('shipyard', 2, 0, 1 + 4 * 2)];
+    case 'wharf': return [buildingSpec('wharf', 2, 0, 1 + 4)];
+    case 'hippodrome': {
+      // All three sections, each a tile-row of 5 further along x.
+      const parts = [0, 1, 2].map((s) => buildingSpec(s ? 'hippodrome_part' : 'hippodrome', 5, 0, s));
+      const dx = 5 * HALF_W;
+      const dy = 5 * HALF_H;
+      return [{ ...parts[0], w: parts[0].w + 2 * dx, h: parts[0].h + 2 * dy, draw(ctx) {
+        parts.forEach((p, s) => { ctx.save(); ctx.translate(s * dx, s * dy); p.draw(ctx); ctx.restore(); });
+      } }];
+    }
     default: {
       const def = BUILDINGS[key];
       if (!def) return null;

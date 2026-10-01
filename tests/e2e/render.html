@@ -30,7 +30,7 @@
   import { buildDemoCity, buildDemoGarrison } from '../../src/dev/demoCity.js';
   import { Renderer } from '../../src/render/renderer.js';
   import { launchInvasion } from '../../src/sim/military.js';
-  import { buildDemoHarbor } from '../../src/dev/demoCity.js';
+  import { buildDemoHarbor, buildDemoFishery, buildDemoHippodrome } from '../../src/dev/demoCity.js';
   import { planAction } from '../../src/sim/construction.js';
   import { addBuilding } from '../../src/sim/entities.js';
   import { HOUSE_TIERS } from '../../src/data/housing.js';
@@ -77,6 +77,27 @@
         if (ship) { harbor.ship = { x: ship.x, y: ship.y, state: ship.state }; break; }
       }
       harbor = { dock: { x: harbor.dock.x, y: harbor.dock.y, side: harbor.dock.waterSide }, ship: harbor.ship, routes: harbor.routes };
+    }
+  }
+  // fishing=1: a shipyard and two wharves on the nearest water with fish, run
+  // `fishDays` (default 60) so the boats are out; the view on the first wharf.
+  let fishery = null;
+  if (q.get('fishing') && res.center) {
+    const f = buildDemoFishery(game, res.center);
+    game.runDays(Number(q.get('fishDays') || 60));
+    if (f.wharves[0]) focus = { x: f.wharves[0].x, y: f.wharves[0].y };
+    fishery = { ok: f.ok, wharves: f.wharves.length, boats: [...game.walkers.values()].filter((w) => w.type === 'fishing_boat').map((w) => w.state), grounds: game.map.fishingGrounds.length };
+  }
+  // hippodrome=1: a hippodrome and a chariot maker, races booked; the view on the track.
+  let hippodrome = null;
+  if (q.get('hippodrome') && res.center) {
+    const hip = buildDemoHippodrome(game, res.center);
+    if (hip.hippodrome) {
+      game.runDays(Number(q.get('hipDays') || 30));
+      const main = game.buildings.get(hip.hippodrome.id);
+      if (main) { main.shows.hippodrome = Math.max(main.shows.hippodrome, 20); main.efficiency = Math.max(main.efficiency, 0.5); } // races on, for the picture
+      focus = { x: hip.hippodrome.x + 7, y: hip.hippodrome.y + 2 };
+      hippodrome = { ok: !!main, maker: !!hip.maker, races: main ? main.shows.hippodrome : 0 };
     }
   }
   const simMs = performance.now() - t0;
@@ -236,7 +257,7 @@
   r.weather.update = () => {}; // keep it as set for the picture
   r.render(0, 0.016);
   r.render(0.5, 0.016);
-  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, focus, coverage: r.stats.coverage, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
+  window.__result = { ok: res.ok, reason: res.reason, farms: res.farms, battle, harbor, fishery, hippodrome, focus, coverage: r.stats.coverage, simMs, renderMs: r.stats.ms, objects: r.stats.objects, pop: game.city.population, buildings: game.buildings.size, walkers: game.walkers.size, tiers: game.city.tierCounts };
   window.__done = true;
 </script>
 </body>

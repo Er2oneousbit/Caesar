@@ -10,7 +10,8 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome } from '../dev/demoCity.js';
+import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
@@ -42,6 +43,9 @@ export const CONSOLE_HELP = [
   ['sick [id | x y]', 'The home under the cursor (or #id, or at x,y; else the one at most risk) falls sick now'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
+  ['fishing', 'Build a shipyard, two fishing wharves and a granary on the nearest water with fish'],
+  ['grounds', 'List the fishing grounds, and every wharf and its boat'],
+  ['hippodrome', 'Build a hippodrome and a chariot maker beside the city'],
   ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
   ['army', 'List forts, soldiers, barracks stock and the raid schedule'],
   ['win', 'Trigger victory'],
@@ -236,6 +240,31 @@ export class DebugConsole {
         const res = buildDemoHarbor(g, center);
         if (res.dock) app.renderer.camera.centerOnTile(res.dock.x, res.dock.y);
         return res.ok ? `Harbor built; sea routes opened: ${res.routes.join(', ') || 'none in this scenario'}.` : 'No navigable shore near the city (try a river or coast map).';
+      }
+      case 'fishing':
+      case 'hippodrome': {
+        need();
+        const center = cityCenter(g);
+        if (!center) return 'Build some homes first (try: demo 2).';
+        if (cmd === 'fishing') {
+          const res = buildDemoFishery(g, center);
+          if (res.shipyard) app.renderer.camera.centerOnTile(res.shipyard.x, res.shipyard.y);
+          return res.ok ? `Fishing quarter built: a shipyard, ${res.wharves.length} wharves${res.granary ? ' and a granary' : ''}. The first boat comes in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff.` : 'No water with fishing grounds near the city (try a coast or river map).';
+        }
+        const res = buildDemoHippodrome(g, center);
+        if (res.hippodrome) app.renderer.camera.centerOnTile(res.hippodrome.x + 7, res.hippodrome.y + 2);
+        return res.hippodrome ? `Hippodrome built${res.maker ? ', with a chariot maker' : ' (no room for a chariot maker)'}.` : 'No room for a hippodrome (15 x 5 clear tiles) near the city, or there is one already.';
+      }
+      case 'grounds': {
+        need();
+        const lines = g.map.fishingGrounds.map((gr, n) => `Ground ${n + 1} at ${gr.x},${gr.y} (water #${gr.body})`);
+        if (!lines.length) lines.push('No fishing grounds on this map (no river, sea or lake of 80+ tiles).');
+        for (const b of g.buildings.values()) {
+          if (b.def.kind !== 'wharf') continue;
+          const boat = wharfBoat(g, b);
+          lines.push(`Wharf #${b.id} at ${b.x},${b.y}: ${boat ? boatStatus(g, b) : 'no boat'}, ${b.stock.fish || 0} fish, ${b.catches || 0} catches, staff ${Math.round(b.efficiency * 100)}%`);
+        }
+        return lines.join('\n');
       }
       case 'invade': {
         need();

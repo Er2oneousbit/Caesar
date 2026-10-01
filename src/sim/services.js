@@ -13,9 +13,9 @@
  */
 
 import { CONFIG } from '../config.js';
-import { VENUE_BOTH_SHOWS } from '../data/buildings.js';
+import { VENUE_BOTH_SHOWS, SHOW_KINDS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
-import { spawnWalker } from './entities.js';
+import { spawnWalker, mainOf } from './entities.js';
 import { startRoaming } from './movement.js';
 import { vendorSupply } from './market.js';
 import { cureHome } from './disease.js';
@@ -36,8 +36,15 @@ export function roamerVisit(game, w) {
       const id = map.building[y * map.w + x];
       if (!id || seen.includes(id)) continue;
       seen.push(id);
-      const b = buildings.get(id);
-      if (b) applyEffect(game, def.effect, w, origin, b);
+      // A hippodrome's sections share its upkeep: a prefect or engineer
+      // passing any of them looks after the hippodrome.
+      const b = mainOf(game, buildings.get(id));
+      if (!b) continue;
+      if (b.id !== id) {
+        if (seen.includes(b.id)) continue;
+        seen.push(b.id);
+      }
+      applyEffect(game, def.effect, w, origin, b);
     }
   }
 }
@@ -107,10 +114,10 @@ export function venueHasBoth(venue, type) {
   return both.every((perf) => venue.shows[perf] > 0);
 }
 
-/** Is a venue currently booked with performances? */
+/** Is a venue currently booked with performances (or races, at the hippodrome)? */
 export function venueActive(b) {
   if (!b.shows) return false;
-  return b.shows.theater > 0 || b.shows.amphitheater > 0 || b.shows.colosseum > 0;
+  return SHOW_KINDS.some((k) => b.shows[k] > 0);
 }
 
 /**
@@ -130,6 +137,8 @@ export function updateServiceSpawns(game, b) {
   const init = {};
   if (def.god) init.god = def.god;
   if (def.kind === 'venue') init.venue = def.venue;
+  const speed = WALKER_TYPES[def.walker].speed;
+  if (speed) init.speed = CONFIG.WALKER_SPEED * speed; // the charioteer drives at twice walking pace
   const w = spawnWalker(game, def.walker, b.accessRoad, b, init);
   if (w) {
     b.roamDir = ((b.roamDir || 0) + 1) % 4;

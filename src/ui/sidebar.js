@@ -106,7 +106,7 @@ export class Sidebar {
     if (!def) return;
     const facts = [];
     if (def.cost) facts.push(`${def.cost} Dn${TOOLS[key] && TOOLS[key].drag !== 'single' ? ' / tile' : ''}`);
-    if (def.size) facts.push(`${def.size}×${def.size}`);
+    if (def.size) facts.push(`${def.size * (def.span || 1)}×${def.size}`); // (the hippodrome: 15x5)
     if (def.workers) facts.push(`${def.workers} workers (${LABOR_CATEGORIES[def.labor] || 'Industry'})`);
     this.planEl = h('div', {});
     mount(this.infoEl,

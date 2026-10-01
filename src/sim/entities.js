@@ -11,7 +11,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { BUILDINGS } from '../data/buildings.js';
+import { BUILDINGS, SHOW_KINDS } from '../data/buildings.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { FOOD_TYPES, HOUSE_GOODS, GOOD_KEYS, emptyStock } from '../data/goods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
@@ -32,7 +32,7 @@ export function newHouseData(variant = 0) {
     goods: emptyStock(HOUSE_GOODS),
     // Service access timers (days remaining). >0 means the house has access.
     religion: Object.fromEntries(GOD_KEYS.map((k) => [k, 0])),
-    ent: { theater: 0, amphitheater: 0, colosseum: 0 },
+    ent: { theater: 0, amphitheater: 0, colosseum: 0, hippodrome: 0 },
     // Days left of a visit from a venue that had both of its kinds of show
     // booked (worth extra entertainment, see VENUE_BOTH_BONUS).
     entBoth: { amphitheater: 0, colosseum: 0 },
@@ -133,6 +133,7 @@ function initKind(b, def) {
       break;
     case 'farm':
     case 'raw':
+    case 'wharf':
       b.stock = { [def.produces]: 0 };
       if (def.produces === 'horses') {
         b.herd = HERD_START; // breeding mares (see data/units.js)
@@ -162,11 +163,45 @@ function initKind(b, def) {
       b.shipId = 0; // walker id of the ship tied up here (or on its way)
       break;
     case 'venue':
-      b.shows = { theater: 0, amphitheater: 0, colosseum: 0 };
+      b.shows = Object.fromEntries(SHOW_KINDS.map((k) => [k, 0]));
       break;
     default:
       break;
   }
+}
+
+/**
+ * The ground a building covers: a square of `size`, or for a building in
+ * sections (the hippodrome, `span` 3) the whole row of them along x.
+ */
+export function footprintRect(b) {
+  const span = b.def.span || 1;
+  return { x: b.x, y: b.y, w: b.size * span, h: b.size };
+}
+
+/**
+ * Every building of a linked group (a hippodrome and its two parts, main
+ * first), or just [b]. A part points at its main by `main`; the main lists
+ * its parts in `parts`.
+ */
+export function linkedGroup(game, b) {
+  const main = b.main ? game.buildings.get(b.main) : b;
+  if (!main) return [b];
+  if (!main.parts || !main.parts.length) return [main];
+  return [main, ...main.parts.map((id) => game.buildings.get(id)).filter(Boolean)];
+}
+
+/** The building that does the work for this one: a hippodrome part's main section, or itself. */
+export function mainOf(game, b) {
+  if (!b || !b.main) return b;
+  return game.buildings.get(b.main) || b;
+}
+
+/** Tile indices of every building in b's linked group. */
+export function groupTiles(game, b) {
+  const out = [];
+  for (const x of linkedGroup(game, b)) out.push(...footprintTiles(game.map, x.x, x.y, x.size));
+  return out;
 }
 
 /** Iterate the tile indices of a footprint. */
@@ -180,16 +215,19 @@ export function footprintTiles(map, x, y, size) {
   return out;
 }
 
-/** Tiles orthogonally adjacent to a footprint (its perimeter ring, no corners). */
-export function perimeterTiles(map, x, y, size) {
+/**
+ * Tiles orthogonally adjacent to a footprint (its perimeter ring, no corners).
+ * `h`: the footprint's height when it is not square (w = size along x).
+ */
+export function perimeterTiles(map, x, y, size, h = size) {
   const out = [];
-  for (let d = 0; d < size; d++) {
-    const cand = [
-      [x + d, y - 1],
-      [x + size, y + d],
-      [x + d, y + size],
-      [x - 1, y + d],
-    ];
+  const w = size;
+  for (let d = 0; d < Math.max(w, h); d++) {
+    const cand = [];
+    if (d < w) cand.push([x + d, y - 1]);
+    if (d < h) cand.push([x + w, y + d]);
+    if (d < w) cand.push([x + d, y + h]);
+    if (d < h) cand.push([x - 1, y + d]);
     for (const [tx, ty] of cand) if (map.inBounds(tx, ty)) out.push(map.idx(tx, ty));
   }
   return out;
@@ -225,7 +263,9 @@ export function computeAccessRoad(game, b) {
     b.accessRoad = best;
     return best;
   }
-  for (const i of perimeterTiles(map, b.x, b.y, b.size)) {
+  // A building in sections (the hippodrome) takes a road beside any of them.
+  const r = footprintRect(b);
+  for (const i of perimeterTiles(map, r.x, r.y, r.w, r.h)) {
     if (!map.road[i]) continue;
     if (!off(i)) { b.accessRoad = i; break; } // on the city's network: done
     if (b.accessRoad < 0) b.accessRoad = i; // else remember the first road, as a fallback
@@ -268,6 +308,8 @@ export function addBuilding(game, type, x, y, size, { quiet = false } = {}) {
 export function removeBuilding(game, b, reason = 'demolish') {
   if (!game.buildings.has(b.id)) return;
   const { map } = game;
+  // A hippodrome comes down whole: any of its sections takes the others with it.
+  const linked = b.main || (b.parts && b.parts.length) ? linkedGroup(game, b).filter((x) => x !== b) : [];
   for (const i of footprintTiles(map, b.x, b.y, b.size)) {
     if (map.building[i] === b.id) map.building[i] = 0;
   }
@@ -284,6 +326,7 @@ export function removeBuilding(game, b, reason = 'demolish') {
   game.markDirty('des', 'water');
   map.touch();
   game.events.emit('buildingRemoved', { building: b, reason });
+  for (const x of linked) removeBuilding(game, x, reason);
 }
 
 /** Turn a house's residents into homeless walkers. */

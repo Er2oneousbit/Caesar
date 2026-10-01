@@ -108,7 +108,7 @@ export function receiveGoods(b, good, amount, home = false) {
     b.stock[good] += amount; // markets never refuse what their own buyer brings
     return amount;
   }
-  if ((kind === 'farm' || kind === 'raw') && b.def.produces === good) {
+  if ((kind === 'farm' || kind === 'raw' || kind === 'wharf') && b.def.produces === good) {
     b.stock[good] += amount; // returned undeliverable cargo
     return amount;
   }

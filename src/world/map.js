@@ -12,6 +12,8 @@
  * ----------------------------------------------------------------------------
  */
 
+import { CONFIG } from '../config.js';
+
 /** Base terrain types. Stored in map.terrain. */
 export const Terrain = Object.freeze({
   GRASS: 0,
@@ -23,6 +25,7 @@ export const Terrain = Object.freeze({
 });
 
 export const TERRAIN_NAMES = ['Grass', 'Meadow', 'Forest', 'Rocks', 'Water', 'Sand'];
+
 
 /** Values stored in map.road */
 export const Road = Object.freeze({
@@ -94,9 +97,12 @@ export class GameMap {
     this.roadNet = new Int32Array(this.size); // road network component id (0 = no road)
     this.waterDist = new Uint8Array(this.size); // distance to nearest water tile (capped 255)
     this.navigable = new Uint8Array(this.size); // 1 = water that ships can sail (reaches the map edge)
+    this.fishBody = new Int32Array(this.size); // water body with fish (1, 2, ...), 0 = land or a pond (computeFishing)
 
     /** Edge water tile where merchant ships appear and leave, or null (no sea access). */
     this.seaEntry = null;
+    /** Fishing grounds { x, y, body } (computeFishing): derived from the terrain, never saved. */
+    this.fishingGrounds = [];
 
     /** Entry/exit tiles for the imperial road (set by mapgen). */
     this.entry = { x: 0, y: 0 };
@@ -221,6 +227,125 @@ export class GameMap {
       this.seaEntry = { x: mid % w, y: (mid / w) | 0 };
     }
     return !!best;
+  }
+
+  /**
+   * Water with fish, and its fishing grounds. Like navigable water, they
+   * depend only on the terrain, which never changes after generation, so
+   * they are derived at every new game and load and never saved (old saves
+   * get them too). No random draws: the map generator's random stream is
+   * untouched, so every map stays as it was.
+   *
+   *   1. Fishing water: every body of water (tiles joined side to side) of
+   *      at least FISH_BODY_MIN tiles. Rivers, coasts and big lakes; not ponds.
+   *   2. Each water tile's distance from land (Chebyshev, so 2 or more means
+   *      all 8 neighbours are water). Grounds lie best 3 to 6 tiles out, not
+   *      at the map's edge:
+   *      open water, but not so far that boats spend the day sailing. A
+   *      narrow river gets its widest spots.
+   *   3. One ground per FISH_TILES_PER_GROUND tiles of a body, 1 to
+   *      FISH_GROUNDS_PER_BODY, at least FISH_GROUND_SPACING apart; at most
+   *      FISH_GROUNDS_MAX on the map, bigger bodies first. A body left with
+   *      no ground is not fishing water (fishBody 0), like a pond.
+   *   4. Ties: the tile's variant byte (random, saved, stable), then its index.
+   */
+  computeFishing(cfg = CONFIG) {
+    const { w, h, size } = this;
+    const body = this.fishBody;
+    body.fill(0);
+    this.fishingGrounds = [];
+    const isWater = (i) => this.terrain[i] === Terrain.WATER;
+    // 1. Bodies of water (4-connected), in tile order.
+    const label = new Int32Array(size);
+    const queue = new Int32Array(size);
+    const bodies = [];
+    for (let start = 0; start < size; start++) {
+      if (!isWater(start) || label[start]) continue;
+      const id = bodies.length + 1;
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = start;
+      label[start] = id;
+      while (head < tail) {
+        const i = queue[head++];
+        const x = i % w;
+        const y = (i / w) | 0;
+        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) {
+          if (j >= 0 && !label[j] && isWater(j)) { label[j] = id; queue[tail++] = j; }
+        }
+      }
+      bodies.push({ id, tiles: Array.from(queue.subarray(0, tail)) });
+    }
+    // 2. Distance from land (8-connected BFS from every land tile).
+    const dist = new Uint8Array(size).fill(255);
+    let head = 0;
+    let tail = 0;
+    for (let i = 0; i < size; i++) if (!isWater(i)) { dist[i] = 0; queue[tail++] = i; }
+    while (head < tail) {
+      const i = queue[head++];
+      const x = i % w;
+      const y = (i / w) | 0;
+      const d = dist[i] + 1;
+      if (d > 254) continue;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if ((dx || dy) && nx >= 0 && ny >= 0 && nx < w && ny < h && dist[ny * w + nx] > d) { dist[ny * w + nx] = d; queue[tail++] = ny * w + nx; }
+        }
+      }
+    }
+    // How good a spot is (lower is better): 3 to 6 tiles from the shore is
+    // best; within 3 tiles of the map's edge only if nothing else will do
+    // (out there the water runs on off the map, far from any wharf).
+    const score = (i) => {
+      const d = dist[i];
+      const x = i % w;
+      const y = (i / w) | 0;
+      const edge = Math.min(x, y, w - 1 - x, h - 1 - y) < 3 ? 1000 : 0;
+      return edge + (d >= 3 && d <= 6 ? 0 : d > 6 ? d - 6 : 100 - d);
+    };
+    // 3. Bigger bodies first (ties: the first in tile order).
+    const fishing = bodies.filter((b) => b.tiles.length >= cfg.FISH_BODY_MIN).sort((a, b) => b.tiles.length - a.tiles.length || a.id - b.id);
+    let n = 0;
+    for (const b of fishing) {
+      const want = Math.max(1, Math.min(cfg.FISH_GROUNDS_PER_BODY, Math.floor(b.tiles.length / cfg.FISH_TILES_PER_GROUND)));
+      const cand = b.tiles.slice().sort((p, q) => score(p) - score(q) || this.variant[p] - this.variant[q] || p - q);
+      const mine = [];
+      for (const i of cand) {
+        if (mine.length >= want || n >= cfg.FISH_GROUNDS_MAX) break;
+        const x = i % w;
+        const y = (i / w) | 0;
+        if (mine.some((g) => Math.max(Math.abs(g.x - x), Math.abs(g.y - y)) < cfg.FISH_GROUND_SPACING)) continue;
+        mine.push({ x, y, body: b.id });
+        n++;
+      }
+      // Water left without a ground (the map's 8 were taken by bigger
+      // waters) has no fish worth a boat, like a pond: no shipyard or wharf
+      // there, so no boat is built that could never fish.
+      if (!mine.length) continue;
+      for (const i of b.tiles) body[i] = b.id;
+      this.fishingGrounds.push(...mine);
+    }
+    return this.fishingGrounds.length;
+  }
+
+  /** Fishing grounds on water body `id`. */
+  groundsOf(id) {
+    return id ? this.fishingGrounds.filter((g) => g.body === id) : [];
+  }
+
+  /**
+   * First water tile with fish orthogonally beside a footprint (where a
+   * wharf's boat moors, or a shipyard launches), or -1.
+   */
+  fishWaterBeside(x, y, S) {
+    for (let d = 0; d < S; d++) {
+      for (const [tx, ty] of [[x + d, y - 1], [x + S, y + d], [x + d, y + S], [x - 1, y + d]]) {
+        if (this.inBounds(tx, ty) && this.fishBody[this.idx(tx, ty)]) return this.idx(tx, ty);
+      }
+    }
+    return -1;
   }
 
   /**
@@ -350,6 +475,7 @@ export class GameMap {
     m.computeWaterDistance();
     m.computeRoadNetworks();
     m.computeNavigation();
+    m.computeFishing();
     return m;
   }
 }

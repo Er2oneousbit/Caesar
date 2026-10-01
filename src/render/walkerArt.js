@@ -18,6 +18,7 @@ import { GOODS } from '../data/goods.js';
 import { GODS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { cartCapacity, isWagon, cargoLevel, horsesLed, drawCargo, LED_GOODS } from './cargoArt.js';
+import { chariotBody } from './hippodromeArt.js';
 
 const SKIN = ['#e3b68c', '#c99a6b', '#a8784e', '#f0caa2', '#b98a5e'];
 const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
@@ -40,6 +41,7 @@ const STEP_RAD = Math.PI * 2 * 0.8;
  */
 export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked || 0, origin = null) {
   const def = WALKER_TYPES[w.type];
+  if (w.type === 'fishing_boat') { drawFishingBoat(ctx, w, sx, sy, k, t, dirX); return; }
   if (def.kind === 'ship') { drawShip(ctx, w, sx, sy, k, t, dirX); return; }
   const moving = w.moving;
   // Legs step with the distance walked, so they match the ground speed at any
@@ -47,6 +49,12 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
   const step = stride * STEP_RAD + w.anim;
   const phase = moving ? Math.sin(step) : 0;
   const face = dirX < 0 ? -1 : 1;
+  // A charioteer drives: the hippodrome's through the streets, a chariot
+  // maker's team on its way to the races.
+  if (def.item === 'chariot' || (w.type === 'performer' && w.venue === 'hippodrome')) {
+    drawChariot(ctx, sx, sy, k, face, phase, def.tunic && w.type === 'charioteer' ? def.tunic : '#b8573a', w.id);
+    return;
+  }
   const tunic = w.type === 'priest' && w.god ? GODS[w.god].color : def.tunic;
   const skin = SKIN[w.id % SKIN.length];
   const item = w.mule ? 'mule' : def.item;
@@ -447,6 +455,128 @@ function drawMule(ctx, cx, cy, k, face, phase, rider = false, packs = undefined)
   ctx.fillRect(cx - 4 * k, cy - 11 * k, 7 * k, 3.5 * k);
   ctx.fillStyle = '#9b5a3a';
   ctx.fillRect(cx - 3 * k, cy - 13 * k, 5 * k, 2 * k);
+}
+
+/**
+ * A racing chariot and its team of two horses, galloping, the driver
+ * standing in the car with the reins (his tunic in his faction's colour).
+ * Exported for the hippodrome's races (renderer) and the art sheet.
+ */
+export function drawChariot(ctx, sx, sy, k, face, phase, color, id = 0) {
+  // the horses, side by side ahead of the car (the far one first)
+  const coats = HORSE_COATS;
+  drawHorse(ctx, sx + face * 10.5 * k, sy - 1.6 * k, k, face, -phase, coats[(id + 1) % coats.length]);
+  drawHorse(ctx, sx + face * 9.5 * k, sy, k, face, phase, coats[id % coats.length]);
+  chariotBody(ctx, sx, sy, k, color);
+  // the driver, leaning forward with the reins
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(sx - 2 * k, sy - 9 * k);
+  ctx.lineTo(sx + 1.6 * k, sy - 9 * k);
+  ctx.lineTo(sx + 2.2 * k + face * 0.8 * k, sy - 15 * k);
+  ctx.lineTo(sx - 1.2 * k + face * 0.8 * k, sy - 15 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = SKIN[id % SKIN.length];
+  ctx.beginPath(); ctx.arc(sx + face * 1.2 * k, sy - 17 * k, 2.1 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#d6ab3c'; // a leather cap
+  ctx.beginPath(); ctx.arc(sx + face * 1.2 * k, sy - 17.6 * k, 2.1 * k, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = '#3a2a1e';
+  ctx.lineWidth = 0.5 * k;
+  ctx.beginPath(); ctx.moveTo(sx + face * 2.5 * k, sy - 12.5 * k); ctx.lineTo(sx + face * 14.5 * k, sy - 12 * k); ctx.stroke();
+}
+
+/**
+ * Fishing boat: a small open boat with a short mast and a triangular sail
+ * while it sails, the fisherman in the stern and the net: heaped in the bow
+ * on the way, cast over the side (a ring of floats on the water) while it
+ * fishes, and a basket of the catch on the way home.
+ */
+function drawFishingBoat(ctx, w, sx, sy, k0, t, dirX) {
+  const k = k0 * 1.05;
+  const f = dirX < 0 ? -1 : 1;
+  const y = sy + Math.sin(t * 2.4 + w.id) * 0.6 * k;
+  const X = (dx) => sx + dx * f * k;
+  const Y = (dy) => y + dy * k;
+  const fishing = w.state === 'fishing';
+  const moored = w.state === 'moored' || w.state === 'spare';
+  if (fishing) {
+    // the net in the water beside the boat: a ring of cork floats
+    ctx.strokeStyle = 'rgba(60,50,40,0.45)';
+    ctx.lineWidth = 0.6 * k;
+    ctx.beginPath(); ctx.ellipse(X(-2), Y(4), 13 * k, 4.2 * k, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#e0c060';
+    for (let n = 0; n < 9; n++) {
+      const a = (Math.PI * 2 * n) / 9 + Math.sin(t + n) * 0.05;
+      ctx.fillRect(X(-2) + Math.cos(a) * 13 * k - 0.8 * k, Y(4) + Math.sin(a) * 4.2 * k - 0.6 * k, 1.6 * k, 1.2 * k);
+    }
+  } else if (!moored) {
+    // a small wake
+    ctx.fillStyle = 'rgba(235,245,255,0.3)';
+    ctx.beginPath(); ctx.ellipse(sx, sy + 1 * k, 10 * k, 2.4 * k, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // the hull
+  ctx.fillStyle = '#6e4a2c';
+  ctx.beginPath();
+  ctx.moveTo(X(-8), Y(-4.5));
+  ctx.lineTo(X(7), Y(-4.5));
+  ctx.lineTo(X(10), Y(-7));
+  ctx.lineTo(X(8), Y(-1));
+  ctx.lineTo(X(4), Y(0.5));
+  ctx.lineTo(X(-6), Y(0.5));
+  ctx.lineTo(X(-9), Y(-3));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#a07a50'; // the rail
+  ctx.fillRect(Math.min(X(-8), X(7)), Y(-4.9), 15 * k, 1 * k);
+  ctx.fillStyle = '#3d6f8f'; // a painted eye on the bow, against the evil eye
+  ctx.fillRect(X(7.2) - 0.6 * k, Y(-3.6), 1.2 * k, 1 * k);
+  // the catch, or the net heaped in the bow
+  if (w.state === 'homeWithCatch') {
+    ctx.fillStyle = '#b08850';
+    ctx.fillRect(X(2) - 2.5 * k, Y(-7.2), 5 * k, 2.6 * k);
+    ctx.fillStyle = '#b9c9cf';
+    ctx.beginPath(); ctx.ellipse(X(2), Y(-7.4), 2.4 * k, 0.8 * k, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (!fishing) {
+    ctx.fillStyle = 'rgba(80,70,55,0.9)';
+    ctx.beginPath(); ctx.ellipse(X(3.5), Y(-5.6), 2.8 * k, 1.3 * k, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e0c060';
+    ctx.fillRect(X(3) - 0.6 * k, Y(-6.6), 1.2 * k, 0.9 * k);
+  }
+  // mast, and the sail while under way
+  ctx.fillStyle = '#4a3222';
+  ctx.fillRect(X(-0.5) - 0.45 * k, Y(-19), 0.9 * k, 14.5 * k);
+  if (!fishing && !moored) {
+    ctx.fillStyle = '#e9dfc6';
+    ctx.beginPath();
+    ctx.moveTo(X(-0.5), Y(-19));
+    ctx.quadraticCurveTo(X(5), Y(-12), X(6), Y(-6.5));
+    ctx.lineTo(X(-0.5), Y(-6.5));
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(160,90,60,0.6)';
+    ctx.fillRect(Math.min(X(-0.5), X(4)), Y(-10), 4.2 * k, 0.9 * k);
+  }
+  // the fisherman in the stern: hauling the net over the side while fishing
+  const skin = SKIN[w.id % SKIN.length];
+  const fx = X(-5);
+  const lean = fishing ? Math.sin(t * 3 + w.id) * 0.8 : 0;
+  ctx.fillStyle = '#7a5a3a';
+  ctx.fillRect(fx - 1.8 * k, Y(-10.5), 3.6 * k, 5.6 * k);
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(fx + f * lean * k, Y(-12.2), 1.7 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = skin;
+  ctx.lineWidth = 0.9 * k;
+  ctx.beginPath();
+  ctx.moveTo(fx, Y(-9.5));
+  if (fishing) ctx.lineTo(fx - f * (3 + lean) * k, Y(-5.5));
+  else ctx.lineTo(fx - f * 2.5 * k, Y(-7)); // a hand on the steering oar
+  ctx.stroke();
+  if (!fishing) {
+    ctx.strokeStyle = '#3a2618';
+    ctx.lineWidth = 0.8 * k;
+    ctx.beginPath(); ctx.moveTo(X(-7.5), Y(-6)); ctx.lineTo(X(-10.5), Y(0.5)); ctx.stroke();
+  }
 }
 
 /**

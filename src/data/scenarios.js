@@ -35,6 +35,7 @@
 
 import { CONFIG } from '../config.js';
 import { DIFFICULTY, difficultyOf } from './difficulty.js';
+import { BUILDINGS, TOOLS } from './buildings.js';
 
 /**
  * Trade partners.
@@ -103,7 +104,15 @@ const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'eng
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school'];
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock',
-  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall'];
+  'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'tower', 'wall', 'shipyard', 'wharf'];
+/**
+ * Missions 5 and 6: every building and tool but the hippodrome and its
+ * chariot maker, which wait for the last mission's great city (only it asks
+ * for Palatia, where the hippodrome matters; earlier it would only make the
+ * missions easier).
+ */
+const HIPPODROME_KEYS = ['hippodrome', 'hippodrome_part', 'chariot_maker'];
+const ALL_BUT_HIPPODROME = [...Object.keys(TOOLS), ...Object.keys(BUILDINGS)].filter((k) => !HIPPODROME_KEYS.includes(k));
 
 export const SCENARIOS = Object.freeze([
   {
@@ -180,7 +189,7 @@ export const SCENARIOS = Object.freeze([
     funds: 9000, startYear: -225,
     goals: { population: 6500, culture: 60, prosperity: 50, peace: 60, favor: 55 },
     paceYears: 7.8,
-    unlocks: 'all', partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
+    unlocks: ALL_BUT_HIPPODROME, partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
     military: { first: 48, interval: [22, 32], base: 6 },
     hints: [
       'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity.',
@@ -195,7 +204,7 @@ export const SCENARIOS = Object.freeze([
     funds: 10000, startYear: -210,
     goals: { population: 7000, culture: 60, prosperity: 55, peace: 65, favor: 60 },
     paceYears: 8.5,
-    unlocks: 'all', partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
+    unlocks: ALL_BUT_HIPPODROME, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
     military: { first: 42, interval: [20, 30], base: 6 },
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
@@ -211,6 +220,7 @@ export const SCENARIOS = Object.freeze([
     hints: [
       'Palatia need four gods, a Medicus and a Valetudinarium, wine from two sources (a staffed winery and an import route) and plenty of shows.',
       'A Senate adds to culture and prosperity. Expect regular raids: walls with gates, towers and a mixed army keep the capital safe.',
+      'The Hippodrome (one per city, 15 x 5 tiles) races chariots from a Chariot Maker: its charioteers bring 30 entertainment to the homes they pass, and every home gains a little more.',
     ],
   },
 ]);

@@ -59,7 +59,8 @@ import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, pl
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor, templeAltar } from './buildingArt.js';
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
 import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
-import { drawWalker } from './walkerArt.js';
+import { drawWalker, drawChariot } from './walkerArt.js';
+import { drawGulls } from './waterArt.js';
 import { Effects, drawFlames, drawSpray, drawGlint } from './effects.js';
 import { Ambient } from './ambient.js';
 import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.js';
@@ -695,6 +696,9 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.effects.draw(ctx, cam);
 
+    // --- gulls over the fishing grounds (where wharves' boats go) ----------
+    this.drawFishingGrounds(motion);
+
     // --- ambient: cloud shadows and birds over the city --------------------
     if (this.ambientOn) {
       // Cloud shade needs sunshine; birds stay home at night and in the rain.
@@ -1079,6 +1083,8 @@ export class Renderer {
     if (this.camera.zoom < 0.75 || rise) return; // the rest is too small to see when zoomed out
     if (kind === 'market' && b.efficiency > 0 && hasStock(b)) {
       items.push({ d: front + 0.0004, kind: K_EXTRA, b, wx, wy, live: 'market' });
+    } else if (kind === 'venue' && b.def.venue === 'hippodrome') {
+      if (this.motionOn && b.shows && b.shows.hippodrome > 0 && b.efficiency > 0) this.raceItems(b, items);
     } else if (kind === 'venue' && showOn(b)) {
       items.push({ d: front + 0.0003, kind: K_EXTRA, b, wx, wy, live: 'crowd' });
     } else if (b.type.startsWith('temple_')) {
@@ -1374,11 +1380,69 @@ export class Renderer {
   }
 
   /** Flat overlay footprints, stock displays, fountain spray and other live details. */
+  /**
+   * Races at the hippodrome (looks only): three chariots lapping the spina.
+   * Each is drawn just after the strip of its section's sprite that holds
+   * it (a strip is a screen column, drawn at its front tile's depth), so the
+   * track does not paint over it.
+   * Track coordinates as in hippodromeArt.js (U along the 15 tiles, v across).
+   */
+  raceItems(b, items) {
+    const A = 2.9;
+    const B = 12.1;
+    const R = 0.8;
+    const straight = B - A;
+    const arc = Math.PI * R;
+    const L = 2 * straight + 2 * arc;
+    const colors = ['#2f6db5', '#b8573a', '#3f8f5a'];
+    for (let n = 0; n < 3; n++) {
+      let s = ((this.time * (1.9 - n * 0.12) + n * 3.1) % L + L) % L;
+      let U;
+      let v;
+      let face;
+      if (s < straight) { U = B - s; v = 2.5 + R; face = -1; } else if ((s -= straight) < arc) {
+        const a = Math.PI / 2 + s / R;
+        U = A + Math.cos(a) * R * 1.2; v = 2.5 + Math.sin(a) * R; face = Math.sin(a) > 0 ? -1 : 1;
+      } else if ((s -= arc) < straight) { U = A + s; v = 2.5 - R; face = 1; } else {
+        const a = -Math.PI / 2 + (s - straight) / R;
+        U = B + Math.cos(a) * R * 1.2; v = 2.5 + Math.sin(a) * R; face = Math.sin(a) < 0 ? 1 : -1;
+      }
+      const x = b.x + U;
+      const y = b.y + v;
+      const sec = this.game.buildings.get(this.game.map.buildingAt(Math.floor(x), Math.floor(y))) || b;
+      const depths = this.stripsFor(sec);
+      const j = Math.floor(x) - Math.floor(y) - (sec.x - sec.y - sec.size);
+      const d = Math.max(depths[Math.max(0, Math.min(depths.length - 1, j - 1))], depths[Math.max(0, Math.min(depths.length - 1, j))]);
+      items.push({ d: d + 0.0008, kind: K_EXTRA, b, wx: (x - y) * HALF_W, wy: (x + y) * HALF_H, race: { face, color: colors[n], n } });
+    }
+  }
+
+  /** Gulls wheeling over each fishing ground in view (still with reduced motion). */
+  drawFishingGrounds(motion) {
+    const { ctx, camera: cam, game } = this;
+    const grounds = game.map.fishingGrounds;
+    if (!grounds || !grounds.length) return;
+    const k = cam.scale;
+    const t = motion ? this.time : 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    grounds.forEach((g, n) => {
+      const sx = ((g.x - g.y) * HALF_W - cam.x) * k;
+      const sy = ((g.x + g.y + 1) * HALF_H - cam.y) * k;
+      if (sx < -80 * k || sy < -80 * k || sx > cam.viewW + 80 * k || sy > cam.viewH + 80 * k) return;
+      drawGulls(ctx, sx, sy, k, t, n * 2.3 + g.x * 0.1);
+    });
+  }
+
   drawExtra(it) {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
     const b = it.b;
     const t = this.motionOn ? this.time : 0; // reduced motion: everything holds still
+    if (it.race) {
+      const phase = Math.sin(t * 16 + it.race.n * 2);
+      drawChariot(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k * 0.9, it.race.face, phase, it.race.color, b.id + it.race.n);
+      return;
+    }
     if (it.flags) {
       const ox = (it.wx - cam.x) * k;
       const oy = (it.wy - cam.y) * k;
@@ -1557,9 +1621,10 @@ export class Renderer {
     // tiles where one would (a corner does not count; homes, which take a
     // road within 2 tiles, are placed by area and only get the color).
     this.stats.ghostNoRoad = plan.items.some((it) => it.ok && it.noRoad);
-    if (plan.kind === 'building' && plan.items.length === 1 && plan.items[0].ok && plan.items[0].noRoad) {
+    if (plan.kind === 'building' && plan.items[0] && !plan.items.some((x) => !x.part && x !== plan.items[0]) && plan.items[0].ok && plan.items[0].noRoad) {
       const it = plan.items[0];
-      for (const e of accessEdgeTiles(game, it.x, it.y, it.size)) {
+      const span = plan.items.length; // a hippodrome: its sections in a row
+      for (const e of accessEdgeTiles(game, it.x, it.y, it.size * span, it.size)) {
         if (!e.open) continue;
         this.fillDiamond((e.x - e.y) * HALF_W, (e.x + e.y) * HALF_H, ROAD_EDGE_FILL);
         this.outlineFootprint(e.x, e.y, 1, ROAD_EDGE_LINE, 1.4);
@@ -1580,10 +1645,13 @@ export class Renderer {
         // Same sprite (and cache key) as a placed building of variant 0: live flags.
         // With no road in reach it is washed over in the warning color
         // (its own key, before the snow suffix that must stay last).
+        // `type`, `state`: a hippodrome's other sections, a waterside building's turn.
         const snow = this.pal.snow;
+        const type = it.type || plan.tool;
+        const st = it.state || 0;
         const spr = it.noRoad
-          ? this.sprites.get(`b:${plan.tool}:${it.size}:0:0:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(plan.tool, it.size, 0, 0, true, snow), NO_ROAD_TINT))
-          : this.sprites.get(`b:${plan.tool}:${it.size}:0:0${this.snowKey}`, () => buildingSpec(plan.tool, it.size, 0, 0, true, snow));
+          ? this.sprites.get(`b:${type}:${it.size}:0:${st}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow), NO_ROAD_TINT))
+          : this.sprites.get(`b:${type}:${it.size}:0:${st}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow));
         this.fillDiamond(wx, wy, color, it.size);
         this.ctx.globalAlpha = 0.72;
         this.blit(spr, wx, wy);

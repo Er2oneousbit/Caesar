@@ -24,11 +24,13 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 * **Crime:** unhappy homes send out protesters, thieves who rob the Forum or a market, and in a city at the end of its patience, rioters who burn their way toward its finest buildings. Prefects patrol as police and chase criminals down. The Crime overlay shows where trouble is brewing and why.
 * **Disease:** crowded, unhealthy homes can fall sick, lose people and pass it next door. A Medicus sends physicians to cure them, and baths, barbers, fountains, food and a hospital keep it away. The Disease overlay shows which homes are at risk.
 * **The five gods of the original:** Ceres, Neptune, Mercury, Mars and Venus. Keep them content with temples and festivals and they bless the city (a bumper harvest, a trade windfall, food for the granaries, peace, a happier people); neglect them and they strike, and an angered Mercury or Venus strikes harder the second time.
+* **Fishing:** a shipyard builds fishing boats; a wharf's boat sails out to where the gulls circle and brings the catch home. Fish is a food of its own, and the sea does not freeze in winter.
+* **The hippodrome:** a 15-tile racetrack with chariot races (a Chariot Maker sends the teams), the grandest show in the city and the key to its finest palaces.
 * **Four difficulties**, Easy to Insane.
 * **Trade** by land and sea with nine partner cities, and an empire map (E) that shows the caravans and ships on their way and the warbands your scouts have seen coming.
 * **Granary and warehouse orders:** per good, accept it, refuse it, or *get* it (the building's cart fetches it from other storage), and an *Empty* switch that sends everything elsewhere.
 * **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed), watchtowers, walls and gates.
-* **A living world:** day and night, four seasons with snow in winter, rain and thunderstorms, fluttering flags, busy markets, crowds at the shows.
+* **A living world:** day and night, four seasons with snow in winter, rain and thunderstorms, fluttering flags, busy markets, crowds at the shows, chariots racing round the spina.
 * **Music:** ten original tracks of a few minutes each for building and for the night, festival music, and war drums when raiders attack, all played live by synthesized lyre, pipes and drums.
 
 Press **F1** in the game for the full manual. The rules and numbers are in [docs/GAMEPLAY.md](docs/GAMEPLAY.md).

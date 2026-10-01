@@ -9,6 +9,9 @@
  *   funds                         starting treasury (Dn)
  *   startYear                     negative = BC
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
+ *                                 population: at most GOAL_SHARE of what the
+ *                                 mission's buildings can employ (sim/capacity.js;
+ *                                 a test holds it there)
  *   paceYears                     the planned floor: the fewest game years the
  *                                 goals allow (sim/pace.js; a test holds the
  *                                 goals to it). A year is about 5.3 minutes at 1x
@@ -67,13 +70,27 @@ export const INVASION_PRESETS = Object.freeze({
 });
 
 /*
- * The campaign's length: each mission's goals are set so the fastest possible
- * city takes the mission's paceYears (sim/pace.js), about 1 year for the first
- * and 15 for the last. With the homes, farms and services to build first,
- * that is roughly half an hour for the first missions and a few hours for the
- * last at normal speed. The goals follow the housing ladder: what the
- * unlocked buildings let homes reach (Huts in the first mission, Townhouses
- * in the second, Domus in the third, Villas in the fourth, then everything).
+ * The campaign's goals. Population: what the mission's buildings can employ.
+ * Above 10% unemployment the city's mood falls and peace stops growing, so a
+ * goal of more people than there is work for cannot be met by a well run
+ * city (mission 1 once asked for 1,200 people; its buildings employ about a
+ * fifth of that). Each goal is about GOAL_SHARE (85%) of the mission's
+ * employment ceiling (sim/capacity.js, `npm run sim -- --capacity`), rounded
+ * down, and the goals still rise mission to mission: mission 6, with four
+ * land partners, employs fewer than mission 5 with six, so mission 5 asks for
+ * less than its ceiling allows.
+ *
+ * Length: each mission's goals are set so the fastest possible city takes the
+ * mission's paceYears (sim/pace.js). With population goals that fit the jobs,
+ * peace sets the length (a point a month from 20): about 1 year for the first
+ * mission and 4.6 for the last, roughly half an hour to an hour or two at
+ * normal speed with the city to build first.
+ *
+ * The homes follow the housing ladder: what the unlocked buildings let homes
+ * reach (Huts in the first mission, Townhouses in the second, Merchant Houses
+ * in the third, Villas in the fourth, then everything). The third mission's
+ * only venue is the theater, which gives a home at most 16 entertainment (10
+ * for a visit, 6 from the seat base), and a Domus needs 20.
  */
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_jupiter', 'garden', 'forum'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_vesta', 'statue_small', 'plaza'];
@@ -87,7 +104,7 @@ export const SCENARIOS = Object.freeze([
     intro: 'The Senate has granted you a patch of riverside land and a handful of settlers. Lay out roads, give families a place to live, keep them fed and keep the fires down. Grow a town, bring the gods to its streets and keep the peace to prove you can govern.',
     map: { size: 64, type: 'river', seed: 'novum-castrum' },
     funds: 6000, startYear: -280,
-    goals: { population: 1200, culture: 15, prosperity: 0, peace: 35, favor: 0 },
+    goals: { population: 170, culture: 15, prosperity: 0, peace: 35, favor: 0 },
     paceYears: 1.25,
     unlocks: BASIC, partners: [], requests: false, crime: false, disease: false,
     hints: [
@@ -98,6 +115,7 @@ export const SCENARIOS = Object.freeze([
       'The Forum sends tax collectors. Homes they have not visited pay nothing!',
       `Culture here comes from the temples: every home a priest visits counts. Peace grows a point a month while the city is content (a mood of ${CONFIG.PEACE_MOOD} or more): fed, housed, at work and not overtaxed.`,
       'Click any building for details. Homes tell you exactly what they need to grow.',
+      `This land gives little work: a town of about 200 people fills its jobs. More homes than that only add idle hands, and above ${CONFIG.UNEMPLOYMENT_GRACE * 100}% unemployment the mood falls and peace stops growing. The Labor advisor shows how many are out of work.`,
     ],
   },
   {
@@ -105,14 +123,15 @@ export const SCENARIOS = Object.freeze([
     intro: 'A lakeside town needs clean water and a little culture. Build reservoirs by the lakes, run aqueducts, and give citizens fountains, schools and a stage.',
     map: { size: 96, type: 'lakes', seed: 'aquae-clarae' },
     funds: 7000, startYear: -270,
-    goals: { population: 2500, culture: 35, prosperity: 20, peace: 45, favor: 0 },
-    paceYears: 2.25,
+    goals: { population: 260, culture: 35, prosperity: 20, peace: 45, favor: 0 },
+    paceYears: 2.1,
     unlocks: TIER2, partners: [], requests: false, crime: false, disease: false,
     hints: [
       'A Reservoir placed next to water fills up. Fountains inside its piped area (10 tiles) supply homes within 4 tiles.',
       'Aqueducts connect a full reservoir to other reservoirs farther inland.',
       'Cottages need a fountain; above them homes want entertainment, then a school. A Theater needs actors: build an Actor Troupe nearby.',
       'Prosperity grows with better homes, a profit, work for everyone and fair wages.',
+      'Work is still scarce here: about 300 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
     ],
   },
   {
@@ -120,13 +139,14 @@ export const SCENARIOS = Object.freeze([
     intro: 'The plains of Figlina are rich in clay. Build an industry, fill warehouses and open your first trade route. Prosperity is now expected of you.',
     map: { size: 112, type: 'plains', seed: 'figlina' },
     funds: 7000, startYear: -255,
-    goals: { population: 3500, culture: 45, prosperity: 30, peace: 50, favor: 0 },
-    paceYears: 3.6,
+    goals: { population: 530, culture: 45, prosperity: 30, peace: 50, favor: 0 },
+    paceYears: 2.5,
     unlocks: TIER3, partners: ['tarraco', 'aquileia'], requests: true,
     hints: [
       'Clay Pits must be near water. Potters turn clay into pottery, which Merchant Houses and every home above them need, with Thermae nearby.',
       'Warehouses store goods. Caravans only trade with warehouses.',
       'Open trade routes in the Trade advisor, then mark goods for import or export.',
+      'Trade is work: what your partners buy keeps farms, clay pits and potters staffed. Let the town grow as its jobs do.',
     ],
   },
   {
@@ -134,8 +154,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'A great river divides this province. Bridge it, harvest its forests and olive groves, and entertain a growing people with gladiatorial games.',
     map: { size: 128, type: 'river', seed: 'pons-aelius' },
     funds: 8000, startYear: -240,
-    goals: { population: 5000, culture: 50, prosperity: 40, peace: 55, favor: 0 },
-    paceYears: 5.7,
+    goals: { population: 1250, culture: 50, prosperity: 40, peace: 55, favor: 0 },
+    paceYears: 2.9,
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
     military: { first: 60, interval: [30, 40], base: 4 },
     hints: [
@@ -150,8 +170,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'A coastal province with iron in its hills and vines on its slopes. Grow a wealthy city worthy of villas, and keep the Emperor happy.',
     map: { size: 128, type: 'coast', seed: 'portus-mercatorum' },
     funds: 9000, startYear: -225,
-    goals: { population: 6500, culture: 60, prosperity: 50, peace: 60, favor: 55 },
-    paceYears: 7.8,
+    goals: { population: 1400, culture: 60, prosperity: 50, peace: 60, favor: 55 },
+    paceYears: 3.3,
     unlocks: 'all', partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
     military: { first: 48, interval: [22, 32], base: 6 },
     hints: [
@@ -165,8 +185,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'Water is life in the desert. Only the land around the oases can feed your people. Plan every aqueduct carefully.',
     map: { size: 128, type: 'desert', seed: 'oasis-aurea' },
     funds: 10000, startYear: -210,
-    goals: { population: 7000, culture: 60, prosperity: 55, peace: 65, favor: 60 },
-    paceYears: 8.5,
+    goals: { population: 1550, culture: 60, prosperity: 55, peace: 65, favor: 60 },
+    paceYears: 3.75,
     unlocks: 'all', partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
     military: { first: 42, interval: [20, 30], base: 6 },
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
@@ -176,8 +196,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'Your last and greatest charge: build a city to rival Rome itself.',
     map: { size: 160, type: 'lakes', seed: 'urbs-magna' },
     funds: 12000, startYear: -190,
-    goals: { population: 12000, culture: 75, prosperity: 70, peace: 75, favor: 65 },
-    paceYears: 15.4,
+    goals: { population: 2900, culture: 75, prosperity: 70, peace: 75, favor: 65 },
+    paceYears: 4.6,
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
     military: { first: 36, interval: [14, 22], base: 8 },
     hints: [

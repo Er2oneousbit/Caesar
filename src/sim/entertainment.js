@@ -20,7 +20,7 @@ import { spawnWalker, killWalker } from './entities.js';
 import { followPath } from './movement.js';
 
 export const SHOW_DAYS = 32; // days of shows one performer provides
-const REFILL_BELOW = 12; // venues ask for a new performer below this
+export const REFILL_BELOW = 12; // venues ask for a new performer below this
 
 /** Daily: training building dispatches a performer to a venue that needs one. */
 export function updateTraining(game, b) {

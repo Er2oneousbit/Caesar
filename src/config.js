@@ -72,6 +72,7 @@ export const CONFIG = {
   GOODS_PER_HOUSE_PEOPLE: 20, // one unit of each needed good per this many residents per month
   GOODS_MIDMONTH_DAY: 8, // goods are used up twice a month: at the month's start and on this day
   WORKFORCE_RATIO: 0.32, // share of plebeian residents that can work
+  UNEMPLOYMENT_GRACE: 0.1, // unemployment up to this share costs no mood (sim/population.js); a mission's population goal must fit its jobs at it (sim/capacity.js)
   LABOR_RANGE: 40, // a building can hire if occupied housing is within this many road tiles
 
   // --- Immigration -------------------------------------------------------

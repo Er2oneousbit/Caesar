@@ -280,7 +280,7 @@ export function computeSentiment(game) {
   f.base = 50;
   f.taxes = -(c.taxRate - CONFIG.DEFAULT_TAX_RATE) * (c.taxRate > CONFIG.DEFAULT_TAX_RATE ? 3 : 1.5);
   f.wages = (c.wage - CONFIG.BASE_WAGE) * 0.8;
-  f.unemployment = c.unemploymentRate > 0.1 ? -Math.min(15, (c.unemploymentRate - 0.1) * 60) : 0;
+  f.unemployment = c.unemploymentRate > CONFIG.UNEMPLOYMENT_GRACE ? -Math.min(15, (c.unemploymentRate - CONFIG.UNEMPLOYMENT_GRACE) * 60) : 0;
   f.food = c.population > 60 ? -(1 - c.fedShare) * 18 : 0;
   // Family Tents (2) are neutral; a city averaging Apartment Houses (10) gets the full +10.
   f.housing = Math.min(10, Math.max(-4, (c.avgTier - 2) * 1.25));

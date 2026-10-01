@@ -6,6 +6,10 @@
  * item that tells the player what job they do (bucket = prefect, cart = cart
  * pusher, scroll = teacher...). Criminals: a protester shakes a placard, a
  * hooded thief carries a sack, a rioter waves a torch. Original simple figures.
+ *
+ * Carts show what they carry and how much (cargoArt.js); a farm's wagon is
+ * bigger and pulled by an ox; horses are led on a rope, not carted. A
+ * caravan's mules carry packs of the goods it bought on their way out.
  * ----------------------------------------------------------------------------
  */
 
@@ -13,6 +17,8 @@ import { WALKER_TYPES } from '../data/walkers.js';
 import { GOODS } from '../data/goods.js';
 import { GODS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { CONFIG } from '../config.js';
+import { cartCapacity, cargoLevel, horsesLed, drawCargo, LED_GOODS } from './cargoArt.js';
 
 const SKIN = ['#e3b68c', '#c99a6b', '#a8784e', '#f0caa2', '#b98a5e'];
 const HAIR = ['#3a2a1e', '#5a3a22', '#1e1a16', '#7a5a3a', '#9a8a7a'];
@@ -30,8 +36,10 @@ const STEP_RAD = Math.PI * 2 * 0.8;
  * @param {number} dirX   screen-space movement direction sign (-1 left, 1 right)
  * @param {number} dirY   screen-space vertical direction sign (-1 up, 1 down)
  * @param {number} [stride] tiles walked (interpolated): drives the legs
+ * @param {object|null} [origin] def of the building that sent a cart: how
+ *        much the cart holds, and whether it is a farm wagon
  */
-export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked || 0) {
+export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked || 0, origin = null) {
   const def = WALKER_TYPES[w.type];
   if (def.kind === 'ship') { drawShip(ctx, w, sx, sy, k, t, dirX); return; }
   const moving = w.moving;
@@ -59,8 +67,13 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
     if (moving) sy -= Math.abs(Math.sin(step)) * 0.8 * k;
   }
 
-  if (item === 'cart') drawCart(ctx, w, sx + face * 7 * k, sy + dirY * 1.5 * k, k, face, phase);
-  if (item === 'mule' && !riding) drawMule(ctx, sx + face * 8 * k, sy + dirY * 1.5 * k, k, face, phase);
+  // A carter with horses on board leads them on a rope instead of pushing a
+  // cart, and a ranch's drover walks home with just the rope (not a wagon).
+  const loaded = !!(w.cargo && w.cargo.amount > 0);
+  const leading = item === 'cart' && (loaded ? LED_GOODS.includes(w.cargo.good) : LED_GOODS.includes(origin?.produces));
+  if (leading) drawLedHorses(ctx, sx, sy, k, face, dirY, phase, loaded ? horsesLed(w.cargo.amount) : 0, w.id);
+  else if (item === 'cart') drawCart(ctx, w, sx, sy, k, face, dirY, phase, cartCapacity(origin, w.cargo?.amount));
+  if (item === 'mule' && !riding) drawMule(ctx, sx + face * 8 * k, sy + dirY * 1.5 * k, k, face, phase, false, w.packs);
 
   // legs: striding, or astride the mule
   ctx.strokeStyle = '#4a3a2c';
@@ -113,9 +126,17 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
   ctx.strokeStyle = skin;
   ctx.lineWidth = 1.1 * k;
   ctx.beginPath();
-  ctx.moveTo(sx + face * 2.4 * k, sy - 11.5 * k);
-  if (raised) ctx.lineTo(sx + face * (3.6 + wave * 0.5) * k, sy - (16 + wave) * k);
-  else ctx.lineTo(sx + face * (3.5 + (item === 'cart' ? 2 : 0)) * k, sy - (item === 'cart' ? 9 : 7.5 - phase) * k);
+  if (leading) {
+    // the rope hand reaches back to the horses following him
+    ctx.moveTo(sx - face * 2.4 * k, sy - 11.5 * k);
+    ctx.lineTo(sx - face * 4 * k, sy - 8 * k);
+  } else {
+    ctx.moveTo(sx + face * 2.4 * k, sy - 11.5 * k);
+    if (raised) ctx.lineTo(sx + face * (3.6 + wave * 0.5) * k, sy - (16 + wave) * k);
+    // a carter holds the back of his cart's bed
+    else if (item === 'cart') ctx.lineTo(sx + face * 4.8 * k, sy - 8.2 * k);
+    else ctx.lineTo(sx + face * 3.5 * k, sy - (7.5 - phase) * k);
+  }
   ctx.stroke();
 
   // head + hair
@@ -243,32 +264,150 @@ function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0) {
   }
 }
 
-function drawCart(ctx, w, cx, cy, k, face, phase) {
-  // two-wheeled hand cart with a load colored by its cargo
+/**
+ * A two-wheeled hand cart pushed ahead of the carter or, for a cart that
+ * holds FARM_CART_LOAD (a farm's), a longer four-wheeled wagon with an ox in
+ * the shafts. The load sits on the bed (cargoArt.js); an empty cart shows
+ * the inside of its bed.
+ */
+function drawCart(ctx, w, sx, sy, k, face, dirY, phase, cap) {
+  const wagon = cap >= CONFIG.FARM_CART_LOAD;
+  const hw = wagon ? 5.5 : 4; // half the bed's length
+  const cx = sx + face * (hw + 4.5) * k; // the bed's back edge just past his hands
+  const cy = sy + dirY * 1.5 * k;
+  if (wagon) drawOx(ctx, cx + face * (hw + 7) * k, cy, k, face, phase, cx + face * hw * k);
+  const amount = w.cargo ? w.cargo.amount : 0;
   ctx.fillStyle = '#7a5a3a';
-  ctx.fillRect(cx - 4 * k, cy - 7 * k, 8 * k, 3 * k);
-  if (w.cargo && w.cargo.amount > 0) {
-    const color = GOODS[w.cargo.good]?.color || '#c9a86b';
-    ctx.fillStyle = color;
-    ctx.fillRect(cx - 3.5 * k, cy - 10 * k, 7 * k, 3.2 * k);
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(cx - 3.5 * k, cy - 7.6 * k, 7 * k, 0.8 * k);
+  ctx.fillRect(cx - hw * k, cy - 7 * k, 2 * hw * k, 3 * k);
+  if (amount > 0) {
+    drawCargo(ctx, w.cargo.good, cargoLevel(amount, cap), cx, cy - 7 * k, k, face, hw);
+  } else {
+    ctx.fillStyle = '#4e3826'; // the inside of an empty bed
+    ctx.fillRect(cx - (hw - 0.7) * k, cy - 7 * k, 2 * (hw - 0.7) * k, 1 * k);
   }
-  ctx.fillStyle = '#3a2a1e';
-  ctx.beginPath();
-  ctx.arc(cx, cy - 2.2 * k, 2.2 * k, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#a08060';
-  ctx.lineWidth = 0.5 * k;
-  ctx.beginPath();
+  ctx.fillStyle = '#5e4430'; // side board
+  ctx.fillRect(cx - hw * k, cy - 5.2 * k, 2 * hw * k, 0.6 * k);
+  // Wheels: a wagon shows two, a hand cart one, each with a turning spoke.
+  const r = wagon ? 2.5 : 2.2;
   const a = phase * 1.5;
-  ctx.moveTo(cx + Math.cos(a) * 2 * k, cy - 2.2 * k + Math.sin(a) * 2 * k);
-  ctx.lineTo(cx - Math.cos(a) * 2 * k, cy - 2.2 * k - Math.sin(a) * 2 * k);
+  for (const wx of wagon ? [cx - hw * 0.55 * k, cx + hw * 0.55 * k] : [cx]) {
+    ctx.fillStyle = '#3a2a1e';
+    ctx.beginPath();
+    ctx.arc(wx, cy - r * k, r * k, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#a08060';
+    ctx.lineWidth = 0.5 * k;
+    ctx.beginPath();
+    ctx.moveTo(wx + Math.cos(a) * (r - 0.2) * k, cy - r * k + Math.sin(a) * (r - 0.2) * k);
+    ctx.lineTo(wx - Math.cos(a) * (r - 0.2) * k, cy - r * k - Math.sin(a) * (r - 0.2) * k);
+    ctx.stroke();
+  }
+}
+
+/** The ox in a farm wagon's shafts; `poleX` is where the shaft meets the bed. */
+function drawOx(ctx, cx, cy, k, face, phase, poleX) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 6 * k, 2 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#5a4634';
+  ctx.lineWidth = 1.4 * k;
+  ctx.beginPath();
+  for (const lx of [-3.5, -1.8, 2, 3.8]) {
+    ctx.moveTo(cx + face * lx * k, cy - 5 * k);
+    ctx.lineTo(cx + face * (lx + phase * 0.7 * (lx > 0 ? 1 : -1)) * k, cy);
+  }
+  // the shaft from the bed to the yoke
+  ctx.moveTo(poleX, cy - 5.5 * k);
+  ctx.lineTo(cx + face * 3 * k, cy - 8.5 * k);
+  ctx.stroke();
+  ctx.fillStyle = '#9a8770'; // a pale draught ox
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 7 * k, 5.8 * k, 3.2 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath(); // the head, carried low
+  ctx.ellipse(cx + face * 6.2 * k, cy - 7.5 * k, 2.2 * k, 1.7 * k, face * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#6e5a46'; // the yoke on its neck
+  ctx.fillRect(cx + face * 3.6 * k - 0.6 * k, cy - 10.2 * k, 1.2 * k, 2.4 * k);
+  ctx.strokeStyle = '#efe6d0'; // horns
+  ctx.lineWidth = 0.7 * k;
+  ctx.beginPath();
+  ctx.moveTo(cx + face * 5.8 * k, cy - 9 * k);
+  ctx.quadraticCurveTo(cx + face * 6.4 * k, cy - 11 * k, cx + face * 7.8 * k, cy - 10.8 * k);
   ctx.stroke();
 }
 
-/** A pack mule; with `rider` the packs ride on its rump behind the rider. */
-function drawMule(ctx, cx, cy, k, face, phase, rider = false) {
+const HORSE_COATS = ['#7a4a2c', '#4a3324', '#a8693c', '#b8b0a4']; // bay, dark, chestnut, grey
+
+/**
+ * A drover leading `n` horses (1 to 4) on a rope: they follow behind him, the
+ * second beside the first (further back in the picture), the next pair
+ * behind those. With 0 he is walking home with the rope.
+ */
+function drawLedHorses(ctx, sx, sy, k, face, dirY, phase, n, id) {
+  const base = sy - dirY * 1.5 * k;
+  for (let i = n - 1; i >= 0; i--) {
+    const hx = sx - face * (12 + (i % 2) * 1.5 + (i >> 1) * 7) * k;
+    const hy = base - ((i % 2) * 2.6 + (i >> 1) * 0.6) * k;
+    drawHorse(ctx, hx, hy, k, face, i % 2 ? -phase : phase, HORSE_COATS[(id + i) % HORSE_COATS.length]);
+  }
+  // the lead rope, from the drover's hand to the first horse's head (or,
+  // with no horses, hanging loose from his hand)
+  ctx.strokeStyle = '#d8c8a0';
+  ctx.lineWidth = 0.5 * k;
+  ctx.beginPath();
+  ctx.moveTo(sx - face * 4 * k, sy - 8 * k);
+  if (n > 0) ctx.lineTo(sx - face * 5.6 * k, base - 11.8 * k);
+  else ctx.lineTo(sx - face * 4.6 * k, sy - 3.5 * k);
+  ctx.stroke();
+}
+
+/** One horse: longer legs than a mule, an arched neck, a dark mane and tail. */
+function drawHorse(ctx, cx, cy, k, face, phase, coat) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 5.5 * k, 1.8 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = coat;
+  ctx.lineWidth = 1.1 * k;
+  ctx.beginPath();
+  for (const lx of [-3.6, -2.2, 2.2, 3.6]) {
+    ctx.moveTo(cx + face * lx * k, cy - 6.5 * k);
+    ctx.lineTo(cx + face * (lx + phase * 1.2 * (lx > 0 ? 1 : -1)) * k, cy);
+  }
+  ctx.stroke();
+  ctx.fillStyle = coat;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 8 * k, 5 * k, 2.4 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath(); // the neck, rising forward
+  ctx.moveTo(cx + face * 2.6 * k, cy - 9.8 * k);
+  ctx.lineTo(cx + face * 4.6 * k, cy - 13.2 * k);
+  ctx.lineTo(cx + face * 6 * k, cy - 12.6 * k);
+  ctx.lineTo(cx + face * 5 * k, cy - 7.8 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); // the head, nose down and forward
+  ctx.ellipse(cx + face * 6.5 * k, cy - 11.9 * k, 2 * k, 0.9 * k, face * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#2a1e16'; // mane and tail
+  ctx.lineWidth = 0.9 * k;
+  ctx.beginPath();
+  ctx.moveTo(cx + face * 2.7 * k, cy - 10.4 * k);
+  ctx.lineTo(cx + face * 4.5 * k, cy - 13.6 * k);
+  ctx.moveTo(cx - face * 4.8 * k, cy - 9 * k);
+  ctx.quadraticCurveTo(cx - face * 6.4 * k, cy - 8 * k, cx - face * 6 * k, cy - 4.5 * k);
+  ctx.stroke();
+}
+
+/**
+ * A pack mule; with `rider` the packs ride on its rump behind the rider.
+ * `packs` (a caravan on its way out) lists the goods it bought, drawn as
+ * cargo on its back; an empty list means it bought nothing (an empty pack
+ * saddle). Without it (on the way in) the mule carries plain bales.
+ */
+function drawMule(ctx, cx, cy, k, face, phase, rider = false, packs = undefined) {
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath();
   ctx.ellipse(cx, cy, 6 * k, 2 * k, 0, 0, Math.PI * 2);
@@ -295,6 +434,16 @@ function drawMule(ctx, cx, cy, k, face, phase, rider = false) {
     ctx.fillRect(px - 2 * k, cy - 11 * k, 4 * k, 3.5 * k);
     ctx.fillStyle = '#9b5a3a';
     ctx.fillRect(px - 1.5 * k, cy - 12.5 * k, 3 * k, 1.8 * k);
+    return;
+  }
+  if (Array.isArray(packs)) {
+    // the pack saddle, then what was bought: two of the first good, one of a second on top
+    // (a little forward, clear of the merchant walking at the mule's flank)
+    const px = cx + face * 1.2 * k;
+    ctx.fillStyle = '#6e4a2c';
+    ctx.fillRect(px - 3.6 * k, cy - 10.4 * k, 7.2 * k, 1.4 * k);
+    if (packs[0]) drawCargo(ctx, packs[0], 2, px, cy - 10 * k, k, face, 3.4);
+    if (packs[1]) drawCargo(ctx, packs[1], 1, px, cy - 12.4 * k, k, face, 3.4);
     return;
   }
   ctx.fillStyle = '#c9a86b';

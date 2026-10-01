@@ -128,10 +128,21 @@ function spawnCaravan(game, partnerId) {
 /** Caravan reached its warehouse: trade, then leave by the exit. */
 export function caravanArrive(game, w) {
   const wh = game.buildings.get(w.target);
-  if (wh && isStorage(wh)) logTrade(game, w.partner, tradeAt(game, w.partner, wh), 'land');
+  if (wh && isStorage(wh)) {
+    const out = tradeAt(game, w.partner, wh);
+    logTrade(game, w.partner, out, 'land');
+    // For the art only: the mules leave loaded with what the city sold them,
+    // the biggest lots first (an empty list: they bought nothing).
+    w.packs = caravanPacks(out.sold);
+  }
   const { map } = game;
   w.state = 'leaving';
   if (!walkTo(game, w, map.idx(map.exit.x, map.exit.y))) killWalker(game, w);
+}
+
+/** The (at most two) goods a leaving caravan shows on its mules, biggest lot first. */
+export function caravanPacks(sold) {
+  return Object.keys(sold || {}).filter((g) => sold[g] > 0).sort((a, b) => sold[b] - sold[a]).slice(0, 2);
 }
 
 /** Exchange goods between a caravan and one warehouse. */

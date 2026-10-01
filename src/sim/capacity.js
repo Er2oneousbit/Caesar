@@ -7,7 +7,7 @@
  * population goal under it, and `npm run sim -- --capacity` prints the table.
  *
  * Why it matters: WORKFORCE_RATIO of the plebeian residents look for work, and
- * above UNEMPLOYMENT_GRACE unemployment the city's mood falls (up to 15 points,
+ * above UNEMPLOYMENT_MOOD_FREE unemployment the city's mood falls (up to 15 points,
  * sim/population.js), so peace stops growing (it needs PEACE_MOOD). A goal of
  * more people than the mission's buildings can employ cannot be met by a well
  * run city: mission 1 asked for 1,200 people when a sensible town of Huts
@@ -415,12 +415,12 @@ export function jobsFor(s, people, opts) {
 /** Can a city of `people` residents keep unemployment at or below the grace? */
 export function employsEnough(s, people, opts) {
   const workforce = people * CONFIG.WORKFORCE_RATIO;
-  return jobsFor(s, people, opts) >= workforce * (1 - CONFIG.UNEMPLOYMENT_GRACE);
+  return jobsFor(s, people, opts) >= workforce * (1 - CONFIG.UNEMPLOYMENT_MOOD_FREE);
 }
 
 /**
  * The employment ceiling: the largest population (in steps of `step`) whose
- * jobs keep unemployment at or below CONFIG.UNEMPLOYMENT_GRACE. Jobs grow in
+ * jobs keep unemployment at or below CONFIG.UNEMPLOYMENT_MOOD_FREE. Jobs grow in
  * whole buildings, so a size just past the ceiling may fit again a little
  * later: the largest one that fits counts (a player builds the next farm
  * before it is needed).

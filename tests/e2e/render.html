@@ -17,6 +17,7 @@
                 time=0.8 (time of day 0..1: 0.3 noon, 0.67 sunset, 0.8 night)
                 month=9 (season: 0 Ianuarius .. 11 December)  weather=rain|storm|snow|cloudy
                 look=market (center on the nearest building of that type or kind)
+                walker=cart (center on the nearest walker of that type)
                 busy=1 (stock markets and book shows, to see shoppers and crowds)
                 ladder=1 (a home of every level, 1-20, set out beside the city, plus a 2x2 block)
                 artset=1 (reservoirs joined by an aqueduct that crosses a road, the statues,
@@ -112,6 +113,16 @@
       if (!best || d < best.d) best = { b, d };
     }
     if (best) focus = { x: best.b.x + Math.floor(best.b.size / 2), y: best.b.y + Math.floor(best.b.size / 2) };
+  }
+  // walker=<type>: center on the walker of that type nearest the view center (walker=cart: a cart and its load).
+  if (q.get('walker') && focus) {
+    let best = null;
+    for (const w of game.walkers.values()) {
+      if (w.type !== q.get('walker')) continue;
+      const d = Math.hypot(w.x - focus.x, w.y - focus.y);
+      if (!best || d < best.d) best = { w, d };
+    }
+    if (best) focus = { x: best.w.x, y: best.w.y };
   }
   // ladder=1: one home of every level in rows by footprint (1x1, 2x2, 3x3,
   // 4x4) on the nearest open land, trees cleared for the picture.

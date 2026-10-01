@@ -115,7 +115,7 @@ export const SCENARIOS = Object.freeze([
       'The Forum sends tax collectors. Homes they have not visited pay nothing!',
       `Culture here comes from the temples: every home a priest visits counts. Peace grows a point a month while the city is content (a mood of ${CONFIG.PEACE_MOOD} or more): fed, housed, at work and not overtaxed.`,
       'Click any building for details. Homes tell you exactly what they need to grow.',
-      `This land gives little work: a town of about 200 people fills its jobs. More homes than that only add idle hands, and above ${CONFIG.UNEMPLOYMENT_GRACE * 100}% unemployment the mood falls and peace stops growing. The Labor advisor shows how many are out of work.`,
+      `This land gives little work: a town of about 200 people fills its jobs. More homes than that only add idle hands, and above ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% unemployment the mood falls and peace stops growing. The Labor advisor shows how many are out of work.`,
     ],
   },
   {

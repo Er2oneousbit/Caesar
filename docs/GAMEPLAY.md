@@ -105,7 +105,7 @@ Most services are delivered by walkers. A walker serves every building within **
 
 A home's **entertainment score** is the points of every venue whose entertainer passed by recently, plus a city-wide base of up to 20: for each kind of venue, the share of the population its working venues can seat (theater 400, amphitheater 900, colosseum 2,000 people), averaged over the three kinds and divided by 5. A growing city needs more venues, not just one of each.
 
-Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, the same faint blue shows the reservoirs' piped area, where they would run. Placing or clicking a well, fountain or reservoir shows its own reach in dark blue. Wells and reservoirs need no road, but they wear out like everything else, and an engineer repairs only what lies within 2 tiles of the road he walks: one placed further from every road is flagged when you place it, on its panel and on the Problems overlay, and in time it collapses.
+Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a full reservoir's 10-tile piped area); a Reservoir fills when it touches water or connects by aqueduct to a full reservoir. While you place housing plots, a faint blue shows where homes would get water (paler for well water, stronger for fountain water); while you place a fountain or baths, a faint teal shows the reservoirs' piped area, where they would run, so the fountains' own reach (blue) stands out on it. Placing or clicking a well or fountain shows its own reach in dark blue, a reservoir its piped area in dark teal. Wells and reservoirs need no road, but they wear out like everything else, and an engineer repairs only what lies within 2 tiles of the road he walks: one placed further from every road is flagged when you place it, on its panel and on the Problems overlay, and in time it collapses.
 
 ## Workers
 
@@ -119,6 +119,7 @@ Water is by area, not walkers: Well 2 tiles; Fountain 4 tiles (must be inside a 
 * People eat **0.25 units per month** (a 100-unit load feeds 400 person-months).
 * Farms must sit on meadow. Output scales with the share of meadow under the 3x3 field. A full wheat farm makes 100 units every 20 days (about 80 a month, enough for ~300 people). Fields never burn. On Insane nothing grows in winter (December to Februarius; see [Difficulty](#difficulty)).
 * Farm wagons haul up to 400 units, other carts up to 200; a producer can have 2 carts on the road.
+* You can read a cart at a glance: it carries its good (sacks of wheat, crates of vegetables or fruit, baskets of olives or grapes, meat, clay, logs, iron ingots, marble blocks, pots, pale amphorae of oil, dark amphorae of wine, tables and chairs, shields and spears, sheaves of arrows), piled 1 to 4 high for how full it is. A farm's wagon is longer and pulled by an ox; a warehouse sends one 100-unit lot, which fills its cart. Horses are not carted: a drover leads them, one horse per 100 units. An empty cart on its way home shows its bare bed.
 * Raw material goes to a workshop that needs it, else to a warehouse (which later ships it to workshops that run low). Finished goods go to warehouses; markets fetch them for homes that need them.
 
 | Chain | Placement rule |
@@ -150,7 +151,7 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 
 | | Land route | Sea route |
 |---|---|---|
-| Who comes | a caravan (with a mule) | a merchant ship, sail striped in the partner's color |
+| Who comes | a caravan (with a mule: plain bales on the way in, what it bought from you on the way out) | a merchant ship, sail striped in the partner's color |
 | From | the Imperial road entrance | the map edge where the river/sea leaves the map |
 | To | the nearest staffed warehouse on the road network | a free, staffed **Dock** |
 | Per visit | up to 800 units each way | up to 1,200 units each way |
@@ -173,9 +174,17 @@ Workshops follow a **recipe**: most use 100 units of one raw material per 100-un
 | Corinthus (1200) | sea | marble, oil | wine, wheat, iron, arrows |
 | Alexandria (1400) | sea | wheat, vegetables | wine, oil, weapons, furniture |
 
+**The Empire map** (E, the compass in the top bar, or the button under the Trade advisor's small map) shows the whole inland sea: your province (the red star), Rome, every partner of the scenario with its route (solid when open, faint and broken while closed, grey where ships cannot reach you), and who is on the way:
+
+* A caravan or ship sets out from its city 10 to 32 days before it arrives (longer from far cities: Capua 10, Tarraco 20, Alexandria 29) and moves along its route in its city's color. Point at it (or tap it) for the days left: *Massilia ship: 6 days*. The side panel lists those on the way and those coming later (*sets out in 12 days*). A ship that found no free staffed Dock comes back 6 days later, so it shows 6 days out again.
+* A warband the scouts have seen shows as a red banner with its size, closing in from the side it will enter by over its last 3 months: *Warband of 14 from the north, in 3 months*. Click it (or *Show the edge*) to close the map and look at the map edge it will come from. Raiders already in the province show at your city; click them to look at them.
+* Click a city (or its caravan or ship) for what it sells and buys, this year's amounts, and the button to open its route.
+
+The map only reads the game: the game keeps running while it is open (pause with Space), and nothing on it changes trade or raids.
+
 ## Military
 
-**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. The first raid comes after about 5 years with occasional raids and 3 with frequent ones (campaign missions: 5 years in mission 4, then 4, 3.5 and 3), 25% sooner on Insane, and none while the city has fewer than 300 people. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar). A warband has about `base + population / 450 + raids so far` warriors (x0.7 Easy, x1.3 Hard, x1.5 Insane; 3 to 40; on Insane raiders also have 15% more health and attack, and come 25% sooner), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
+**Raids.** Provinces from mission 4 on (and sandboxes, unless set to peaceful) are raided. The first raid comes after about 5 years with occasional raids and 3 with frequent ones (campaign missions: 5 years in mission 4, then 4, 3.5 and 3), 25% sooner on Insane, and none while the city has fewer than 300 people. Scouts warn you about 3 months ahead with the direction (⚠ in the top bar); the Empire map shows the warband closing in, its size, and the map edge it will enter by. A warband has about `base + population / 450 + raids so far` warriors (x0.7 Easy, x1.3 Hard, x1.5 Insane; 3 to 40; on Insane raiders also have 15% more health and attack, and come 25% sooner), with slingers once the city passes 700 people and horsemen past 1,200. Raiders spawn on a map edge that can reach your homes and head for the nearest buildings, which they wreck or burn. They flee when 70% of the band is dead, and give up after 80 days, 10 buildings destroyed, or being cut off; a band that reached the city takes plunder when it leaves.
 
 Repelling a raid: +8 peace, +3 favor. Each building lost: -1 peace.
 
@@ -214,6 +223,8 @@ Starts from 50 and is recalculated monthly (moving halfway toward the new value)
 | Festivals | temporary boost |
 | New city | +20 for the first year |
 | Difficulty | -8 on Insane |
+
+The top bar shows the mood (🙂) and, beside it, unemployment (⚒): the share of the workforce with no job. It turns amber above 10%, where it starts to cost mood; its tooltip says how much, and a click opens the Labor advisor. More workplaces, or fewer new homes, bring it down.
 
 Mood 30+ brings settlers; below 25 people start leaving.
 

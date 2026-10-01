@@ -36,6 +36,7 @@ export const KEY_HELP = [
   ['X or Delete', 'Clear land tool'],
   ['Ctrl+Z or U', 'Undo last construction'],
   ['O / Shift+O', 'Next overlay / turn overlays off'],
+  ['E', 'Empire map: trade partners, caravans and ships on the way, warbands'],
   ['Home', 'Glide to the map entrance'],
   ['F1', 'Help'],
   ['F2', 'Advisors'],
@@ -334,6 +335,7 @@ export class Input {
       case 'x': case 'X': case 'Delete': a.ui.selectTool('clear'); break;
       case 'u': case 'U': a.undo(); break;
       case 'm': case 'M': a.toggleMusic(); break;
+      case 'e': case 'E': if (!e.repeat) a.ui.toggleEmpire(); break; // holding E must not flicker it open and shut
       case 'o': a.cycleOverlay(1); break;
       case 'O': a.setOverlay('none'); break;
       case '+': case '=': this.app.renderer.camera.zoomStep(1); break;

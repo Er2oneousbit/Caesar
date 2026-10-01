@@ -116,7 +116,7 @@ if (opts.pace) {
 // give and the room its map has (sim/capacity.js).
 if (opts.capacity) {
   const pad = (v, n) => String(v).padStart(n);
-  console.log(`Employment ceiling: the most people whose jobs keep unemployment at ${CONFIG.UNEMPLOYMENT_GRACE * 100}% or less, every home at the`);
+  console.log(`Employment ceiling: the most people whose jobs keep unemployment at ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% or less, every home at the`);
   console.log(`best working level (sim/capacity.js); goals may ask ${GOAL_SHARE * 100}% of it. Land: room to house and feed them.`);
   console.log(' mission  top home            working home      /tile  jobs/100  employment     land   goal (max)');
   for (const s of SCENARIOS) {

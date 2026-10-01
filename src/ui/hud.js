@@ -2,7 +2,7 @@
  * hud.js
  * ----------------------------------------------------------------------------
  * The top bar: menu button, city name, treasury, population, date, mood,
- * speed controls, overlay picker, advisors and help buttons.
+ * unemployment, speed controls, overlay picker, empire map, advisors and help buttons.
  * Refreshed a few times per second by UI.update().
  * ----------------------------------------------------------------------------
  */
@@ -19,6 +19,23 @@ const SEASON_ICONS = { winter: '❄️', spring: '🌱', summer: '☀️', autum
 const SPEED_LABELS = ['⏸', '▶', '▶▶', '▶▶▶', '⏩'];
 const SPEED_TITLES = ['Pause (Space)', 'Normal speed', 'Fast', 'Faster', 'Fastest'].map((t, i) => (i ? `${t}, ${CONFIG.SPEEDS[i]}x (${i})` : t));
 
+/**
+ * The top bar's unemployment chip: the share of the workforce without a job,
+ * amber once it costs mood (above UNEMPLOYMENT_MOOD_FREE, see computeSentiment
+ * in sim/population.js), with the mood it costs and the way out in the tooltip.
+ */
+export function workLine(c) {
+  const rate = c.unemploymentRate || 0;
+  const pct = Math.round(rate * 100);
+  const cost = Math.round(-(c.sentimentFactors?.unemployment || 0));
+  const warn = rate > CONFIG.UNEMPLOYMENT_MOOD_FREE;
+  const idle = `${fmt(c.unemployed || 0)} of ${fmt(c.workforce || 0)} workers have no job`;
+  const title = warn
+    ? `Unemployment ${pct}%: ${idle}. Above ${Math.round(CONFIG.UNEMPLOYMENT_MOOD_FREE * 100)}% it lowers the city mood${cost > 0 ? ` (now -${cost})` : ''}: build workplaces, or stop adding homes. Click for labor.`
+    : `Unemployment ${pct}%: ${idle}. Above ${Math.round(CONFIG.UNEMPLOYMENT_MOOD_FREE * 100)}% it lowers the city mood. Click for labor.`;
+  return { value: `${pct}%`, warn, title };
+}
+
 export class Hud {
   constructor(app, root) {
     this.app = app;
@@ -32,6 +49,8 @@ export class Hud {
     this.season = h('span', { class: 'lbl season' }, '');
     this.date.el.append(this.season);
     this.mood = this.stat('🙂', 'Mood', 'City mood (sentiment). Low mood stops immigration.', () => app.ui.openAdvisors('overview'));
+    // Unemployment beside the mood it drives: past UNEMPLOYMENT_MOOD_FREE it costs mood, so it turns amber there.
+    this.work = this.stat('⚒', 'Unemployment', 'Unemployment. Click for labor.', () => app.ui.openAdvisors('labor'));
     // Raid alert: hidden in peace time, amber when scouts warn, red during an attack.
     this.threat = h('button', { class: 'hud-btn threat hidden', onclick: () => app.focusThreat() }, '');
     this.speedBtns = SPEED_LABELS.map((lbl, i) => h('button', { class: 'hud-btn', title: SPEED_TITLES[i], onclick: () => (i === 0 ? app.togglePause() : app.setSpeed(i)) }, lbl));
@@ -44,10 +63,12 @@ export class Hud {
       this.pop.el,
       this.date.el,
       this.mood.el,
+      this.work.el,
       this.threat,
       h('div', { class: 'speed-group' }, this.speedBtns),
       h('span', { class: 'hud-spacer' }),
       this.overlaySel,
+      h('button', { class: 'hud-btn', id: 'hud-empire', title: 'Empire map (E)', 'aria-label': 'Empire map', onclick: () => app.ui.openEmpire() }, '🧭'),
       h('button', { class: 'hud-btn', title: 'Advisors (F2)', onclick: () => app.ui.openAdvisors() }, '📜 Advisors'),
       h('button', { class: 'hud-btn', title: 'Messages', onclick: () => app.ui.openAdvisors('messages') }, '✉'),
       h('button', { class: 'hud-btn', title: 'Help (F1)', onclick: () => app.ui.openHelp() }, '?'),
@@ -69,7 +90,7 @@ export class Hud {
    */
   fitSeason() {
     const el = this.el;
-    const sig = `${el.clientWidth}|${this.title.textContent}|${this.money.val.textContent}|${this.pop.val.textContent}|${this.date.val.textContent}|${this.season.textContent}|${this.mood.val.textContent}|${this.threat.className}|${this.threat.textContent}`;
+    const sig = `${el.clientWidth}|${this.title.textContent}|${this.money.val.textContent}|${this.pop.val.textContent}|${this.date.val.textContent}|${this.season.textContent}|${this.mood.val.textContent}|${this.work.val.textContent}|${this.threat.className}|${this.threat.textContent}`;
     if (sig === this.fitSig) return;
     this.fitSig = sig;
     el.classList.remove('no-season');
@@ -97,6 +118,10 @@ export class Hud {
     const s = c.sentiment;
     this.mood.el.firstChild.textContent = s >= 70 ? '😀' : s >= 50 ? '🙂' : s >= 30 ? '😐' : '😠';
     this.mood.val.textContent = `${s}`;
+    const u = workLine(c);
+    this.work.val.textContent = u.value;
+    this.work.el.classList.toggle('warn', u.warn);
+    if (this.work.el.title !== u.title) this.work.el.title = u.title;
     const t = threatSummary(g);
     const show = t.level === 'attack' || t.level === 'warned';
     this.threat.classList.toggle('hidden', !show);

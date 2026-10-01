@@ -155,17 +155,29 @@ const EXIT_COLOR = '#b8322b';
  * (a square, exactly what sim/water.js marks), and the water-layer bit that
  * shows where buildings of that kind supply water right now.
  */
-const WATER_AREA = Object.freeze({
-  well: { r: CONFIG.WELL_RADIUS, bit: WaterBits.WELL },
-  fountain: { r: CONFIG.FOUNTAIN_RADIUS, bit: WaterBits.FOUNTAIN },
-  reservoir: { r: CONFIG.RESERVOIR_RADIUS, bit: WaterBits.PIPED },
-});
 /** Radius colors: the building being placed or selected (dark) vs. existing coverage (pale). */
 const RADIUS_STRONG = Object.freeze({ fill: 'rgba(28,96,214,0.36)', edge: 'rgba(16,64,170,0.95)' });
 const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(120,186,250,0.8)' });
-/** Faint water hints under a tool: the palest blue, and a stronger one for fountain water. */
+/**
+ * The reservoirs' piped area in teal, not blue: placing a fountain shows the
+ * piped area under the existing fountains' reach, and in the same pale blue
+ * the two ran together, so a player could not see where fountains already
+ * gave water (the owner's playtest of mission 2).
+ */
+const PIPED_STRONG = Object.freeze({ fill: 'rgba(16,150,128,0.34)', edge: 'rgba(8,110,92,0.95)' });
+const PIPED_PALE = Object.freeze({ fill: 'rgba(110,220,190,0.26)', edge: 'rgba(60,180,150,0.8)' });
+/** Faint water hints under a tool: the palest blue, a stronger one for fountain water, teal for pipes. */
 const HINT_FAINT = Object.freeze({ fill: 'rgba(150,208,255,0.15)', edge: 'rgba(120,186,250,0.45)' });
 const HINT_FOUNTAIN = Object.freeze({ fill: 'rgba(80,156,240,0.24)', edge: 'rgba(56,128,226,0.6)' });
+const HINT_PIPED = Object.freeze({ fill: 'rgba(110,220,190,0.16)', edge: 'rgba(60,180,150,0.5)' });
+const BLUE = Object.freeze({ strong: RADIUS_STRONG, pale: RADIUS_PALE });
+const TEAL = Object.freeze({ strong: PIPED_STRONG, pale: PIPED_PALE });
+
+const WATER_AREA = Object.freeze({
+  well: { r: CONFIG.WELL_RADIUS, bit: WaterBits.WELL, colors: BLUE },
+  fountain: { r: CONFIG.FOUNTAIN_RADIUS, bit: WaterBits.FOUNTAIN, colors: BLUE },
+  reservoir: { r: CONFIG.RESERVOIR_RADIUS, bit: WaterBits.PIPED, colors: TEAL },
+});
 
 /**
  * Water already there, tinted faintly while a tool is in hand (the original
@@ -184,7 +196,7 @@ export function waterHintLayers(tool) {
     ];
   }
   const def = BUILDINGS[tool];
-  if (def && def.needsPiped) return [{ key: 'piped', bit: WaterBits.PIPED, style: HINT_FAINT }];
+  if (def && def.needsPiped) return [{ key: 'piped', bit: WaterBits.PIPED, style: HINT_PIPED }];
   return [];
 }
 
@@ -549,7 +561,9 @@ export class Renderer {
       const ddx = (w.tx - w.x) - (w.ty - w.y);
       const ddy = (w.tx - w.x) + (w.ty - w.y);
       const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
-      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
+      // A cart's look depends on who sent it (a farm's wagon, a warehouse's single lot).
+      const origin = w.type === 'cart' ? game.buildings.get(w.origin)?.def || null : null;
+      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX: ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx), dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -602,7 +616,7 @@ export class Renderer {
           break;
         case K_WALKER:
           if (it.w.id === this.selectedWalker) this.drawWalkerRing(it);
-          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride);
+          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride, it.origin);
           break;
         case K_FIRE:
           drawFlames(ctx, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, this.time, it.seed);
@@ -666,7 +680,7 @@ export class Renderer {
       if (b) {
         // A clicked well/fountain/reservoir shows the area it supplies.
         const water = WATER_AREA[b.def.kind];
-        if (water) this.drawCoverage(this.squareTiles(b.x, b.y, b.size, water.r));
+        if (water) this.drawCoverage(this.squareTiles(b.x, b.y, b.size, water.r), null, water.colors);
         this.outlineFootprint(b.x, b.y, b.size, 'rgba(255,230,120,0.95)', 2);
         if (b.rally) this.drawRallyLine(b);
         if (b.def.kind === 'tower') this.drawRange(b.x, b.y, b.size, TOWER_RANGE, 'rgba(255,120,60,0.12)');
@@ -1201,7 +1215,7 @@ export class Renderer {
     this.stats.waterHint = counts;
   }
 
-  drawCoverage(strong, isPale = null) {
+  drawCoverage(strong, isPale = null, colors = BLUE) {
     const { game } = this;
     const map = game.map;
     const sides = (x, y) => this.tileSides(x, y);
@@ -1216,7 +1230,7 @@ export class Renderer {
           const i = map.idx(x, y);
           if (strong.has(i) || !isPale(i)) continue;
           paleCount++;
-          this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, RADIUS_PALE.fill);
+          this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, colors.pale.fill);
           for (const [j, a, b] of sides(x, y)) if (!inside(j)) paleEdges.push(a, b);
         }
       }
@@ -1224,11 +1238,11 @@ export class Renderer {
     for (const i of strong) {
       const x = map.xOf(i);
       const y = map.yOf(i);
-      this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, RADIUS_STRONG.fill);
+      this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, colors.strong.fill);
       for (const [j, a, b] of sides(x, y)) if (!strong.has(j)) strongEdges.push(a, b);
     }
-    this.strokeEdges(paleEdges, RADIUS_PALE.edge, 1);
-    this.strokeEdges(strongEdges, RADIUS_STRONG.edge, 1.6);
+    this.strokeEdges(paleEdges, colors.pale.edge, 1);
+    this.strokeEdges(strongEdges, colors.strong.edge, 1.6);
     // Exposed for the browser smoke test (and the curious): tiles painted this frame.
     this.stats.coverage = { strong: strong.size, pale: paleCount };
   }
@@ -1445,7 +1459,7 @@ export class Renderer {
     // Other area-of-effect buildings keep a simple single-color hint.
     const radius = { hospital: CONFIG.HOSPITAL_RADIUS, tower: TOWER_RANGE }[plan.tool];
     if (water) {
-      this.drawCoverage(strong, (i) => (map.water[i] & water.bit) !== 0);
+      this.drawCoverage(strong, (i) => (map.water[i] & water.bit) !== 0, water.colors);
     } else if (radius && plan.items.length === 1) {
       const it = plan.items[0];
       const S = it.size;

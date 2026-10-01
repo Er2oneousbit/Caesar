@@ -161,6 +161,7 @@ button, input, select { font: inherit; color: inherit; }
 @media (max-width: 1280px) { .hud-stat .season { display: none; } }
 #hud-top.no-season .hud-stat .season { display: none; } /* set by Hud.fitSeason() when the bar is full */
 .hud-stat.neg { color: #ff8f83; }
+.hud-stat.warn { color: #ffcf6a; } /* unemployment that costs mood */
 .hud-title { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; color: var(--gold); white-space: nowrap; }
 .hud-spacer { flex: 1; min-width: 4px; }
 .speed-group { display: flex; gap: 2px; }
@@ -568,6 +569,23 @@ canvas.trend { display: block; margin: 2px 0; }
 #crash .box { max-width: 720px; width: 100%; background: #2a211a; border: 2px solid #b3261e; border-radius: 10px; padding: 16px; }
 #crash pre { max-height: 40vh; overflow: auto; background: #140f0b; padding: 10px; border-radius: 6px; font-size: 12px; user-select: text; -webkit-user-select: text; white-space: pre-wrap; }
 
+/* ---------- empire map (ui/empire.js) ---------------------------------------- */
+/* The map art is parchment in both themes; the panel around it follows the theme. */
+.empire-modal { width: min(1180px, 100%); max-height: min(94vh, 100%); }
+.empire-body { display: flex; gap: 14px; align-items: flex-start; scrollbar-gutter: stable; }
+.empire-main { flex: 1 1 auto; min-width: 0; }
+.empire-map-wrap { width: 100%; display: flex; justify-content: center; }
+.empire-full { display: block; border-radius: 4px; cursor: pointer; touch-action: manipulation; }
+.empire-readout { margin-top: 6px; min-height: 2.6em; font-size: 13px; }
+.empire-side { flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.empire-section h4 { margin: 0 0 4px; }
+.empire-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; font-size: 13px; border-radius: 4px; }
+.empire-row.link { cursor: pointer; width: 100%; border: none; background: none; text-align: left; }
+.empire-row.link:hover, .empire-row.sel { background: var(--panel-3); }
+.empire-glyph { flex: none; display: inline-flex; }
+.empire-glyph canvas { border-radius: 3px; }
+.empire-legend .empire-row { font-size: 12px; color: var(--ink-soft); }
+
 /* ---------- phones & small screens ------------------------------------------ */
 @media (max-width: 760px) {
   :root { --sidebar-w: 0px; --top-h: 42px; }
@@ -594,5 +612,7 @@ canvas.trend { display: block; margin: 2px 0; }
   #overlay-legend { display: none; } /* no room beside the build sheet; tap a building for the details */
   .hud-title { display: none; }
   .grid2 { grid-template-columns: 1fr; }
+  .empire-body { flex-direction: column; align-items: stretch; }
+  .empire-side { flex: none; }
   #console { right: 0; }
 }

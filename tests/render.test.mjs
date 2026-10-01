@@ -20,6 +20,9 @@
  *   - water hints: which water is tinted under which tool
  *   - art: aqueduct joins (reservoirs, road bridges), every temple, statue
  *     and mine draws; each god's temple has a look of its own
+ *   - carts: what a cart holds by who sent it, the load as 1 to 4 items,
+ *     cargo art for every good (horses led instead), a cheap draw, both
+ *     facings mirrored
  * ----------------------------------------------------------------------------
  */
 
@@ -38,6 +41,10 @@ import { aqueductSpec } from '../src/render/terrainArt.js';
 import { buildingSpec, TEMPLE_LOOKS } from '../src/render/buildingArt.js';
 import { recordingContext } from '../src/render/draw.js';
 import { GOD_KEYS } from '../src/data/gods.js';
+import { GOODS, GOOD_KEYS } from '../src/data/goods.js';
+import { BUILDINGS } from '../src/data/buildings.js';
+import { CARGO_ART, CARGO_STEPS, LED_GOODS, cargoArtOf, cargoLevel, cartCapacity, horsesLed, drawCargo } from '../src/render/cargoArt.js';
+import { drawWalker } from '../src/render/walkerArt.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { GameMap, Terrain, WaterBits } from '../src/world/map.js';
 
@@ -610,8 +617,12 @@ test('water hints: housing shows well and fountain water, piped-water buildings 
     assert.equal(waterHintOf(WaterBits.PIPED, layers), 0);
     assert.equal(waterHintOf(WaterBits.WELL | WaterBits.FOUNTAIN, layers), -1);
   }
-  // The same faint blue under houses (well water) and piped-water buildings.
-  assert.equal(waterHintLayers('fountain')[0].style, house[0].style);
+  // The piped area is teal, never one of the blues of the water homes get:
+  // placing a fountain shows it under the fountains' reach, and in the same
+  // pale blue the two could not be told apart.
+  const piped = waterHintLayers('fountain')[0].style;
+  for (const l of house) assert.notEqual(piped.fill, l.style.fill, l.key);
+  assert.equal(waterHintLayers('baths')[0].style, piped);
   // Wells and reservoirs show their own coverage while placed; others nothing.
   for (const tool of ['well', 'reservoir', 'road', 'prefecture', null]) assert.deepEqual(waterHintLayers(tool), [], String(tool));
 });
@@ -644,4 +655,119 @@ test('art: each god has a temple of its own look, the original five included', (
   assert.equal(new Set(looks.map((l) => l.roof)).size, looks.length, 'every roof its own color');
   assert.equal(new Set(looks.map((l) => l.emblem)).size, looks.length, 'every god its own emblem');
   assert.equal(new Set(looks.map((l) => l.front)).size, looks.length, 'something of its own in front');
+});
+
+/**
+ * A stand-in 2D context that counts paint calls (fill, stroke, fillRect) and
+ * keeps every x it was given (path points, centers, rectangle edges).
+ */
+function countingContext() {
+  const log = { paints: 0, xs: [] };
+  const target = {};
+  const ctx = new Proxy(target, {
+    get: (t, key) => {
+      if (key in t) return t[key];
+      return (...a) => {
+        if (key === 'fill' || key === 'stroke') log.paints++;
+        if (key === 'fillRect') { log.paints++; log.xs.push(a[0], a[0] + a[2]); }
+        if (key === 'moveTo' || key === 'lineTo' || key === 'arc' || key === 'ellipse') log.xs.push(a[0]);
+        if (key === 'quadraticCurveTo') log.xs.push(a[0], a[2]);
+      };
+    },
+    set: (t, key, v) => { t[key] = v; return true; },
+  });
+  return { ctx, log };
+}
+
+test('carts: what a cart holds follows who sent it', () => {
+  assert.equal(cartCapacity(BUILDINGS.farm_wheat), CONFIG.FARM_CART_LOAD, 'a farm wagon hauls the harvest');
+  assert.equal(cartCapacity(BUILDINGS.horse_ranch), CONFIG.FARM_CART_LOAD);
+  assert.equal(cartCapacity(BUILDINGS.warehouse), CONFIG.CART_CAPACITY, 'a warehouse sends one lot');
+  assert.equal(cartCapacity(BUILDINGS.pottery_ws), CONFIG.CART_LOAD, 'workshops');
+  assert.equal(cartCapacity(BUILDINGS.clay_pit), CONFIG.CART_LOAD, 'raw producers');
+  assert.equal(cartCapacity(BUILDINGS.dock), CONFIG.CART_LOAD, 'dock carts');
+  assert.equal(cartCapacity(null), CONFIG.CART_LOAD, 'sender gone: a hand cart');
+  assert.equal(cartCapacity(BUILDINGS.warehouse, 300), 300, 'never less than what is on board');
+});
+
+test('carts: the load shows as 1 to 4 items, full when full', () => {
+  const H = CONFIG.CART_LOAD;
+  const F = CONFIG.FARM_CART_LOAD;
+  assert.equal(cargoLevel(0, H), 0, 'empty cart: empty bed');
+  assert.equal(cargoLevel(-5, H), 0);
+  assert.equal(cargoLevel(100, 0), 0, 'no capacity: nothing drawn rather than a divide by zero');
+  assert.equal(cargoLevel(1, H), 1, 'any load shows at least one item');
+  assert.equal(cargoLevel(100, H), 2, 'half a hand cart');
+  assert.equal(cargoLevel(200, H), CARGO_STEPS, 'a full hand cart');
+  assert.equal(cargoLevel(100, CONFIG.CART_CAPACITY), CARGO_STEPS, "a warehouse's lot is a full cart");
+  assert.deepEqual([100, 200, 300, 400].map((n) => cargoLevel(n, F)), [1, 2, 3, 4], 'a farm wagon fills up a quarter at a time');
+  assert.equal(cargoLevel(900, F), CARGO_STEPS, 'never more than full');
+  assert.deepEqual([50, 100, 200, 300, 400, 800].map(horsesLed), [1, 1, 2, 3, 4, 4], 'one horse per 100 units, 1 to 4');
+});
+
+test('carts: every good has cargo art or is led; unknown goods get a plain block', () => {
+  for (const g of GOOD_KEYS) {
+    assert.ok(CARGO_ART[g] || LED_GOODS.includes(g), `${g} has cargo art (or is led on foot)`);
+    assert.ok(!(CARGO_ART[g] && LED_GOODS.includes(g)), `${g} is either carted or led, not both`);
+  }
+  for (const g of Object.keys(CARGO_ART)) assert.ok(GOODS[g], `cargo art for ${g} matches a good`);
+  for (const g of LED_GOODS) assert.ok(GOODS[g], `led good ${g} is a good`);
+  assert.equal(cargoArtOf('wine'), CARGO_ART.wine);
+  const fallback = cargoArtOf('no-such-good');
+  assert.equal(typeof fallback.draw, 'function', 'an unknown good still has something to draw');
+  const { ctx, log } = countingContext();
+  drawCargo(ctx, 'no-such-good', 2, 0, 0, 1, 1);
+  assert.equal(log.paints, 4, 'two plain blocks, each with a shadow');
+});
+
+test('carts: cheap to draw, more load draws more, both facings mirror', () => {
+  for (const g of GOOD_KEYS.filter((x) => !LED_GOODS.includes(x))) {
+    let last = 0;
+    for (let n = 1; n <= CARGO_STEPS; n++) {
+      const right = countingContext();
+      const left = countingContext();
+      drawCargo(right.ctx, g, n, 0, 0, 1, 1);
+      drawCargo(left.ctx, g, n, 0, 0, 1, -1);
+      assert.ok(right.log.paints > last, `${g}: ${n} items draw more than ${n - 1}`);
+      assert.ok(right.log.paints <= 24, `${g}: ${n} items stay cheap (${right.log.paints} paints)`);
+      last = right.log.paints;
+      assert.equal(left.log.paints, right.log.paints, `${g}: the same shapes facing left`);
+      const r = [Math.min(...right.log.xs), Math.max(...right.log.xs)];
+      const l = [Math.min(...left.log.xs), Math.max(...left.log.xs)];
+      near(r[0], -l[1], 1e-9, `${g} x${n}: mirrored (back edge)`);
+      near(r[1], -l[0], 1e-9, `${g} x${n}: mirrored (front edge)`);
+    }
+  }
+});
+
+test('carts: every carter with every load draws in both facings', () => {
+  const cart = (cargo) => ({ id: 7, type: 'cart', anim: 0, moving: true, cargo });
+  const senders = [BUILDINGS.pottery_ws, BUILDINGS.farm_wheat, BUILDINGS.warehouse, BUILDINGS.horse_ranch, null];
+  const empty = {};
+  for (const face of [1, -1]) {
+    for (const origin of senders) {
+      for (const g of [...GOOD_KEYS, 'no-such-good']) {
+        for (const amount of [100, 200, 300, 400]) {
+          const { ctx, log } = countingContext();
+          drawWalker(ctx, cart({ good: g, amount }), 100, 100, 2, 0, face, 1, 0.5, origin);
+          assert.ok(log.paints > 0);
+          assert.ok(log.paints <= 60, `${g} ${amount}: a whole carter stays cheap (${log.paints} paints)`);
+        }
+      }
+      const { ctx, log } = countingContext();
+      drawWalker(ctx, cart(null), 100, 100, 2, 0, face, 1, 0.5, origin);
+      empty[origin?.name || 'none'] = log.paints;
+    }
+  }
+  const shop = empty[BUILDINGS.pottery_ws.name];
+  assert.ok(empty[BUILDINGS.farm_wheat.name] > shop, 'a farm wagon (with its ox) is more than a hand cart');
+  assert.equal(empty[BUILDINGS.warehouse.name], shop, 'a warehouse pushes a hand cart');
+  assert.equal(empty.none, shop, 'so does a carter whose building is gone');
+  assert.ok(empty[BUILDINGS.horse_ranch.name] < shop, "a ranch's drover walks home with his rope, no wagon");
+  // A caravan's mule: bales on the way in, what it bought on the way out, or an empty saddle.
+  for (const packs of [undefined, [], ['wine'], ['marble', 'oil'], ['no-such-good']]) {
+    const { ctx, log } = countingContext();
+    drawWalker(ctx, { id: 9, type: 'caravan', anim: 0, moving: true, packs }, 100, 100, 2, 0, 1, 0, 0.5);
+    assert.ok(log.paints > 0);
+  }
 });

@@ -154,7 +154,7 @@ test('mission 1, built only with its own buildings and sized to its jobs, is won
   game.runDays(24 * CONFIG.DAYS_PER_MONTH);
   const c = game.city;
   assert.ok(c.population >= s.goals.population, `${c.population} people, goal ${s.goals.population}`);
-  assert.ok(c.unemploymentRate <= CONFIG.UNEMPLOYMENT_GRACE, `unemployment ${Math.round(c.unemploymentRate * 100)}%`);
+  assert.ok(c.unemploymentRate <= CONFIG.UNEMPLOYMENT_MOOD_FREE, `unemployment ${Math.round(c.unemploymentRate * 100)}%`);
   assert.ok(c.sentiment >= CONFIG.PEACE_MOOD, `mood ${c.sentiment}`);
   assert.ok(won !== null, `won (peace ${c.ratings.peace}, culture ${c.ratings.culture})`);
 });

@@ -296,6 +296,16 @@ try {
       await page.click(`#info-panel .order-btn[data-good="${store.good}"]`);
       seen.push(await order());
     }
+    // A slow press: the panel's timed rebuild (every 0.7 s) must wait for the
+    // release, or the button is replaced under the pointer and the click lost.
+    const box = await page.locator(`#info-panel .order-btn[data-good="${store.good}"]`).boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(900);
+    await page.mouse.up();
+    const slow = await order();
+    for (let k = 0; k < 2; k++) await page.click(`#info-panel .order-btn[data-good="${store.good}"]`); // back to Accept
+    check('a slow press on an order button is not lost to the panel refreshing', slow === 'refuse' && (await order()) === 'accept', `after the slow press: ${slow}`);
     const label = await page.textContent(`#info-panel .order-btn[data-good="${store.good}"]`);
     await page.click(`#info-panel button:has-text("Empty the ${store.name}")`);
     const emptying = await page.evaluate(({ id }) => window.colonia.game.buildings.get(id).emptying, store);

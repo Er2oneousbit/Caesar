@@ -104,13 +104,14 @@ function warnOnce(game, key, text) {
 // Land: caravans
 // ---------------------------------------------------------------------------
 
-function spawnCaravan(game, partnerId) {
+export function spawnCaravan(game, partnerId) {
   const { map, pf, buildings } = game;
   const entry = map.idx(map.entry.x, map.entry.y);
   if (!map.road[entry]) return;
   const found = pf.findNearest(entry, (id) => {
     const b = buildings.get(id);
-    return b && b.def.kind === 'warehouse' && b.efficiency > 0;
+    // An emptying warehouse takes no imports: the caravan goes on to the next.
+    return b && b.def.kind === 'warehouse' && b.efficiency > 0 && !b.emptying;
   });
   if (!found) {
     warnOnce(game, 'noWarehouseWarned', `A caravan from ${TRADE_PARTNERS[partnerId].name} found no staffed warehouse connected to the road and turned back.`);

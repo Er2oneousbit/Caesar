@@ -141,7 +141,7 @@ function emptyStep(game, b) {
     const amount = Math.min(CONFIG.CART_LOAD, have);
     const t = findDeliveryTarget(game, b.accessRoad, good, amount, b.id);
     if (!t) { stuck.push(good); continue; }
-    sendDeliveryCart(game, b, game.buildings.get(t.id), good, amount, t.path);
+    if (!sendDeliveryCart(game, b, game.buildings.get(t.id), good, amount, t.path)) return false; // walker cap
     b.orderNote = { kind: 'empty', why: 'out', goods: [good], stuck };
     return true;
   }
@@ -253,6 +253,7 @@ function granaryGet(game, b) {
     b.orderNote = { kind: 'get', why: 'out', goods: [bestFood] };
     return true;
   }
+  b.orderNote = null; // no cart went today (the city is at its walker limit): no stale words
   return false;
 }
 
@@ -289,7 +290,13 @@ export function collectArrive(game, w) {
   const home = game.buildings.get(w.origin);
   const good = w.want;
   let got = 0;
-  if (w.reserve && src && isStorage(src) && src.orders?.[good] !== 'get') got = takeGoods(src, good, w.reserve.amount);
+  if (w.reserve && src && isStorage(src) && src.orders?.[good] !== 'get') {
+    let want = w.reserve.amount;
+    // A granary's floor holds on arrival too: markets may have drawn the
+    // food down since the cart set off.
+    if (home && home.def.kind === 'granary') want = Math.min(want, granaryFoodToSpare(game, w, good));
+    got = want > 0 ? takeGoods(src, good, want) : 0;
+  }
   if (got > 0) {
     if (home && home.incoming) home.incoming[good] = Math.max(0, home.incoming[good] - (w.reserve.amount - got));
     w.reserve.amount = got;
@@ -297,7 +304,22 @@ export function collectArrive(game, w) {
   } else {
     releaseReservation(game, w);
   }
-  goHome(game, w);
+  // No way home (the road was cut while it was out): the load stays where it was.
+  if (!goHome(game, w) && got > 0 && src) src.stock[good] += got;
+}
+
+/**
+ * How much of a food the granaries on the cart's roads (not its own, not
+ * those on Get for it) can give before only GRANARY_GET_FLOOR is left.
+ */
+function granaryFoodToSpare(game, w, food) {
+  const here = game.map.idx(w.x, w.y);
+  if (!game.map.road[here]) return 0;
+  let total = 0;
+  for (const s of storageByRoad(game, here, 'granary', w.origin)) {
+    if (s.b.orders?.[food] !== 'get') total += s.b.stock[food] || 0;
+  }
+  return Math.max(0, total - GRANARY_GET_FLOOR);
 }
 
 /** The Get or Empty cart this building has out, if any (for the info panel). */

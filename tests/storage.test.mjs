@@ -23,7 +23,7 @@ import { updateWalkers } from '../src/sim/walkers.js';
 import { findDeliveryTarget, findSupplier, storageSpaceFor, takeFromCity, storageByRoad } from '../src/sim/storage.js';
 import { dispatchCart } from '../src/sim/production.js';
 import { buyerArrive } from '../src/sim/market.js';
-import { openRoute, setTradeMode, tradeAt } from '../src/sim/trade.js';
+import { openRoute, setTradeMode, tradeAt, spawnCaravan } from '../src/sim/trade.js';
 import {
   updateStorage, cycleOrder, setOrder, setEmptying, getGoods,
   WAREHOUSE_GET_LOAD, GRANARY_GET_LOAD, GRANARY_GET_FLOOR,
@@ -56,6 +56,8 @@ function strip() {
   };
   return {
     game,
+    spot,
+    ry,
     up: (dx, type) => place(dx, ry - 3, type),
     down: (dx, type) => place(dx, ry + 1, type),
   };
@@ -76,6 +78,16 @@ function settle(game, maxDays = 80) {
 }
 
 const carts = (game) => [...game.walkers.values()].filter((w) => w.type === 'cart');
+
+/** Fill the city up to its walker limit with placeholders (no new walker can spawn). */
+function atWalkerCap(game) {
+  for (let i = 1; game.walkers.size < CONFIG.MAX_WALKERS; i++) game.walkers.set(-i, { dead: true });
+}
+
+/** Remove the placeholders again. */
+function belowWalkerCap(game) {
+  for (const id of [...game.walkers.keys()]) if (id < 0) game.walkers.delete(id);
+}
 
 // ---------------------------------------------------------------------------
 // The orders themselves
@@ -506,6 +518,95 @@ test('a cart that cannot deliver brings its load home, even to a building that i
   settle(game);
   assert.equal(w1.stock.wine, 200, 'back home, not lost');
   assert.equal(w2.stock.wine, 0);
+});
+
+test('a Get cart whose road home was cut leaves the load at its source', () => {
+  const { game, spot, ry, up } = strip();
+  const w1 = up(0, 'warehouse');
+  const w2 = up(30, 'warehouse');
+  w2.stock.wine = 1000;
+  setOrder(w1, 'wine', 'get');
+  updateStorage(game, w1);
+  const cart = carts(game)[0];
+  while (cart.x < spot.x + 12) updateWalkers(game);
+  assert.ok(build(game, 'clear', spot.x + 6, ry, spot.x + 6, ry).ok, 'road cut behind the cart');
+  game.processRoadChanges();
+  settle(game);
+  assert.equal(game.walkers.has(cart.id), false, 'the cart could not get home');
+  assert.equal(w1.stock.wine + w2.stock.wine, 1000, 'no wine lost');
+  assert.equal(w2.stock.wine, 1000, 'it stayed at the source');
+  assert.equal(w1.incoming.wine, 0, 'hold released');
+});
+
+test('granary Get checks the floor again on arrival: a source drawn down meanwhile keeps its last load', () => {
+  const { game, up } = strip();
+  const g1 = up(0, 'granary');
+  const g2 = up(20, 'granary');
+  g2.stock.wheat = 1000;
+  setOrder(g1, 'wheat', 'get');
+  updateStorage(game, g1);
+  assert.equal(g1.incoming.wheat, 800);
+  g2.stock.wheat = 300; // market buyers took most of it while the cart was on its way
+  settle(game);
+  assert.equal(g2.stock.wheat, GRANARY_GET_FLOOR, 'the last load stays');
+  assert.equal(g1.stock.wheat, 200);
+  assert.equal(g1.incoming.wheat, 0);
+});
+
+test('two granaries on Get for one food leave the last load between them', () => {
+  const { game, up } = strip();
+  const g1 = up(0, 'granary');
+  const g2 = up(10, 'granary');
+  const g3 = up(20, 'granary');
+  g2.stock.vegetables = 300;
+  setOrder(g1, 'vegetables', 'get');
+  setOrder(g3, 'vegetables', 'get');
+  updateStorage(game, g1);
+  updateStorage(game, g3);
+  assert.equal(carts(game).length, 2, 'both set off, each counting on the same 200 to spare');
+  settle(game);
+  assert.equal(g2.stock.vegetables, GRANARY_GET_FLOOR);
+  assert.equal(g1.stock.vegetables + g3.stock.vegetables, 200);
+  assert.equal(g1.incoming.vegetables + g3.incoming.vegetables, 0);
+});
+
+test('at the walker limit an emptying or fetching building sends nothing and says nothing went', () => {
+  const { game, up } = strip();
+  const w1 = up(0, 'warehouse');
+  const w2 = up(10, 'warehouse');
+  const g1 = up(20, 'granary');
+  const g2 = up(30, 'granary');
+  w1.stock.wine = 200;
+  setEmptying(w1, true);
+  g2.stock.wheat = 1000;
+  setOrder(g1, 'wheat', 'get');
+  g1.orderNote = { kind: 'get', why: 'nothing', goods: ['wheat'] }; // yesterday's words
+  atWalkerCap(game);
+  updateStorage(game, w1);
+  updateStorage(game, g1);
+  belowWalkerCap(game);
+  assert.equal(carts(game).length, 0);
+  assert.equal(w1.stock.wine, 200, 'the wine stays');
+  assert.notEqual(w1.orderNote?.why, 'out', 'no "going out" for a cart that never left');
+  assert.equal(g1.orderNote, null, 'no stale note');
+  assert.equal(g1.incoming.wheat, 0);
+  assert.equal(w2.incoming.wine, 0);
+});
+
+test('a caravan passes over an emptying warehouse', () => {
+  const game = newGame({ seed: 'phone' });
+  assert.ok(buildDemoCity(game, { level: 2 }).ok);
+  const wh = [...game.buildings.values()].find((b) => b.type === 'warehouse');
+  assert.ok(wh, 'the demo city has a warehouse');
+  wh.efficiency = 1;
+  assert.ok(openRoute(game, 'tarraco').ok);
+  const caravans = () => [...game.walkers.values()].filter((w) => w.type === 'caravan');
+  spawnCaravan(game, 'tarraco');
+  assert.equal(caravans()[0]?.target, wh.id, 'a caravan comes to it while it takes goods');
+  for (const w of caravans()) game.walkers.delete(w.id);
+  setEmptying(wh, true);
+  spawnCaravan(game, 'tarraco');
+  assert.equal(caravans().some((w) => w.target === wh.id), false, 'not while it is emptying');
 });
 
 // ---------------------------------------------------------------------------

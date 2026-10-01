@@ -166,7 +166,7 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 |---|---|---|
 | Who comes | a caravan (with a mule) | a merchant ship, sail striped in the partner's color |
 | From | the Imperial road entrance | the map edge where the river/sea leaves the map |
-| To | the nearest staffed warehouse on the road network | a free, staffed **Dock** |
+| To | the nearest staffed warehouse on the road network that is not emptying | a free, staffed **Dock** |
 | Per visit | up to 800 units each way | up to 1,200 units each way |
 | Imports go | straight into that warehouse, unless it refuses the good or is emptying | onto the dock's quay (1,600 units); dock workers cart them to warehouses, granaries or workshops that accept them |
 | Exports come from | that warehouse | staffed warehouses within 60 road tiles of the dock |

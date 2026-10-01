@@ -151,6 +151,19 @@ export class InfoPanel {
     root.appendChild(this.el);
     this.target = null; // { kind: 'building', id } | { kind: 'tile', x, y } | { kind: 'walker', id }
     this.timer = 0;
+    // A pointer held down in the panel (a press on a button, say): the timed
+    // rebuild waits, or it would replace the button between press and
+    // release and the click would be lost. It runs on the next frame after
+    // the release instead, once the click has landed.
+    this.pressed = false;
+    this.el.addEventListener('pointerdown', () => { this.pressed = true; });
+    const release = () => {
+      if (!this.pressed) return;
+      this.pressed = false;
+      this.timer = Math.max(this.timer, 0.7); // the frame after the click event
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
   }
 
   get open() { return !this.el.classList.contains('hidden'); }
@@ -197,6 +210,7 @@ export class InfoPanel {
     if (!this.open) return;
     this.timer += dt;
     if (this.timer < 0.7) return;
+    if (this.pressed) return; // a press in progress: rebuild after the release
     this.timer = 0;
     // Do not rebuild while the user is interacting with a control inside.
     if (this.el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;

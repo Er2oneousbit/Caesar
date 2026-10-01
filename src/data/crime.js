@@ -19,6 +19,7 @@
 export const RIOT_TARGETS = Object.freeze([
   { type: 'senate' },
   { homeMin: 13 }, // villas and palatia: the rich
+  { type: 'hippodrome' },
   { type: 'colosseum' },
   { type: 'hospital' },
   { type: 'amphitheater' },

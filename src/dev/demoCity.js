@@ -603,6 +603,156 @@ function demoWall(game, center) {
 }
 
 // ---------------------------------------------------------------------------
+// Fishing, the big venues and the hippodrome (simulate.mjs --fishing,
+// --venues, --hippodrome; screenshots and tests)
+// ---------------------------------------------------------------------------
+
+/** Does a home stand within a worker's walk (LABOR_RANGE road tiles) of road tile `start`? */
+function homesInReach(game, start) {
+  game.processRoadChanges(); // (indexes the homes by road too)
+  return game.pf.bfsRoad(start, (i) => !!game.homeByRoad.get(i), CONFIG.LABOR_RANGE - 4) >= 0;
+}
+
+/**
+ * Place a building at the nearest spot that passes its placement rules and
+ * can be joined by road to the network that reaches the map entry, within a
+ * worker's walk of the homes; a spot that cannot is undone (full refund) and
+ * the next one tried. `fits(x, y)` narrows the candidate spots (top-left
+ * corners) cheaply.
+ */
+function placeJoined(game, type, size, center, maxD, fits = () => true, tries = 40) {
+  const { map } = game;
+  const spots = [];
+  for (let y = 1; y < map.h - size - 1; y++) {
+    for (let x = 1; x < map.w - size - 1; x++) {
+      const d = Math.hypot(x - center.x, y - center.y);
+      if (d <= maxD && fits(x, y)) spots.push({ x, y, d });
+    }
+  }
+  spots.sort((a, b) => a.d - b.d);
+  let n = 0;
+  for (const s of spots) {
+    if (n >= tries) break;
+    const b = attempt(game, () => {
+      if (!place(game, type, s.x, s.y, size)) return null;
+      n++;
+      const placed = game.buildings.get(map.building[map.idx(s.x, s.y)]);
+      if (!placed || placed.type !== type) return null;
+      game.processRoadChanges();
+      const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
+      const joined = () => placed.accessRoad >= 0 && map.roadNet[placed.accessRoad] === entryNet;
+      const S = size;
+      // A road to the nearest street with homes on it (the nearest road may
+      // be the Imperial road, a long walk from any worker), else to any road.
+      let street = null;
+      let bestD = Infinity;
+      for (const h of game.buildings.values()) {
+        if (!h.house || h.accessRoad < 0 || map.roadNet[h.accessRoad] !== entryNet) continue;
+        const d = Math.hypot(map.xOf(h.accessRoad) - s.x, map.yOf(h.accessRoad) - s.y);
+        if (d < bestD) { bestD = d; street = { x: map.xOf(h.accessRoad), y: map.yOf(h.accessRoad) }; }
+      }
+      for (const [x, y] of [[s.x + S, s.y], [s.x - 1, s.y], [s.x, s.y + S], [s.x, s.y - 1], [s.x + S, s.y + S - 1], [s.x - 1, s.y + S - 1]]) {
+        if (joined()) break;
+        if (!map.inBounds(x, y) || map.building[map.idx(x, y)] || map.terrain[map.idx(x, y)] === Terrain.WATER) continue;
+        if (!(street && build(game, 'road', x, y, street.x, street.y))) connectToRoad(game, x, y, entryNet);
+        game.processRoadChanges();
+      }
+      return joined() && homesInReach(game, placed.accessRoad) ? placed : null;
+    });
+    if (b) return b;
+  }
+  return null;
+}
+
+/**
+ * A fishing quarter: a shipyard and `wharves` wharves on the nearest water
+ * with fishing grounds, a granary beside them for the catch, and a prefect
+ * and engineer to keep them standing.
+ * @returns {{ok:boolean, shipyard?:object, wharves:object[], granary?:object}}
+ */
+export function buildDemoFishery(game, center, { wharves = 2 } = {}) {
+  const { map } = game;
+  if (!game.isUnlocked('wharf') || !game.isUnlocked('shipyard')) return { ok: false, wharves: [] };
+  // Water with fish and a ground: the spot must touch such water.
+  const fishing = (x, y) => {
+    const i = map.fishWaterBeside(x, y, 2);
+    return i >= 0 && map.groundsOf(map.fishBody[i]).length > 0;
+  };
+  const shipyard = placeJoined(game, 'shipyard', 2, center, 45, fishing);
+  if (!shipyard) return { ok: false, wharves: [] };
+  const body = map.fishBody[map.fishWaterBeside(shipyard.x, shipyard.y, 2)];
+  const sameWater = (x, y) => fishing(x, y) && map.fishBody[map.fishWaterBeside(x, y, 2)] === body;
+  const built = [];
+  for (let k = 0; k < wharves; k++) {
+    const w = placeJoined(game, 'wharf', 2, shipyard, 30, sameWater);
+    if (w) built.push(w);
+  }
+  guard(game, shipyard.x, shipyard.y);
+  for (const w of built) guard(game, w.x, w.y); // (each its own: wharves on a long shore lie apart)
+  const granary = built.length ? placeNear(game, 'granary', 3, built[0], 3, 16) : null;
+  return { ok: built.length > 0, shipyard, wharves: built, granary };
+}
+
+/**
+ * The big venues: an amphitheater and a colosseum in reach of the housing,
+ * with a gladiator school and a menagerie to keep both shows booked.
+ */
+export function buildDemoVenues(game, center) {
+  const out = {};
+  for (const [type, size, minD] of [['amphitheater', 3, 4], ['colosseum', 5, 4], ['gladiator_school', 3, 8], ['menagerie', 3, 8]]) {
+    if (game.isUnlocked(type)) out[type] = placeNear(game, type, size, center, minD, 30);
+  }
+  return out;
+}
+
+/**
+ * A hippodrome (15 x 5) and a chariot maker beside the city.
+ * @returns {{ok:boolean, hippodrome?:object, maker?:object}}
+ */
+export function buildDemoHippodrome(game, center) {
+  const { map } = game;
+  if (!game.isUnlocked('hippodrome')) return { ok: false };
+  const W = 15;
+  const H = 5;
+  const clear = (x, y) => {
+    if (x + W >= map.w || y + H >= map.h) return false;
+    for (let dy = 0; dy < H; dy++) for (let dx = 0; dx < W; dx++) if (!map.isFree(x + dx, y + dy) || map.terrain[map.idx(x + dx, y + dy)] === Terrain.TREES) return false;
+    return true;
+  };
+  const spots = [];
+  for (let y = 1; y < map.h - H - 1; y++) {
+    for (let x = 1; x < map.w - W - 1; x++) {
+      const d = Math.hypot(x + 7 - center.x, y + 2 - center.y);
+      if (d >= 8 && d <= 34 && clear(x, y)) spots.push({ x, y, d });
+    }
+  }
+  spots.sort((a, b) => a.d - b.d);
+  let hippodrome = null;
+  for (const s of spots.slice(0, 30)) {
+    hippodrome = attempt(game, () => {
+      if (!build(game, 'hippodrome', s.x + 7, s.y + 2)) return null;
+      const b = game.buildings.get(map.building[map.idx(s.x, s.y)]);
+      if (!b || b.type !== 'hippodrome') return null;
+      game.processRoadChanges();
+      const entryNet = map.roadNet[map.idx(map.entry.x, map.entry.y)];
+      const joined = () => b.accessRoad >= 0 && map.roadNet[b.accessRoad] === entryNet;
+      for (const [x, y] of [[s.x + 7, s.y + H], [s.x + 7, s.y - 1], [s.x + W, s.y + 2], [s.x - 1, s.y + 2]]) {
+        if (joined()) break;
+        connectToRoad(game, x, y, entryNet);
+        game.processRoadChanges();
+      }
+      return joined() ? b : null;
+    });
+    if (hippodrome) break;
+  }
+  if (!hippodrome) return { ok: false };
+  guard(game, hippodrome.x + 7, hippodrome.y + H);
+  // The maker by the town, where its workers live (the track may lie a long walk out).
+  const maker = placeNear(game, 'chariot_maker', 3, center, 6, 24);
+  return { ok: !!maker, hippodrome, maker };
+}
+
+// ---------------------------------------------------------------------------
 // Harbor showcase
 // ---------------------------------------------------------------------------
 

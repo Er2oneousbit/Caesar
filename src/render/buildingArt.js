@@ -24,6 +24,8 @@ import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { GODS } from '../data/gods.js';
 import { P, poly, quad, ground, box, gableRoof, hipRoof, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
+import { shipyardArt, wharfArt } from './waterArt.js';
+import { hippodromeArt, chariotMakerArt } from './hippodromeArt.js';
 
 const TH = CONFIG.TILE_H;
 
@@ -61,6 +63,7 @@ const HEIGHT = {
   statue_small: 40, statue_medium: 64, statue_large: 90, engineer_post: 44, prefecture: 40,
   clay_pit: 30, timber_yard: 34, iron_mine: 40, marble_quarry: 40, market: 36, granary: 50, warehouse: 40,
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
+  shipyard: 36, wharf: 30, hippodrome: 46, hippodrome_part: 46, chariot_maker: 34,
 };
 
 /**
@@ -73,7 +76,7 @@ const SHADOW = {
   clay_pit: 0.08, iron_mine: 0.45, marble_quarry: 0.35, dock: 0.35, statue_small: 0.35, statue_medium: 0.6,
   statue_large: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
   warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
-  prefecture: 0.45,
+  prefecture: 0.45, shipyard: 0.3, wharf: 0.25, hippodrome: 0.35, hippodrome_part: 0.35, chariot_maker: 0.45,
 };
 /** Shadow length per house level (tents are low, insulae tall, villas wide but low, palaces tall). */
 const HOUSE_SHADOW = [0, 0.18, 0.2, 0.22, 0.26, 0.3, 0.34, 0.45, 0.5, 0.5, 0.65, 0.95, 1.1, 0.5, 0.55, 0.55, 0.6, 0.65, 0.7, 0.85, 0.9];
@@ -2187,6 +2190,11 @@ const ART = {
   tower: towerArt,
   horse_ranch: ranchArt,
   dock: dockArt,
+  shipyard: shipyardArt,
+  wharf: wharfArt,
+  hippodrome: hippodromeArt,
+  hippodrome_part: hippodromeArt,
+  chariot_maker: chariotMakerArt,
 };
 
 /**
@@ -2200,6 +2208,10 @@ export function artState(b, resting = false) {
   if (b.house) return b.house.tier;
   if (b.herd !== undefined) return b.herd; // horse ranch: one sprite per herd size
   if (kind === 'dock') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
+  // Shipyard: the water's edge, and the boat on the slip (0 none, 1 ribs, 2 planked; none while its spare waits on the water).
+  if (kind === 'shipyard') return (b.waterSide ?? 1) + 4 * (b.spareId || !(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2);
+  if (kind === 'wharf') return (b.waterSide ?? 1) + 4 * ((b.stock?.fish || 0) > 0 ? 1 : 0); // baskets of fish on the deck
+  if (kind === 'part') return b.section || 0; // a hippodrome's stretch of track
   if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20)) + (resting ? 5 : 0);
   // Water works and what runs on piped water (the baths) show it: a full
   // pool, or a dry one (the baths were always drawn full, even out of a

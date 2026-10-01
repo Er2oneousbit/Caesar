@@ -20,13 +20,15 @@
   drawn straight from the procedural art (no game running). Handy for artists
   reviewing changes, and as a side-by-side reference when making replacement
   sprites. Query params: scale=2 (pixel scale, default 2)  tiers=1,2,3 (levels subset)  extras=1 (with tiers: the other sections too)  carts=1 (the carts only; scale=1 is the default zoom)
+  water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
 <script type="module">
   import { buildingSpec } from '../../src/render/buildingArt.js';
   import { HOUSE_TIERS } from '../../src/data/housing.js';
-  import { drawWalker } from '../../src/render/walkerArt.js';
+  import { drawWalker, drawChariot } from '../../src/render/walkerArt.js';
+  import { drawGulls } from '../../src/render/waterArt.js';
   import { LED_GOODS } from '../../src/render/cargoArt.js';
   import { GOOD_KEYS } from '../../src/data/goods.js';
   import { BUILDINGS } from '../../src/data/buildings.js';
@@ -34,7 +36,8 @@
   const q = new URLSearchParams(location.search);
   const scale = Number(q.get('scale') || 2);
   // carts=1 shows only the carts (an empty tier list skips every home level)
-  const only = q.get('carts') ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const water = !!q.get('water');
+  const only = q.get('carts') || water ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -85,7 +88,46 @@
       return [t, buildingSpec(t, S, 0, 0)];
     }));
   }
-  if (!only || q.get('extras') || q.get('carts')) {
+  if (!only || q.get('extras') || water) {
+    // Fishing: the shipyard turned to each side of the water (empty slip,
+    // ribs, planked hull), the wharf with and without the catch waiting.
+    // Water drawn under each so the side facing it shows.
+    const onWater = (spec, side, S) => ({ ...spec, draw(ctx) {
+      const pts = [[S, 0, S + 0.9, S], [0, S, S, S + 0.9], [-0.9, 0, 0, S], [0, -0.9, S, 0]];
+      const [u0, v0, u1, v1] = [pts[3], pts[0], pts[1], pts[2]][side];
+      const P = (u, v) => [(u - v) * 32, (u + v) * 16];
+      ctx.fillStyle = '#4a90c8';
+      ctx.beginPath();
+      for (const [u, v] of [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]) ctx.lineTo(...P(u, v));
+      ctx.fill();
+      spec.draw(ctx);
+    } });
+    const wide = (spec) => ({ ...spec, w: spec.w + 70, h: spec.h + 34, ax: spec.ax + 35 });
+    section('Shipyard: the water on each side; empty slip, ribs, planked hull', [0, 1, 2, 3].flatMap((side) => [0, 1, 2].map((stage) => [`side ${side}, hull ${stage}`, wide(onWater(buildingSpec('shipyard', 2, 0, side + 4 * stage), side, 2))])));
+    section('Fishing wharf: the water on each side; catch waiting', [0, 1, 2, 3].flatMap((side) => [0, 1].map((fish) => [`side ${side}${fish ? ', catch' : ''}`, wide(onWater(buildingSpec('wharf', 2, 0, side + 4 * fish), side, 2))])));
+    // The hippodrome: its three sections drawn in place, as one.
+    const hip = [0, 1, 2].map((s) => buildingSpec(s ? 'hippodrome_part' : 'hippodrome', 5, 0, s));
+    section('Hippodrome (three 5x5 sections) and the chariot maker', [
+      ['hippodrome', { w: hip[0].w + 2 * 160, h: hip[0].h + 2 * 80, ax: hip[0].ax, ay: hip[0].ay, draw(ctx) {
+        hip.forEach((spec, s) => { ctx.save(); ctx.translate(s * 160, s * 80); spec.draw(ctx); ctx.restore(); });
+      } }],
+      ['chariot_maker', buildingSpec('chariot_maker', 3, 0, 0)],
+    ]);
+    const boatSpec = (state) => ({ w: 70, h: 44, ax: 35, ay: 34, draw(ctx) {
+      ctx.fillStyle = '#4a90c8';
+      ctx.fillRect(-35, -34, 70, 44);
+      drawWalker(ctx, { id: 4, type: 'fishing_boat', anim: 0, moving: state !== 'fishing', state }, 0, 0, 1, 0.4, state === 'homeWithCatch' ? -1 : 1, 0, 0);
+    } });
+    section('Fishing boats: sailing out, fishing, coming home with the catch, moored; gulls over a ground', [
+      ['out', boatSpec('toGround')], ['fishing', boatSpec('fishing')], ['home', boatSpec('homeWithCatch')], ['moored', boatSpec('moored')],
+      ['gulls', { w: 90, h: 60, ax: 45, ay: 44, draw(ctx) { ctx.fillStyle = '#4a90c8'; ctx.fillRect(-45, -44, 90, 60); drawGulls(ctx, 0, 6, 1, 0.7, 1); } }],
+    ]);
+    const chariot = (face, color, label) => [label, { w: 60, h: 34, ax: face > 0 ? 18 : 42, ay: 28, draw(ctx) { drawChariot(ctx, 0, 0, 1, face, 0.6, color, 1); } }];
+    section('Chariots: the charioteer (blue), a team on its way to the races, both ways', [
+      chariot(1, '#2f6db5', 'charioteer'), chariot(-1, '#2f6db5', 'facing left'), chariot(1, '#b8573a', 'team'),
+    ]);
+  }
+  if ((!only || q.get('extras') || q.get('carts')) && !water) {
     // Carts: every good at a part load (100 of a hand cart's 200) and a full
     // load, facing right then left; farm wagons at 100 and 400; horses led;
     // caravan mules coming in (bales) and going out with what they bought.

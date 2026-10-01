@@ -645,6 +645,30 @@ try {
   }
   check('rubble offers to rebuild what stood there, on the same spot', fell.rubble === 1 && !!rebuilt && rebuilt.standing && /^Rebuild the .+ \(\d+ Dn\)$/.test(rebuilt.label || ''), JSON.stringify({ fell, rebuilt }));
 
+  // 5a2c. Fishing and the hippodrome: built with the console's builders (the
+  //       player's construction API), their panels show the boat, the catch
+  //       and the races; a click on any section of the track opens the
+  //       hippodrome's panel.
+  const water = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const free = g.cheats.freeBuild;
+    g.cheats.freeBuild = true;
+    const out = { fish: app.ui.console.run('fishing'), hip: app.ui.console.run('hippodrome') };
+    g.cheats.freeBuild = free;
+    const find = (k) => [...g.buildings.values()].find((b) => b.def.kind === k || b.type === k);
+    const text = () => document.querySelector('#info-panel')?.textContent || '';
+    const wharf = find('wharf');
+    if (wharf) { app.ui.info.showBuilding(wharf.id); out.wharf = text(); }
+    const part = find('hippodrome_part');
+    if (part) { app.ui.info.showBuilding(part.id); out.target = app.ui.info.target?.id; out.main = part.main; out.hipPanel = text(); }
+    app.ui.info.close();
+    app.renderer.render(0, 0.016);
+    return out;
+  });
+  check('a wharf can be placed, and its panel shows its boat and catch', /Fishing/.test(water.wharf || '') && /Catch in store/.test(water.wharf || '') && errors.length === 0, JSON.stringify({ fish: water.fish, wharf: (water.wharf || '').slice(0, 160) }));
+  check('a hippodrome can be placed; any section opens its panel with the races', !!water.main && water.target === water.main && /Races/.test(water.hipPanel || '') && errors.length === 0, JSON.stringify({ hip: water.hip, target: water.target, main: water.main }));
+
   // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
   //      the Production advisor and the trend charts.
   await page.selectOption('.hud-select', 'problems');

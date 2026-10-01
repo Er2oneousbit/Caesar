@@ -16,9 +16,11 @@
  *
  * The five gods (data/gods.js):
  *   Ceres    blessing: every farm ripens.  wrath: farm progress lost.
- *   Neptune  blessing: money.  wrath: buildings near water weakened.
+ *   Neptune  blessing: money.  wrath: buildings near water weakened, and
+ *            every fishing boat sinks (the original's curse; the shipyards
+ *            build new ones).
  *   Mercury  blessing: the emptiest working granary gets MERCURY_BLESS_FOOD of
- *            each food.  wrath: the fullest granary or warehouse loses
+ *            each land food (no fish).  wrath: the fullest granary or warehouse loses
  *            MERCURY_WRATH_LOSS units; again before he calms, it burns.
  *   Mars     blessing: +10 peace.  wrath: -10 peace, treasury looted.
  *   Venus    blessing: every home's mood +VENUS_BLESS_HOME and a city mood
@@ -31,7 +33,7 @@
 
 import { CONFIG } from '../config.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
-import { FOOD_TYPES } from '../data/goods.js';
+import { FOOD_TYPES, LAND_FOODS } from '../data/goods.js';
 import { transact } from './economy.js';
 import { igniteBuilding, buildingLabel } from './risk.js';
 import { farmDormant } from './production.js';
@@ -39,6 +41,7 @@ import { isStorage, storageUsed, storageRoom, storageAccepts, receiveGoods, take
 import { liftAllMoods } from './mood.js';
 import { diseaseActive, houseHealth } from './disease.js';
 import { logGoods } from './goodsLedger.js';
+import { sinkFishingBoats } from './fishing.js';
 
 /** One god's fresh state. angered: it struck and has not calmed since (see the header). */
 export function newGodMood() {
@@ -111,7 +114,7 @@ const byId = (a, b) => a.id - b.id;
  */
 export function emptiestGranary(game) {
   const all = [...game.buildings.values()]
-    .filter((b) => b.def.kind === 'granary' && FOOD_TYPES.some((f) => storageAccepts(b, f)))
+    .filter((b) => b.def.kind === 'granary' && LAND_FOODS.some((f) => storageAccepts(b, f)))
     .sort(byId);
   const working = all.filter((b) => b.efficiency > 0);
   let best = null;
@@ -157,7 +160,9 @@ function blessMercury(game) {
   const b = emptiestGranary(game);
   if (!b) return { text: 'He found no granary that would take food.' };
   let given = 0;
-  for (const f of FOOD_TYPES) {
+  // The four land foods, as the original's four food slots: the gift stays
+  // 2,400 units, and never brings fish to a city that has no wharf.
+  for (const f of LAND_FOODS) {
     // Through the granary's own door: its room and what it accepts. A food
     // it refuses would only be carted away again. Foods the city does not
     // grow are given all the same: Mercury brings them from afar.
@@ -283,12 +288,15 @@ function wrath(game, god, s) {
     case 'ceres':
       for (const b of all) if (b.def.kind === 'farm') b.progress = 0;
       break;
-    case 'neptune':
+    case 'neptune': {
       // Not buildings that can never collapse (a reservoir on the shore):
       // they would only show risk that can never act. Homes always take it,
       // as a Tent may move up to a level that can collapse.
       for (const b of all) if ((b.house || b.def.damage > 0) && game.map.isNearTerrain(b.x, b.y, b.size, 4, 3)) b.damageRisk += 60;
+      const sunk = sinkFishingBoats(game);
+      if (sunk > 0) note = { text: `${GODS[god].wrath} His storms sink ${sunk === 1 ? 'a fishing boat' : `all ${sunk} fishing boats`}: the shipyards must build new ones.` };
       break;
+    }
     case 'mercury':
       note = wrathMercury(game, major);
       break;

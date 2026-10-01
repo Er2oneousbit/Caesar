@@ -129,7 +129,7 @@ test('Mercury blesses the emptiest working granary with 600 of each food, as far
   assert.equal(emptiestGranary(game), B, 'the working granary with the least food, not the empty unstaffed one');
   act(game, 'mercury', 'bless');
   // 1900 free: wheat +600, vegetables +600, fruit +600, meat the last 100.
-  assert.deepEqual({ ...B.stock }, { wheat: 900, vegetables: 600, fruit: 600, meat: 300 });
+  assert.deepEqual({ ...B.stock }, { wheat: 900, vegetables: 600, fruit: 600, meat: 300, fish: 0 }, 'the four land foods: Mercury brings no fish');
   assert.equal(sumStock(A), 1200, 'the others are left alone');
   assert.equal(sumStock(C), 0);
   const m = game.messages[0];
@@ -145,7 +145,7 @@ test('Mercury\'s blessing: refused foods are skipped, an unstaffed granary only 
   const G = store(game, 'granary', { wheat: 100 }, 0);
   G.orders.fruit = 'refuse';
   act(game, 'mercury', 'bless');
-  assert.deepEqual({ ...G.stock }, { wheat: 700, vegetables: 600, fruit: 0, meat: 600 }, 'no fruit for a granary that refuses it');
+  assert.deepEqual({ ...G.stock }, { wheat: 700, vegetables: 600, fruit: 0, meat: 600, fish: 0 }, 'no fruit for a granary that refuses it');
 });
 
 test('Mercury\'s blessing passes over a granary set to refuse every food (its emptiness is no need)', () => {
@@ -169,7 +169,7 @@ test('Mercury\'s wrath: the fullest storehouse loses 1600 units; angered again, 
   const G = store(game, 'granary', { wheat: 1000, vegetables: 800, fruit: 400 });
   assert.equal(fullestStorehouse(game), G, '2200 units beat 2000');
   act(game, 'mercury', 'wrath');
-  assert.deepEqual({ ...G.stock }, { wheat: 0, vegetables: 200, fruit: 400, meat: 0 }, 'wheat first, then vegetables');
+  assert.deepEqual({ ...G.stock }, { wheat: 0, vegetables: 200, fruit: 400, meat: 0, fish: 0 }, 'wheat first, then vegetables');
   assert.equal(sumStock(W), 2000, 'the warehouse is spared');
   assert.match(game.messages[0].text, /^Mercury is angry! 1600 units of goods vanish from the Granary at/);
   assert.equal(game.city.gods.mercury.angered, true);

@@ -11,6 +11,7 @@
 import { HALF_W } from '../config.js';
 import { MINIMAP_TERRAIN } from './terrainArt.js';
 import { MAX_TIER } from '../data/housing.js';
+import { mainOf } from '../sim/entities.js';
 
 const CATEGORY_COLORS = {
   housing: [214, 190, 140],
@@ -69,7 +70,7 @@ export class Minimap {
               const t = b.house.tier / MAX_TIER;
               c = [Math.round(200 - 60 * t), Math.round(170 - 40 * t), Math.round(120 + 60 * t)];
             } else {
-              c = CATEGORY_COLORS[b.def.category] || [200, 200, 200];
+              c = CATEGORY_COLORS[mainOf(game, b).def.category] || [200, 200, 200]; // (a hippodrome's sections as the hippodrome)
             }
           }
         }

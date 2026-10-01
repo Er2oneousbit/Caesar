@@ -659,7 +659,7 @@ export class Advisors {
       kv(name, `${Math.floor(r[key])}${goals[key] ? ` (goal ${goals[key]})` : ''}`), bar(r[key], 100),
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '3px' } }, tip));
     const seats = g.city.entCoverage || {};
-    const seatText = `Venue seats for ${seats.theater || 0}% (theaters), ${seats.amphitheater || 0}% (amphitheaters) and ${seats.colosseum || 0}% (colosseums) of the city give every home +${g.city.entBase || 0} entertainment.`;
+    const seatText = `Venue seats for ${seats.theater || 0}% (theaters), ${seats.amphitheater || 0}% (amphitheaters) and ${seats.colosseum || 0}% (colosseums) of the city${seats.hippodrome ? ', and races at the hippodrome for everyone,' : ''} give every home +${g.city.entBase || 0} entertainment.`;
     return [
       row('culture', 'Culture', `Religion ${pct(cov.religion)}, school ${pct(cov.school)}, library ${pct(cov.library)}, academy ${pct(cov.academy)} of citizens covered; average entertainment ${Math.round(cov.entertainment || 0)}. ${seatText} Build temples, schools, libraries and venues where people live.`),
       row('prosperity', 'Prosperity', 'Rises with better housing, patrician villas, a profitable treasury, low unemployment, fair wages and a Senate. Changes slowly.'),

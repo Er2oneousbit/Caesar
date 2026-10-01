@@ -17,12 +17,18 @@ import { BUILDINGS } from '../data/buildings.js';
 import { cityStock, takeFromCity } from './storage.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
+import { hasWorkingWharf } from './fishing.js';
 
-/** Goods the city could plausibly supply (it can build the producer). */
+/**
+ * Goods the city could plausibly supply (it can build the producer). Fish
+ * only while a wharf is at work: a city with no wharf is never asked for it,
+ * and its requests are drawn exactly as before there was fish.
+ */
 function requestableGoods(game) {
   const out = new Set();
   for (const [key, def] of Object.entries(BUILDINGS)) {
     if (!def.produces || !game.isUnlocked(key)) continue;
+    if (def.kind === 'wharf' && !hasWorkingWharf(game)) continue;
     out.add(def.produces);
   }
   // Import-able goods also count if a route could be opened.

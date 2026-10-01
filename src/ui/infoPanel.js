@@ -11,7 +11,7 @@
 
 import { h, mount, fmt, pct, bar, kv } from './dom.js';
 import { CONFIG } from '../config.js';
-import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX } from '../data/buildings.js';
+import { BUILDINGS, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX, ENT_SEATS_MAX } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX } from '../data/units.js';
@@ -27,6 +27,7 @@ import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
 import { dockBerth, dockUsed } from '../sim/trade.js';
+import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat } from '../sim/fishing.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
@@ -52,7 +53,7 @@ export function describeNeed(m) {
     case 'water': return m.need >= 2 ? 'Clean water from a fountain within 4 tiles (fountains need a reservoir).' : 'Access to water: a well within 2 tiles.';
     case 'food': return `${m.need} type${m.need > 1 ? 's' : ''} of food (has ${m.have}). A market vendor must pass by, and the market needs a stocked granary.`;
     case 'religion': return `Priests of ${m.need} different god${m.need > 1 ? 's' : ''} visiting (has ${m.have}). Build temples nearby.`;
-    case 'ent': return `Entertainment ${m.need} (has ${m.have}). Entertainers passing by: theater ${VENUE_POINTS.theater}, amphitheater ${VENUE_POINTS.amphitheater} (${VENUE_POINTS.amphitheater + VENUE_BOTH_BONUS.amphitheater} with plays and gladiators), colosseum ${VENUE_POINTS.colosseum} (${VENUE_POINTS.colosseum + VENUE_BOTH_BONUS.colosseum} with gladiators and beasts), plus up to ${ENT_BASE_MAX} when the city's venues have seats for everyone.`;
+    case 'ent': return `Entertainment ${m.need} (has ${m.have}). Entertainers passing by: theater ${VENUE_POINTS.theater}, amphitheater ${VENUE_POINTS.amphitheater} (${VENUE_POINTS.amphitheater + VENUE_BOTH_BONUS.amphitheater} with plays and gladiators), colosseum ${VENUE_POINTS.colosseum} (${VENUE_POINTS.colosseum + VENUE_BOTH_BONUS.colosseum} with gladiators and beasts), the hippodrome's charioteers ${VENUE_POINTS.hippodrome}, plus up to ${ENT_SEATS_MAX} when the city's venues have seats for everyone (${ENT_BASE_MAX} with races at the hippodrome).`;
     case 'edu': return `${['', 'A school or a library nearby.', 'Both a school and a library nearby.', 'A school, a library and an academy nearby.'][m.need]} (has ${['none', 'one of school and library', 'school and library', 'all three'][m.have]})`;
     case 'barber': return 'A barber nearby.';
     case 'baths': return 'Public baths (Thermae) nearby. They need piped water from a reservoir.';
@@ -117,6 +118,17 @@ export function buildingStatus(game, b) {
     case 'barracks':
       if (b.blocked) return { level: 'warn', text: b.blocked };
       break;
+    case 'wharf': {
+      if (!wharfBoat(game, b)) {
+        const yard = [...game.buildings.values()].some((x) => x.def.kind === 'shipyard' && bodyOf(game, x) === bodyOf(game, b));
+        return { level: 'warn', text: yard ? 'Waiting for a boat from the shipyard.' : 'Waiting for a boat: build a Shipyard on this water.' };
+      }
+      if (b.noStorage) return { level: 'warn', text: 'The catch is piling up: no granary or warehouse with room is reachable.' };
+      break;
+    }
+    case 'shipyard':
+      if (bodyOf(game, b) === 0) return { level: 'bad', text: 'Not beside water with fish.' };
+      break;
     case 'dock':
       if (!game.map.seaEntry) return { level: 'bad', text: 'No river or sea here reaches the map edge: ships cannot come.' };
       if (dockBerth(game, b) < 0) return { level: 'bad', text: 'Not beside water that ships can sail.' };
@@ -135,6 +147,7 @@ export function buildingStatus(game, b) {
       break;
     }
     case 'venue':
+      if (def.venue === 'hippodrome' && !venueActive(b)) return { level: 'warn', text: 'No races: a Chariot Maker connected by road sends the teams.' };
       if (!venueActive(b)) {
         const need = VENUE_SUPPLIERS[def.venue].map((v) => PERFORMER_NAMES[v].toLowerCase() + 's').join(' or ');
         return { level: 'warn', text: `No shows booked. It needs ${need} from a training building connected by road.` };
@@ -194,6 +207,9 @@ export class InfoPanel {
   get open() { return !this.el.classList.contains('hidden'); }
 
   showBuilding(id) {
+    // A hippodrome's other sections show the hippodrome.
+    const b = this.app.game?.buildings.get(id);
+    if (b && b.main && this.app.game.buildings.has(b.main)) id = b.main;
     this.target = { kind: 'building', id };
     this.unselectWalker();
     this.app.renderer.selectedId = id;
@@ -392,7 +408,7 @@ export class InfoPanel {
   renderBuilding(g, b) {
     const def = b.def;
     const st = buildingStatus(g, b);
-    const parts = [this.head(def.name, `${b.size}×${b.size}`), h('div', { class: `status ${st.level}` }, st.text)];
+    const parts = [this.head(def.name, `${b.size * (def.span || 1)}×${b.size}`), h('div', { class: `status ${st.level}` }, st.text)];
     if (def.workers) {
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Employment'),
@@ -434,6 +450,16 @@ export class InfoPanel {
           [...FOOD_TYPES, ...HOUSE_GOODS].every((k) => b.stock[k] <= 0) ? h('div', { class: 'muted' }, 'Empty') : null));
         break;
       case 'venue': {
+        if (def.venue === 'hippodrome') {
+          const on = venueActive(b) && b.efficiency > 0;
+          parts.push(sec('Races',
+            kv('Races', on ? `Running: ${b.shows.hippodrome} days booked` : b.shows.hippodrome > 0 ? 'Booked, but nobody works here' : 'None booked'),
+            kv('Entertainment value', `${VENUE_POINTS.hippodrome} to the homes its charioteers pass`),
+            kv('Seats', on ? `The whole city: +${ENT_BASE_MAX - ENT_SEATS_MAX} at most to every home` : 'None while no races run'),
+            kv('Prosperity', on ? `+${CONFIG.HIPPODROME_PROSPERITY} while races run` : 'Nothing while no races run'),
+            h('div', { class: 'muted' }, 'A Chariot Maker connected by road books 32 days of races with each team it sends. One hippodrome per city.')));
+          break;
+        }
         const acc = VENUE_SUPPLIERS[def.venue];
         const both = venueHasBoth(b, def.venue);
         const value = VENUE_POINTS[def.venue] + (both ? VENUE_BOTH_BONUS[def.venue] || 0 : 0);
@@ -477,6 +503,33 @@ export class InfoPanel {
           kv('On the quay', `${fmt(dockUsed(b))} / ${fmt(CONFIG.DOCK_CAPACITY)}`), bar(dockUsed(b), CONFIG.DOCK_CAPACITY),
           goods.length ? h('div', {}, goods.map(([k, v]) => h('span', { class: 'chip' }, `${GOODS[k].icon} ${GOODS[k].name} ${fmt(v)}`))) : null,
           h('div', { class: 'muted' }, `A ship waits here while it trades. The crane lands its imports on the quay (you pay as they land) and dock workers cart them to storage; they fetch exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles (you are paid as each load goes aboard). The ship sails when both are done, or after ${CONFIG.SHIP_MAX_STAY_DAYS} days: keep storage near the Dock.`)));
+        break;
+      }
+      case 'wharf': {
+        const boat = wharfBoat(g, b);
+        const ground = boat && boat.ground ? `${boat.ground.x}, ${boat.ground.y}` : null;
+        const grounds = g.map.groundsOf(bodyOf(g, b)).length;
+        const trouble = b.boatTrouble && g.time.totalDays - b.boatTrouble.day < CONFIG.DAYS_PER_MONTH * 3 ? `A boat ${b.boatTrouble.what}.` : null;
+        parts.push(sec('Fishing',
+          kv('Boat', boat ? boatStatus(g, b) : 'None: a Shipyard on this water sends one'),
+          ground ? kv('Fishing ground', ground) : null,
+          kv('Fishing grounds on this water', `${grounds}`),
+          kv('Catch in store', `${fmt(b.stock.fish || 0)} fish`),
+          kv('Catches landed', `${fmt(b.catches || 0)} (${CONFIG.FISH_CATCH} fish each)`),
+          trouble ? h('div', { class: 'status warn' }, trouble) : null,
+          h('div', { class: 'muted' }, `The boat fishes ${CONFIG.FISH_DAYS} days at the nearest fishing ground (gulls circle over it) and brings back ${CONFIG.FISH_CATCH} fish; carts take them to a granary. Fewer workers: a longer wait between trips. The sea does not freeze: fishing goes on all winter.`)));
+        break;
+      }
+      case 'shipyard': {
+        const spare = spareBoat(g, b);
+        const wanting = wharvesWithoutBoat(g, b);
+        parts.push(sec('Boatbuilding',
+          kv('Spare boat', spare ? 'Waiting on the water for a wharf' : 'None'),
+          spare ? null : kv('Next boat', pct(Math.min(100, b.progress) / 100)),
+          spare ? null : bar(Math.min(100, b.progress), 100),
+          kv('Wharves on this water without a boat', `${wanting}`),
+          kv('Boats built', `${fmt(b.boatsBuilt || 0)}`),
+          h('div', { class: 'muted' }, `A boat takes ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff and needs no materials. It goes to the nearest staffed wharf on this water that has none; the yard keeps one spare ready and builds no more until a wharf takes it.`)));
         break;
       }
       case 'tower':

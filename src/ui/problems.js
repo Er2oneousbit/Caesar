@@ -23,7 +23,7 @@
  */
 
 import { HOUSE_TIERS, MAX_TIER } from '../data/housing.js';
-import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_BOTH_SHOWS, VENUE_SUPPLIERS, ENT_BASE_MAX } from '../data/buildings.js';
+import { BUILDINGS, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_BOTH_SHOWS, VENUE_SUPPLIERS, VENUE_SEATS, ENT_BASE_MAX, ENT_SEATS_MAX } from '../data/buildings.js';
 import { FOOD_TYPES } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { buildingStatus, describeNeed } from './infoPanel.js';
@@ -85,7 +85,9 @@ function reachable(game, m) {
   const sells = (good) => partners.some((id) => TRADE_PARTNERS[id].sells[good]);
   const makes = (good, depth = 0) => depth < 3 && Object.entries(BUILDINGS).some(([k, d]) => d.produces === good && has(k)
     && (!d.recipe || Object.keys(d.recipe).every((raw) => makes(raw, depth + 1) || sells(raw))));
-  const gets = (good) => makes(good) || sells(good);
+  // Fish needs water with fish (fishing grounds) as well as the shipyard and wharf.
+  const fishes = () => game.map.fishingGrounds.length > 0 && has('shipyard') && has('wharf');
+  const gets = (good) => (good === 'fish' ? fishes() : makes(good) || sells(good));
   switch (m.key) {
     case 'water': return m.need >= 2 ? has('fountain') : has('well') || has('fountain');
     case 'food': return FOOD_TYPES.filter(gets).length >= m.need;
@@ -93,8 +95,10 @@ function reachable(game, m) {
     case 'ent': {
       // The best score: the city-wide base plus every venue that can get performers.
       const trained = (perf) => Object.keys(BUILDINGS).some((k) => BUILDINGS[k].kind === 'training' && BUILDINGS[k].venue === perf && has(k));
+      // The seats: up to ENT_SEATS_MAX from the three seat kinds, and the
+      // rest of ENT_BASE_MAX from a hippodrome, which seats the whole city.
       const venues = Object.keys(VENUE_POINTS).filter((v) => has(v) && VENUE_SUPPLIERS[v].some(trained));
-      let best = venues.length ? ENT_BASE_MAX : 0;
+      let best = (venues.some((v) => VENUE_SEATS[v]) ? ENT_SEATS_MAX : 0) + (venues.includes('hippodrome') ? ENT_BASE_MAX - ENT_SEATS_MAX : 0);
       for (const v of venues) best += VENUE_POINTS[v] + (VENUE_BOTH_SHOWS[v] && VENUE_BOTH_SHOWS[v].every(trained) ? VENUE_BOTH_BONUS[v] || 0 : 0);
       return best >= m.need;
     }

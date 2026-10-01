@@ -29,15 +29,16 @@ export function lacksRoad(b) {
 }
 
 /**
- * The tiles where a road would give a building at (x, y) of size S access:
+ * The tiles where a road would give a building at (x, y) of size S (h deep
+ * along y when it is not square: the hippodrome) access:
  * its edge ring, without the corners (a road there does not count). `open`
  * says whether a road can be laid on the tile at all (not water, rock, a
  * building or a fire; a wall would become a gate).
  * @returns {{x:number, y:number, i:number, open:boolean}[]}
  */
-export function accessEdgeTiles(game, x, y, S) {
+export function accessEdgeTiles(game, x, y, S, h = S) {
   const { map } = game;
-  return perimeterTiles(map, x, y, S).map((i) => {
+  return perimeterTiles(map, x, y, S, h).map((i) => {
     const t = map.terrain[i];
     const open = !map.building[i] && t !== Terrain.WATER && t !== Terrain.ROCK && !game.fires.has(i);
     return { x: map.xOf(i), y: map.yOf(i), i, open };

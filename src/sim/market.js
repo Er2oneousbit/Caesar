@@ -86,6 +86,9 @@ export function updateMarketBuyer(game, market) {
   const demand = game.city.goodsDemand || {};
   const wants = [];
   for (const f of FOOD_TYPES) {
+    // Fish only when some granary or warehouse holds it: a want nobody can
+    // fill would take one of the day's four tries from pottery or furniture.
+    if (f === 'fish' && !fishInStore(game)) continue;
     const ratio = market.stock[f] / CONFIG.MARKET_FOOD_CAP;
     if (ratio < 0.6) wants.push({ good: f, ratio });
   }
@@ -103,6 +106,12 @@ export function updateMarketBuyer(game, market) {
     return;
   }
   market.buyerCooldown = 3; // nothing available, check again later
+}
+
+/** Does any granary or warehouse hold fish? */
+function fishInStore(game) {
+  for (const b of game.buildings.values()) if (isStorage(b) && b.stock.fish > 0) return true;
+  return false;
 }
 
 /** Buyer reached the storage: fill the basket, then head home. */

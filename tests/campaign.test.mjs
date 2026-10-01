@@ -74,8 +74,9 @@ test('each mission keeps to its planned pace, and the missions get longer', () =
 test('each mission\'s goals are within reach of its buildings', () => {
   // The housing ladder through the campaign: Huts, Townhouses, Domus (the
   // amphitheater: a theater alone gives at most 16 entertainment, a Domus
-  // needs 20), Villas, then every level.
-  assert.deepEqual(SCENARIOS.map(topLevel), [4, 7, 9, 13, 20, 20, 20]);
+  // needs 20), Villas, then Grand Palatia in missions 5 and 6 and every level
+  // in mission 7, whose hippodrome the Imperial Palatium (95) needs.
+  assert.deepEqual(SCENARIOS.map(topLevel), [4, 7, 9, 13, 19, 19, 20]);
   for (const s of SCENARIOS) {
     const g = s.goals;
     const keys = unlockedBuildings(s);

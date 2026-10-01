@@ -18,6 +18,10 @@ export const GOODS = Object.freeze({
   vegetables: { name: 'Vegetables', kind: 'food', color: '#6aa84f', buy: 42, sell: 30, icon: '🥬' },
   fruit: { name: 'Fruit', kind: 'food', color: '#d9534f', buy: 44, sell: 32, icon: '🍎' },
   meat: { name: 'Meat', kind: 'food', color: '#b5655a', buy: 52, sell: 38, icon: '🍖' },
+  // Fish (fishing wharves): a fifth food of its own, last among the foods, so
+  // every loop over the foods keeps the first four in their old order. No
+  // trade partner deals in it yet.
+  fish: { name: 'Fish', kind: 'food', color: '#8fb3c2', buy: 48, sell: 34, icon: '🐟' },
   // Raw materials
   clay: { name: 'Clay', kind: 'raw', color: '#b8683c', buy: 44, sell: 30, icon: '🧱' },
   timber: { name: 'Timber', kind: 'raw', color: '#8b5a2b', buy: 55, sell: 38, icon: '🪵' },
@@ -40,6 +44,14 @@ export const GOOD_KEYS = Object.freeze(Object.keys(GOODS));
 export const FOOD_TYPES = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'food'));
 export const RAW_TYPES = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'raw'));
 export const MANUFACTURED = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'goods'));
+
+/**
+ * The four foods that grow on land (the original's four food slots). Fish is
+ * a fifth food, but some rules stay with these four so that a city without a
+ * wharf plays exactly as before: Mercury's blessing brings these and no fish,
+ * and a home's health still counts "every kind of food" as four.
+ */
+export const LAND_FOODS = Object.freeze(['wheat', 'vegetables', 'fruit', 'meat']);
 
 /**
  * Military inputs: what a barracks uses to equip one recruit (units).

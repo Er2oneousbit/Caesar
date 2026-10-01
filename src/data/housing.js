@@ -87,9 +87,17 @@ export const HOUSE_TIERS = Object.freeze([
   L({ name: 'Mansion', size: 3, people: 117, down: 53, up: 61, water: 2, food: 3, religion: 3, ent: 55, edu: 3, barber: 1, baths: 1, health: 2, goods: LUXURY, wine: 2, tax: 12, patrician: true, fire: 0.6, damage: 0.8, desOut: [4, 2, -1, 4] }),
   L({ name: 'Palatium', size: 3, people: 126, down: 57, up: 66, water: 2, food: 3, religion: 4, ent: 60, edu: 3, barber: 1, baths: 1, health: 2, goods: LUXURY, wine: 2, tax: 13, patrician: true, fire: 0.6, damage: 0.8, desOut: [4, 2, -1, 4] }),
   // --- 4x4 -------------------------------------------------------------------
-  L({ name: 'Grand Palatium', size: 4, people: 192, down: 60, up: 72, water: 2, food: 3, religion: 4, ent: 70, edu: 3, barber: 1, baths: 1, health: 2, goods: LUXURY, wine: 2, tax: 15, patrician: true, fire: 0.5, damage: 0.8, desOut: [5, 2, -1, 5] }),
+  // Entertainment 80 and 95 (were 70 and 80) since the hippodrome: with it a
+  // home can score 116, and 80 no longer needed the colosseum (theater,
+  // amphitheater and hippodrome reach it). Measured on the level 3 demo city
+  // with every venue (3 years, river 96 and lakes 128): without a hippodrome
+  // no home cleared 60; with one, 55-58% of homes cleared 80 and 38-43%
+  // cleared 95. As in the original, the top level now needs the hippodrome
+  // (80 is the most a city without one can give) and the one below it every
+  // other venue at its best.
+  L({ name: 'Grand Palatium', size: 4, people: 192, down: 60, up: 72, water: 2, food: 3, religion: 4, ent: 80, edu: 3, barber: 1, baths: 1, health: 2, goods: LUXURY, wine: 2, tax: 15, patrician: true, fire: 0.5, damage: 0.8, desOut: [5, 2, -1, 5] }),
   // The top level never moves up (`up` is out of reach).
-  L({ name: 'Imperial Palatium', size: 4, people: 208, down: 68, up: 999, water: 2, food: 3, religion: 4, ent: 80, edu: 3, barber: 1, baths: 1, health: 2, goods: LUXURY, wine: 2, tax: 16, patrician: true, fire: 0.5, damage: 0.8, desOut: [5, 2, -1, 5] }),
+  L({ name: 'Imperial Palatium', size: 4, people: 208, down: 68, up: 999, water: 2, food: 3, religion: 4, ent: 95, edu: 3, barber: 1, baths: 1, health: 2, goods: LUXURY, wine: 2, tax: 16, patrician: true, fire: 0.5, damage: 0.8, desOut: [5, 2, -1, 5] }),
 ]);
 
 export const MAX_TIER = HOUSE_TIERS.length - 1;

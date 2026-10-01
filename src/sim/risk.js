@@ -15,7 +15,7 @@
 
 import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
-import { footprintTiles, removeBuilding, spawnWalker } from './entities.js';
+import { footprintTiles, removeBuilding, spawnWalker, groupTiles, mainOf } from './entities.js';
 import { followPath, goHome } from './movement.js';
 import { recordRuin } from './ruins.js';
 
@@ -45,6 +45,20 @@ function siteOf(b) {
   return { type: b.house ? 'house' : b.type, x: b.x, y: b.y, size: b.size };
 }
 
+/**
+ * What falls when `b` burns or collapses: its own tiles, and a hippodrome's
+ * whole track (all three sections go together; the rubble remembers the
+ * hippodrome, so its Rebuild puts the whole of it back). `main`: the
+ * building the rubble is named after.
+ */
+function fallingGround(game, b) {
+  const main = mainOf(game, b);
+  if (main === b && !(b.parts && b.parts.length)) return { own: footprintTiles(game.map, b.x, b.y, b.size), rest: [], main: b };
+  const own = footprintTiles(game.map, b.x, b.y, b.size);
+  const rest = groupTiles(game, b).filter((i) => !own.includes(i));
+  return { own, rest, main };
+}
+
 /** Daily risk growth + disaster checks for one building. */
 export function updateRisk(game, b) {
   const { fire, damage: dmg } = riskRates(b);
@@ -72,7 +86,7 @@ const RUIN_OF_FIRE = { fire: 'fire', wrath: 'wrath', raid: 'raidFire', raidQuiet
  *        the angry god's own message says where (sim/religion.js)
  */
 export function igniteBuilding(game, b, cause = 'fire') {
-  const tiles = footprintTiles(game.map, b.x, b.y, b.size);
+  const { own: tiles, rest, main } = fallingGround(game, b);
   const label = buildingLabel(b);
   const aLabel = withArticle(label);
   removeBuilding(game, b, 'fire');
@@ -80,7 +94,9 @@ export function igniteBuilding(game, b, cause = 'fire') {
     game.map.rubble[i] = 1;
     game.fires.set(i, CONFIG.FIRE_BURN_DAYS);
   }
-  recordRuin(game, tiles, label, RUIN_OF_FIRE[cause] || 'fire', siteOf(b));
+  // The rest of a hippodrome falls in with the burning section, without flames.
+  for (const i of rest) game.map.rubble[i] = 1;
+  recordRuin(game, [...tiles, ...rest], label, RUIN_OF_FIRE[cause] || 'fire', siteOf(main));
   game.city.stats.fires++;
   const texts = {
     wrath: null,
@@ -102,12 +118,13 @@ export function igniteBuilding(game, b, cause = 'fire') {
  * @param {'decay'|'raid'|'raidQuiet'} cause
  */
 export function collapseBuilding(game, b, cause = 'decay') {
-  const tiles = footprintTiles(game.map, b.x, b.y, b.size);
+  const { own, rest, main } = fallingGround(game, b);
+  const tiles = [...own, ...rest];
   const label = buildingLabel(b);
   const aLabel = withArticle(label);
   removeBuilding(game, b, 'collapse');
   for (const i of tiles) game.map.rubble[i] = 1;
-  recordRuin(game, tiles, label, cause === 'raid' || cause === 'raidQuiet' ? 'raid' : 'collapse', siteOf(b));
+  recordRuin(game, tiles, label, cause === 'raid' || cause === 'raidQuiet' ? 'raid' : 'collapse', siteOf(main));
   game.city.stats.collapses++;
   if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause !== 'raidQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y);
@@ -137,12 +154,11 @@ export function updateFires(game) {
     const x = map.xOf(i);
     const y = map.yOf(i);
     for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
-      const id = map.buildingAt(x + dx, y + dy);
-      if (!id || seen.has(id)) continue;
-      const nb = buildings.get(id);
-      if (!nb) continue;
+      // Flames beside any section of the hippodrome heat the hippodrome.
+      const nb = mainOf(game, buildings.get(map.buildingAt(x + dx, y + dy)));
+      if (!nb || seen.has(nb.id)) continue;
       if (!(riskRates(nb).fire > 0)) continue; // fire-proof: the flames pass it by
-      seen.add(id);
+      seen.add(nb.id);
       near.push(nb);
     }
     // Remind a prefect every few days while the fire is unattended.

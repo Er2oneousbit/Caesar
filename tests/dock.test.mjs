@@ -566,7 +566,7 @@ test('save: a real version 7 save with a ship moored and wine on the quay loads 
   assert.equal(wine(), total, 'none lost');
   const again = serializeGame(game);
   assert.equal(again.version, CONFIG.SAVE_VERSION);
-  assert.equal(CONFIG.SAVE_VERSION, 8);
+  assert.ok(CONFIG.SAVE_VERSION >= 8, 'dock trade came with version 8');
 });
 
 test('save: a city saved mid-visit plays on exactly as the one it came from', () => {

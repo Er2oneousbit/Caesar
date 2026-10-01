@@ -30,9 +30,10 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
-import { addBuilding, perimeterTiles, removeBuilding } from './entities.js';
+import { addBuilding, perimeterTiles, removeBuilding, linkedGroup } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
+import { waterBeside } from './fishing.js';
 import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 
 const UNDO_WINDOW_DAYS = 10;
@@ -78,14 +79,16 @@ export function checkBuilding(game, type, x, y) {
   const def = BUILDINGS[type];
   const fail = (reason, cost = def ? def.cost : 0) => ({ ok: false, reason, cost, warnings: [] });
   if (!def) return fail('Unknown building');
-  if (!game.isUnlocked(type)) return fail('Not available in this scenario');
+  if (!game.isUnlocked(type) || !def.category) return fail('Not available in this scenario');
   const { map } = game;
   const S = def.size;
+  const W = S * (def.span || 1); // a hippodrome: three sections in a row along x
+  if (def.limit && countOf(game, type) >= def.limit) return fail(`Only ${def.limit === 1 ? 'one' : def.limit} ${def.name} in a city`);
   let trees = 0;
   let rubble = 0;
   let meadow = 0;
   for (let dy = 0; dy < S; dy++) {
-    for (let dx = 0; dx < S; dx++) {
+    for (let dx = 0; dx < W; dx++) {
       const tx = x + dx;
       const ty = y + dy;
       if (!map.inBounds(tx, ty)) return fail('Outside the map');
@@ -124,6 +127,13 @@ export function checkBuilding(game, type, x, y) {
       if (!map.seaEntry) return fail('No river or sea here reaches the map edge: ships cannot come to this province', cost);
       if (map.navigableBeside(x, y, S) < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
       break;
+    case 'fishingShore': {
+      const i = map.fishWaterBeside(x, y, S);
+      if (i < 0) return fail('Must touch the bank of a river, the sea or a big lake (a pond has no fish)', cost);
+      if (def.kind === 'wharf' && !map.groundsOf(map.fishBody[i]).length) return fail('No fish in this water', cost);
+      out.water = i;
+      break;
+    }
     default:
       break;
   }
@@ -131,7 +141,7 @@ export function checkBuilding(game, type, x, y) {
   // Soft warnings (placement allowed, but it will not work well).
   // (A building with no workers, the Oracle, works without a road.)
   if (def.needsRoad && def.kind !== 'house' && def.workers > 0) {
-    const hasRoad = perimeterTiles(map, x, y, S).some((i) => map.road[i]);
+    const hasRoad = perimeterTiles(map, x, y, W, S).some((i) => map.road[i]);
     if (!hasRoad) {
       out.warnings.push(NO_ROAD_WARNING);
       out.noRoad = true;
@@ -154,7 +164,22 @@ export function checkBuilding(game, type, x, y) {
     const touchesAqueduct = perimeterTiles(map, x, y, S).some((i) => map.aqueduct[i]);
     if (!touchesAqueduct) out.warnings.push('Not next to water: connect it by aqueduct to a full reservoir');
   }
+  if (def.kind === 'wharf' && out.water >= 0) {
+    const body = map.fishBody[out.water];
+    const yard = [...game.buildings.values()].some((b) => b.def.kind === 'shipyard' && map.fishBody[waterBeside(game, b)] === body);
+    if (!yard) out.warnings.push('No shipyard on this water yet: the wharf needs a boat from one');
+  }
+  if (def.venue === 'hippodrome' && def.kind === 'venue' && !countOf(game, 'chariot_maker')) {
+    out.warnings.push('No Chariot Maker yet: build one, connected by road, to start the races');
+  }
   return out;
+}
+
+/** How many buildings of this type the city has. */
+function countOf(game, type) {
+  let n = 0;
+  for (const b of game.buildings.values()) if (b.type === type) n++;
+  return n;
 }
 
 /**
@@ -171,17 +196,35 @@ export function rebuildPlan(game, i) {
   if (type === 'house') return planAction(game, 'house', x, y, x + size - 1, y + size - 1);
   if (type === 'wall') return planAction(game, 'wall', x, y, x, y);
   if (!BUILDINGS[type]) return null;
-  const off = Math.floor((BUILDINGS[type].size - 1) / 2);
-  const plan = planAction(game, type, x + off, y + off, x + off, y + off);
+  const off = anchorOffset(type);
+  const plan = planAction(game, type, x + off.x, y + off.y, x + off.x, y + off.y);
   // planAction anchors on the middle tile: the same footprint, or nothing.
   return plan.items[0] && plan.items[0].x === x && plan.items[0].y === y ? plan : null;
 }
 
+/** From a building's top-left tile to its center tile (where the cursor holds it). */
+export function anchorOffset(type) {
+  const def = BUILDINGS[type];
+  if (!def) return { x: 0, y: 0 };
+  return { x: Math.floor((def.size * (def.span || 1) - 1) / 2), y: Math.floor((def.size - 1) / 2) };
+}
+
 /** Anchor a building so the cursor tile sits at its center. */
 export function anchorFor(type, cx, cy) {
-  const def = BUILDINGS[type];
-  const off = def ? Math.floor((def.size - 1) / 2) : 0;
-  return { x: cx - off, y: cy - off };
+  const off = anchorOffset(type);
+  return { x: cx - off.x, y: cy - off.y };
+}
+
+/**
+ * A preview look for a waterside building being placed: which edge faces
+ * the water (the art's state), as once it is built.
+ */
+function ghostState(game, def, x, y, water) {
+  if (def.placement !== 'fishingShore' || !(water >= 0)) return 0;
+  const { map } = game;
+  const mx = map.xOf(water);
+  const my = map.yOf(water);
+  return my < y ? 0 : mx >= x + def.size ? 1 : my >= y + def.size ? 2 : 3;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +246,17 @@ export function planAction(game, tool, x0, y0, x1, y1) {
   // Single building
   const a = anchorFor(tool, x1, y1);
   const chk = checkBuilding(game, tool, a.x, a.y);
+  const def = BUILDINGS[tool];
+  const S = def?.size || 1;
+  const items = [{ x: a.x, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y, chk.water) : 0 }];
+  // A hippodrome's other sections: drawn in the preview, built with the first.
+  for (let k = 1; k < (def?.span || 1); k++) {
+    items.push({ x: a.x + k * S, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: 0, noRoad: !!chk.noRoad, part: true, type: `${tool}_part`, state: k });
+  }
   return {
     tool,
     kind: 'building',
-    items: [{ x: a.x, y: a.y, size: BUILDINGS[tool]?.size || 1, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad }],
+    items,
     cost: chk.ok ? chk.cost : 0,
     count: chk.ok ? 1 : 0,
     warnings: chk.warnings,
@@ -436,13 +486,16 @@ function planClear(game, x0, y0, x1, y1) {
     const id = map.building[i];
     if (id) {
       if (!seen.has(id)) {
-        seen.add(id);
+        // A hippodrome comes down whole: show every section it takes with it.
         const b = buildings.get(id);
-        if (b) {
-          items.push({ x: b.x, y: b.y, size: b.size, ok: true, building: id, cost: 0 });
+        for (const x of b ? linkedGroup(game, b) : []) {
+          if (seen.has(x.id)) continue;
+          seen.add(x.id);
+          items.push({ x: x.x, y: x.y, size: x.size, ok: true, building: x.id, cost: 0 });
           count++;
-          if (b.house) evicted += b.house.pop;
+          if (x.house) evicted += x.house.pop;
         }
+        seen.add(id);
       }
       continue;
     }
@@ -503,7 +556,7 @@ export function applyPlan(game, plan) {
       if (!it.ok) continue;
       if (it.building) {
         const b = game.buildings.get(it.building);
-        if (b) { removeBuilding(game, b, 'demolish'); done++; }
+        if (b) { done += linkedGroup(game, b).length; removeBuilding(game, b, 'demolish'); } // a hippodrome: all its sections
       } else if (it.road) {
         const i = map.idx(it.x, it.y);
         map.road[i] = Road.NONE;
@@ -584,12 +637,13 @@ export function applyPlan(game, plan) {
   } else {
     // Buildings (single or area)
     for (const it of plan.items) {
-      if (!it.ok) continue;
+      if (!it.ok || it.part) continue; // a hippodrome's sections come with its first
       const chk = checkBuilding(game, plan.tool, it.x, it.y); // re-check: earlier items may have changed things
       if (!chk.ok) continue;
+      const span = BUILDINGS[plan.tool].span || 1;
       const tiles = [];
       for (let dy = 0; dy < it.size; dy++) {
-        for (let dx = 0; dx < it.size; dx++) {
+        for (let dx = 0; dx < it.size * span; dx++) {
           const i = map.idx(it.x + dx, it.y + dy);
           tiles.push(saveTile(i));
           clearTile(i);
@@ -597,7 +651,9 @@ export function applyPlan(game, plan) {
       }
       const b = addBuilding(game, plan.tool, it.x, it.y);
       if (b.def.kind === 'dock') dockBerth(game, b); // berth + which side faces the water
+      if (b.def.placement === 'fishingShore') waterBeside(game, b); // slip or mooring + which side faces the water
       undo.ops.push({ op: 'building', id: b.id, tiles });
+      if (span > 1) addSections(game, b, span, undo);
       spent += chk.cost;
       done++;
     }
@@ -608,6 +664,23 @@ export function applyPlan(game, plan) {
   game.onMapEdited();
   if (done > 0) game.events.emit('sound', { name: 'build' });
   return { ok: done > 0, count: done, cost: spent };
+}
+
+/**
+ * A hippodrome's other sections, linked to it (`main`, `parts`): each its
+ * own 5x5 building that holds its tiles and draws its stretch of track. The
+ * hippodrome's road access takes a road beside any of them (entities.js).
+ * Undoing any one removes the whole (removeBuilding takes the group).
+ */
+function addSections(game, b, span, undo) {
+  b.parts = [];
+  for (let k = 1; k < span; k++) {
+    const p = addBuilding(game, `${b.type}_part`, b.x + k * b.size, b.y);
+    p.main = b.id;
+    p.section = k;
+    b.parts.push(p.id);
+    undo.ops.push({ op: 'building', id: p.id, tiles: [] });
+  }
 }
 
 /** Is there something to undo right now? */

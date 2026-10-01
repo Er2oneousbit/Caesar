@@ -23,11 +23,16 @@
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
  *                  | 'shore' (beside navigable water: docks)
+ *                  | 'fishingShore' (beside water with fish: shipyards, wharves)
  *   kind           behavior family (drives sim dispatch):
  *                    service | farm | raw | workshop | granary | warehouse |
  *                    market | venue | training | water | reservoir |
  *                    fountain | well | decor | hospital | house | dock |
- *                    barracks | fort | tower
+ *                    barracks | fort | tower | shipyard | wharf | part
+ *   span           sections in a row along the map's x axis (the hippodrome:
+ *                  3 of size x size). The first is the building itself, the
+ *                  others are `part` buildings linked to it (sim/linked.js)
+ *   limit          at most this many in a city (the hippodrome: 1)
  *   produces       good produced (farm/raw/workshop)
  *   consumes       raw good consumed (single-input workshops, 100 per batch)
  *   recipe         raw goods per 100-unit batch, e.g. { timber: 100, iron: 50 }.
@@ -251,6 +256,25 @@ export const BUILDINGS = Object.freeze({
     des: [-4, 1, 1, 3], spawnDays: 8,
     desc: 'Keeps exotic beasts for the colosseum games.',
   }),
+  // The hippodrome: 15 x 5 tiles, three 5 x 5 sections in a row (the first is
+  // the hippodrome itself, the other two are hippodrome_part). The original's
+  // 3,500 Dn and 150 staff scaled as Colonia scaled the colosseum (1,500 to
+  // 400, 100 to 25). Fire and collapse are checked once, for the whole.
+  hippodrome: B({
+    name: 'Hippodrome', category: 'entertainment', kind: 'venue', venue: 'hippodrome', cost: 900, size: 5, span: 3, limit: 1, workers: 40, labor: 'entertainment',
+    des: [-3, 2, 1, 6], walker: 'charioteer', spawnDays: 8,
+    desc: 'Chariot races: 15 x 5 tiles, one per city. While races run (a Chariot Maker sends the teams), its charioteer gives the homes he passes 30 entertainment, its seats hold the whole city (up to 6 more for every home) and prosperity rises a little.',
+  }),
+  hippodrome_part: B({
+    name: 'Hippodrome', category: null, kind: 'part', cost: 0, size: 5, workers: 0, needsRoad: false,
+    des: [-3, 2, 1, 6], fire: 0, damage: 0,
+    desc: 'Part of the hippodrome\'s track.',
+  }),
+  chariot_maker: B({
+    name: 'Chariot Maker', category: 'entertainment', kind: 'training', venue: 'hippodrome', cost: 75, size: 3, workers: 10, labor: 'entertainment',
+    des: [-3, 1, 1, 3], spawnDays: 8,
+    desc: 'Builds racing chariots and trains the teams that race at the hippodrome. One keeps the races going.',
+  }),
 
   // --- Government & decoration --------------------------------------------
   forum: B({
@@ -412,6 +436,21 @@ export const BUILDINGS = Object.freeze({
     desc: 'Merchant ships from sea trade routes tie up here and wait while they trade. Build it on the bank of a river or sea that reaches the map edge. Up to 3 dock workers (by staffing) cart imports to storage and fetch exports from warehouses connected to the dock by road: keep one close.',
   }),
 
+  // --- Fishing (sim/fishing.js) ---------------------------------------------
+  // On the bank of water with fish (a river, the sea or a big lake, where gulls
+  // circle over the fishing grounds). No inputs: a shipyard builds a boat from
+  // nothing in 16 days at full staff, and keeps one spare ready.
+  shipyard: B({
+    name: 'Shipyard', category: 'industry', kind: 'shipyard', cost: 100, size: 2, workers: 10, labor: 'industry',
+    des: [-6, 1, 1, 3], fire: 1, damage: 1, placement: 'fishingShore',
+    desc: 'Builds fishing boats (one every 16 days at full staff) and sends each to the nearest wharf on its water that has none. Keeps one spare boat ready. Build it on the bank of a river, the sea or a big lake with fish.',
+  }),
+  wharf: B({
+    name: 'Fishing Wharf', category: 'farms', kind: 'wharf', produces: 'fish', cost: 60, size: 2, workers: 6, labor: 'food',
+    des: [-6, 1, 1, 3], fire: 1, damage: 1, placement: 'fishingShore',
+    desc: 'Its boat (from a Shipyard on the same water) sails to the nearest fishing ground, fishes for 4 days and brings back 100 fish; carts take the catch to a granary. Fish is a food of its own. The sea does not freeze: wharves fish all winter.',
+  }),
+
   // --- Horses & military ----------------------------------------------------
   horse_ranch: B({
     name: 'Horse Ranch', category: 'farms', kind: 'farm', produces: 'horses', cost: 70, size: 3, workers: 10, labor: 'military',
@@ -459,7 +498,7 @@ export function buildingsInCategory(cat) {
  * Entertainment a home gets from a venue whose entertainer passed by recently
  * (see entertainmentScore in sim/housing.js).
  */
-export const VENUE_POINTS = Object.freeze({ theater: 10, amphitheater: 15, colosseum: 20 });
+export const VENUE_POINTS = Object.freeze({ theater: 10, amphitheater: 15, colosseum: 20, hippodrome: 30 });
 
 /**
  * Extra points when the visiting venue had both of its kinds of show booked:
@@ -475,14 +514,24 @@ export const VENUE_BOTH_SHOWS = Object.freeze({ amphitheater: ['theater', 'amphi
 
 /**
  * City-wide entertainment: people each working venue (staffed, shows booked)
- * can seat. How well the seats cover the population, averaged over the venue
- * kinds, gives every home up to ENT_BASE_MAX points on top of its own visits.
+ * can seat. How well the seats cover the population, averaged over these
+ * three venue kinds (ENT_SEAT_KINDS), gives every home up to ENT_SEATS_MAX
+ * points on top of its own visits.
+ *
+ * A working hippodrome (staffed, races booked) seats the whole city: its 100%
+ * coverage is added to the sum, still divided by the three seat kinds, so it
+ * is worth up to 6 more points to every home (the original's +5, rounded the
+ * way Colonia's base rounds) and the base can reach ENT_BASE_MAX. A city
+ * without one gets exactly what it got before the hippodrome.
  */
 export const VENUE_SEATS = Object.freeze({ theater: 400, amphitheater: 900, colosseum: 2000 });
-export const ENT_BASE_MAX = 20;
+export const ENT_SEAT_KINDS = 3;
+export const ENT_SEATS_MAX = 20; // the base from the three seat kinds alone
+export const ENT_BASE_MAX = 26; // with a working hippodrome too
+export const HIPPODROME_COVERAGE = 100; // % of the city a working hippodrome seats
 
 /** Performer display names by venue they train for. */
-export const PERFORMER_NAMES = Object.freeze({ theater: 'Actor', amphitheater: 'Gladiator', colosseum: 'Beast Tamer' });
+export const PERFORMER_NAMES = Object.freeze({ theater: 'Actor', amphitheater: 'Gladiator', colosseum: 'Beast Tamer', hippodrome: 'Charioteer' });
 
 /**
  * Which training buildings can supply a venue.
@@ -492,4 +541,8 @@ export const VENUE_SUPPLIERS = Object.freeze({
   theater: ['theater'],
   amphitheater: ['amphitheater', 'theater'],
   colosseum: ['amphitheater', 'colosseum'],
+  hippodrome: ['hippodrome'],
 });
+
+/** Every kind of show a venue can have booked (the keys of a venue's `shows`). */
+export const SHOW_KINDS = Object.freeze(['theater', 'amphitheater', 'colosseum', 'hippodrome']);

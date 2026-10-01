@@ -52,6 +52,7 @@ import { repayLoan } from '../sim/loans.js';
 import { newGodState, newGodMood, updateReligion } from '../sim/religion.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
+import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest } from '../sim/emperor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
@@ -157,6 +158,7 @@ export class Game {
       this.rng = new RNG(`${seed}:sim`);
       const { map, info } = generateMap({ width: scenario.map.size, height: scenario.map.size, seed, type: scenario.map.type });
       map.computeNavigation(); // rivers/sea reaching the map edge (ships, docks)
+      map.computeFishing(); // water with fish and its fishing grounds (wharves)
       this.map = map;
       this.mapInfo = info;
       this.time = new GameTime(scenario.startYear);
@@ -272,6 +274,8 @@ export class Game {
         case 'venue': updateVenue(this, b); break;
         case 'barracks': updateBarracks(this, b); break;
         case 'dock': updateDock(this, b); break;
+        case 'shipyard': updateShipyard(this, b); break;
+        case 'wharf': updateWharf(this, b); break;
         default: break;
       }
       if (!this.buildings.has(b.id)) return;

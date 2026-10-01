@@ -80,6 +80,7 @@ function workLines(game, w) {
       if (w.state === 'treat') return ['Rest, broth and fresh air. You will mend.', 'Keep the sick apart from the rest of the house.'];
       return ['Boil your water and air your rooms.', 'A clean house keeps the fever away.'];
     case 'bather': return ['The baths are warm today. Come along!', 'Nothing clears the head like a hot bath and a cold plunge.'];
+    case 'charioteer': return ['The Blues will win today, mark my words!', 'Races at the hippodrome! Seven laps, four teams, one winner!'];
     case 'entertainer':
       if (w.venue === 'amphitheater') return ['Gladiators at the amphitheater! Do not miss it!'];
       if (w.venue === 'colosseum') return ['Beasts from Africa at the colosseum! Come and see!'];
@@ -97,7 +98,7 @@ function workLines(game, w) {
       if (w.cargo) return [`${amountText(w.cargo.good, w.cargo.amount)} on board. Mind the wheels!`, 'Heavy load, but it pays.'];
       return ['Back for the next load.'];
     case 'buyer': return w.load && Object.keys(w.load).length ? ['A full basket for the market. My back will not thank me.'] : ['The market needs stock. Off to the storehouse.'];
-    case 'performer': return ['Off to the stage. The show must go on.'];
+    case 'performer': return w.venue === 'hippodrome' ? ['Fresh horses for the races. Make way!'] : ['Off to the stage. The show must go on.'];
     case 'recruit': return ['Off to the fort. Rome needs me.', 'Twenty years of service, and then a farm of my own.'];
     case 'homeless': return ['Our home is gone. Is there a roof anywhere?', 'We lost everything. We need a place to stay.'];
     default: return CITY_LINES.fine;
@@ -180,6 +181,10 @@ export function walkerSays(game, w) {
       return pick([`Good roads and fair prices. ${p ? p.name : 'Home'} will send us again.`, 'Mind the mules, they bite.'], w, game);
     }
     case 'ship': return pick(['A fair wind brought us in. A fair price will send us home.', 'Unload the cargo, and quickly!'], w, game);
+    case 'fishing_boat':
+      if (w.state === 'fishing') return pick(['Haul! Haul! They are running thick today.', 'Follow the gulls and you find the fish.'], w, game);
+      if (w.state === 'homeWithCatch') return pick(['A good catch. The granary will have fish tonight.', 'Home before the wind turns.'], w, game);
+      return pick(['Nets mended, sail up.', 'The sea feeds those who work it.'], w, game);
     case 'protester': return protesterLine(game, w);
     case 'thief': return pick(['Nothing to see here, friend. Keep walking.', 'Who, me? Just taking the air.', 'A man has to eat.'], w, game);
     case 'rioter': return pick(['Burn it! Burn it all!', 'They will listen to us now!', 'Down with the governor!'], w, game);
@@ -240,6 +245,12 @@ export function walkerDoing(game, w) {
     case 'toFort': return `Marching to ${the(target)}`;
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;
+    case 'spare': return 'Waiting by the shipyard for a wharf';
+    case 'toWharf': return `Sailing to ${the(game.buildings.get(w.origin))}`;
+    case 'moored': return 'Tied up at the wharf';
+    case 'toGround': return 'Sailing out to the fishing ground';
+    case 'fishing': return 'Fishing';
+    case 'homeWithCatch': return 'Bringing the catch home';
     case 'docked':
       if (w.unload && Object.values(w.unload).some((n) => n > 0)) return 'Unloading at the dock';
       if (w.wants && Object.values(w.wants).some((n) => n > 0)) return w.wantsStuck ? 'Waiting for goods' : 'Loading at the dock';

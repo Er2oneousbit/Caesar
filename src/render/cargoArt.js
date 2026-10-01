@@ -3,7 +3,8 @@
  * ----------------------------------------------------------------------------
  * What a cart carries, drawn on its bed so a player can read the city's
  * logistics at a glance: sacks of wheat, crates of vegetables and fruit,
- * baskets of olives and grapes, joints of meat, lumps of clay, logs, iron
+ * baskets of olives and grapes, joints of meat, flat baskets of silver fish,
+ * lumps of clay, logs, iron
  * ingots, marble blocks, pots, amphorae of oil (pale) and wine (dark), a
  * table and chairs, shields with spears, sheaves of arrows. Horses are not
  * carted at all: the drover leads them (walkerArt.js).
@@ -144,6 +145,29 @@ function joint(ctx, x, y, k, f) {
   ellipse(ctx, x - f * 0.7 * k, y - 1.4 * k, 0.6 * k, 0.5 * k, f * 0.35);
   ctx.fillStyle = '#f2ead8'; // the bone
   ctx.fillRect(x + f * 1.3 * k - 0.35 * k, y - 2.5 * k, 0.7 * k, 1.1 * k);
+}
+
+/** One silver fish lying on its side (body and tail fin in one shape), with a shine along its back. */
+function fishShape(ctx, x, y, k, f, len, tint) {
+  ctx.fillStyle = tint;
+  ctx.beginPath();
+  ctx.ellipse(x, y, len * k, 0.42 * k, 0, 0, Math.PI * 2);
+  ctx.moveTo(x - f * (len - 0.2) * k, y);
+  ctx.lineTo(x - f * (len + 0.75) * k, y - 0.55 * k);
+  ctx.lineTo(x - f * (len + 0.75) * k, y + 0.55 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillRect(x - len * 0.55 * k, y - 0.32 * k, len * 1.1 * k, 0.16 * k);
+}
+
+/** Fish: a flat wicker basket with the catch laid across it, tails out. */
+function fishBasket(ctx, x, y, k, f, i) {
+  ctx.fillStyle = WICKER;
+  ctx.fillRect(x - 1.8 * k, y - 1 * k, 3.6 * k, 1 * k);
+  const g = i % 2 ? -1 : 1; // alternate head to tail, as fish are packed
+  fishShape(ctx, x - f * 0.15 * k, y - 1.35 * k, k, f * g, 1.15, '#9fb6c0');
+  fishShape(ctx, x + f * 0.2 * k, y - 2 * k, k, -f * g, 1.0, '#b9c9cf');
 }
 
 /** Clay: two wet reddish lumps, the lower one darker. */
@@ -311,6 +335,7 @@ export const CARGO_ART = Object.freeze({
   vegetables: { layout: 'pile', draw: crate('#6aa84f', '#e08a2e') }, // greens and a carrot
   fruit: { layout: 'pile', draw: fruitCrate },
   meat: { layout: 'pile', draw: joint },
+  fish: { layout: 'pile', draw: fishBasket },
   clay: { layout: 'pile', draw: clayLumps },
   timber: { layout: 'layers', draw: log },
   olives: { layout: 'pile', draw: basket('#55652a', '#2e2a1e') }, // green and black olives

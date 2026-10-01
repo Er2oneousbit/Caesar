@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.12.2',
-  SAVE_VERSION: 8, // v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v6 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 9, // v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v8 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -282,12 +282,30 @@ export const CONFIG = {
   DOCK_CAPACITY: 2400, // units of unloaded imports a dock can hold (a whole ship's load)
   DOCK_REACH: 60, // road tiles: dock workers fetch exports from staffed warehouses this close to the dock (a trip must also end before the stay limit)
 
+  // --- Fishing (sim/fishing.js) -------------------------------------------
+  // The original's pace: a shipyard builds a boat in 16 days at full staff; a
+  // wharf's boat waits (1.02 - staff) x 10 days at the wharf (0.2 days at full
+  // staff, 5.2 at half, never with nobody), sails to the nearest fishing
+  // ground, fishes 4 days and lands one load. Boats sail at walking speed.
+  SHIPYARD_BOAT_DAYS: 16,
+  FISH_DAYS: 4, // days a boat fishes per trip (at the difficulty's production 1; slower where it is lower)
+  FISH_CATCH: 100, // units of fish a boat lands per trip
+  BOAT_WAIT_DAYS: 10, // x (1.02 - staffing): the boat's wait at the wharf between trips
+  WHARF_FULL: 200, // the boat waits while its wharf holds this much fish (two catches) or more
+  // Fishing grounds, derived from the terrain (world/map.js computeFishing):
+  FISH_BODY_MIN: 80, // tiles: smaller water is a pond, with no fish worth a boat
+  FISH_TILES_PER_GROUND: 250, // one ground per this much water, 1 to FISH_GROUNDS_PER_BODY a body
+  FISH_GROUNDS_PER_BODY: 4,
+  FISH_GROUNDS_MAX: 8, // on the whole map (the original's limit), bigger bodies first
+  FISH_GROUND_SPACING: 12, // tiles (Chebyshev) between two grounds on the same water
+
   // --- Ratings ------------------------------------------------------------
   // Culture and prosperity move toward what the city deserves by at most
   // these many points a month; peace grows while the mood is good. These set
   // how fast a mission's goals can be met (sim/pace.js).
   CULTURE_STEP: 4,
   PROSPERITY_STEP: 2,
+  HIPPODROME_PROSPERITY: 2, // on the prosperity target while the hippodrome has races
   PEACE_START: 20,
   PEACE_PER_MONTH: 1, // while the mood is at least PEACE_MOOD
   PEACE_MOOD: 45,

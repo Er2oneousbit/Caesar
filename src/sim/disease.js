@@ -46,7 +46,7 @@
 
 import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
-import { FOOD_TYPES } from '../data/goods.js';
+import { FOOD_TYPES, LAND_FOODS } from '../data/goods.js';
 import { WaterBits } from '../world/map.js';
 import { spawnWalker, perimeterTiles } from './entities.js';
 import { followPath, goHome } from './movement.js';
@@ -147,7 +147,9 @@ export function healthLacks(inp) {
   if (!inp.baths) out.push('baths');
   if (!inp.barber) out.push('barber');
   if (!inp.fountain) out.push(inp.well ? 'well' : 'water');
-  if (inp.foods > 0 && inp.foods < FOOD_TYPES.length) out.push('food');
+  // Four kinds, the land foods: a home keeps at most three, so this stays as
+  // it was before fish (a fifth food) came.
+  if (inp.foods > 0 && inp.foods < LAND_FOODS.length) out.push('food');
   return out;
 }
 

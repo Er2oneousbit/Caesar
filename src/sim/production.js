@@ -185,9 +185,9 @@ export function farmSeasonNotice(game, starting = false) {
 
 /**
  * Send finished goods off in full batches: one cart per full load, at most
- * two carts on the road at once.
+ * two carts on the road at once. (Fishing wharves ship their catch this way.)
  */
-function shipOutput(game, b, good, maxLoad) {
+export function shipOutput(game, b, good, maxLoad) {
   const out = cartsOut(game, b);
   if (out >= 2 || b.stock[good] < CONFIG.CART_CAPACITY) return;
   if (out === 1 && b.stock[good] < maxLoad / 2) return; // a second cart only for a big backlog

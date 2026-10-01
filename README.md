@@ -20,7 +20,7 @@ Saved games stay in your browser. Use *Save game → Export to file* to keep a b
 ## What's in it
 
 * **The housing ladder of the original:** 20 levels, from a tent to an imperial palace. Homes grow from single tiles into 2x2 insulae and villas, 3x3 villas and 4x4 palaces as you bring them water, food, gods, schools, baths, entertainment and fine goods. Click any home to see exactly what it needs next.
-* **A campaign** of seven missions, from a riverside village to a great capital (about half an hour for the first, an hour or two for the last), and a **sandbox** with five landscapes, four map sizes (up to *Uber*, 256x256) and your choice of raids.
+* **A campaign** of seven missions, from a riverside village to a great capital (about half an hour for the first, a few hours for the last), and a **sandbox** with five landscapes, four map sizes (up to *Uber*, 256x256) and your choice of raids.
 * **Crime:** unhappy homes send out protesters, thieves who rob the Forum or a market, and in a city at the end of its patience, rioters who burn their way toward its finest buildings. Prefects patrol as police and chase criminals down. The Crime overlay shows where trouble is brewing and why.
 * **Disease:** crowded, unhealthy homes can fall sick, lose people and pass it next door. A Medicus sends physicians to cure them, and baths, barbers, fountains, food and a hospital keep it away. The Disease overlay shows which homes are at risk.
 * **Four difficulties**, Easy to Insane.

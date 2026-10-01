@@ -21,7 +21,7 @@
  *   npm run sim -- --difficulty insane --raids frequent --garrison
  *   npm run sim -- --pace       (how long the campaign's goals take, no city)
  *   npm run sim -- --capacity   (how many people each mission's buildings employ, no city)
- *   npm run sim -- --scenario c1 --unlocks --homes 16   (mission 1 as a player could build it)
+ *   npm run sim -- --scenario c1 --unlocks --homes 40   (mission 1 as a player could build it)
  *
  * Campaign runs build every building unless --unlocks is given (then only
  * what the mission unlocks), so their numbers stay comparable with earlier
@@ -40,7 +40,7 @@ import { FOOD_TYPES } from '../src/data/goods.js';
 import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
 import { sickHomes } from '../src/sim/disease.js';
 import { planAction, applyPlan } from '../src/sim/construction.js';
-import { missionCapacity, landOf, GOAL_SHARE } from '../src/sim/capacity.js';
+import { missionCapacity, landOf } from '../src/sim/capacity.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
@@ -117,13 +117,14 @@ if (opts.pace) {
 if (opts.capacity) {
   const pad = (v, n) => String(v).padStart(n);
   console.log(`Employment ceiling: the most people whose jobs keep unemployment at ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% or less, every home at the`);
-  console.log(`best working level (sim/capacity.js); goals may ask ${GOAL_SHARE * 100}% of it. Land: room to house and feed them.`);
-  console.log(' mission  top home            working home      /tile  jobs/100  employment     land   goal (max)');
+  console.log('best working level (sim/capacity.js), for a lean and a sensible builder. Land: room to house and feed them.');
+  console.log('A population goal must fit the sensible ceiling and the land (tests/campaign.test.mjs; missions 3 to 7 are known exceptions).');
+  console.log(' mission  top home            working home      /tile   lean (jobs)   sensible (jobs)     land    goal');
   for (const s of SCENARIOS) {
     const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
     const m = missionCapacity(s, landOf(map));
-    const most = Math.floor(GOAL_SHARE * Math.min(m.employment, m.land));
-    console.log(` ${s.id.padEnd(7)}  ${HOUSE_TIERS[m.top].name.padEnd(18)}  ${HOUSE_TIERS[m.working].name.padEnd(16)} ${pad(m.perTile, 5)}  ${pad(m.jobsPer100.toFixed(1), 8)}  ${pad(m.employment, 10)}  ${pad(m.land, 7)}  ${pad(s.goals.population, 5)} (${most})`);
+    const over = s.goals.population > Math.min(m.sensible.people, m.land) ? '  over' : '';
+    console.log(` ${s.id.padEnd(7)}  ${HOUSE_TIERS[m.top].name.padEnd(18)}  ${HOUSE_TIERS[m.working].name.padEnd(16)} ${pad(m.perTile, 5)}  ${pad(m.lean.people, 6)} (${pad(m.lean.jobs, 4)})  ${pad(m.sensible.people, 8)} (${pad(m.sensible.jobs, 4)})  ${pad(m.land, 7)}  ${pad(s.goals.population, 6)}${over}`);
   }
   process.exit(0);
 }

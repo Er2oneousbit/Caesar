@@ -3,35 +3,52 @@
  * ----------------------------------------------------------------------------
  * How many people a mission's buildings can employ: the yardstick for its
  * population goal. Beside sim/pace.js (how fast goals can be met), this says
- * how big a goal can be at all. A test holds every campaign mission's
- * population goal under it, and `npm run sim -- --capacity` prints the table.
+ * how big a goal can be at all. A test holds the campaign's population goals
+ * under it (missions 3 to 7 are known exceptions for now, see the ROADMAP),
+ * and `npm run sim -- --capacity` prints the table.
  *
  * Why it matters: WORKFORCE_RATIO of the plebeian residents look for work, and
- * above UNEMPLOYMENT_MOOD_FREE unemployment the city's mood falls (up to 15 points,
- * sim/population.js), so peace stops growing (it needs PEACE_MOOD). A goal of
- * more people than the mission's buildings can employ cannot be met by a well
- * run city: mission 1 asked for 1,200 people when a sensible town of Huts
- * employs about 70 to 90, and stalled near 720 with 70% unemployment.
+ * above UNEMPLOYMENT_MOOD_FREE unemployment the city's mood falls (up to 15
+ * points, sim/population.js), so peace stops growing (it needs PEACE_MOOD). A
+ * goal of more people than the mission's buildings can employ cannot be met by
+ * a well run city: mission 1 asked for 1,200 people when a sensible town of
+ * Huts has about 100 jobs, and stalled near 600 to 720 with half its workers
+ * idle.
  *
  * The model is a yardstick, not a simulation. For a city of P people, all in
- * the best working homes the mission allows, it lists the buildings a sensible
- * player puts up (planCity) and counts their workers; the employment ceiling
- * is the largest P whose jobs keep unemployment at or below the grace. Every
- * assumption leans toward FEWER jobs (a real city builds more than this), so
- * a goal under the ceiling can be met:
+ * the best working homes the mission allows, it lists the buildings a player
+ * puts up (planCity) and counts their workers; the employment ceiling is the
+ * largest P whose jobs keep unemployment at or below UNEMPLOYMENT_MOOD_FREE.
+ * Two profiles say how generously the player builds:
+ *
+ *   LEAN       a building for each trip's worth of homes: a walker covers 4
+ *              home tiles for each tile of its roam, farms grow just what the
+ *              city eats. Few buildings, though not a strict floor: a walker
+ *              starts each trip in a new direction and serves on the way home,
+ *              so over the months a visit lasts one building can reach more.
+ *   SENSIBLE   what the demo city (src/dev/demoCity.js), built like a careful
+ *              player's town, has: about 2 home tiles per tile of roam (2
+ *              prefectures, 2 engineers and 2 markets for its 130 or so home
+ *              tiles) and 3 farms more than the town needs (it builds 4 where
+ *              a mission 1 town of 300 needs 1: fields only partly on meadow,
+ *              a harvest Ceres may blight, granaries to fill). Measured in
+ *              mission 1 with `npm run sim -- --scenario c1 --unlocks --homes
+ *              40`: 312 people, 95 to 100 jobs, 4% out of work; the profile
+ *              gives 300. The campaign's goals are held to this one.
+ *
+ * Both profiles share the rest:
  *
  *   homes      every home at the working level: the best level the unlocks
  *              allow whose residents work (patricians do not, so villas could
  *              only add people on top of the ceiling, never jobs-short ones)
- *   services   a roaming walker serves HOMES_PER_STREET_TILE home tiles for
- *              each tile of its `roam` (data/walkers.js), as if it never walked
- *              the same street twice: the fewest buildings that could cover
- *              the homes. Fountains and hospitals cover their radius, of which
- *              HOME_SHARE is homes. Upkeep (prefects, engineers) covers homes,
- *              plus one of each for the farms and one for any industry
- *   food       grown on full meadow at the fastest food farm's rate and the
- *              most productive difficulty, at least one farm per food kind the
- *              level eats; granaries hold GRANARY_MONTHS of food
+ *   services   one building per stretch of homes its walker covers (above).
+ *              Fountains and hospitals cover their radius, of which HOME_SHARE
+ *              is homes. Upkeep (prefects, engineers) covers homes, plus one of
+ *              each for the farms and one for any industry
+ *   food       farms on full meadow at the fastest food farm's rate and the
+ *              most productive difficulty, at least as many farms as the kinds
+ *              of food the level eats, plus the profile's spareFarms;
+ *              granaries hold GRANARY_MONTHS of food
  *   gods       every unlocked god gets temples for its share of the city
  *              (PEOPLE_PER_TEMPLE, sim/religion.js), at least one; the gods the
  *              level needs also send priests past every home
@@ -51,7 +68,8 @@
  *
  * The land ceiling asks whether the map has room: homes and their streets on
  * LAND_FOR_HOMES of the buildable land, and food from farms on MEADOW_FARMED
- * of the meadow at the least productive difficulty.
+ * of the meadow at the least productive difficulty (Insane, whose fields rest
+ * in winter).
  * ----------------------------------------------------------------------------
  */
 
@@ -68,6 +86,9 @@ import { SHOW_DAYS, REFILL_BELOW } from './entertainment.js';
 
 /** Home tiles within SERVICE_RADIUS of one street tile: street, house, house means two rows each side. */
 export const HOMES_PER_STREET_TILE = 4;
+/** How generously a player builds (see the header): planCity's options. */
+export const LEAN = Object.freeze({ homesPerStreetTile: HOMES_PER_STREET_TILE, spareFarms: 0 });
+export const SENSIBLE = Object.freeze({ homesPerStreetTile: 2, spareFarms: 3 });
 /** Share of a residential area that is homes (street, house, house: two rows in three). */
 export const HOME_SHARE = 2 / 3;
 /** Months of food a city's granaries hold. */
@@ -78,8 +99,6 @@ export const WAREHOUSE_MONTHS = 2;
 export const LAND_FOR_HOMES = 0.5;
 /** Share of the meadow a city can farm (fields come in patches a 3x3 farm does not fill). */
 export const MEADOW_FARMED = 2 / 3;
-/** Share of the employment ceiling a mission's population goal may ask for (see scenarios.js). */
-export const GOAL_SHARE = 0.85;
 
 const VENUE_KINDS = Object.keys(VENUE_POINTS);
 const PER_MONTH = CONFIG.DAYS_PER_MONTH;
@@ -221,9 +240,9 @@ export function peoplePerTile(t) {
 // ---------------------------------------------------------------------------
 
 /** Home tiles one building of `key` serves with its roaming walker. */
-function walkerReach(key) {
+function walkerReach(key, perStreetTile = HOMES_PER_STREET_TILE) {
   const roam = WALKER_TYPES[BUILDINGS[key].walker]?.roam ?? CONFIG.DEFAULT_ROAM;
-  return roam * HOMES_PER_STREET_TILE;
+  return roam * perStreetTile;
 }
 
 /** Home tiles inside a square of the given radius around a building. */
@@ -241,9 +260,13 @@ export function topProduction() {
   return Math.max(...Object.values(DIFFICULTY).map((d) => d.production));
 }
 
-/** The least productive difficulty's production (most farmland). */
+/**
+ * The least productive difficulty's yearly farm rate (most farmland): its
+ * production, less the winter months (December to Februarius) its fields
+ * rest or slow down (winterGrowth).
+ */
 export function lowProduction() {
-  return Math.min(...Object.values(DIFFICULTY).map((d) => d.production));
+  return Math.min(...Object.values(DIFFICULTY).map((d) => d.production * (1 - (3 / CONFIG.MONTHS_PER_YEAR) * (1 - (d.winterGrowth ?? 1)))));
 }
 
 /**
@@ -251,7 +274,8 @@ export function lowProduction() {
  * of the mission's working level (see the header for every assumption).
  * @returns {{level:number, homeTiles:number, items:{key:string, count:number, why:string}[], jobs:number}}
  */
-export function planCity(s, people, { production = topProduction() } = {}) {
+export function planCity(s, people, { production = topProduction(), homesPerStreetTile = LEAN.homesPerStreetTile, spareFarms = LEAN.spareFarms } = {}) {
+  const reach = (key) => walkerReach(key, homesPerStreetTile);
   const ctx = offers(s);
   const { keys, goods } = ctx;
   const level = topLevels(s).working;
@@ -263,7 +287,7 @@ export function planCity(s, people, { production = topProduction() } = {}) {
     const have = items.find((it) => it.key === key);
     if (have) { have.count += count; have.why += `; ${why}`; } else items.push({ key, count, why });
   };
-  const cover = (key, why) => add(key, Math.max(1, Math.ceil(tiles / walkerReach(key))), why);
+  const cover = (key, why) => add(key, Math.max(1, Math.ceil(tiles / reach(key))), why);
   if (people <= 0) return { level, homeTiles: 0, items, jobs: 0 };
 
   // Upkeep, markets and taxes: walkers past every home (a Senate's tax
@@ -272,7 +296,7 @@ export function planCity(s, people, { production = topProduction() } = {}) {
   cover('engineer_post', 'repairs');
   cover('market', 'food and goods to the door');
   if (keys.has('senate')) add('senate', 1, 'culture and prosperity');
-  const taxReach = walkerReach('forum');
+  const taxReach = reach('forum');
   add('forum', Math.max(keys.has('senate') ? 0 : 1, Math.ceil(tiles / taxReach) - (keys.has('senate') ? 1 : 0)), 'taxes');
 
   // Water: wells employ nobody; fountains cover their radius.
@@ -284,7 +308,7 @@ export function planCity(s, people, { production = topProduction() } = {}) {
     const fastest = farms.reduce((a, b) => (b.productionDays < a.productionDays ? b : a));
     const monthly = people * CONFIG.FOOD_PER_PERSON_MONTH;
     const perFarm = (CONFIG.CART_CAPACITY * PER_MONTH * production) / fastest.productionDays;
-    add(fastest.key, Math.max(need.food, Math.ceil(monthly / perFarm)), 'food');
+    add(fastest.key, Math.max(need.food, Math.ceil(monthly / perFarm)) + spareFarms, 'food');
     add('granary', Math.max(1, Math.ceil((monthly * GRANARY_MONTHS) / CONFIG.GRANARY_CAPACITY)), 'food store');
     add('prefecture', 1, 'farms');
     add('engineer_post', 1, 'farms');
@@ -295,7 +319,7 @@ export function planCity(s, people, { production = topProduction() } = {}) {
   const gods = godsOf(keys);
   gods.forEach((g, i) => {
     const share = Math.max(1, Math.ceil(people / GOD_KEYS.length / CONFIG.PEOPLE_PER_TEMPLE));
-    const priests = i < need.religion ? Math.ceil(tiles / walkerReach(`temple_${g}`)) : 0;
+    const priests = i < need.religion ? Math.ceil(tiles / reach(`temple_${g}`)) : 0;
     add(`temple_${g}`, Math.max(share, priests), `${g}`);
   });
 
@@ -309,7 +333,7 @@ export function planCity(s, people, { production = topProduction() } = {}) {
   if (need.edu >= 3) cover('academy', 'academy');
 
   // Shows: the cheapest set of venues that reaches the level's entertainment.
-  if (need.ent > 0) for (const it of venuePlan(keys, need.ent, tiles, people)) add(it.key, it.count, it.why);
+  if (need.ent > 0) for (const it of venuePlan(keys, need.ent, tiles, people, reach)) add(it.key, it.count, it.why);
 
   // Industry and trade: the homes' own goods, and what partners buy.
   const flow = industryPlan(s, keys, goods, need, people, production);
@@ -339,7 +363,7 @@ export function planCity(s, people, { production = topProduction() } = {}) {
  * A trainer sends a performer every `spawnDays`; a venue wants one every
  * SHOW_DAYS - REFILL_BELOW days.
  */
-function venuePlan(keys, want, tiles, people) {
+function venuePlan(keys, want, tiles, people, reach) {
   const kinds = venueKinds(keys);
   let best = null;
   for (let mask = 1; mask < 1 << kinds.length; mask++) {
@@ -355,7 +379,7 @@ function venuePlan(keys, want, tiles, people) {
     const items = [];
     const shows = {};
     for (const v of set) {
-      const venues = Math.max(Math.ceil(tiles / walkerReach(v)), Math.ceil((seatShare * people) / VENUE_SEATS[v]));
+      const venues = Math.max(Math.ceil(tiles / reach(v)), Math.ceil((seatShare * people) / VENUE_SEATS[v]));
       items.push({ key: v, count: venues, why: 'shows' });
       // The shows it books: both kinds when the bonus is counted, else its own (or the first it takes).
       const performers = bothShows(keys, v) ? VENUE_BOTH_SHOWS[v] : [VENUE_SUPPLIERS[v].find((p) => trainerOf(keys, p))];
@@ -466,21 +490,23 @@ export function landCeiling(s, land, { production = lowProduction() } = {}) {
 }
 
 /**
- * One mission's capacity, for the table and the tests. land: landOf(map), or
- * null to skip the land ceiling.
+ * One mission's capacity, for the table and the tests: the employment ceiling
+ * at both profiles (`lean`, `sensible`, with the jobs at that size) and, with
+ * land (landOf(map)), the land ceiling.
  */
 export function missionCapacity(s, land = null) {
   const { top, working } = topLevels(s);
-  const employment = employmentCeiling(s);
-  const plan = planCity(s, employment);
+  const at = (profile) => {
+    const people = employmentCeiling(s, profile);
+    return { people, jobs: planCity(s, people, profile).jobs };
+  };
   return {
     id: s.id,
     top,
     working,
     perTile: peoplePerTile(working),
-    employment,
-    jobsPer100: employment ? (plan.jobs / employment) * 100 : 0,
+    lean: at(LEAN),
+    sensible: at(SENSIBLE),
     land: land ? landCeiling(s, land) : null,
-    plan,
   };
 }

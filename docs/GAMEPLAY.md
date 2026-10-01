@@ -310,21 +310,21 @@ A mission is won when every goal is met at the same time (checked monthly). You 
 
 Seven missions, each opening the next. The first two teach the basics and have no crime or disease. The goals grow with the housing ladder: each mission's buildings let homes reach a certain level, and its culture and prosperity goals ask for a good share of what those buildings can give.
 
-**Population goals fit the jobs.** About a third of your plebeians look for work, and above 10% unemployment the city's mood falls (up to 15 points), so peace stops growing. Each mission's population goal is what its buildings can employ, with room to spare: the early missions unlock few buildings that hire (farms, a granary, markets, prefects, engineers, a Forum, a few temples), so their towns stay small, and more homes there only add idle hands. Later missions add workshops, shows, schools and baths, and trade: whatever a partner buys keeps farms and workshops staffed, so jobs grow with your exports.
+**Population and jobs.** About a third of your plebeians look for work, and above 10% unemployment the city's mood falls (up to 15 points), so peace stops growing. The first two missions unlock few buildings that hire (farms, a granary, markets, prefects, engineers, a Forum, temples, then fountains, a school and a theater), so their goals are what a sensibly built town of them employs: about 300 people in mission 1, 450 in mission 2. More homes there only add idle hands. Later missions add workshops, shows, schools and baths, and trade: whatever a partner buys keeps farms and workshops staffed, so jobs grow with your exports. Their goals are not yet checked against their jobs: they may ask for more people than the city can employ (see the ROADMAP).
 
 | Mission | Map | Population | Culture | Prosperity | Peace | Favor | Homes up to | First raid |
 |---|---|---|---|---|---|---|---|---|
-| 1 Novum Castrum | river, 64 | 170 | 15 | | 35 | | Hut | |
-| 2 Aquae Clarae | lakes, 96 | 260 | 35 | 20 | 45 | | Townhouse | |
-| 3 Figlina | plains, 112 | 530 | 45 | 30 | 50 | | Merchant House | |
-| 4 Pons Aelius | river, 128 | 1,250 | 50 | 40 | 55 | | Villa | 5 years |
-| 5 Portus Mercatorum | coast, 128 | 1,400 | 60 | 50 | 60 | 55 | Imperial Palatium | 4 years |
-| 6 Oasis Aurea | desert, 128 | 1,550 | 60 | 55 | 65 | 60 | Imperial Palatium | 3.5 years |
-| 7 Urbs Magna | lakes, 160 | 2,900 | 75 | 70 | 75 | 65 | Imperial Palatium | 3 years |
+| 1 Novum Castrum | river, 64 | 300 | 15 | | 35 | | Hut | |
+| 2 Aquae Clarae | lakes, 96 | 450 | 35 | 20 | 45 | | Townhouse | |
+| 3 Figlina | plains, 112 | 3,500 | 45 | 30 | 50 | | Domus | |
+| 4 Pons Aelius | river, 128 | 5,000 | 50 | 40 | 55 | | Villa | 5 years |
+| 5 Portus Mercatorum | coast, 128 | 6,500 | 60 | 50 | 60 | 55 | Imperial Palatium | 4 years |
+| 6 Oasis Aurea | desert, 128 | 7,000 | 60 | 55 | 65 | 60 | Imperial Palatium | 3.5 years |
+| 7 Urbs Magna | lakes, 160 | 12,000 | 75 | 70 | 75 | 65 | Imperial Palatium | 3 years |
 
-Mission 3's homes stop at Merchant Houses: its only venue is the theater, which gives a home at most 16 entertainment (10 for a visit, 6 for the seats), and a Domus needs 20.
+Mission 3 opens the Amphitheater and the Gladiator School for its Domus: a theater alone gives a home at most 16 entertainment (10 for a visit, 6 for the seats), and a Domus needs 20.
 
-**How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month. The population goals are met in months; peace sets the length, so even a city that is always ready needs about 1.3 years for the first mission, 2.1, 2.5, 2.9, 3.3 and 3.8 for the next ones and 4.6 for the last (`npm run sim -- --pace` prints the table). A year is about 5.3 minutes at 1x; with the city to build first, that makes roughly half an hour for the first missions and an hour or two for the last at normal speed.
+**How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month. In the first two missions peace sets the length, from mission 3 on the population, so even a city that is always ready needs about 1.3 years for the first mission, 2.1, 3.6, 5.7, 7.8 and 8.5 for the next ones and 15 for the last (`npm run sim -- --pace` prints the table). A year is about 5.3 minutes at 1x; with the city to build first, that makes roughly half an hour for the first missions and a few hours for the last at normal speed.
 
 ## The world around the city (visual only)
 

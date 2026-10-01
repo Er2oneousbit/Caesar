@@ -8,7 +8,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Health, Education and Entertainment advisors** (disease came in v0.11.0, crime in v0.10.0): city health and coverage by building, the Overview's crime and health lines, as in the design brief.
+1. **Health, Education and Entertainment advisors** (disease came in v0.11.0, crime in v0.10.0): built, for the next release. Three advisor tabs with, per kind of building, staffed counts, the people reached and the needs of homes met (Colonia's walker reach and venue seats, in twelve coverage words), one line of advice from what holds homes back most, city health and the year's outbreaks; the Overview's health and crime lines. Left for later: a "months since the last festival" count for the Entertainment advisor (Colonia keeps only the cooldown).
 2. **The Emperor's world** (the empire map came in v0.12.0): the Emperor's legions, requests for troops, distant battles and triumphal arches.
 3. **Classic content still missing**: hippodrome (it joins the entertainment score: its own points and seats, and the top levels' entertainment needs get a second look), fishing wharves and shipyards (fish counts with meat as one food type), military academy, large temples, and the governor's residence with salary and rank.
 4. **More campaign missions**: the seven missions now run from about a year to fifteen at the fastest (v0.8.2); the original's campaign runs to about eleven promotions. New missions between them, with the choice between a peaceful and a military province at points along the way (parity item 13), the last ones reaching populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). After items 1, 2 and 3, so the new provinces are not built twice; each new mission gets its `paceYears` from `npm run sim -- --pace`. **The rule: a mission's goals must fit its jobs.** Its population goal is at most what a sensibly built city of its buildings employs at 10% unemployment (`src/sim/capacity.js`, `npm run sim -- --capacity`), and its map must house and feed that many; `tests/campaign.test.mjs` holds every mission to it (missions 3 to 7 are listed exceptions until the late missions get their jobs, below). Populations in the tens of thousands need the jobs for them first.
@@ -289,7 +289,7 @@ Open items only; each keeps its number (#n) for good, so the release notes and t
 * **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
 * **#9** **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 * **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
-* **#15** **Health, Education and Entertainment advisors** (the Problems overlay, its other half, came in v0.9.1).
+* **#15** **Health, Education and Entertainment advisors** (the Problems overlay, its other half, came in v0.9.1): built for the next release (see Next up #1); only the festival count is left.
 * **#16** **Triumphal arches**, awarded for battles won.
 * **#17** **Military academy**: trains soldiers who fight better.
 * **#18** **Large temples**: bigger temples with more reach (all of Colonia's temples are 2x2).

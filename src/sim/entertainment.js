@@ -76,7 +76,18 @@ export function updateVenue(game, b) {
  * at 100%; the average over the kinds, over 5, is the base (0..20).
  */
 export function updateEntertainmentBase(game) {
-  const c = game.city;
+  const { cover, base } = seatCoverage(game);
+  game.city.entCoverage = cover;
+  game.city.entBase = base;
+}
+
+/**
+ * The seats behind the city-wide base, read-only (the Entertainment advisor
+ * shows them): { seats, cover, base } with seats and cover (0-100, % of the
+ * population) by venue kind.
+ */
+export function seatCoverage(game) {
+  const pop = game.city.population;
   const seats = {};
   for (const k in VENUE_SEATS) seats[k] = 0;
   for (const b of game.buildings.values()) {
@@ -89,9 +100,8 @@ export function updateEntertainmentBase(game) {
   let sum = 0;
   const cover = {};
   for (const k of kinds) {
-    cover[k] = c.population > 0 ? Math.min(100, Math.floor((seats[k] * 100) / c.population)) : 0;
+    cover[k] = pop > 0 ? Math.min(100, Math.floor((seats[k] * 100) / pop)) : 0;
     sum += cover[k];
   }
-  c.entCoverage = cover;
-  c.entBase = Math.min(ENT_BASE_MAX, Math.floor(sum / kinds.length / 5));
+  return { seats, cover, base: Math.min(ENT_BASE_MAX, Math.floor(sum / kinds.length / 5)) };
 }

@@ -306,6 +306,15 @@ table.tbl td.r, table.tbl th.r { text-align: right; }
 .panel-sec { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .panel-sec h5 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
 .kv { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; font-size: 13px; }
+.kv.link { cursor: pointer; }
+.kv.link:hover > span:first-child { text-decoration: underline; }
+/* A second, smaller line under a figure (the coverage advisors). */
+.sub { font-size: 11.5px; }
+/* The coverage tables: names may wrap, figures do not. */
+table.tbl.coverage td.num, table.tbl.coverage td.r { white-space: nowrap; }
+/* A building type's name that goes to one of them when clicked. */
+.linkbtn { border: none; background: none; padding: 0; font: inherit; color: var(--bronze); text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.linkbtn:hover { text-decoration-style: solid; }
 .status { padding: 6px 8px; border-radius: 6px; background: var(--panel-2); font-size: 13px; }
 .status.bad { background: color-mix(in srgb, var(--bad) 14%, var(--panel)); color: var(--bad); }
 .status.warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
@@ -623,6 +632,9 @@ canvas.trend { display: block; margin: 2px 0; }
   #overlay-legend { display: none; } /* no room beside the build sheet; tap a building for the details */
   .hud-title { display: none; }
   .grid2 { grid-template-columns: 1fr; }
+  /* Fourteen advisor tabs: tighter, so they take three rows and leave the page room. */
+  .tabs.advisor-tabs { padding: 4px 6px 0; gap: 0; }
+  .advisor-tabs .tab { padding: 5px 5px; font-size: 12.5px; }
   .empire-body { flex-direction: column; align-items: stretch; }
   .empire-side { flex: none; }
   #console { right: 0; }

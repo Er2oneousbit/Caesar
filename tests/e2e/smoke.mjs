@@ -328,7 +328,7 @@ try {
   // 4. Menus and advisors via keyboard
   await page.keyboard.press('F2');
   check('F2 opens advisors', await page.isVisible('text=Advisors'));
-  for (const tab of ['Labor', 'Population', 'Production', 'Finance', 'Trade', 'Military', 'Religion', 'Ratings', 'Imperial']) {
+  for (const tab of ['Labor', 'Population', 'Production', 'Finance', 'Trade', 'Military', 'Health', 'Education', 'Entertainment', 'Religion', 'Ratings', 'Imperial']) {
     await page.click(`.tab:has-text("${tab}")`);
   }
   check('advisor tabs render', errors.length === 0, errors.join(' | '));
@@ -749,7 +749,49 @@ try {
   await page.click('.tab:has-text("Overview")');
   const charts = await page.evaluate(() => document.querySelectorAll('.modal canvas.trend').length);
   check('Production advisor lists goods and bottlenecks; the Overview draws three trend charts', legendGone && prod.rows > 1 && /Bottlenecks/.test(prod.text) && /Wheat/.test(prod.text) && charts === 3, JSON.stringify({ legendGone, rows: prod.rows, charts }));
-  await page.keyboard.press('Escape');
+  // 5a4. The Health, Education and Entertainment advisors open and show their
+  //      numbers: a row per kind of building with figures, an advice line,
+  //      and staffed counts that match the city; the Overview's health and
+  //      crime lines. (A home is still sick from the Disease overlay check.)
+  const overviewLines = await page.evaluate(() => document.querySelector('.modal-body').textContent);
+  const coverageTabs = [];
+  for (const [tab, kinds] of [['Health', ['clinic', 'hospital', 'baths', 'barber']], ['Education', ['school', 'library', 'academy']], ['Entertainment', ['theater', 'amphitheater', 'colosseum', 'actor_troupe', 'gladiator_school', 'menagerie']]]) {
+    await page.click(`.tab:has-text("${tab}")`);
+    coverageTabs.push(await page.evaluate(({ tab, kinds }) => {
+      const g = window.colonia.game;
+      const body = document.querySelector('.modal-body');
+      const rows = kinds.map((k) => body.querySelector(`tr[data-kind="${k}"]`));
+      // The "Staffed" cell of each row: "<staffed> of <built>", as the city has them.
+      const staffedOk = rows.every((tr, i) => {
+        if (!tr) return false;
+        const all = [...g.buildings.values()].filter((b) => b.type === kinds[i]);
+        return tr.children[1].textContent === `${all.filter((b) => b.efficiency > 0).length} of ${all.length}`;
+      });
+      const figures = rows.every((tr) => tr && [...tr.querySelectorAll('td.num')].every((td) => /\d/.test(td.textContent)));
+      const advice = body.querySelector('.status.advice')?.textContent || '';
+      return { tab, rows: rows.filter(Boolean).length, staffedOk, figures, advice, sick: /Sick homes now/.test(body.textContent) };
+    }, { tab, kinds }));
+  }
+  check('the Health, Education and Entertainment advisors show every kind of building with its numbers and an advice line; the Overview has health and crime lines',
+    coverageTabs.every((t) => t.staffedOk && t.figures && t.advice.length > 10) && coverageTabs[0].sick && /City health/.test(overviewLines) && /Crime/.test(overviewLines) && errors.length === 0,
+    JSON.stringify({ coverageTabs, errors }));
+  if (shots) await page.screenshot({ path: path.join(shots, 'smoke-advisor-entertainment.png') });
+  // Clicking a building type's name goes to one of them, with its panel open.
+  const named = await page.evaluate(() => {
+    const link = document.querySelector('.modal-body tr[data-kind] .linkbtn');
+    return link ? link.closest('tr').dataset.kind : null;
+  });
+  if (named) await page.click('.modal-body tr[data-kind] .linkbtn');
+  await page.waitForTimeout(150);
+  const shownType = await page.evaluate(() => {
+    const app = window.colonia;
+    const t = app.ui.info.target;
+    const b = t && t.kind === 'building' ? app.game.buildings.get(t.id) : null;
+    return { modal: !!document.querySelector('.modal'), type: b ? b.type : null };
+  });
+  check('clicking a building type in those advisors shows one of them', !!named && !shownType.modal && shownType.type === named, JSON.stringify({ named, shownType }));
+  await page.evaluate(() => window.colonia.ui.info.close());
+  if (shownType.modal) await page.keyboard.press('Escape'); // the click closed the advisors (Escape on the map opens the game menu)
 
   // 5b. Military: garrison, fort panel + deploy by clicking the map, raid alert, advisor
   const gar = await page.evaluate(() => {
@@ -1195,6 +1237,22 @@ try {
   });
   check('phone: the empire map opens from the top bar and fits the screen', !!pe && pe.w > 250 && pe.right <= pe.vw && pe.scrollW <= pe.vw && pe.sideTop >= pe.mapBottom, JSON.stringify(pe));
   if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone-empire.png') });
+  // The Health, Education and Entertainment advisors on a phone: each opens
+  // with its table, nothing scrolls sideways, and the fourteen tabs leave the
+  // page most of the window.
+  await phone.keyboard.press('Escape');
+  const phoneTabs = [];
+  for (const tab of ['health', 'education', 'entertainment']) {
+    phoneTabs.push(await phone.evaluate((t) => {
+      window.colonia.ui.openAdvisors(t);
+      const body = document.querySelector('.modal-body');
+      const tabs = document.querySelector('.modal .tabs');
+      return { tab: t, rows: body.querySelectorAll('tr[data-kind]').length, scrollW: body.scrollWidth, w: body.clientWidth, page: document.documentElement.scrollWidth, tabsH: Math.round(tabs.getBoundingClientRect().height) };
+    }, tab));
+    if (shots) await phone.screenshot({ path: path.join(shots, `smoke-phone-${tab}.png`) });
+    await phone.keyboard.press('Escape');
+  }
+  check('phone: the Health, Education and Entertainment advisors open and fit the width', phoneTabs.every((t) => t.rows >= 3 && t.scrollW <= t.w && t.page <= 390 && t.tabsH < 120), JSON.stringify(phoneTabs));
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
   // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing
   //     may query the page before the tap: Playwright's evaluate() counts as a

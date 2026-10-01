@@ -28,6 +28,7 @@ import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER
 import { dockBerth, dockUsed } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
+import { riskRates } from '../sim/risk.js';
 import { farmDormant, daysToNextMare } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
@@ -144,9 +145,6 @@ export function buildingStatus(game, b) {
     default:
       break;
   }
-  if (def.needsRoad === false && def.damage > 0 && !game.map.roadWithin(b.x, b.y, b.size, CONFIG.SERVICE_RADIUS)) {
-    return { level: 'warn', text: `No road within ${CONFIG.SERVICE_RADIUS} tiles: engineers cannot reach it to repair it, and in time it will collapse.` };
-  }
   if (def.workers && b.efficiency < 1) return { level: 'warn', text: `Understaffed: working at ${pct(b.efficiency)}.` };
   return { level: 'good', text: 'Working normally.' };
 }
@@ -259,11 +257,22 @@ export class InfoPanel {
       h('button', { class: 'panel-close', title: 'Close (right click)', onclick: () => this.close() }, '×'));
   }
 
+  /**
+   * Fire and collapse risk. What cannot burn or collapse (a warehouse, a
+   * well, a Tent's roof) says so: "0%" would read as "safe for now".
+   */
   risks(b) {
+    const rates = riskRates(b);
+    if (!(rates.fire > 0) && !(rates.damage > 0)) {
+      return h('div', { class: 'panel-sec' }, h('h5', {}, 'Risks'), h('div', { class: 'muted' }, 'None: it never burns or collapses on its own.'));
+    }
+    const row = (label, rate, risk, never) => (rate > 0
+      ? [kv(label, `${Math.round(risk)}%`), bar(risk, 100, 'risk')]
+      : [kv(label, never)]);
     return h('div', { class: 'panel-sec' },
       h('h5', {}, 'Risks'),
-      kv('Fire risk', `${Math.round(b.fireRisk)}%`), bar(b.fireRisk, 100, 'risk'),
-      kv('Collapse risk', `${Math.round(b.damageRisk)}%`), bar(b.damageRisk, 100, 'risk'));
+      row('Fire risk', rates.fire, b.fireRisk, 'None: it cannot burn'),
+      row('Collapse risk', rates.damage, b.damageRisk, 'None: it cannot collapse'));
   }
 
   demolishButton(g, b) {
@@ -502,7 +511,8 @@ export class InfoPanel {
       const out = b.walkers.map((id) => g.walkers.get(id)).filter((w) => w && w.type === def.walker).length;
       parts.push(sec('Walker', kv(WALKER_TYPES[def.walker].name, out ? 'Out on patrol' : 'At the building'), h('div', { class: 'muted' }, WALKER_TYPES[def.walker].desc)));
     }
-    if (def.fire || def.damage) parts.push(this.risks(b));
+    // Always, so a warehouse or well says it is safe rather than saying nothing.
+    parts.push(this.risks(b));
     if (b.hp !== undefined && b.hp < buildingMaxHp(b)) {
       parts.push(sec('Raid damage', kv('Condition', `${Math.max(0, Math.round(b.hp))} / ${buildingMaxHp(b)}`), bar(b.hp, buildingMaxHp(b), 'risk'), h('div', { class: 'muted' }, 'Repairs itself slowly once the fighting stops.')));
     }

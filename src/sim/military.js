@@ -34,7 +34,7 @@ import { difficultyOf } from '../data/difficulty.js';
 import { spawnWalker, killWalker, STRIDE_WRAP } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
-import { igniteBuilding, collapseBuilding } from './risk.js';
+import { igniteBuilding, collapseBuilding, riskRates } from './risk.js';
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 
@@ -507,7 +507,7 @@ function damageBuilding(game, b, dmg) {
   const loud = now - game.military.lastLossMessageDay >= 4;
   if (loud) game.military.lastLossMessageDay = now;
   // Raiders torch most of what they break.
-  if (game.rng.chance(0.6) && (b.house ? b.house.tier > 0 : b.def.fire > 0)) igniteBuilding(game, b, loud ? 'raid' : 'raidQuiet');
+  if (game.rng.chance(0.6) && riskRates(b).fire > 0) igniteBuilding(game, b, loud ? 'raid' : 'raidQuiet');
   else collapseBuilding(game, b, loud ? 'raid' : 'raidQuiet');
 }
 

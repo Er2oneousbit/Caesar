@@ -281,7 +281,10 @@ function wrath(game, god, s) {
       for (const b of all) if (b.def.kind === 'farm') b.progress = 0;
       break;
     case 'neptune':
-      for (const b of all) if (game.map.isNearTerrain(b.x, b.y, b.size, 4, 3)) b.damageRisk += 60;
+      // Not buildings that can never collapse (a reservoir on the shore):
+      // they would only show risk that can never act. Homes always take it,
+      // as a Tent may move up to a level that can collapse.
+      for (const b of all) if ((b.house || b.def.damage > 0) && game.map.isNearTerrain(b.x, b.y, b.size, 4, 3)) b.damageRisk += 60;
       break;
     case 'mercury':
       note = wrathMercury(game, major);

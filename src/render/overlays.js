@@ -28,6 +28,7 @@ import { problemOf, PROBLEM_LEGEND } from '../ui/problems.js';
 import { crimeBand, crimeTip } from '../ui/crimeInfo.js';
 import { healthColumn, healthTip } from '../ui/healthInfo.js';
 import { SICK_COLOR } from '../data/disease.js';
+import { riskRates } from '../sim/risk.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
@@ -58,7 +59,9 @@ export const OVERLAYS = [
   {
     key: 'fire', name: 'Fire risk', bad: true,
     show: is('prefecture'),
-    value: (b) => Math.min(1, b.fireRisk / 100),
+    // No column over what can never burn (a warehouse, a garden): a column
+    // there, however short, says it could. The same for collapse below.
+    value: (b) => (riskRates(b).fire > 0 ? Math.min(1, b.fireRisk / 100) : null),
     walkers: ['prefect'],
   },
   {
@@ -81,7 +84,7 @@ export const OVERLAYS = [
   {
     key: 'damage', name: 'Collapse risk', bad: true,
     show: is('engineer_post'),
-    value: (b) => Math.min(1, b.damageRisk / 100),
+    value: (b) => (riskRates(b).damage > 0 ? Math.min(1, b.damageRisk / 100) : null),
     walkers: ['engineer'],
   },
   {

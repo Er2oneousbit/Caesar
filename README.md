@@ -76,7 +76,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | In debt and cannot build | Ask Rome for a loan in the Finance advisor (F2): the money comes at once and is repaid monthly with interest. |
 | Tax income is falling | Click a home: its tax line says whether a tax collector has registered it, and for how long. A lone Forum's collector can wander off along the Imperial road; a second Forum, or roadblocks at the ends of your blocks, keep collectors on your streets. |
 | A building never gets workers | No road touches it. A red sign with a crossed-out road floats over it, and after 8 days a message says where it is. Run a road along any of its edges; a road that only meets a corner does not count. |
-| Fountains or baths ran dry | A reservoir may have collapsed. Keep reservoirs and wells within 2 tiles of a road so engineers can repair them (the game warns when you place one too far). |
+| Fountains or baths ran dry | The reservoir feeding them, or an aqueduct linking it to a full one, is gone (raiders, or demolished by mistake). A fountain also needs its workers. Click a reservoir or fountain: its panel says whether it is full. Wells, fountains and reservoirs never burn or wear out. |
 | Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Dock on its bank. Use land routes on maps without one. |
 | "Something broke in the city" screen | Click *Copy report* and include it in a bug report. *Download emergency save* keeps your city. |
 

@@ -29,16 +29,20 @@ export function withArticle(label) {
   return `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label}`;
 }
 
+/**
+ * Fire and damage risk a building gains a day, before difficulty: a home's
+ * come from its level (an empty lot gains none), anything else's from its
+ * data. A rate of 0 means it never burns (or never collapses); the UI asks
+ * here too, so it never shows odds for a building that cannot go off.
+ */
+export function riskRates(b) {
+  const r = b.house ? HOUSE_TIERS[b.house.tier] : b.def;
+  return { fire: r.fire, damage: r.damage };
+}
+
 /** Daily risk growth + disaster checks for one building. */
 export function updateRisk(game, b) {
-  let fire = b.def.fire;
-  let dmg = b.def.damage;
-  if (b.house) {
-    if (b.house.tier === 0) return; // empty lots cannot burn
-    const t = HOUSE_TIERS[b.house.tier];
-    fire = t.fire;
-    dmg = t.damage;
-  }
+  const { fire, damage: dmg } = riskRates(b);
   const { rng } = game;
   const mult = game.difficulty.risk;
   if (fire > 0) b.fireRisk += fire * mult * (0.6 + rng.next() * 0.8);
@@ -132,8 +136,7 @@ export function updateFires(game) {
       if (!id || seen.has(id)) continue;
       const nb = buildings.get(id);
       if (!nb) continue;
-      const flammable = nb.house ? nb.house.tier > 0 : nb.def.fire > 0;
-      if (!flammable) continue;
+      if (!(riskRates(nb).fire > 0)) continue; // fire-proof: the flames pass it by
       seen.add(id);
       near.push(nb);
     }

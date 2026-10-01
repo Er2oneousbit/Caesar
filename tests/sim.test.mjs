@@ -32,7 +32,8 @@ import { loanTerms, takeLoan, repayLoan } from '../src/sim/loans.js';
 import { difficultyOf } from '../src/data/difficulty.js';
 import { openRoute, setTradeMode, tradeAt } from '../src/sim/trade.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
-import { updateFires, igniteBuilding } from '../src/sim/risk.js';
+import { updateFires, igniteBuilding, updateRisk } from '../src/sim/risk.js';
+import { BUILDINGS } from '../src/data/buildings.js';
 import { resourceAvailable } from '../src/sim/production.js';
 
 log.setLevel('error');
@@ -524,6 +525,63 @@ test('one fire in an unguarded housing block takes a handful of homes, not the b
   assert.ok(total / seeds < 20, `mean tiles burned ${total / seeds} of 48`);
 });
 
+test('wells, fountains, reservoirs, warehouses and engineer posts never burn or collapse, even with risk forced high', () => {
+  // As in the original. Warehouses and engineer's posts used to burn (a
+  // fifth of all fires in the analyst's sample), and a reservoir off every
+  // engineer's rounds collapsed and dried the fountains it fed.
+  const game = newGame({ seed: 'immune' });
+  const spot = findFree(game, 16, 5);
+  let x = spot.x + 1;
+  const placed = [['well', 1], ['fountain', 1], ['reservoir', 3], ['warehouse', 3], ['engineer_post', 1]].map(([type, size]) => {
+    const b = addBuilding(game, type, x, spot.y + 1, size);
+    x += size + 1;
+    return b;
+  });
+  game.rng.chance = () => true; // every roll that could set off a disaster succeeds
+  for (let day = 0; day < 50; day++) {
+    for (const b of placed) {
+      b.fireRisk = 1000;
+      b.damageRisk = 1000;
+      updateRisk(game, b);
+    }
+  }
+  // Flames along both sides of the row: none of them heats up or catches.
+  for (const b of placed) {
+    b.fireRisk = 0;
+    for (let dx = 0; dx < b.size; dx++) {
+      game.fires.set(game.map.idx(b.x + dx, b.y - 1), CONFIG.FIRE_BURN_DAYS);
+      game.fires.set(game.map.idx(b.x + dx, b.y + b.size), CONFIG.FIRE_BURN_DAYS);
+    }
+  }
+  updateFires(game);
+  for (const b of placed) {
+    assert.ok(game.buildings.has(b.id), `${b.type} still stands`);
+    assert.equal(b.fireRisk, 0, `${b.type} is not heated by the fire beside it`);
+  }
+  assert.equal(game.city.stats.fires, 0);
+  assert.equal(game.city.stats.collapses, 0);
+});
+
+test('a workshop burns and collapses at the same pace, and so does the timber yard', () => {
+  // As in the original. Fire rates of 1.5 to 3 against damage 1 made the
+  // workshops the city's main fire source (the owner: "fire happens way
+  // faster than collapse").
+  const makers = Object.entries(BUILDINGS).filter(([key, d]) => d.kind === 'workshop' || key === 'timber_yard');
+  assert.ok(makers.length >= 7);
+  for (const [key, d] of makers) {
+    assert.ok(d.fire > 0, `${key} can burn`);
+    assert.equal(d.fire, d.damage, `${key}: fire ${d.fire} a day against damage ${d.damage}`);
+  }
+  // In play: an unserved potter's two risks climb together.
+  const game = newGame({ seed: 'pace' });
+  const spot = findFree(game, 2, 2);
+  const potter = addBuilding(game, 'pottery_ws', spot.x, spot.y, 2);
+  game.rng.chance = () => false; // let the risks climb without going off
+  for (let day = 0; day < 60; day++) updateRisk(game, potter);
+  const ratio = potter.fireRisk / potter.damageRisk;
+  assert.ok(ratio > 0.85 && ratio < 1.15, `fire risk ${potter.fireRisk.toFixed(0)} against collapse risk ${potter.damageRisk.toFixed(0)}`);
+});
+
 test('a timber yard needs woods, not a lone tree: to be placed, and to keep working', () => {
   const game = newGame();
   const spot = findFree(game, 8, 8);
@@ -641,5 +699,4 @@ test('the level 3 demo city (the money yardstick) pipes water to its fountains',
   const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
   assert.ok(res.length >= 1 && res.every((r) => r.hasWater), 'reservoirs full');
   assert.ok(fountains.length >= 4 && fountains.every((f) => f.hasWater), 'fountains wet');
-  for (const r of res) assert.ok(game.map.roadWithin(r.x, r.y, 3, CONFIG.SERVICE_RADIUS), 'within an engineer\'s reach (a lakeshore one once collapsed)');
 });

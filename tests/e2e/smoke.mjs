@@ -398,6 +398,36 @@ try {
       seen.join() === 'accept,refuse,get,accept' && label === 'Accept' && emptying && /Emptying/.test(says) && stopped && errors.length === 0,
       JSON.stringify({ seen, label, emptying, stopped }));
   }
+  // The Risks section shows odds only for what can go off: a well never
+  // burns or collapses, and a Tent never collapses ("0%" read as "safe for now").
+  // A well, not a warehouse: the menu's sandbox has a random seed, and the
+  // demo city builds a warehouse only where it finds clay by water, but
+  // always its wells.
+  const risks = await page.evaluate(() => {
+    const app = window.colonia;
+    const all = [...app.game.buildings.values()];
+    const text = (b) => {
+      if (!b) return null;
+      app.ui.info.showBuilding(b.id);
+      const sec = [...document.querySelectorAll('#info-panel .panel-sec')].find((s) => s.querySelector('h5')?.textContent === 'Risks');
+      return sec ? sec.textContent : null;
+    };
+    const out = { well: text(all.find((b) => b.type === 'well')), shop: text(all.find((b) => !b.house && b.def.fire > 0 && b.def.damage > 0)) };
+    const home = all.find((b) => b.house && b.house.pop > 0 && b.size === 1);
+    if (home) {
+      const was = home.house.tier;
+      home.house.tier = 1;
+      out.tent = text(home);
+      home.house.tier = was;
+    }
+    app.ui.info.close();
+    return out;
+  });
+  check('info panel risks: odds for a workplace, none for a well or a Tent\'s collapse',
+    /never burns or collapses/.test(risks.well || '') && !/%/.test(risks.well || '')
+    && /Fire risk\s*\d+%/.test(risks.shop || '') && /Collapse risk\s*\d+%/.test(risks.shop || '')
+    && /Fire risk\s*\d+%/.test(risks.tent || '') && /Collapse risk\s*None: it cannot collapse/.test(risks.tent || ''),
+    JSON.stringify(risks));
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Population")');
   const rows = await page.evaluate(() => [...document.querySelectorAll('.modal tr')].filter((tr) => /^\d+\. /.test(tr.textContent)).length);

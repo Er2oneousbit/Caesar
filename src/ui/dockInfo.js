@@ -15,6 +15,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { cartsOut } from '../sim/production.js';
 import { dockWorkers, mooredShip, daysMoored, exportClaims } from '../sim/trade.js';
 import { goodsList } from './storageInfo.js';
+import { dealPricesText } from '../sim/prices.js';
 import { fmt } from './dom.js';
 
 /** "wine 800"; horses, counted by the head: "3 horses". */
@@ -41,7 +42,8 @@ export function dockShipText(game, dock) {
 
 /**
  * The Dock panel's rows: what the moored ship still has to unload and to
- * load (with how much of that is on a worker's cart), and the dock workers.
+ * load (with how much of that is on a worker's cart), its partner's prices
+ * for those goods this year (sim/prices.js), and the dock workers.
  * @returns {[string, string][]}
  */
 export function dockRows(game, dock) {
@@ -53,6 +55,9 @@ export function dockRows(game, dock) {
       .map(([g, n]) => `${amountOf(g, n)}${onWay[g] > 0 ? ` (${fmt(onWay[g])} on the way)` : ''}`);
     rows.push(['To unload', goodsAmounts(ship.unload) || 'Nothing']);
     rows.push(['To load', load.join(', ') || 'Nothing']);
+    const goods = (o) => Object.keys(o || {}).filter((g) => o[g] > 0);
+    const prices = dealPricesText(game, ship.partner, goods(ship.unload), goods(ship.wants));
+    if (prices) rows.push(['Prices this year (per 100)', prices]);
   }
   const most = dockWorkers(dock);
   const full = dockWorkers({ efficiency: 1 });

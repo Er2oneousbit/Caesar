@@ -20,6 +20,7 @@ import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAG
 import { goalStatus } from '../sim/ratings.js';
 import { RANKS, SANDBOX_RANK, TOP_RANK } from '../data/ranks.js';
 import { SITES, SANDBOX_SITES, HOME_SITE } from '../data/sites.js';
+import { marketLine } from '../sim/prices.js';
 import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
@@ -192,6 +193,8 @@ export function briefing(app, s, onBegin = null, onBack = null) {
     h('h4', {}, 'Goals'),
     goals.length ? h('ul', {}, goals.map(([k, v]) => h('li', {}, `${k[0].toUpperCase()}${k.slice(1)}: ${fmt(v)}`))) : h('div', { class: 'muted' }, 'None: build as you like.'),
     fundsRow,
+    // The province's own market (sim/prices.js), for a mission that has one.
+    marketLine(s) ? h('div', { class: 'row muted market-line' }, `Local market: ${marketLine(s)}`) : null,
     h('div', { class: 'row muted governor-line' }, onBegin || !app.game ? briefingGovernorLine(s, app.savedFor(s.id)) : `Rank: ${rankLine(app.game)}.`),
     onBegin
       ? difficultyField(diff, (k) => { diff = k; fundsRow.textContent = fundsText(); })

@@ -26,6 +26,7 @@ import { tradeRouteCard } from './advisors.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { routeKind } from '../sim/trade.js';
 import { SITES, homeSiteId } from '../data/sites.js';
+import { missionYear } from '../sim/prices.js';
 import { battleSummary } from '../sim/battle.js';
 import {
   MAP_W, MAP_H, drawEmpire, empireTravelers, empireHitAt, travelerLabel, isDrawn, figureCenter, figureScale,
@@ -288,10 +289,10 @@ export class EmpireView {
     });
     const sel = this.selected && g.city.trade.routes[this.selected] ? this.selected : null;
     const r = sel ? g.city.trade.routes[sel] : null;
-    // The card's note on docks changes as Docks are built and staffed.
+    // The card's note on docks changes as Docks are built and staffed, its prices each New Year.
     const docks = [...g.buildings.values()].filter((b) => b.def.kind === 'dock');
     const dockState = [docks.length, docks.some((b) => b.efficiency > 0)];
-    this.section('card', this.cardEl, JSON.stringify([sel, r && [r.open, r.sold, r.bought], !!g.map.seaEntry, dockState]), () => (sel
+    this.section('card', this.cardEl, JSON.stringify([sel, r && [r.open, r.sold, r.bought], !!g.map.seaEntry, dockState, missionYear(g)]), () => (sel
       ? [h('h4', {}, 'Trade partner'), tradeRouteCard(this.app, g, sel, () => { this.sigs.card = null; this.renderPanel(this.app.game); })]
       : [h('h4', {}, 'Trade partner'), h('div', { class: 'muted' }, Object.keys(g.city.trade.routes).length ? 'Click a city on the map for what it buys and sells, and to open a route to it.' : 'No trade partners are available in this scenario.')]));
   }

@@ -302,6 +302,18 @@ export const CONFIG = {
   DOCK_UNLOAD_DAYS: 3, // days the dock's crane takes to land DOCK_LOAD from the ship onto the quay (the original's 1.6 days a load)
   DOCK_CAPACITY: 2400, // units of unloaded imports a dock can hold (a whole ship's load)
   DOCK_REACH: 60, // road tiles: dock workers fetch exports from staffed warehouses this close to the dock (a trip must also end before the stay limit)
+  // Prices (sim/prices.js; Colonia's own rules: the original had one price table for every partner).
+  // The province's farthest partner trades at this much above base, its nearest at base, the others
+  // in proportion to their route's length. Both ways: a far partner's goods cost more to bring in, and
+  // a far market pays more for goods rare there. A quarter is enough to make the far routes worth
+  // their longer waits without making the near ones pointless.
+  TRADE_DISTANCE_PREMIUM: 0.25,
+  // Each good's price drifts each New Year: last year's drift pulled halfway back toward 1, plus a
+  // seeded step of up to +-10%, never beyond +-15%. Enough that a good can be worth switching to
+  // or away from, never so much that a city's trade plan breaks in one year.
+  PRICE_DRIFT_MAX: 0.15,
+  PRICE_DRIFT_STEP: 0.1,
+  PRICE_DRIFT_PULL: 0.5,
 
   // --- Fishing (sim/fishing.js) -------------------------------------------
   // The original's pace: a shipyard builds a boat in 16 days at full staff; a

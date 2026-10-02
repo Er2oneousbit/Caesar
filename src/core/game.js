@@ -55,6 +55,7 @@ import { repayLoan } from '../sim/loans.js';
 import { newGodState, newGodMood, updateReligion } from '../sim/religion.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { newTradeState, updateTrade, resetTradeYear, updateDock, tradeMonthly } from '../sim/trade.js';
+import { pricesNewYear } from '../sim/prices.js';
 import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome, enemiesInProvince } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
@@ -379,6 +380,7 @@ export class Game {
     yearlyEconomy(this);
     salaryNewYear(this); // the year's salary against the governor's rank
     resetTradeYear(this);
+    pricesNewYear(this); // news of the year's biggest price moves (sim/prices.js: prices follow the date)
     crimeNewYear(this);
     healthNewYear(this);
     this.events.emit('year', this.time);

@@ -463,6 +463,8 @@ input[type="range"] { width: 100%; accent-color: var(--bronze); }
 .post-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .post-threat { font-weight: 600; }
 .post-card .post-start { margin-top: auto; align-self: flex-start; }
+/* Under the campaign list once a province of the last step is won. */
+.caesar-line { margin: 10px 0 0; text-align: center; font-family: var(--font-title); font-weight: 700; color: var(--bronze); }
 @media (max-width: 760px) {
   .scenario-list { gap: 12px; } /* siblings stacked 6px apart: the steps a little farther */
   .step-missions { flex-direction: column; }

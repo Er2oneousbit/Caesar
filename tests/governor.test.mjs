@@ -31,7 +31,7 @@ import {
 import { checkOutcome } from '../src/sim/ratings.js';
 import { GIFT_SIZES, GIFT_MEMORY_MONTHS, giftCost, giftFavor, sendGift, giftsMonth } from '../src/sim/emperor.js';
 import {
-  rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, briefingGovernorLine, victoryGovernorLine, salaryNow,
+  rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, briefingGovernorLine, victoryGovernorLine, victoryTitle, salaryNow,
 } from '../src/ui/governorInfo.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -65,7 +65,7 @@ test('ranks: eleven, Citizen to Caesar, with the salary table from 0 to 100 Dn a
 });
 
 test('ranks: one per step (step 1 a Citizen, step 9 a Consul), both siblings alike; the sandbox picks one, the middle by default', () => {
-  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, s.rank])), { c1: 0, c2: 1, c3: 2, c3m: 2, c4: 3, c4p: 3, c5: 4, c5p: 4, c6: 5, c6p: 5, c7: 6, c7p: 6, c8m: 7, c8p: 7, c9m: 8, c9p: 8 });
+  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, s.rank])), { c1: 0, c2: 1, c3: 2, c3m: 2, c4: 3, c4p: 3, c5: 4, c5p: 4, c6: 5, c6p: 5, c7: 6, c7p: 6, c8m: 7, c8p: 7, c9m: 8, c9p: 8, c10m: 9, c10p: 9 });
   for (const s of SCENARIOS) assert.equal(s.rank, s.step - 1, s.id);
   assert.equal(withDifficulty(findScenario('c4'), 'hard').rank, 3, 'a difficulty keeps the rank');
   assert.equal(sandboxScenario({}).rank, 5);
@@ -350,7 +350,7 @@ test('savings carry from mission to mission (worked example 5); replaying a miss
   // The first mission, the sandbox and the last mission's victory.
   assert.equal(campaignSavings(record, 'c1'), 0);
   assert.equal(campaignSavings({ sandbox: 500 }, 'sandbox'), 0);
-  assert.deepEqual(storeCampaignSavings(record, 'c9p', 5000), [], 'the last step stores nothing');
+  assert.deepEqual(storeCampaignSavings(record, 'c10p', 5000), [], 'the last step stores nothing');
   assert.equal(campaignSavings(undefined, 'c3'), 0);
   assert.equal(new Game({ scenario: findScenario('c1') }).city.governor.savings, 0);
 });
@@ -541,6 +541,12 @@ test('words: the Imperial advisor, the briefing and the victory screen', () => {
   assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c5p'), savings: 2000 })), 'Rome promotes you to Procurator. Your savings of 2,000 Dn go with you to your next post.', 'two provinces at step 6');
   assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c1') })), 'Rome promotes you to Clerk. Your savings of 0 Dn go with you to Aquae Clarae.');
   assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c7') })), 'Rome promotes you to Praetor. Your savings of 0 Dn go with you to your next post.');
-  assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c9m') })), 'Your savings of 0 Dn are yours to keep.');
+  assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c9m') })), 'Rome promotes you to Proconsul. Your savings of 0 Dn go with you to your next post.');
+  // The last step: Caesar, and nothing goes on.
+  const crowned = new Game({ scenario: findScenario('c10m'), savings: 3100 });
+  assert.equal(victoryGovernorLine(crowned), 'Rome hails you Caesar: your career is crowned. Your savings of 3,100 Dn are yours to keep.');
+  assert.equal(victoryTitle(crowned), 'Hail, Caesar!');
+  assert.equal(victoryTitle(new Game({ scenario: findScenario('c9p') })), 'Victory!');
+  assert.equal(victoryTitle(game), 'Victory!', 'the sandbox');
   assert.equal(victoryGovernorLine(game), null);
 });

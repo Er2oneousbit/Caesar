@@ -16,7 +16,7 @@ import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame, upgradeNavyV10 } from '../src/core/save.js';
 import { sandboxScenario, SCENARIOS, NAVY_KEYS } from '../src/data/scenarios.js';
 import { UNIT_TYPES, STATION_CAPACITY } from '../src/data/units.js';
-import { generateMap } from '../src/world/mapgen.js';
+import { generateMap, mapOptions } from '../src/world/mapgen.js';
 import { Terrain } from '../src/world/map.js';
 import { addBuilding, removeBuilding, spawnWalker } from '../src/sim/entities.js';
 import { checkBuilding } from '../src/sim/construction.js';
@@ -386,16 +386,16 @@ test('a raid by sea against the fleet: ships are sunk before they land, the raid
 // Unlocks and saves
 // ---------------------------------------------------------------------------
 
-test('unlocks: the fleet comes with the missions that have raids and water from the sea (4, 5, 7, Corduba) and the sandbox', () => {
+test('unlocks: the fleet comes with the missions that have raids and water from the sea (4, 5, 7, Corduba, Narbo Martius) and the sandbox', () => {
   const has = (s, k) => s.unlocks === 'all' || s.unlocks.includes(k);
   for (const s of SCENARIOS) {
-    const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
+    const { map } = generateMap(mapOptions(s.map));
     map.computeNavigation();
     const fleet = NAVY_KEYS.every((k) => has(s, k));
     assert.equal(NAVY_KEYS.some((k) => has(s, k)), fleet, `${s.id}: both or neither`);
     assert.equal(fleet, !!s.military && !!map.seaEntry, `${s.id}: fleet ${fleet}, raids ${!!s.military}, water from the sea ${!!map.seaEntry}`);
   }
-  assert.deepEqual(SCENARIOS.filter((s) => NAVY_KEYS.every((k) => has(s, k))).map((s) => s.id), ['c4', 'c5', 'c7', 'c9m']);
+  assert.deepEqual(SCENARIOS.filter((s) => NAVY_KEYS.every((k) => has(s, k))).map((s) => s.id), ['c4', 'c5', 'c7', 'c9m', 'c10m']);
   assert.equal(sandboxScenario().unlocks, 'all');
   // Placement: on the shore of water ships can sail, like a dock.
   const { game } = coastCity();

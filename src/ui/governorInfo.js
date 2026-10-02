@@ -8,8 +8,8 @@
  * ----------------------------------------------------------------------------
  */
 
-import { RANKS } from '../data/ranks.js';
-import { nextMissions, stepOf } from '../data/scenarios.js';
+import { RANKS, TOP_RANK } from '../data/ranks.js';
+import { nextMissions, stepOf, rankAfterWin, endsCareer } from '../data/scenarios.js';
 import { salaryOf, salaryOutlook } from '../sim/governor.js';
 import { GIFT_SIZES, GIFT_MEMORY_MONTHS, giftCost, giftFavor } from '../sim/emperor.js';
 import { withArticle } from '../sim/risk.js';
@@ -79,15 +79,22 @@ export function briefingGovernorLine(scenario, savings) {
 /**
  * The victory screen's line: the promotion and the savings that go with it,
  * or null outside the campaign. Where the next step offers two provinces the
- * line names neither: the player has yet to choose.
+ * line names neither: the player has yet to choose. A win at the last step
+ * makes the governor Caesar and ends the career: nothing goes on.
  */
 export function victoryGovernorLine(game) {
-  if (!stepOf(game.scenario.id)) return null;
-  const next = nextMissions(game.scenario.id);
+  const id = game.scenario.id;
+  if (!stepOf(id)) return null;
+  const next = nextMissions(id);
   const savings = dn(game.city.governor.savings);
-  if (!next.length) return `Your savings of ${savings} are yours to keep.`;
+  if (!next.length) return `Rome hails you ${RANKS[rankAfterWin(id)].name}: your career is crowned. Your savings of ${savings} are yours to keep.`;
   const where = next.length === 1 ? next[0].name : 'your next post';
-  return `Rome promotes you to ${RANKS[next[0].rank].name}. Your savings of ${savings} go with you to ${where}.`;
+  return `Rome promotes you to ${RANKS[rankAfterWin(id)].name}. Your savings of ${savings} go with you to ${where}.`;
+}
+
+/** The victory screen's heading: "Hail, Caesar!" for a win that ends the career, else "Victory!". */
+export function victoryTitle(game) {
+  return endsCareer(game.scenario.id) ? `Hail, ${RANKS[TOP_RANK].name}!` : 'Victory!';
 }
 
 /** The salary drawn now, in a few words (Finance advisor). */

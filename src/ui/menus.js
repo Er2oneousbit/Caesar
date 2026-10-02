@@ -18,8 +18,8 @@ import { MAP_SIZES, MAP_SIZE_NOTES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
 import { goalStatus } from '../sim/ratings.js';
-import { RANKS, SANDBOX_RANK } from '../data/ranks.js';
-import { briefingGovernorLine, victoryGovernorLine, rankLine } from './governorInfo.js';
+import { RANKS, SANDBOX_RANK, TOP_RANK } from '../data/ranks.js';
+import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
 const SLOT_NAMES = { auto: 'Autosave', quick: 'Quicksave', slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3', slot4: 'Slot 4', slot5: 'Slot 5' };
@@ -113,7 +113,10 @@ export function campaignMenu(app) {
       h('span', { class: 'n', title: `Step ${n}` }, won ? '✔' : String(n)),
       h('div', { class: 'step-missions' }, missions.map(button))));
   }
-  return modal('Campaign', h('div', { class: 'scenario-list' }, rows),
+  // A province of the last step won: the career is crowned (the list stays open to replay).
+  const crowned = missionsAtStep(LAST_STEP).some((s) => done.includes(s.id));
+  return modal('Campaign', [h('div', { class: 'scenario-list' }, rows),
+    crowned ? h('p', { class: 'caesar-line' }, `You won a province of the last step: Rome hails you ${RANKS[TOP_RANK].name}.`) : null],
     [h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back')], '', () => app.ui.closeModal());
 }
 
@@ -406,7 +409,7 @@ function nextStepButton(app) {
 
 export function victoryMenu(app) {
   const g = app.game;
-  return modal('Victory!', [
+  return modal(victoryTitle(g), [
     h('p', {}, `The Senate is delighted with ${g.city.name}. You have met every goal of this mission.`),
     h('table', { class: 'tbl' }, goalStatus(g).map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'r num ok' }, `${fmt(r.have)} / ${fmt(r.need)}`)))),
     victoryGovernorLine(g) ? h('p', { class: 'governor-line' }, victoryGovernorLine(g)) : null,

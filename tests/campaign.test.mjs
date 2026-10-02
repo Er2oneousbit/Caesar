@@ -24,7 +24,8 @@ import { HOUSE_TIERS } from '../src/data/housing.js';
 import { goalMonths, populationMonths, monthsToMinutes } from '../src/sim/pace.js';
 import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, employmentCeiling, employsEnough, landCeiling, landOf, peoplePerTile, lowProduction, topProduction, docksFor, demandAt, LEAN, SENSIBLE, PATRICIAN_SHARE, VILLA_LEVEL } from '../src/sim/capacity.js';
 import { demandChangeAt } from '../src/sim/tradeDemand.js';
-import { generateMap } from '../src/world/mapgen.js';
+import { generateMap, mapOptions, REGION_KINDS } from '../src/world/mapgen.js';
+import { Terrain } from '../src/world/map.js';
 import { updateImmigration, immigrationPerDay } from '../src/sim/population.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { checkBuilding } from '../src/sim/construction.js';
@@ -88,7 +89,7 @@ test('each mission\'s goals are within reach of its buildings', () => {
   // from step 7, whose hippodrome the Imperial Palatium (95) needs. Siblings
   // reach the same level as the mission beside them.
   assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, topLevel(s)])),
-    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c6p: 19, c7: 20, c7p: 20, c8m: 20, c8p: 20, c9m: 20, c9p: 20 });
+    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c6p: 19, c7: 20, c7p: 20, c8m: 20, c8p: 20, c9m: 20, c9p: 20, c10m: 20, c10p: 20 });
   for (const s of SCENARIOS) {
     const g = s.goals;
     const keys = unlockedBuildings(s);
@@ -120,7 +121,7 @@ test('each mission\'s population goal fits the jobs its buildings give, and its 
   for (const s of SCENARIOS) {
     const goal = s.goals.population;
     const ceiling = employmentCeiling(s, SENSIBLE);
-    const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
+    const { map } = generateMap(mapOptions(s.map));
     const land = landCeiling(s, landOf(map));
     assert.ok(goal <= land, `${s.id}: population goal ${goal}, but the map houses and feeds at most ${land}`);
     if (KNOWN_OVER.includes(s.id)) {
@@ -331,4 +332,104 @@ test('every mission with a shipyard can get timber for its boats: woods for a ti
     assert.ok(anySite('shipyard'), `${s.id}: shore for a shipyard`);
     assert.ok(anySite('timber_yard'), `${s.id}: woods for a timber yard`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The last step: a big city of districts (world/mapgen.js regions)
+// ---------------------------------------------------------------------------
+
+/** The terrain each resource region gathers. */
+const REGION_TERRAIN = Object.freeze({ fields: Terrain.MEADOW, woods: Terrain.TREES, hills: Terrain.ROCK });
+
+/** The tiles of each region's terrain, as [x, y], by region kind. */
+function resourceTiles(map) {
+  const out = Object.fromEntries(REGION_KINDS.map((k) => [k, []]));
+  for (let i = 0; i < map.size; i++) {
+    for (const k of REGION_KINDS) if (map.terrain[i] === REGION_TERRAIN[k]) out[k].push([i % map.w, (i / map.w) | 0]);
+  }
+  return out;
+}
+
+test('the last step: big maps, 10,000 people or more, and fields, woods and hills far apart, so the city grows in districts', () => {
+  const last = missionsAtStep(LAST_STEP);
+  assert.equal(last.length, 2);
+  for (const s of last) {
+    assert.ok(s.map.size >= 192 && s.map.size <= 256, `${s.id}: a ${s.map.size} map`);
+    assert.ok(s.goals.population >= 10000, `${s.id}: ${s.goals.population} people`);
+    assert.equal(s.map.regions, true, `${s.id}: resource regions`);
+    const { map } = generateMap(mapOptions(s.map));
+    const tiles = resourceTiles(map);
+    const mid = Object.fromEntries(REGION_KINDS.map((k) => {
+      const t = tiles[k];
+      return [k, [t.reduce((n, p) => n + p[0], 0) / t.length, t.reduce((n, p) => n + p[1], 0) / t.length]];
+    }));
+    // The middles of the fields, the woods and the rock lie far apart...
+    for (let a = 0; a < REGION_KINDS.length; a++) {
+      for (let b = a + 1; b < REGION_KINDS.length; b++) {
+        const [ka, kb] = [REGION_KINDS[a], REGION_KINDS[b]];
+        const d = Math.hypot(mid[ka][0] - mid[kb][0], mid[ka][1] - mid[kb][1]);
+        assert.ok(d >= 70, `${s.id}: ${ka} and ${kb} ${Math.round(d)} tiles apart`);
+      }
+    }
+    // ...and no place lies within LABOR_RANGE tiles of a tenth of all three
+    // at once: a building hires only from homes that near, so one compact
+    // town cannot staff the farms, the timber yards and the quarries. Each
+    // needs a district of its own. (Measured: at most 5 or 6%.)
+    const r2 = CONFIG.LABOR_RANGE * CONFIG.LABOR_RANGE;
+    let worst = 0;
+    for (let y = 0; y < map.h; y += 4) {
+      for (let x = 0; x < map.w; x += 4) {
+        const share = Math.min(...REGION_KINDS.map((k) => tiles[k].filter(([a, b]) => (a - x) ** 2 + (b - y) ** 2 <= r2).length / tiles[k].length));
+        worst = Math.max(worst, share);
+      }
+    }
+    assert.ok(worst < 0.1, `${s.id}: one place reaches ${Math.round(worst * 100)}% of every resource`);
+    // Enough rock for quarries and mines and woods for timber yards (the
+    // capacity test holds the meadow's food to the goal).
+    assert.ok(tiles.hills.length >= 800 && tiles.woods.length >= 1500, `${s.id}: ${tiles.hills.length} rock, ${tiles.woods.length} woods`);
+    // The Imperial road crosses the province, edge to edge.
+    const across = (map.entry.x === 0 && map.exit.x === map.w - 1) || (map.entry.y === 0 && map.exit.y === map.h - 1);
+    assert.ok(across, `${s.id}: road from ${map.entry.x},${map.entry.y} to ${map.exit.x},${map.exit.y}`);
+    if (s.military) {
+      // War bands can come in over land from at least three edges, so no
+      // single wall covers the city.
+      const seen = new Uint8Array(map.size);
+      const open = (i) => map.road[i] || (map.terrain[i] !== Terrain.WATER && map.terrain[i] !== Terrain.ROCK);
+      const queue = [map.idx(map.entry.x, map.entry.y)];
+      seen[queue[0]] = 1;
+      const edges = new Set();
+      while (queue.length) {
+        const i = queue.pop();
+        const x = i % map.w;
+        const y = (i / map.w) | 0;
+        if (x === 0) edges.add('W');
+        if (y === 0) edges.add('N');
+        if (x === map.w - 1) edges.add('E');
+        if (y === map.h - 1) edges.add('S');
+        for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+          if (!map.inBounds(nx, ny)) continue;
+          const j = map.idx(nx, ny);
+          if (!seen[j] && open(j)) { seen[j] = 1; queue.push(j); }
+        }
+      }
+      assert.ok(edges.size >= 3, `${s.id}: land from ${[...edges].join('')}`);
+    }
+  }
+});
+
+test('map regions: only where a mission asks, the same rivers and coasts, and the same map every time', () => {
+  const opts = { width: 96, height: 96, seed: 'regions-test', type: 'river' };
+  const plain = generateMap(opts);
+  assert.equal(plain.info.regions, null);
+  assert.deepEqual(generateMap({ ...opts, regions: false }).map.terrain, plain.map.terrain, 'off is the map as it always was');
+  const a = generateMap({ ...opts, regions: true });
+  const b = generateMap({ ...opts, regions: true });
+  assert.deepEqual(a.map.terrain, b.map.terrain);
+  assert.deepEqual(Object.keys(a.info.regions).sort(), [...REGION_KINDS, 'radius'].sort());
+  // Regions gather the fields, woods and rock; the water stays where it was.
+  for (let i = 0; i < plain.map.size; i++) assert.equal(a.map.terrain[i] === Terrain.WATER, plain.map.terrain[i] === Terrain.WATER, `tile ${i}`);
+  // A scenario's map options carry the flag; the earlier missions have none.
+  assert.deepEqual(mapOptions(findScenario('c10p').map), { width: 224, height: 224, seed: 'puteoli', type: 'coast', regions: true });
+  assert.deepEqual(SCENARIOS.filter((s) => s.map.regions).map((s) => s.id), ['c10m', 'c10p']);
+  assert.equal(mapOptions(findScenario('c1').map).regions, false);
 });

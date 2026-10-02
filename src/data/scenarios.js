@@ -69,7 +69,7 @@ import { CONFIG } from '../config.js';
 import { DIFFICULTY, difficultyOf } from './difficulty.js';
 import { at } from './empireGeo.js';
 import { BUILDINGS, TOOLS } from './buildings.js';
-import { SANDBOX_RANK, clampRank } from './ranks.js';
+import { SANDBOX_RANK, TOP_RANK, clampRank } from './ranks.js';
 import { GOD_KEYS } from './gods.js';
 
 /**
@@ -531,6 +531,56 @@ export const SCENARIOS = Object.freeze([
       'No raiders come to Carteia, and you may build no forts. Favor is asked high here: meet Caesar\'s requests and send gifts, for if it runs out his legions come.',
     ],
   },
+  {
+    id: 'c10m', step: 10, track: 'military', name: 'Narbo Martius', title: 'The Cimbri and the Teutones',
+    intro: 'Narbo Martius, founded in 118 BC on the Via Domitia, is Rome\'s first citizen colony beyond the Alps. Whole peoples are on the move in the north: the Cimbri and the Teutones will sweep through Gaul and destroy a Roman army at Arausio before Marius beats them at Aquae Sextiae and Vercellae. Build a great city of many districts on the Atax, its fields, forests and quarries far apart, and hold it against the largest war bands of your career. Win here, and Rome will hail you Caesar.',
+    // The last step's maps gather their fields, woods and hills in regions far
+    // apart (world/mapgen.js), so a city of 10,000 grows several districts. The
+    // Atax reaches the sea (the fleet); land on every edge, so war bands can
+    // come from any side.
+    map: { size: 256, type: 'river', seed: 'narbo-martius', regions: true },
+    funds: 20000, startYear: -118,
+    goals: { population: 10000, culture: 77, prosperity: 72, peace: 78, favor: 70 },
+    paceYears: 12.65,
+    rank: 9, // Proconsul (data/ranks.js); winning the last step makes the governor Caesar
+    unlocks: 'all', partners: ['tarraco', 'massilia', 'lugdunum', 'aquileia', 'capua', 'carthago', 'corinthus', 'alexandria', 'gades'], requests: true,
+    // Wine for Gaul and Gades, weapons for Africa, rising: Lugdunum's wine in
+    // the fourth year, Carthago's weapons in the seventh.
+    demand: { lugdunum: { wine: 2500, oil: 1500 }, gades: { wine: 2500 }, massilia: { furniture: 1500, pottery: 1500 }, carthago: { weapons: 2500 }, alexandria: { weapons: 1500 } },
+    demandChanges: [{ year: 4, partner: 'lugdunum', good: 'wine', to: 4000 }, { year: 7, partner: 'carthago', good: 'weapons', to: 4000 }],
+    military: { first: 36, interval: [12, 18], base: 16 },
+    seaRaids: false,
+    distantBattles: [{ year: 4, city: 'aquae_sextiae', enemy: 60 }, { year: 8, city: 'vercellae', enemy: 72 }],
+    hints: [
+      `Narbo needs districts: its fields, its forests and its rocky hills lie far apart, and a building hires only from homes within ${CONFIG.LABOR_RANGE} road tiles. Give each its own quarter of homes, markets and services, joined to the rest by good roads and bridges.`,
+      'War bands come over land from every side within three years, and they grow with the city: towers and walls with gates on the roads into each district, and forts that can reach them all.',
+      'Caesar will call for troops against the Teutones at Aquae Sextiae and the Cimbri at Vercellae, both mighty hosts: keep forts for Empire service, and enough men at home.',
+      'Lugdunum buys wine and Carthago weapons, and both will want more within a few years. The Atax carries ships to the sea.',
+    ],
+  },
+  {
+    id: 'c10p', step: 10, track: 'peaceful', name: 'Puteoli', title: 'A Lesser Delos',
+    intro: 'Puteoli, a citizen colony of 194 BC on the Bay of Naples, is becoming Italy\'s great port for the ships of Alexandria and the East; the poet Lucilius called it a lesser Delos. Twelve partners trade here. Build the greatest market of your career: a city of many districts, its fields, forests and quarries far apart, with culture and prosperity at their height and the Emperor\'s favor higher still. No enemy threatens the bay. Win here, and Rome will hail you Caesar.',
+    // Regions far apart, as at Narbo (world/mapgen.js); the sea on one side.
+    map: { size: 224, type: 'coast', seed: 'puteoli', regions: true },
+    funds: 20000, startYear: -118,
+    goals: { population: 12000, culture: 80, prosperity: 78, peace: 85, favor: 85 },
+    paceYears: 15.4,
+    rank: 9, // Proconsul, as Narbo Martius (data/ranks.js)
+    unlocks: withoutArmy(ALL_KEYS), partners: Object.keys(TRADE_PARTNERS), requests: true,
+    // The greatest market of the career: Rhodus's wheat rises in the third
+    // year and Alexandria's wine in the sixth, and Corinthus's wine falls in
+    // the ninth, a change to plan around.
+    demand: { corinthus: { wine: 2500, wheat: 2500, clothing: 1500 }, alexandria: { wine: 1500, oil: 1500, furniture: 1500 }, delos: { oil: 4000, wine: 4000 }, massilia: { furniture: 1500, pottery: 1500 }, capua: { clothing: 1500 } },
+    demandChanges: [{ year: 3, partner: 'rhodus', good: 'wheat', to: 4000 }, { year: 6, partner: 'alexandria', good: 'wine', to: 2500 }, { year: 9, partner: 'corinthus', good: 'wine', to: 1500 }],
+    hints: [
+      `Puteoli needs districts: its fields, its forests and its rocky hills lie far apart, and a building hires only from homes within ${CONFIG.LABOR_RANGE} road tiles. Give each its own quarter of homes, markets and services, joined to the rest by good roads.`,
+      'Delos buys 4,000 oil and 4,000 wine a year. Rhodus will want 4,000 wheat a year from the third year and Alexandria more wine from the sixth, but in the ninth Corinthus buys less wine: plan for the fall.',
+      'Twelve partners and the busiest routes send their ships more often: build several Emporia (Trade Docks) along the shore.',
+      'No raiders come to Puteoli, and you may build no forts, but Rome asks for favor 85: meet every request, send gifts and keep the city content, for if favor runs out his legions come.',
+      'Villas and palaces lift prosperity: give the patricians a quarter of their own, away from the workshops and the docks.',
+    ],
+  },
 ]);
 
 /**
@@ -589,6 +639,22 @@ export function missionsAtStep(n) {
 export function nextMissions(id) {
   const n = stepOf(id);
   return n ? missionsAtStep(n + 1) : [];
+}
+
+/**
+ * The rank a win at `id` brings: the next step's, or, for a mission of the
+ * last step, Caesar (TOP_RANK), which ends the career. Null outside the
+ * campaign.
+ */
+export function rankAfterWin(id) {
+  if (!stepOf(id)) return null;
+  const next = nextMissions(id);
+  return next.length ? next[0].rank : TOP_RANK;
+}
+
+/** Whether a win at `id` ends the career: a mission of the last step. */
+export function endsCareer(id) {
+  return stepOf(id) === LAST_STEP;
 }
 
 /** The other mission at the same step, or null at a step with one mission. */

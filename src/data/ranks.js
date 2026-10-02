@@ -5,9 +5,11 @@
  * with the monthly salary Rome allows it (the original's scale, 0 to 100 Dn).
  * The names are Roman offices and plain titles, worded for Colonia.
  *
- * The rank is fixed for a whole mission: the campaign's missions are played
- * one rank each (mission 1 as a Citizen, mission 7 as an Aedile; the higher
- * ranks wait for a longer campaign), and the sandbox setup lets the player
+ * The rank is fixed for a whole mission: the campaign's ten steps are played
+ * one rank each, both provinces of a step alike (step 1 as a Citizen, step 10
+ * as a Proconsul), and a win at the last step makes the governor Caesar, the
+ * top rank, and ends the career (data/scenarios.js rankAfterWin). So all
+ * eleven are used, the last as the reward. The sandbox setup lets the player
  * pick one (SANDBOX_RANK unless chosen). The salary itself can be set to any
  * rank's rate in the Imperial advisor (sim/governor.js).
  * ----------------------------------------------------------------------------

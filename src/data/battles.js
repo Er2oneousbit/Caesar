@@ -58,6 +58,17 @@ export const THREATENED_CITIES = Object.freeze({
     path: [[9.85, 43.6], [8.6, 43.4], [6.5, 42.6], [4.5, 41.6], [2.6, 40.6], [1.2, 40.0], [0.4, 38.9], [-0.6, 37.9], [-1.6, 37.2], [-3.0, 36.6], [-4.6, 36.4], [-5.6, 35.95], [-6.2, 36.2], [-6.45, 36.72]],
     enemyFrom: [-8.0, 39.5], enemyMonths: 7,
   },
+  // A Roman post of 122 BC in the hills behind Massilia, where the Teutones
+  // came down the Rhone; the way runs along the coast road.
+  aquae_sextiae: {
+    name: 'Aquae Sextiae', enemy: 'the Teutones', pos: at(5.45, 43.53), route: 'land',
+    path: [[10.0, 44.15], [9.3, 44.5], [8.5, 44.4], [7.6, 44.05], [6.8, 43.8], [6.2, 43.62]], enemyFrom: [4.0, 46.5], enemyMonths: 6,
+  },
+  // A town of the Po plain under the Alps, where the Cimbri came over the passes.
+  vercellae: {
+    name: 'Vercellae', enemy: 'the Cimbri', pos: at(8.42, 45.32), route: 'land',
+    path: [[10.2, 44.2], [9.6, 44.6], [9.0, 45.0]], enemyFrom: [9.5, 46.8], enemyMonths: 5,
+  },
 });
 
 export const THREATENED_IDS = Object.freeze(Object.keys(THREATENED_CITIES));

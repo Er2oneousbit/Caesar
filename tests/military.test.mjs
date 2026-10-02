@@ -20,7 +20,8 @@ import { Terrain, Wall } from '../src/world/map.js';
 import { addBuilding, removeBuilding } from '../src/sim/entities.js';
 import { updateWorkshop, updateProducer } from '../src/sim/production.js';
 import { planAction, applyPlan, undoLast } from '../src/sim/construction.js';
-import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts, fortPost } from '../src/sim/military.js';
+import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts, fortPost, fillField } from '../src/sim/military.js';
+import { MinHeap } from '../src/world/pathfinding.js';
 import { HERD_START, HERD_MAX, HERD_GROWTH_DAYS, FORT_CAPACITY, UNIT_TYPES } from '../src/data/units.js';
 import { buildDemoCity, buildDemoGarrison, commandGarrison } from '../src/dev/demoCity.js';
 import { newGame, build, findFree, unitCounts } from './helpers.mjs';
@@ -569,4 +570,31 @@ test('a deployed soldier crosses a river by its bridge to reach a raider on the 
   }
   assert.ok(crossed || !game.units.has(raider.id), 'he got across');
   assert.ok(atBank < 20, `he did not stand on the bank facing the water (${atBank} ticks)`);
+});
+
+test('the raiders\' field crosses a big forest in one pass, each tile pushed a few times, not once per equal path', () => {
+  // The field holds 32-bit floats and a forest tile costs 1.6, which they
+  // hold only roughly. Compared unrounded, a tile's new cost kept beating its
+  // own stored value, and each of the many equal paths across a forest
+  // pushed it again: the woods of a step-10 map grew the search's heap past
+  // the memory there was when Caesar's legions set out (Narbo Martius).
+  const game = newGame();
+  const { map } = game;
+  for (let i = 0; i < map.size; i++) if (map.terrain[i] !== Terrain.WATER && !map.road[i]) map.terrain[i] = Terrain.TREES;
+  const b = addBuilding(game, 'prefecture', 20, 20);
+  const field = new Float32Array(map.size);
+  let pushes = 0;
+  const push = MinHeap.prototype.push;
+  MinHeap.prototype.push = function (key, val) {
+    if (++pushes > map.size * 8) throw new Error(`${pushes} pushes on a ${map.w} map`);
+    return push.call(this, key, val);
+  };
+  try {
+    fillField(game, field, (id) => id === b.id);
+  } finally {
+    MinHeap.prototype.push = push;
+  }
+  assert.ok(pushes <= map.size * 8, `${pushes} pushes`);
+  // And the costs are still the walk: ten forest tiles west of the building, 16.
+  assert.ok(Math.abs(field[map.idx(b.x - 10, b.y)] - 16) < 0.001, `${field[map.idx(b.x - 10, b.y)]}`);
 });

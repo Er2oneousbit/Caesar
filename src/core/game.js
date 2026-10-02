@@ -32,7 +32,7 @@ import { CONFIG } from '../config.js';
 import { EventBus } from './events.js';
 import { RNG } from './rng.js';
 import { log } from './debug.js';
-import { generateMap } from '../world/mapgen.js';
+import { generateMap, mapOptions } from '../world/mapgen.js';
 import { PathFinder } from '../world/pathfinding.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { GameTime } from '../sim/time.js';
@@ -167,7 +167,7 @@ export class Game {
       const seed = flags.seed ?? scenario.map.seed;
       this.seed = seed;
       this.rng = new RNG(`${seed}:sim`);
-      const { map, info } = generateMap({ width: scenario.map.size, height: scenario.map.size, seed, type: scenario.map.type });
+      const { map, info } = generateMap({ ...mapOptions(scenario.map), seed });
       map.computeNavigation(); // rivers/sea reaching the map edge (ships, docks)
       map.computeFishing(); // water with fish and its fishing grounds (wharves)
       this.map = map;

@@ -53,7 +53,7 @@ import { sickHomes } from '../src/sim/disease.js';
 import { planAction, applyPlan, anchorOffset } from '../src/sim/construction.js';
 import { BUILDINGS } from '../src/data/buildings.js';
 import { missionCapacity, landOf, planCity, employmentCeiling, topLevels, SENSIBLE, PATRICIAN_SHARE } from '../src/sim/capacity.js';
-import { generateMap } from '../src/world/mapgen.js';
+import { generateMap, mapOptions } from '../src/world/mapgen.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
 import { goalStatus } from '../src/sim/ratings.js';
@@ -66,7 +66,8 @@ Headless balance simulation
   node scripts/simulate.mjs [options]
 
 Options:
-  --scenario <id>   campaign scenario id (c1..c7, c3m, c4p, c5p) instead of a sandbox map
+  --scenario <id>   campaign scenario id (c1, c2, then c3 to c10 with a sibling each: c3m, c4p...
+                    c10m, c10p) instead of a sandbox map
   --unlocks         build only what the mission unlocks (campaign runs build everything without it)
   --homes <n>       at most n housing plots, to size the town to its jobs (default: the whole site)
   --type <t>        sandbox landscape: river | coast | lakes | plains | desert (default river)
@@ -188,7 +189,7 @@ if (opts.capacity) {
   console.log('fit the sensible ceiling and the land (tests/campaign.test.mjs).');
   console.log(' mission  top home            working home      /tile   lean (jobs)   sensible (jobs) villas  all working     land    goal');
   for (const s of SCENARIOS) {
-    const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
+    const { map } = generateMap(mapOptions(s.map));
     const m = missionCapacity(s, landOf(map));
     const over = s.goals.population > Math.min(m.sensible.people, m.land) ? '  over' : '';
     console.log(` ${s.id.padEnd(7)}  ${HOUSE_TIERS[m.top].name.padEnd(18)}  ${HOUSE_TIERS[m.working].name.padEnd(16)} ${pad(m.perTile, 5)}  ${pad(m.lean.people, 6)} (${pad(m.lean.jobs, 4)})  ${pad(m.sensible.people, 8)} (${pad(m.sensible.jobs, 4)}) ${pad(m.sensible.villas, 6)}  ${pad(m.allWorking.people, 11)}  ${pad(m.land, 7)}  ${pad(s.goals.population, 6)}${over}`);

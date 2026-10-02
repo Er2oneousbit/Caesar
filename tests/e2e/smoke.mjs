@@ -1672,6 +1672,33 @@ try {
     }))[2]);
     check('the campaign list shows step 3\'s two provinces side by side, both open after mission 2',
       step3?.length === 2 && step3[0].id === 'c3' && step3[1].id === 'c3m' && step3[0].y === step3[1].y && !step3[0].locked && !step3[1].locked, JSON.stringify(step3));
+    // Ten steps: one mission at steps 1 and 2, two side by side from step 3.
+    const perStep = await page.$$eval('.scenario-step', (rows) => rows.map((r) => r.querySelectorAll('button.scenario').length));
+    check('the campaign list has ten steps, two provinces at each from step 3', perStep.join() === '1,1,2,2,2,2,2,2,2,2', perStep.join());
+    await page.click('.modal button:has-text("Back")');
+  }
+
+  // 6b3. The last step: a province starts on its big map of regions, and its
+  //      victory hails the governor Caesar with no next post; the campaign
+  //      list then says so.
+  {
+    await page.evaluate(() => window.colonia.newScenario('c10p'));
+    await page.waitForFunction(() => window.colonia.game && window.colonia.game.scenario.id === 'c10p', null, { timeout: 20000 });
+    const big = await page.evaluate(() => { const g = window.colonia.game; return { w: g.map.w, h: g.map.h, rank: g.city.governor.rank, regions: !!g.mapInfo?.regions }; });
+    check('a step-10 province starts on its 224 map of resource regions, at the Proconsul\'s rank', big.w === 224 && big.h === 224 && big.rank === 9 && big.regions, JSON.stringify(big));
+    await page.evaluate(() => window.colonia.onVictory());
+    const crown = await page.evaluate(() => ({
+      title: document.querySelector('.modal .modal-head h2')?.textContent,
+      line: document.querySelector('.modal .governor-line')?.textContent || '',
+      choose: !!document.querySelector('.modal button.choose-post'),
+      next: [...document.querySelectorAll('.modal .modal-foot button')].map((b) => b.textContent),
+    }));
+    check('winning the last step hails you Caesar, with no next post', crown.title === 'Hail, Caesar!' && /Rome hails you Caesar/.test(crown.line) && !crown.choose && !crown.next.some((t) => /^Next/.test(t)), JSON.stringify(crown));
+    await page.evaluate(() => window.colonia.toMainMenu());
+    await page.waitForSelector('.menu-card');
+    await page.click('.menu-card button:has-text("Campaign")');
+    const caesar = await page.textContent('.modal .caesar-line').catch(() => null);
+    check('the campaign list says the career is crowned', /Rome hails you Caesar/.test(caesar || ''), String(caesar));
     await page.click('.modal button:has-text("Back")');
   }
 
@@ -1932,6 +1959,25 @@ try {
   await wideFont.evaluate((el) => el.remove());
   check('phone: long Latin names fit every build menu list, and in two lines at most the inspect panel\'s title', phoneNames.over.length === 0 && phoneNames.heads.length === 7 && phoneNames.heads.every((x) => x.fits && x.lines <= 2), JSON.stringify(phoneNames));
   check('phone: the Health, Education and Entertainment advisors open and fit the width', phoneTabs.every((t) => t.rows >= 3 && t.scrollW <= t.w && t.page <= 390 && t.tabsH < 120), JSON.stringify(phoneTabs));
+  // The campaign list on a phone: ten steps, the two provinces of a step
+  // stacked, every button inside the width and nothing scrolling sideways.
+  await phone.evaluate(() => window.colonia.toMainMenu());
+  await phone.waitForSelector('.menu-card');
+  await phone.tap('.menu-card button:has-text("Campaign")');
+  await phone.waitForSelector('.modal .scenario-step');
+  const phoneCampaign = await phone.evaluate(() => {
+    const rows = [...document.querySelectorAll('.scenario-step')];
+    const body = document.querySelector('.modal-body');
+    const right = body.getBoundingClientRect().right;
+    const buttons = [...document.querySelectorAll('.scenario-step button.scenario')];
+    const stacked = rows.filter((r) => r.querySelectorAll('button.scenario').length === 2).every((r) => {
+      const [a, b] = [...r.querySelectorAll('button.scenario')].map((x) => x.getBoundingClientRect());
+      return b.top >= a.bottom - 1;
+    });
+    return { rows: rows.length, stacked, inside: buttons.every((x) => x.getBoundingClientRect().right <= right + 0.5), scrollW: body.scrollWidth, w: body.clientWidth, page: document.documentElement.scrollWidth };
+  });
+  if (shots) await phone.screenshot({ path: path.join(shots, 'smoke-phone-campaign.png') });
+  check('phone: the campaign list shows ten steps, siblings stacked, inside the width', phoneCampaign.rows === 10 && phoneCampaign.stacked && phoneCampaign.inside && phoneCampaign.scrollW <= phoneCampaign.w && phoneCampaign.page <= 390, JSON.stringify(phoneCampaign));
   check('phone: no page errors', perrors.length === 0, perrors.join(' | '));
   // 7b. Phone main menu: ONE tap on the title gate starts the music. Nothing
   //     may query the page before the tap: Playwright's evaluate() counts as a

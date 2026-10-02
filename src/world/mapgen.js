@@ -10,7 +10,9 @@
  *      land (a lone tile of water reads as a glitch, not a pond).
  *   3. Sprinkle meadows (fertile land, more common near water), forests and
  *      rock outcrops using fbm noise with percentile thresholds so every seed
- *      gets similar proportions.
+ *      gets similar proportions. A mission map may ask for regions: then
+ *      the fields, woods and hills each gather far from the others
+ *      (REGION_KINDS).
  *   4. Add beaches next to water.
  *   5. Lay the Imperial Road from an entry tile on one map edge to an exit tile
  *      on another edge using A* (it avoids water and rocks when it can). Each
@@ -60,6 +62,34 @@ export const MIN_FIELD_TILES = 12;
  */
 export const MIN_WATER_TILES = 4;
 
+/**
+ * Resource regions, a mission map's option (`map.regions`, the last step's
+ * big provinces): the fields, the woods and the rocky hills each gather in a
+ * region of their own, far apart, instead of being sprinkled over the whole
+ * map. A building hires only from homes within LABOR_RANGE road tiles, so a
+ * city that farms, fells timber and quarries here grows a district by each
+ * region: one compact town cannot staff them all.
+ *
+ * The three centres sit on a ring REGION_RING of the map's side from its
+ * middle, a third of a turn apart (on a 224 map about 130 tiles from each
+ * other), turned to keep them on land. Near a centre a tile's noise for its
+ * region's resource gets a bonus, REGION_BONUS at the centre fading out at
+ * REGION_RADIUS of the side, and each resource covers REGION_SHARES of the
+ * land (less than on an open map: the region is its home), so the noise
+ * still draws natural field, forest and outcrop shapes and leaves a few
+ * small ones elsewhere. At a bonus of 1 the regions came out as solid
+ * blobs; at 0.5 a third of the meadow strayed out of its region. At 0.7 the
+ * last step's maps keep 77 to 98% of their meadow and rock (60% of the
+ * woods, whose lone trees are everywhere) near their centres, and no point
+ * lies within LABOR_RANGE tiles of even a tenth of all three.
+ */
+export const REGION_KINDS = Object.freeze(['fields', 'woods', 'hills']);
+export const REGION_RING = 0.34;
+export const REGION_RADIUS = 0.17;
+export const REGION_BONUS = 0.7;
+/** Share of the land each resource covers on a map with regions (percentile cuts, as on an open map). */
+export const REGION_SHARES = Object.freeze({ fields: 0.06, woods: 0.06, hills: 0.025 });
+
 /** One-line notes shown under the size picker. */
 export const MAP_SIZE_NOTES = Object.freeze({
   small: 'Quick games; room for a town.',
@@ -87,11 +117,72 @@ function percentile(values, p) {
 }
 
 /**
+ * The options generateMap takes for a scenario's map (its `map` field): the
+ * size, type and seed, and resource regions where the mission asks for them.
+ */
+export function mapOptions(m) {
+  return { width: m.size, height: m.size, seed: m.seed, type: m.type, regions: !!m.regions };
+}
+
+/**
+ * Where the three resource regions go (REGION_KINDS): on the ring, a third
+ * of a turn apart, from a start angle and an order drawn from `rng` (a
+ * stream of the regions' own, so maps without regions never see it), turned
+ * in 5 degree steps to the position where the region with the least land
+ * has the most (a centre out at sea would grow its fields in the water).
+ * @returns {{fields:{x,y}, woods:{x,y}, hills:{x,y}, radius:number}}
+ */
+function placeRegions(map, rng) {
+  const { w, h } = map;
+  const side = Math.min(w, h);
+  const ring = REGION_RING * side;
+  const radius = REGION_RADIUS * side;
+  const start = rng.next() * Math.PI * 2;
+  const first = rng.int(REGION_KINDS.length);
+  const centres = (a) => REGION_KINDS.map((_, k) => {
+    const t = a + (k * Math.PI * 2) / REGION_KINDS.length;
+    return { x: Math.round((w - 1) / 2 + Math.cos(t) * ring), y: Math.round((h - 1) / 2 + Math.sin(t) * ring) };
+  });
+  const landShare = ({ x, y }) => {
+    let land = 0;
+    let all = 0;
+    for (let dy = -radius; dy <= radius; dy += 2) {
+      for (let dx = -radius; dx <= radius; dx += 2) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        const tx = Math.round(x + dx);
+        const ty = Math.round(y + dy);
+        if (!map.inBounds(tx, ty)) continue;
+        all++;
+        if (map.terrain[map.idx(tx, ty)] !== Terrain.WATER) land++;
+      }
+    }
+    return all ? land / all : 0;
+  };
+  let best = null;
+  let bestScore = -1;
+  for (let k = 0; k < 24; k++) {
+    const pts = centres(start + (k * Math.PI * 2) / (24 * REGION_KINDS.length));
+    const score = Math.min(...pts.map(landShare));
+    if (score > bestScore) { bestScore = score; best = pts; }
+  }
+  const out = { radius };
+  REGION_KINDS.forEach((kind, k) => { out[kind] = best[(k + first) % REGION_KINDS.length]; });
+  return out;
+}
+
+/** A tile's bonus toward a region's resource: REGION_BONUS at its centre, fading to 0 at its radius. */
+function regionBonus(c, radius, x, y) {
+  return REGION_BONUS * Math.max(0, 1 - Math.hypot(x - c.x, y - c.y) / radius);
+}
+
+/**
  * Generate a new map.
- * @param {{width:number, height:number, seed:number|string, type:string}} opts
+ * @param {{width:number, height:number, seed:number|string, type:string, regions?:boolean}} opts
+ *   regions: gather the fields, woods and hills in regions of their own
+ *   (REGION_KINDS; mission maps that ask for it, see mapOptions)
  * @returns {{map: GameMap, info: object}}
  */
-export function generateMap({ width, height, seed, type }) {
+export function generateMap({ width, height, seed, type, regions: withRegions = false }) {
   if (!MAP_TYPES[type]) throw new Error(`Unknown map type "${type}"`);
   const rng = new RNG(`${seed}:${width}x${height}:${type}`);
   const map = new GameMap(width, height);
@@ -100,7 +191,7 @@ export function generateMap({ width, height, seed, type }) {
   const nTrees = new ValueNoise(rng);
   const nRock = new ValueNoise(rng);
   const nDetail = new ValueNoise(rng);
-  const info = { type, seed, river: null, coastSide: -1 };
+  const info = { type, seed, river: null, coastSide: -1, regions: null };
 
   // 1. Base terrain
   map.terrain.fill(type === 'desert' ? Terrain.SAND : Terrain.GRASS);
@@ -113,7 +204,10 @@ export function generateMap({ width, height, seed, type }) {
 
   map.computeWaterDistance();
 
-  // 3. Meadows, forests and rocks via percentile thresholds on noise.
+  // 3. Meadows, forests and rocks via percentile thresholds on noise (on a
+  //    map with regions, each with a bonus near its own region's centre).
+  const regions = withRegions ? placeRegions(map, new RNG(`${seed}:${width}x${height}:${type}:regions`)) : null;
+  info.regions = regions;
   const { size, w } = map;
   const meadowVal = new Float32Array(size);
   const treeVal = new Float32Array(size);
@@ -131,14 +225,19 @@ export function generateMap({ width, height, seed, type }) {
     meadowVal[i] = nMeadow.fbm(x / 20, y / 20, 2) + nearWater;
     treeVal[i] = nTrees.fbm(x / 11 + 50, y / 11 + 50, 4);
     rockVal[i] = nRock.fbm(x / 8 + 100, y / 8 + 100, 3);
+    if (regions) {
+      meadowVal[i] += regionBonus(regions.fields, regions.radius, x, y);
+      treeVal[i] += regionBonus(regions.woods, regions.radius, x, y);
+      rockVal[i] += regionBonus(regions.hills, regions.radius, x, y);
+    }
   }
   // Meadow share is measured over land only: water has the biggest near-water
   // bonus and would otherwise eat the top of the ranking (coasts and oases
   // came out nearly barren).
   const landMeadow = meadowVal.filter((_, i) => map.terrain[i] !== Terrain.WATER);
-  const meadowCut = percentile(landMeadow, type === 'desert' ? 0.88 : 0.82);
-  const treeCut = percentile(treeVal, type === 'desert' ? 0.96 : 0.84);
-  const rockCut = percentile(rockVal, type === 'desert' ? 0.93 : 0.95);
+  const meadowCut = percentile(landMeadow, regions ? 1 - REGION_SHARES.fields : type === 'desert' ? 0.88 : 0.82);
+  const treeCut = percentile(treeVal, regions ? 1 - REGION_SHARES.woods : type === 'desert' ? 0.96 : 0.84);
+  const rockCut = percentile(rockVal, regions ? 1 - REGION_SHARES.hills : type === 'desert' ? 0.93 : 0.95);
   const base = type === 'desert' ? Terrain.SAND : Terrain.GRASS;
 
   /**

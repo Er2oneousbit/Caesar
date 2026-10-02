@@ -744,7 +744,12 @@ export function fillField(game, field, isSource, breakCost = 0) {
       let c = t === Terrain.TREES ? 1.6 : 1;
       if (map.wall[j]) c += FIELD_WALL_COST;
       if (map.building[j]) c += breakCost;
-      const nd = d + c;
+      // Rounded as the field stores it (32-bit floats): compared unrounded,
+      // a cost the field cannot hold exactly (a forest's 1.6) kept "beating"
+      // its own stored value, and every one of the many equal paths across a
+      // big forest pushed the tile again. On a step-10 map's woods the heap
+      // grew past the memory there was.
+      const nd = Math.fround(d + c);
       if (nd < field[j]) { field[j] = nd; heap.push(nd, j); }
     }
   }

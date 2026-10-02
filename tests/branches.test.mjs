@@ -22,20 +22,21 @@ import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import {
   SCENARIOS, findScenario, withDifficulty, ARMY_KEYS, NAVY_KEYS, LAST_STEP,
-  stepOf, missionsAtStep, nextMissions, siblingOf, missionOpen,
+  stepOf, missionsAtStep, nextMissions, siblingOf, missionOpen, rankAfterWin, endsCareer,
 } from '../src/data/scenarios.js';
+import { RANKS, TOP_RANK } from '../src/data/ranks.js';
 import { THREATENED_CITIES } from '../src/data/battles.js';
 import { storeCampaignSavings, campaignSavings, savingsRecord } from '../src/sim/governor.js';
 import { employmentCeiling, employsEnough, SENSIBLE } from '../src/sim/capacity.js';
 import { goalMonths } from '../src/sim/pace.js';
-import { generateMap } from '../src/world/mapgen.js';
+import { generateMap, mapOptions } from '../src/world/mapgen.js';
 import { postCard, threatLine, introLine, goalsLine, trackName, choiceLine } from '../src/ui/campaignInfo.js';
 
 log.setLevel('error');
 
 const NEW = ['c3m', 'c4p', 'c5p'];
 /** The siblings of the late campaign (steps 6 on), each beside a mission of the other kind. */
-const LATE = ['c6p', 'c7p', 'c8m', 'c8p', 'c9m', 'c9p'];
+const LATE = ['c6p', 'c7p', 'c8m', 'c8p', 'c9m', 'c9p', 'c10m', 'c10p'];
 const ids = (list) => list.map((s) => s.id);
 const has = (s, k) => s.unlocks === 'all' || s.unlocks.includes(k);
 
@@ -44,8 +45,8 @@ const has = (s, k) => s.unlocks === 'all' || s.unlocks.includes(k);
 // ---------------------------------------------------------------------------
 
 test('steps: two provinces at every step from 3 on, one peaceful and one military; one at steps 1 and 2', () => {
-  assert.equal(LAST_STEP, 9);
-  assert.deepEqual(ids(SCENARIOS), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p', 'c7', 'c7p', 'c8m', 'c8p', 'c9m', 'c9p'], 'each new mission right after the one beside it');
+  assert.equal(LAST_STEP, 10);
+  assert.deepEqual(ids(SCENARIOS), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p', 'c7', 'c7p', 'c8m', 'c8p', 'c9m', 'c9p', 'c10m', 'c10p'], 'each new mission right after the one beside it');
   for (let n = 1; n <= LAST_STEP; n++) {
     const at = missionsAtStep(n);
     if (n >= 3) {
@@ -60,7 +61,7 @@ test('steps: two provinces at every step from 3 on, one peaceful and one militar
     }
   }
   assert.deepEqual(Object.fromEntries(SCENARIOS.filter((s) => s.step >= 3).map((s) => [s.id, s.track])),
-    { c3: 'peaceful', c3m: 'military', c4: 'military', c4p: 'peaceful', c5: 'military', c5p: 'peaceful', c6: 'military', c6p: 'peaceful', c7: 'military', c7p: 'peaceful', c8m: 'military', c8p: 'peaceful', c9m: 'military', c9p: 'peaceful' });
+    { c3: 'peaceful', c3m: 'military', c4: 'military', c4p: 'peaceful', c5: 'military', c5p: 'peaceful', c6: 'military', c6p: 'peaceful', c7: 'military', c7p: 'peaceful', c8m: 'military', c8p: 'peaceful', c9m: 'military', c9p: 'peaceful', c10m: 'military', c10p: 'peaceful' });
   // Fixed map seeds, each its own.
   const seeds = SCENARIOS.map((s) => s.map.seed);
   assert.equal(new Set(seeds).size, seeds.length);
@@ -76,6 +77,8 @@ test('steps: two provinces at every step from 3 on, one peaceful and one militar
     { size: 176, type: 'coast', seed: 'luna' },
     { size: 192, type: 'river', seed: 'corduba' },
     { size: 192, type: 'coast', seed: 'carteia' },
+    { size: 256, type: 'river', seed: 'narbo-martius', regions: true },
+    { size: 224, type: 'coast', seed: 'puteoli', regions: true },
   ]);
 });
 
@@ -90,7 +93,9 @@ test('steps: lookups by id (stepOf, missionsAtStep, nextMissions, siblingOf)', (
   assert.deepEqual(ids(nextMissions('c6p')), ['c7', 'c7p']);
   assert.deepEqual(ids(nextMissions('c7p')), ['c8m', 'c8p']);
   assert.deepEqual(ids(nextMissions('c8m')), ['c9m', 'c9p']);
-  assert.deepEqual(ids(nextMissions('c9p')), []);
+  assert.deepEqual(ids(nextMissions('c9p')), ['c10m', 'c10p']);
+  assert.deepEqual(ids(nextMissions('c10m')), []);
+  assert.deepEqual(ids(nextMissions('c10p')), []);
   assert.deepEqual(ids(nextMissions('sandbox')), []);
   assert.equal(siblingOf('c4').id, 'c4p');
   assert.equal(siblingOf('c4p').id, 'c4');
@@ -123,7 +128,7 @@ test('a military province: raids early, forts a step sooner, a distant battle; a
   for (const k of ['fort_archer', 'fort_cavalry', 'fletcher_ws', 'timber_yard', ...NAVY_KEYS]) assert.ok(!has(firmum, k), `Firmum: no ${k}`);
   assert.ok(has(firmum, 'iron_mine') && has(firmum, 'weapons_ws') && has(firmum, 'tower') && has(firmum, 'wall'));
   assert.equal(Math.min(...SCENARIOS.filter((s) => s.military).map((s) => s.military.first)), firmum.military.first);
-  const { map } = generateMap({ width: firmum.map.size, height: firmum.map.size, seed: firmum.map.seed, type: firmum.map.type });
+  const { map } = generateMap(mapOptions(firmum.map));
   map.computeNavigation();
   assert.equal(map.seaEntry, null, 'Firmum\'s lakes do not reach the map edge');
   assert.ok(firmum.partners.every((id) => id === 'aquileia' || id === 'capua'));
@@ -188,6 +193,8 @@ test('unlocks: a step opens when any mission of the step before is won (worked e
   assert.deepEqual(open(['c7p']), ['c1', 'c7p', 'c8m', 'c8p'], 'Copia alone opens step 8');
   assert.deepEqual(open(['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7']), ids(SCENARIOS).filter((id) => stepOf(id) <= 8), 'an old record that won Urbs Magna opens step 8');
   assert.deepEqual(open(['c8m']), ['c1', 'c8m', 'c9m', 'c9p']);
+  assert.deepEqual(open(['c9p']), ['c1', 'c9p', 'c10m', 'c10p']);
+  assert.deepEqual(open(['c10m']), ['c1', 'c10m'], 'a won mission of the last step stays open; nothing comes after it');
   // A record from before the branches needs no rewrite: it opens everything
   // it did, and the new missions beside the steps it reached.
   assert.deepEqual(open(['c1', 'c2', 'c3', 'c4', 'c5', 'c6']), ids(SCENARIOS).filter((id) => stepOf(id) <= 7));
@@ -223,7 +230,7 @@ test('after a win: the next step\'s two provinces as cards; one mission alone as
   // A step of one mission still leads on to it alone.
   assert.deepEqual(ids(nextMissions('c1')), ['c2']);
   // Every intro carries a line of history: the colony and its year.
-  for (const [id, year] of [['c3m', 264], ['c4p', 273], ['c5p', 268], ['c6p', 273], ['c7p', 193], ['c8m', 183], ['c8p', 177], ['c9m', 155], ['c9p', 171]]) assert.match(findScenario(id).intro, new RegExp(`${year} BC`), id);
+  for (const [id, year] of [['c3m', 264], ['c4p', 273], ['c5p', 268], ['c6p', 273], ['c7p', 193], ['c8m', 183], ['c8p', 177], ['c9m', 155], ['c9p', 171], ['c10m', 118], ['c10p', 194]]) assert.match(findScenario(id).intro, new RegExp(`${year} BC`), id);
   assert.equal(trackName(findScenario('c1')), null);
   assert.equal(introLine({ intro: 'One. Two.' }), 'One.');
   assert.equal(goalsLine(findScenario('c1')), 'population 300, culture 15, peace 35');
@@ -257,6 +264,8 @@ test('savings: a win stores them for both missions of the next step; the last wi
   assert.deepEqual(storeCampaignSavings(record, 'c6p', 3000), ['c7', 'c7p']);
   assert.deepEqual([record.c7, record.c7p], [3000, 3000]);
   assert.deepEqual(storeCampaignSavings(record, 'c8p', 4000), ['c9m', 'c9p']);
+  assert.deepEqual(storeCampaignSavings(record, 'c9m', 4500), ['c10m', 'c10p']);
+  assert.deepEqual([record.c10m, record.c10p], [4500, 4500]);
   const before = { ...record };
   for (const s of missionsAtStep(LAST_STEP)) assert.deepEqual(storeCampaignSavings(record, s.id, 5000), [], s.id);
   assert.deepEqual(record, before, 'nothing written after the last step');
@@ -283,7 +292,13 @@ test('savings: an old record falls back to the sibling\'s entry, with no rewrite
 
 test('ranks: both missions of a step at the step\'s rank (worked examples)', () => {
   const rank = (id) => new Game({ scenario: findScenario(id), flags: {} }).city.governor.rank;
-  assert.deepEqual(['c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p', 'c7', 'c7p', 'c8m', 'c8p', 'c9m', 'c9p'].map(rank), [2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8]);
+  assert.deepEqual(['c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p', 'c7', 'c7p', 'c8m', 'c8p', 'c9m', 'c9p', 'c10m', 'c10p'].map(rank), [2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9]);
+  // One rank a step, and a win at the last step makes the governor Caesar,
+  // the top rank: all eleven are used.
+  assert.deepEqual(['c1', 'c2', 'c3m', 'c5p', 'c7', 'c9p', 'c10m', 'c10p'].map(rankAfterWin), [1, 2, 3, 5, 7, 9, TOP_RANK, TOP_RANK]);
+  assert.equal(RANKS[TOP_RANK].name, 'Caesar');
+  assert.equal(rankAfterWin('sandbox'), null);
+  assert.deepEqual(SCENARIOS.filter((s) => endsCareer(s.id)).map((s) => s.id), ['c10m', 'c10p']);
 });
 
 // ---------------------------------------------------------------------------

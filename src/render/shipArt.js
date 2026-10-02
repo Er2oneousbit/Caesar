@@ -36,9 +36,9 @@ const STROKE_RAD = Math.PI * 2 * 1.4;
  * @param {boolean} highlight ring it (selected, or of the selected station)
  * @param {number} stride tiles rowed (interpolated): drives the oars
  */
-export function drawWarship(ctx, u, sx, sy, k, t, tick, highlight, stride) {
-  if (u.type === 'raider_ship') drawRaiderShip(ctx, u, sx, sy, k, t, tick, highlight, stride);
-  else drawLiburnian(ctx, u, sx, sy, k, t, tick, highlight, stride);
+export function drawWarship(ctx, u, sx, sy, k, t, tick, highlight, stride, facing = u.facing) {
+  if (u.type === 'raider_ship') drawRaiderShip(ctx, u, sx, sy, k, t, tick, highlight, stride, facing);
+  else drawLiburnian(ctx, u, sx, sy, k, t, tick, highlight, stride, facing);
 }
 
 /** Frame for a hull: X(dx), Y(dy) in hull units, bow toward +dx turned to face `f`. */
@@ -86,9 +86,9 @@ function oars(ctx, F, f, K, dx0, dx1, n, y0, phase, mode, color) {
   ctx.stroke();
 }
 
-function drawLiburnian(ctx, u, sx, sy, k, t, tick, highlight, stride) {
+function drawLiburnian(ctx, u, sx, sy, k, t, tick, highlight, stride, facing = u.facing) {
   const K = k * 1.3;
-  const f = u.facing < 0 ? -1 : 1;
+  const f = facing < 0 ? -1 : 1;
   const F = frame(sx, sy, K, f, Math.sin(t * 2 + u.id) * 0.5 * K);
   const { X, Y } = F;
   const fighting = u.state === 'engage';
@@ -201,9 +201,9 @@ function drawLiburnian(ctx, u, sx, sy, k, t, tick, highlight, stride) {
   if (u.hp < u.maxHp) health(ctx, u, sx, Y(-35), K, tick);
 }
 
-function drawRaiderShip(ctx, u, sx, sy, k, t, tick, highlight, stride) {
+function drawRaiderShip(ctx, u, sx, sy, k, t, tick, highlight, stride, facing = u.facing) {
   const K = k * 1.25;
-  const f = u.facing < 0 ? -1 : 1;
+  const f = facing < 0 ? -1 : 1;
   const F = frame(sx, sy, K, f, Math.sin(t * 2.2 + u.id) * 0.6 * K);
   const { X, Y } = F;
   const rowing = u.moving;

@@ -23,6 +23,7 @@
                 artset=1 (reservoirs joined by an aqueduct that crosses a road, the statues,
                 every temple, the iron mine and the marble quarry, beside the city)
                 cloth=1 (the cloth industry: flax farm, linen maker, clothing maker; clothDays=60)
+                view=1 (the view turned 1 to 3 quarter turns: the city seen from another side)
 -->
 <canvas id="c"></canvas>
 <script type="module">
@@ -248,6 +249,7 @@
     }
     if (best) { placing = best.plan; focus = { x: best.x, y: best.y }; }
   }
+  if (q.get('view')) r.setViewTurn(Number(q.get('view'))); // see the city from another side (1-3 quarter turns)
   if (focus) r.camera.centerOnTile(focus.x, focus.y);
   r.setOverlay(q.get('overlay') || 'none');
   if (selected) r.selectedId = selected.id;

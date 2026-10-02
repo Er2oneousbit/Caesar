@@ -20,10 +20,17 @@
  *   - fling: after a drag the map keeps sliding and slows down (`fling`).
  *   - glide: `glideToTile` travels to a spot instead of jumping there.
  * `update(dt)` advances all three once per frame (the renderer calls it).
+ *
+ * The view turn (`turn`, 0..3, view.js): world pixels are those of the map
+ * seen from that side, so `worldOf` and `tileOfWorld` work in view tiles and
+ * the camera's `mapToWorld` / `worldToMap` / `screenToTile` / `centerOnTile`
+ * take and give map tiles through the turn. Turning keeps the tile in the
+ * middle of the screen where it is (`setTurn`).
  * ----------------------------------------------------------------------------
  */
 
 import { CONFIG, HALF_W, HALF_H } from '../config.js';
+import { toView, fromView, viewSize } from './view.js';
 
 /** Seconds a zoom step takes to ease in (ease-out, so it responds at once). */
 const ZOOM_TIME = 0.22;
@@ -108,6 +115,9 @@ export class Camera {
     this.zoomAnim = null; // { from, t }: zoom easing from `from` to the level, t = 0..1
     this.vel = null; // fling velocity { x, y } in CSS px per second
     this.glide = null; // { x0, y0, x1, y1, t, dur } view-center travel in world px
+    this.turn = 0; // view turn 0..3 (view.js): the side the city is seen from
+    this.mapW = 0; // map size in tiles (for the view turn)
+    this.mapH = 0;
   }
 
   /**
@@ -143,13 +153,46 @@ export class Camera {
     this.centerOnWorld(c.x, c.y);
   }
 
-  /** Limit the camera to the map area (plus a margin). */
+  /** Limit the camera to the map area (plus a margin), as seen at the view turn. */
   setMapBounds(mapW, mapH) {
-    const left = -mapH * HALF_W;
-    const right = mapW * HALF_W;
+    this.mapW = mapW;
+    this.mapH = mapH;
+    const [W, H] = viewSize(mapW, mapH, this.turn);
+    const left = -H * HALF_W;
+    const right = W * HALF_W;
     const top = 0;
-    const bottom = (mapW + mapH) * HALF_H;
+    const bottom = (W + H) * HALF_H;
     this.bounds = { left, right, top, bottom };
+  }
+
+  /** World px of a continuous map point (x, y), through the view turn. */
+  mapToWorld(x, y) {
+    const [vx, vy] = toView(x, y, this.turn, this.mapW, this.mapH);
+    return worldOf(vx, vy);
+  }
+
+  /** Continuous map point of a world px, through the view turn. */
+  worldToMap(wx, wy) {
+    const v = tileOfWorld(wx, wy);
+    const [x, y] = fromView(v.x, v.y, this.turn, this.mapW, this.mapH);
+    return { x, y };
+  }
+
+  /**
+   * See the city from another side: turn 0..3 (view.js). The map point in
+   * the middle of the screen stays there; a glide or fling in progress
+   * stops (it was heading for a spot of the old view).
+   */
+  setTurn(turn) {
+    turn &= 3;
+    if (turn === this.turn) return;
+    const c = this.center();
+    const m = this.worldToMap(c.x, c.y);
+    this.turn = turn;
+    if (this.mapW) this.setMapBounds(this.mapW, this.mapH);
+    this.zoomAnchor = null;
+    const w = this.mapToWorld(m.x, m.y);
+    this.centerOnWorld(w.x, w.y);
   }
 
   /** World point at the middle of the screen. */
@@ -192,14 +235,14 @@ export class Camera {
 
   /** Center the view on a tile, instantly. */
   centerOnTile(tx, ty) {
-    const w = worldOf(tx + 0.5, ty + 0.5);
+    const w = this.mapToWorld(tx + 0.5, ty + 0.5);
     this.zoomAnchor = null;
     this.centerOnWorld(w.x, w.y);
   }
 
   /** Travel to a tile (a short eased glide; instant when motion is off). */
   glideToTile(tx, ty) {
-    const w = worldOf(tx + 0.5, ty + 0.5);
+    const w = this.mapToWorld(tx + 0.5, ty + 0.5);
     this.glideToWorld(w.x, w.y);
   }
 
@@ -335,10 +378,10 @@ export class Camera {
     return { x: this.x + (sxCss * this.dpr) / this.scale, y: this.y + (syCss * this.dpr) / this.scale };
   }
 
-  /** Screen CSS px -> integer tile under the cursor. */
+  /** Screen CSS px -> integer map tile under the cursor (through the view turn). */
   screenToTile(sxCss, syCss) {
     const w = this.screenToWorld(sxCss, syCss);
-    const t = tileOfWorld(w.x, w.y);
+    const t = this.worldToMap(w.x, w.y);
     return { x: Math.floor(t.x), y: Math.floor(t.y) };
   }
 
@@ -347,12 +390,16 @@ export class Camera {
     return { x: this.x, y: this.y, w: this.viewW / this.scale, h: this.viewH / this.scale };
   }
 
-  serialize() { return { x: this.x, y: this.y, zoomIndex: this._zoomIndex }; }
+  /** The view state a save keeps (not sim state: a save without `turn` opens at turn 0). */
+  serialize() { return { x: this.x, y: this.y, zoomIndex: this._zoomIndex, turn: this.turn }; }
 
   restore(s) {
     if (!s) return;
     this.zoomIndex = s.zoomIndex ?? this._zoomIndex;
     this.stopMotion();
+    // x and y are world px of the view they were saved in: take its turn first.
+    this.turn = (Number(s.turn) || 0) & 3;
+    if (this.mapW) this.setMapBounds(this.mapW, this.mapH);
     this.x = s.x ?? this.x;
     this.y = s.y ?? this.y;
     this.clamp();

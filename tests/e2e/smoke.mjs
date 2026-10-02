@@ -1637,7 +1637,14 @@ try {
     const out = { hidden: bar.classList.contains('no-season'), over: bar.scrollWidth - bar.clientWidth };
     Object.assign(c, keep);
     app.ui.hud.update();
-    out.shownAfter = !bar.classList.contains('no-season') || bar.scrollWidth > bar.clientWidth;
+    // Shown again unless the bar is full even so (a raid's chip, still on
+    // from the legions above while they fight on in real time, can fill
+    // it): measured with the season shown, as fitSeason() measures it.
+    const hid = bar.classList.contains('no-season');
+    bar.classList.remove('no-season');
+    out.fullAfter = bar.scrollWidth > bar.clientWidth;
+    if (hid) bar.classList.add('no-season');
+    out.shownAfter = !hid || out.fullAfter;
     return out;
   });
   // Unemployment sits beside the mood, amber once it costs mood.

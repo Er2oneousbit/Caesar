@@ -35,7 +35,10 @@ const outDir = args.includes('--out') ? args[args.indexOf('--out') + 1] : path.j
 const port = args.includes('--port') ? Number(args[args.indexOf('--port') + 1]) : 8123;
 fs.mkdirSync(outDir, { recursive: true });
 
-const shots = [
+// --shots name:query,name:query picks the pictures (a query's own commas, as
+// in focus=x,y, stay with it); without it, the set below.
+const pick = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : null;
+const shots = pick ? pick.split(/,(?=[\w-]+:)/).map((s) => [s.slice(0, s.indexOf(':')), s.slice(s.indexOf(':') + 1)]) : [
   ['city', 'scenario=c1&months=8&zoom=2'],
   ['closeup', 'scenario=c1&months=8&zoom=4&w=1000&h=700'],
   ['far', 'scenario=c1&months=8&zoom=0'],

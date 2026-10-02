@@ -43,6 +43,15 @@
  *     sun shadows; rain, snow and lightning are drawn over the world.
  * Where two kinds of ground meet, blend sprites soften the edge (the codes
  * are cached per tile until the map changes).
+ *
+ * The view turn (view.js, `camera.turn`): the city can be seen from any of
+ * its four sides. Everything here is drawn in view tiles: the ground pass
+ * walks the view's rows and finds each map tile through `tileAxes`, depth is
+ * the view's x + y, neighbour masks (roads, shores, walls, aqueducts, blends)
+ * are worked out on the map and rotated (`rotMask`), so the sprites and their
+ * keys are those of a turn-0 tile of that shape, and a building is drawn with
+ * its art turned by `b.turn + view turn` (render/turn.js) at its footprint's
+ * view corner (`viewFoot`).
  * ----------------------------------------------------------------------------
  */
 
@@ -68,7 +77,8 @@ import { Ambient } from './ambient.js';
 import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.js';
 import { Weather, seasonPalette } from './weather.js';
 import { hash01 } from './draw.js';
-import { turnUV } from './turn.js';
+import { turnUV, turnDir } from './turn.js';
+import { toView, viewTileOf, viewSize, tileAxes, viewFoot, viewDir, rotMask, rotNibbles, rotBlend, viewAxis } from './view.js';
 import { spanOrigin } from '../sim/entities.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
@@ -121,7 +131,7 @@ export function tintedSpec(spec, color) {
  * it (old saves, or that road removed): the road going into the map, then
  * any road beside the tile, then the middle of the map.
  */
-export function mapGateOffset(map, end, dir = null) {
+export function mapGateOffset(map, end, dir = null, turn = 0) {
   let dx = 0;
   let dy = 0;
   const inward = end.x === 0 ? [1, 0] : end.x === map.w - 1 ? [-1, 0] : end.y === 0 ? [0, 1] : end.y === map.h - 1 ? [0, -1] : null;
@@ -132,8 +142,8 @@ export function mapGateOffset(map, end, dir = null) {
     if (Math.abs(map.w / 2 - end.x) > Math.abs(map.h / 2 - end.y)) dx = Math.sign(map.w / 2 - end.x) || 1;
     else dy = Math.sign(map.h / 2 - end.y) || 1;
   }
-  const a = -dy; // across the road, in tiles
-  const b = dx;
+  // Across the road, in tiles, turned with the view.
+  const [a, b] = viewDir(-dy, dx, turn);
   const r = 0.46; // pillars stand inside the tile, just off the road
   return { ox: (a - b) * HALF_W * r, oy: (a + b) * HALF_H * r };
 }
@@ -175,9 +185,14 @@ export function lookStep(cur, prev, next, hard = false) {
  * (sim/disease.js) is drawn with a sign of its own, so it has a key of its
  * own: `:sick`, after those.
  */
-export function buildingKey(b, variant, state) {
+export function buildingKey(b, variant, state, viewTurn = 0) {
   const sick = b.house && b.house.pop > 0 && b.house.sick > 0;
-  return `b:${b.type}:${b.size}:${variant}:${state}${turnKey(b.turn)}${sick ? ':sick' : ''}`;
+  return `b:${b.type}:${b.size}:${variant}:${state}${turnKey(artTurn(b, viewTurn))}${sick ? ':sick' : ''}`;
+}
+
+/** The turn a building's art is drawn at: its own turn plus the view's (view.js). */
+export function artTurn(b, viewTurn = 0) {
+  return ((b.turn || 0) + viewTurn) & 3;
 }
 
 /** The sprite key part for a turn: `:t1`..`:t3`, nothing for turn 0. */
@@ -185,9 +200,17 @@ export function turnKey(turn) {
   return turn ? `:t${turn & 3}` : '';
 }
 
-/** A plan's items in the order to draw their ghosts: back (small x + y) first, the plan's own order kept otherwise. */
-export function ghostOrder(items) {
-  return items.map((it, k) => [it, k]).sort((a, b) => a[0].x + a[0].y - (b[0].x + b[0].y) || a[1] - b[1]).map((e) => e[0]);
+/**
+ * A plan's items in the order to draw their ghosts: back first (small x + y
+ * of the footprint's view corner at view turn `t` on a W x H map), the
+ * plan's own order kept otherwise.
+ */
+export function ghostOrder(items, t = 0, W = 0, H = 0) {
+  const depth = (it) => {
+    const [vx, vy] = viewFoot(it.x, it.y, it.size || 1, it.size || 1, t, W, H);
+    return vx + vy;
+  };
+  return items.map((it, k) => [it, k, depth(it)]).sort((a, b) => a[2] - b[2] || a[1] - b[1]).map((e) => e[0]);
 }
 
 /**
@@ -195,18 +218,21 @@ export function ghostOrder(items) {
  * as hippodromeArt.js draws it) is on the map, for a hippodrome whose main
  * section is `b`, turned as its sections are (render/turn.js turnUV for
  * each 5 x 5 section, laid out by sim/entities.js spanLayout). Also which
- * way +U looks on the screen (1 right, -1 left), so a chariot faces the way
- * it runs. @returns [x, y, dir]
+ * way +U looks on the screen at view turn `viewTurn` (1 right, -1 left), so
+ * a chariot faces the way it runs. @returns [x, y, dir]
  */
-export function raceSpot(b, U, v) {
+export function raceSpot(b, U, v, viewTurn = 0) {
   const t = (b.turn || 0) & 3;
   const o = spanOrigin(b.def, b.x, b.y, t);
   const L = b.size * (b.def.span || 1);
   const S = b.size;
-  if (t === 1) return [o.x + S - v, o.y + U, -1];
-  if (t === 2) return [o.x + L - U, o.y + S - v, -1];
-  if (t === 3) return [o.x + v, o.y + L - U, 1];
-  return [o.x + U, o.y + v, 1];
+  // +U on the map, then on the screen (x - y) as the view sees it.
+  const [du, dv] = turnDir(1, 0, t + viewTurn);
+  const dir = du - dv > 0 ? 1 : -1;
+  if (t === 1) return [o.x + S - v, o.y + U, dir];
+  if (t === 2) return [o.x + L - U, o.y + S - v, dir];
+  if (t === 3) return [o.x + v, o.y + L - U, dir];
+  return [o.x + U, o.y + v, dir];
 }
 
 /**
@@ -370,15 +396,17 @@ export function blendCode(map, x, y) {
 }
 
 /**
- * Where a walker stands this frame: tile coordinates (fx, fy) and world
+ * Where a walker stands this frame: map tile coordinates (fx, fy) and world
  * pixels (wx, wy) of its feet, part way to the next tile (alpha: 0..1 toward
- * the next sim tick).
+ * the next sim tick), and its depth `d` (the view's x + y), on a W x H map
+ * seen at view turn `t`.
  */
-export function walkerWorld(w, alpha) {
+export function walkerWorld(w, alpha, t = 0, W = 0, H = 0) {
   const p = w.moving ? Math.min(1, w.progress + alpha * w.speed) : 0;
   const fx = w.x + (w.tx - w.x) * p + 0.5;
   const fy = w.y + (w.ty - w.y) * p + 0.5;
-  return { fx, fy, wx: (fx - fy) * HALF_W, wy: (fx + fy) * HALF_H };
+  const [vx, vy] = toView(fx, fy, t, W, H);
+  return { fx, fy, wx: (vx - vy) * HALF_W, wy: (vx + vy) * HALF_H, d: vx + vy };
 }
 
 /**
@@ -408,15 +436,16 @@ const BRIDGE_DEPTH = 0.006;
 /**
  * A figure on a bridge tile: a ship (or boat) passes under the deck, drawn
  * just before it; anyone else walks on the deck, lifted to it and drawn
- * after it. `d`: the draw depth to use (undefined: the figure's own),
- * `lift`: world px up.
+ * after it. `d`: the draw depth to use (undefined: the figure's own; the
+ * view's x + y at view turn `turn`), `lift`: world px up.
  * @returns {{d:number|undefined, lift:number}}
  */
-export function bridgeSpan(map, fx, fy, onWater) {
+export function bridgeSpan(map, fx, fy, onWater, turn = 0) {
   const tx = Math.floor(fx);
   const ty = Math.floor(fy);
   if (!map.inBounds(tx, ty) || map.road[map.idx(tx, ty)] !== Road.BRIDGE) return { d: undefined, lift: 0 };
-  const deck = tx + ty + 1 + BRIDGE_DEPTH;
+  const [vx, vy] = viewTileOf(tx, ty, turn, map.w, map.h);
+  const deck = vx + vy + 1 + BRIDGE_DEPTH;
   return onWater ? { d: deck - 0.004, lift: 0 } : { d: deck + 0.004, lift: BRIDGE_DECK_Z };
 }
 
@@ -479,6 +508,66 @@ export class Renderer {
     this.blendRev = -1;
     this.gates = []; // wall gate tiles in view this frame (they get torches at night)
     this.mapGates = []; // map entrance/exit gateways in view this frame (torches too)
+    // The last way each soldier, raider or ship moved on the map (unit id ->
+    // [dx, dy]): the sim keeps only which way it faces on the unturned
+    // screen, so a turned view works its facing out from this (unitFace).
+    this.headings = new Map();
+  }
+
+  /** The view turn being drawn (0..3, view.js). */
+  get viewTurn() { return this.camera.turn & 3; }
+
+  /**
+   * See the city from another side (0..3 quarter turns clockwise), keeping
+   * the tile in the middle of the screen where it is. Particles drawn for
+   * the old view are dropped (they live in world px of that view).
+   */
+  setViewTurn(turn) {
+    const cam = this.camera;
+    if ((turn & 3) === cam.turn) return;
+    cam.setTurn(turn);
+    this.effects = new Effects();
+    // A followed walker stays followed: the camera moved, but not by the player.
+    if (this.follow) this.follow.x = undefined;
+  }
+
+  /** World px of a continuous map point (x, y), as the view sees it. */
+  worldAt(x, y) {
+    return this.camera.mapToWorld(x, y);
+  }
+
+  /**
+   * A footprint's top corner in world px and in view tiles: the corner of
+   * the w x h footprint at map tile (x, y) nearest the top of the screen,
+   * where its sprite is anchored.
+   */
+  footAt(x, y, w = 1, h = w) {
+    const map = this.game.map;
+    const [vx, vy] = viewFoot(x, y, w, h, this.viewTurn, map.w, map.h);
+    return { wx: (vx - vy) * HALF_W, wy: (vx + vy) * HALF_H, vx, vy };
+  }
+
+  /**
+   * Which way a soldier, raider or ship looks on the screen (1 right, -1
+   * left). Unturned it is the sim's own `u.facing`. Turned, the last way it
+   * moved on the map, seen from the view's side; a heading that no longer
+   * agrees with `u.facing` (it turned to face a foe without moving) gives
+   * way to one that does.
+   */
+  unitFace(u, turn) {
+    const dx = u.x - u.px;
+    const dy = u.y - u.py;
+    let h = this.headings.get(u.id);
+    if (Math.abs(dx) + Math.abs(dy) > 1e-6) {
+      h = [dx, dy];
+      this.headings.set(u.id, h);
+    }
+    if (!turn) return u.facing;
+    const f = u.facing < 0 ? -1 : 1;
+    if (!h || (Math.abs(h[0] - h[1]) > 0.01 && Math.sign(h[0] - h[1]) !== f)) h = [f, 0];
+    const [a, b] = viewDir(h[0], h[1], turn);
+    const s = a - b;
+    return Math.abs(s) > 0.01 ? Math.sign(s) : f;
   }
 
   /** Point the renderer at a (new) game. */
@@ -490,6 +579,9 @@ export class Renderer {
     this.shipSpots = [];
     this.unitSpots = [];
     this.selectedUnit = 0;
+    this.headings.clear();
+    // A new or loaded game opens unturned (a save's camera state turns it back, Camera.restore).
+    this.camera.turn = 0;
     this.camera.setMapBounds(game.map.w, game.map.h);
     this.stripCache = new WeakMap();
     this.effects = new Effects();
@@ -507,18 +599,17 @@ export class Renderer {
       this.appear.set(b.id, this.time);
       if (this.puffBudget > 0) {
         this.puffBudget--;
-        const cx = b.x + b.size / 2;
-        const cy = b.y + b.size / 2;
-        this.effects.dust((cx - cy) * HALF_W, (cx + cy) * HALF_H, Math.min(1, b.size * 0.35));
+        const w = this.worldAt(b.x + b.size / 2, b.y + b.size / 2);
+        this.effects.dust(w.x, w.y, Math.min(1, b.size * 0.35));
       }
     }));
     this.unsub.push(game.events.on('collapse', ({ x, y, size }) => {
-      const cx = x + size / 2;
-      const cy = y + size / 2;
-      this.effects.dust((cx - cy) * HALF_W, (cx + cy) * HALF_H, size);
+      const w = this.worldAt(x + size / 2, y + size / 2);
+      this.effects.dust(w.x, w.y, size);
     }));
     this.unsub.push(game.events.on('unitDied', ({ x, y }) => {
-      this.effects.dust((x - y) * HALF_W, (x + y) * HALF_H, 0.3);
+      const w = this.worldAt(x, y);
+      this.effects.dust(w.x, w.y, 0.3);
     }));
   }
 
@@ -534,20 +625,25 @@ export class Renderer {
 
   setOverlay(key) { this.overlay = overlayByKey(key); }
 
-  /** Screen-space depth strips for a building (cached until it moves/grows). */
+  /**
+   * Screen-space depth strips for a building (cached until it moves, grows
+   * or the view turns), from its footprint in view tiles.
+   */
   stripsFor(b) {
-    const sig = `${b.x},${b.y},${b.size}`;
+    const t = this.viewTurn;
+    const sig = `${b.x},${b.y},${b.size},${t}`;
     const hit = this.stripCache.get(b);
     if (hit && hit.sig === sig) return hit.depths;
     const S = b.size;
+    const { vx: X, vy: Y } = this.footAt(b.x, b.y, S);
     const depths = new Array(2 * S);
     for (let j = 0; j < 2 * S; j++) {
-      const m = b.x - b.y - S + j;
+      const m = X - Y - S + j;
       let best = -Infinity;
       for (let dy = 0; dy < S; dy++) {
         for (let dx = 0; dx < S; dx++) {
-          const x = b.x + dx;
-          const y = b.y + dy;
+          const x = X + dx;
+          const y = Y + dy;
           const k = x - y;
           if (k === m || k === m + 1) best = Math.max(best, x + y + 1);
         }
@@ -586,19 +682,28 @@ export class Renderer {
     const overlayOn = ov.key !== 'none';
     const pp = this.palPrev; // last look, still drawn while the new one is prepared
 
-    // --- visible tile range -------------------------------------------------
+    // --- visible tile range (view tiles; view.js) ---------------------------
+    const vt = cam.turn & 3;
+    const [VW, VH] = viewSize(map.w, map.h, vt);
     const vr = cam.viewRect();
     const x0w = vr.x - HALF_W * 2;
     const x1w = vr.x + vr.w + HALF_W * 2;
     const y0w = vr.y - CONFIG.TILE_H * 2;
     const y1w = vr.y + vr.h + 140; // tall sprites below the view reach up into it
     const corners = [tileOfWorld(x0w, y0w), tileOfWorld(x1w, y0w), tileOfWorld(x0w, y1w), tileOfWorld(x1w, y1w)];
-    const tx0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.x))));
-    const tx1 = Math.min(map.w - 1, Math.ceil(Math.max(...corners.map((c) => c.x))));
-    const ty0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.y))));
-    const ty1 = Math.min(map.h - 1, Math.ceil(Math.max(...corners.map((c) => c.y))));
+    const vx0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.x))));
+    const vx1 = Math.min(VW - 1, Math.ceil(Math.max(...corners.map((c) => c.x))));
+    const vy0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.y))));
+    const vy1 = Math.min(VH - 1, Math.ceil(Math.max(...corners.map((c) => c.y))));
     const groundBottom = vr.y + vr.h + 4;
-    this.viewTiles = { tx0, tx1, ty0, ty1 };
+    // The same range as map tiles (a quarter turn keeps a rectangle a
+    // rectangle), for the passes that loop over map tiles (hints, coverage).
+    const ax = tileAxes(vt, map.w, map.h);
+    const mx0 = ax.ox + ax.xx * vx0 + ax.xy * vy0;
+    const my0 = ax.oy + ax.yx * vx0 + ax.yy * vy0;
+    const mx1 = ax.ox + ax.xx * vx1 + ax.xy * vy1;
+    const my1 = ax.oy + ax.yx * vx1 + ax.yy * vy1;
+    this.viewTiles = { tx0: Math.min(mx0, mx1), tx1: Math.max(mx0, mx1), ty0: Math.min(my0, my1), ty1: Math.max(my0, my1) };
     this.stats.coverage = null;
     this.stats.waterHint = null;
     this.puffBudget = 4;
@@ -617,11 +722,14 @@ export class Renderer {
     const drawSpr = (spr, wx, wy) => this.blit(spr, wx, wy);
 
     // --- pass 1: ground -----------------------------------------------------
-    for (let y = ty0; y <= ty1; y++) {
-      for (let x = tx0; x <= tx1; x++) {
-        const wx = (x - y) * HALF_W;
-        const wy = (x + y) * HALF_H;
+    // Row by row of the view; (x, y) is the map tile seen at view tile (vx, vy).
+    for (let vy = vy0; vy <= vy1; vy++) {
+      for (let vx = vx0; vx <= vx1; vx++) {
+        const wx = (vx - vy) * HALF_W;
+        const wy = (vx + vy) * HALF_H;
         if (wx < x0w || wx > x1w || wy < y0w || wy > y1w) continue;
+        const x = ax.ox + ax.xx * vx + ax.xy * vy;
+        const y = ax.oy + ax.yx * vx + ax.yy * vy;
         const i = y * map.w + x;
         const terr = map.terrain[i];
         const variant = map.variant[i] & 3;
@@ -630,7 +738,7 @@ export class Renderer {
           tiles++;
           if (terr === Terrain.WATER) {
             drawSpr(this.sprites.get(`w${variant}.${waterFrame}`, () => waterTileSpec(variant, waterFrame)), wx, wy);
-            const mask = this.shoreMask(x, y);
+            const mask = rotMask(this.shoreMask(x, y), vt);
             if (mask) drawSpr(this.sprites.get(`sh${mask}`, () => shoreSpec(mask)), wx, wy);
             if (glints && !mask && (Math.imul(i, 2654435761) >>> 0) % 6 === 0) {
               // Sun glints: brief flashes at a fixed spot per tile.
@@ -642,13 +750,13 @@ export class Renderer {
             const gv = map.variant[i] & 7;
             // Where a different kind of ground borders this tile, the sprite
             // has a soft edge painted in (one draw either way; see groundBlendSpec).
-            const code = bid ? 0 : this.blendAt(i, x, y);
+            const code = bid ? 0 : rotBlend(this.blendAt(i, x, y), vt);
             if (code > 0) drawSpr(this.sprites.get(`g${terr}.${gv}.${code}~${pal.key}`, () => groundBlendSpec(terr, gv, code, pal), pp === null ? null : `g${terr}.${gv}.${code}~${pp}`), wx, wy);
             else drawSpr(this.sprites.get(`g${terr}.${gv}~${pal.key}`, () => groundTileSpec(terr, gv, pal), pp === null ? null : `g${terr}.${gv}~${pp}`), wx, wy);
           }
           const road = map.road[i];
           if (road === Road.ROAD) {
-            const mask = this.roadMask(x, y);
+            const mask = rotMask(this.roadMask(x, y), vt);
             drawSpr(this.sprites.get(`r${mask}.${variant}`, () => roadSpec(mask, variant)), wx, wy);
           } else if (road === Road.PLAZA) {
             drawSpr(this.sprites.get(`pz${variant & 1}`, () => plazaSpec(variant & 1)), wx, wy);
@@ -660,7 +768,7 @@ export class Renderer {
           }
         }
         // --- collect objects on this tile ---
-        const depth = x + y + 1;
+        const depth = vx + vy + 1;
         if (bid) {
           if (!seenBuildings.has(bid)) {
             seenBuildings.add(bid);
@@ -684,23 +792,24 @@ export class Renderer {
           let mask = this.wallMask(x, y);
           // A gate with no wall beside it spans across its road.
           if (gate && !mask) mask = map.hasRoad(x, y - 1) || map.hasRoad(x, y + 1) ? 10 : 5;
+          mask = rotMask(mask, vt);
           const hp = wallHpOf(game, i);
           const damaged = hp.hp < hp.max * 0.5;
           items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`wl${mask}.${gate ? 1 : 0}.${damaged ? 1 : 0}`, () => wallSpec(mask, gate, damaged)), wx, wy, full: true });
         }
         if (map.roadblock[i]) {
-          const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
+          const axis = viewAxis(map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v', vt);
           items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`rbk${axis}`, () => roadblockSpec(axis)), wx, wy, full: true });
         }
         if (map.road[i] === Road.BRIDGE) {
           // The deck is an object, not ground: drawn over a ship passing under
           // it and under the people crossing it (bridgeDepth). On the ground
           // it was drawn first, and ships sailed over the bridge (playtest).
-          const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
+          const axis = viewAxis(map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v', vt);
           items.push({ d: depth + BRIDGE_DEPTH, kind: K_STRIP, spr: this.sprites.get(`br${axis}`, () => bridgeSpec(axis)), wx, wy, full: true });
         }
         if (map.aqueduct[i]) {
-          const mask = this.aqueductMask(x, y);
+          const mask = rotNibbles(this.aqueductMask(x, y), vt);
           const filled = map.aqueduct[i] === 2;
           const overRoad = map.road[i] ? 1 : 0; // a bridge over the road
           items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`aq${mask}.${filled ? 1 : 0}.${overRoad}`, () => aqueductSpec(mask, filled, !!overRoad)), wx, wy, full: true });
@@ -721,20 +830,24 @@ export class Renderer {
     this.walkerSpots = [];
     for (const w of game.walkers.values()) {
       if (overlayOn && ov.walkers && !ov.walkers.includes(w.type)) continue;
-      const { fx, fy, wx, wy: groundY } = walkerWorld(w, alpha);
-      const span = bridgeSpan(map, fx, fy, w.kind === 'ship');
+      const { fx, fy, wx, wy: groundY, d: fd } = walkerWorld(w, alpha, vt, map.w, map.h);
+      const span = bridgeSpan(map, fx, fy, w.kind === 'ship', vt);
       const wy = groundY - span.lift;
       if (wx < x0w || wx > x1w || wy < y0w || wy > vr.y + vr.h + 30) continue;
-      const ddx = (w.tx - w.x) - (w.ty - w.y);
-      const ddy = (w.tx - w.x) + (w.ty - w.y);
+      // Its step on the screen: the map step turned with the view.
+      const [sdx, sdy] = viewDir(w.tx - w.x, w.ty - w.y, vt);
+      const ddx = sdx - sdy;
+      const ddy = sdx + sdy;
+      // Standing still it faces the way it last stepped (directions N E S W, turned with the view).
+      const last = w.lastDir >= 0 ? (w.lastDir + vt) & 3 : -1;
       const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
       // A cart's look depends on who sent it (a farm's wagon, a warehouse's single lot).
       const origin = w.type === 'cart' ? game.buildings.get(w.origin)?.def || null : null;
-      const dirX = ddx === 0 ? (w.lastDir === 1 || w.lastDir === 0 ? 1 : -1) : Math.sign(ddx);
+      const dirX = ddx === 0 ? (last === 1 || last === 0 ? 1 : -1) : Math.sign(ddx);
       // A carter's cart (and a wagon's ox) is drawn ahead of him and is most
       // of what the eye sees: clicks on it pick the carter (cartReach).
       this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
-      items.push({ d: span.d ?? fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
+      items.push({ d: span.d ?? fd + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -747,37 +860,45 @@ export class Renderer {
       const fy = u.py + (u.y - u.py) * alpha;
       // (Ships are big: in view a little farther out, so their masts do not pop in.)
       const naval = UNIT_TYPES[u.type].naval;
-      const span = bridgeSpan(map, fx, fy, naval);
-      const wx = (fx - fy) * HALF_W;
-      const wy = (fx + fy) * HALF_H - span.lift;
+      const span = bridgeSpan(map, fx, fy, naval, vt);
+      const [ux, uy] = toView(fx, fy, vt, map.w, map.h);
+      const wx = (ux - uy) * HALF_W;
+      const wy = (ux + uy) * HALF_H - span.lift;
       // u.walked already includes this tick's step; the drawing is (1 - alpha) of it behind.
       const stride = u.walked - (1 - alpha) * Math.hypot(u.x - u.px, u.y - u.py);
+      const face = this.unitFace(u, vt); // (before the view test: it keeps the heading of units out of view too)
       if (!inView(wx, wy) && !(naval && inView(wx, wy - 60))) continue;
-      items.push({ d: span.d ?? fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
+      items.push({ d: span.d ?? ux + uy + 0.004, kind: K_UNIT, u, wx, wy, stride, face });
       if (naval) this.shipSpots.push({ id: u.id, wx, wy });
       else this.unitSpots.push({ id: u.id, wx, wy });
     }
+    if (this.headings.size > game.units.size + 64) {
+      for (const id of this.headings.keys()) if (!game.units.has(id)) this.headings.delete(id);
+    }
     for (const p of game.projectiles) {
-      const wx = (p.x - p.y) * HALF_W;
-      const wy = (p.x + p.y) * HALF_H - p.z;
-      if (inView(wx, wy)) items.push({ d: p.x + p.y + 0.5, kind: K_PROJ, p, wx, wy });
+      const [px, py] = toView(p.x, p.y, vt, map.w, map.h);
+      const wx = (px - py) * HALF_W;
+      const wy = (px + py) * HALF_H - p.z;
+      if (inView(wx, wy)) items.push({ d: px + py + 0.5, kind: K_PROJ, p, wx, wy, vel: viewDir(p.vx || 0, p.vy || 0, vt) });
     }
     for (const b of game.buildings.values()) {
       if (!b.rally) continue;
-      const wx = (b.rally.x - b.rally.y) * HALF_W;
-      const wy = (b.rally.x + b.rally.y) * HALF_H;
-      if (inView(wx, wy)) items.push({ d: b.rally.x + b.rally.y + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b) });
+      const [rx, ry] = toView(b.rally.x, b.rally.y, vt, map.w, map.h);
+      const wx = (rx - ry) * HALF_W;
+      const wy = (rx + ry) * HALF_H;
+      if (inView(wx, wy)) items.push({ d: rx + ry + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b) });
     }
     // Map entrance and exit: a gateway over the Imperial road at the map edge.
     // Two items, so walkers on the tile pass between the pillars.
     this.mapGates = [];
     for (const [end, dir, color, seed] of [[map.entry, map.entryDir, ENTRY_COLOR, 1.3], [map.exit, map.exitDir, EXIT_COLOR, 4.1]]) {
-      const wx = (end.x - end.y) * HALF_W;
-      const wy = (end.x + end.y + 1) * HALF_H; // tile center
+      const [ex, ey] = viewTileOf(end.x, end.y, vt, map.w, map.h);
+      const wx = (ex - ey) * HALF_W;
+      const wy = (ex + ey + 1) * HALF_H; // tile center
       if (!inView(wx, wy) && !inView(wx, wy - GATE_H * 2)) continue; // base or top on screen
-      const { ox, oy } = mapGateOffset(map, end, dir);
+      const { ox, oy } = mapGateOffset(map, end, dir, vt);
       this.mapGates.push({ wx, wy, ox, oy });
-      const d = end.x + end.y + 1;
+      const d = ex + ey + 1;
       items.push({ d: d - 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'back' });
       items.push({ d: d + 0.05, kind: K_GATE, wx, wy, ox, oy, color, seed, part: 'front' });
     }
@@ -809,10 +930,10 @@ export class Renderer {
           this.drawExtra(it);
           break;
         case K_UNIT:
-          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, (selFort !== 0 && (it.u.fort === selFort || it.u.station === selFort)) || it.u.id === this.selectedUnit, it.stride);
+          drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, (selFort !== 0 && (it.u.fort === selFort || it.u.station === selFort)) || it.u.id === this.selectedUnit, it.stride, it.face);
           break;
         case K_PROJ:
-          drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k);
+          drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, it.vel[0], it.vel[1]);
           break;
         case K_FLAG:
           drawRallyFlag(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, it.color, this.time);
@@ -881,7 +1002,8 @@ export class Renderer {
       const { x, y } = this.hoverTile;
       this.outlineFootprint(x, y, 1, 'rgba(255,230,120,0.95)', 2);
       ctx.globalAlpha = 0.7;
-      drawRallyFlag(ctx, Math.round(((x - y) * HALF_W - cam.x) * k), Math.round(((x + y + 1) * HALF_H - cam.y) * k), k, color, this.time);
+      const at = this.worldAt(x + 0.5, y + 0.5); // the tile's center
+      drawRallyFlag(ctx, Math.round((at.x - cam.x) * k), Math.round((at.y - cam.y) * k), k, color, this.time);
       ctx.globalAlpha = 1;
     }
 
@@ -1013,14 +1135,17 @@ export class Renderer {
     const t = this.time;
     const flick = (seed) => 0.84 + 0.09 * Math.sin(t * 9.1 + seed) + 0.07 * Math.sin(t * 23.7 + seed * 1.7);
     const windowsToo = k >= 0.7; // window glows are lost when zoomed far out
+    const vt = this.viewTurn;
     if (lamps > 0.01) {
       for (const b of visibleBuildings) {
         if (!isLit(b, lamps)) continue;
         const variant = this.artVariant(b);
         const state = artState(b, farmDormant(game, b));
-        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}${turnKey(b.turn)}`, b.type, b.size, variant, state, b.turn || 0);
-        const ox = ((b.x - b.y) * HALF_W - cam.x) * k;
-        const oy = ((b.x + b.y) * HALF_H - cam.y) * k;
+        const T = artTurn(b, vt);
+        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}${turnKey(T)}`, b.type, b.size, variant, state, T);
+        const foot = this.footAt(b.x, b.y, b.size);
+        const ox = (foot.wx - cam.x) * k;
+        const oy = (foot.wy - cam.y) * k;
         // Each building fades in over a little while after its turn comes.
         const on = b.house ? 0.1 + hash01(b.id, 7) * 0.5 : 0.05 + hash01(b.id, 7) * 0.2;
         const a = Math.min(1, (lamps - on) / 0.15);
@@ -1050,10 +1175,9 @@ export class Renderer {
       // Torches on both sides of each wall gate.
       const map = game.map;
       for (const i of this.gates) {
-        const x = map.xOf(i);
-        const y = map.yOf(i);
-        const sx = ((x - y) * HALF_W - cam.x) * k;
-        const sy = ((x + y + 1) * HALF_H - cam.y) * k;
+        const c = this.worldAt(map.xOf(i) + 0.5, map.yOf(i) + 0.5); // the tile's center
+        const sx = (c.x - cam.x) * k;
+        const sy = (c.y - cam.y) * k;
         const f = flick(i);
         L.pool(sx, sy, tile * 2.2, 0.6 * lamps * f, true);
         L.glow(sx - 12 * k, sy - 20 * k, 6 * k * f, 0.9 * lamps * f, true);
@@ -1091,13 +1215,14 @@ export class Renderer {
     // Fires light up the night whatever the lamps are doing.
     if (game.fires.size) {
       const map = game.map;
-      const vt = this.viewTiles;
+      const vts = this.viewTiles;
       for (const i of game.fires.keys()) {
         const x = map.xOf(i);
         const y = map.yOf(i);
-        if (vt && (x < vt.tx0 || x > vt.tx1 || y < vt.ty0 || y > vt.ty1)) continue;
-        const sx = ((x - y) * HALF_W - cam.x) * k;
-        const sy = ((x + y + 1) * HALF_H - cam.y) * k;
+        if (vts && (x < vts.tx0 || x > vts.tx1 || y < vts.ty0 || y > vts.ty1)) continue;
+        const c = this.worldAt(x + 0.5, y + 0.5); // the tile's center
+        const sx = (c.x - cam.x) * k;
+        const sy = (c.y - cam.y) * k;
         const f = flick(i * 7);
         L.pool(sx, sy, tile * 4.5, 0.95 * f, true);
         L.glow(sx, sy - 12 * k, 20 * k * f, 0.45 * f, true);
@@ -1147,8 +1272,12 @@ export class Renderer {
   /** Queue a building's strips (or its overlay stand-in). */
   collectBuilding(b, items, overlayOn) {
     const ov = this.overlay;
-    const wx = (b.x - b.y) * HALF_W;
-    const wy = (b.x + b.y) * HALF_H;
+    // Anchored at its footprint's top corner as the view sees it, its art turned with the view.
+    const foot = this.footAt(b.x, b.y, b.size);
+    const wx = foot.wx;
+    const wy = foot.wy;
+    const vt = this.viewTurn;
+    const T = artTurn(b, vt);
     const depths = this.stripsFor(b);
     const front = Math.max(...depths);
     if (overlayOn && ov.show && !ov.show(b)) {
@@ -1164,20 +1293,20 @@ export class Renderer {
       } else if (b.house && ov.house) v = b.house.pop > 0 ? ov.house(b) : null;
       else if (ov.value) v = ov.value(b);
       if (v !== null && v !== undefined) {
-        const cx = b.x + b.size / 2;
-        const cy = b.y + b.size / 2;
-        items.push({ d: front + 0.001, kind: K_COLUMN, wx: (cx - cy) * HALF_W, wy: (cx + cy) * HALF_H, v: Math.max(0, Math.min(1, v)), bad: !!ov.bad, color: tint, S: b.size });
+        const c = this.worldAt(b.x + b.size / 2, b.y + b.size / 2);
+        items.push({ d: front + 0.001, kind: K_COLUMN, wx: c.x, wy: c.y, v: Math.max(0, Math.min(1, v)), bad: !!ov.bad, color: tint, S: b.size });
       }
       return;
     }
     const state = artState(b, farmDormant(this.game, b));
     const variant = this.artVariant(b);
-    const key = buildingKey(b, variant, state);
+    const key = buildingKey(b, variant, state, vt);
     const sick = key.endsWith(':sick');
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
     const snow = this.pal.snow;
-    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick, b.turn || 0), this.snowPrev === null ? null : key + this.snowPrev);
-    if (spr && spr.s) this.buildingBoxes.push({ x: b.x, y: b.y, S: b.size, H: spr.ay / spr.s });
+    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick, T), this.snowPrev === null ? null : key + this.snowPrev);
+    // (In view tiles: picking compares them with world px of the view.)
+    if (spr && spr.s) this.buildingBoxes.push({ x: foot.vx, y: foot.vy, S: b.size, H: spr.ay / spr.s });
     if (lacksRoad(b)) this.noRoadMarks.push({ b, H: spr && spr.s ? spr.ay / spr.s : 0 });
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).
@@ -1203,7 +1332,7 @@ export class Renderer {
       items.push({ d: front + 0.0005, kind: K_EXTRA, b, wx, wy, stock: true });
     }
     if ((b.type === 'pottery_ws' || b.type === 'weapons_ws') && b.efficiency > 0 && b.progress > 0 && Math.random() < 0.03) {
-      const [u, v] = turnUV(0.99, 0.34, b.size, b.turn || 0); // the kiln's chimney (workshopArt), turned with it
+      const [u, v] = turnUV(0.99, 0.34, b.size, T); // the kiln's chimney (workshopArt), turned with it
       this.effects.smoke(wx + (u - v) * HALF_W, wy + (u + v) * HALF_H - 32);
     }
     // Hearth smoke from lived-in homes (only when zoomed in enough to see it).
@@ -1214,7 +1343,7 @@ export class Renderer {
       items.push({ d: front + 0.0006, kind: K_EXTRA, b, wx, wy, spray: true });
     }
     // Live details. Flag cloth always (the sprite only has the poles).
-    const flags = flagsFor(b.type, b.size, b.turn || 0);
+    const flags = flagsFor(b.type, b.size, T);
     if (flags.length) items.push({ d: front + 0.0007, kind: K_EXTRA, b, wx, wy: wy + rise, flags });
     if (this.camera.zoom < 0.75 || rise) return; // the rest is too small to see when zoomed out
     if (kind === 'market' && b.efficiency > 0 && hasStock(b)) {
@@ -1227,7 +1356,7 @@ export class Renderer {
       items.push({ d: front + 0.0004, kind: K_EXTRA, b, wx, wy, live: 'altar' });
     } else if (b.type === 'weapons_ws' && b.efficiency > 0 && b.progress > 0 && this.motionOn && Math.random() < 0.035) {
       // The smith hammers: sparks fly out of the forge door (workshopArt door, left face).
-      const [u, v] = turnUV(0.6, 1.07, b.size, b.turn || 0);
+      const [u, v] = turnUV(0.6, 1.07, b.size, T);
       this.effects.sparks(wx + (u - v) * HALF_W, wy + (u + v) * HALF_H - 4, 4 + Math.floor(Math.random() * 4));
     }
   }
@@ -1277,7 +1406,8 @@ export class Renderer {
       for (let x = Math.floor(a.x - r); x <= a.x + r; x++) {
         if (!map.inBounds(x, y) || map.navBody[map.idx(x, y)] !== body) continue;
         if (Math.hypot(x + 0.5 - a.x, y + 0.5 - a.y) > r) continue;
-        this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, 'rgba(255,236,160,0.2)'); // (pale gold: blue would vanish on the water)
+        const f = this.footAt(x, y);
+        this.fillDiamond(f.wx, f.wy, 'rgba(255,236,160,0.2)'); // (pale gold: blue would vanish on the water)
       }
     }
   }
@@ -1310,10 +1440,10 @@ export class Renderer {
   drawRallyLine(b) {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
-    const cx = b.x + b.size / 2;
-    const cy = b.y + b.size / 2;
-    const a = [((cx - cy) * HALF_W - cam.x) * k, ((cx + cy) * HALF_H - cam.y) * k];
-    const z = [((b.rally.x - b.rally.y) * HALF_W - cam.x) * k, ((b.rally.x + b.rally.y) * HALF_H - cam.y) * k];
+    const from = this.worldAt(b.x + b.size / 2, b.y + b.size / 2);
+    const to = this.worldAt(b.rally.x, b.rally.y);
+    const a = [(from.x - cam.x) * k, (from.y - cam.y) * k];
+    const z = [(to.x - cam.x) * k, (to.y - cam.y) * k];
     ctx.save();
     ctx.setLineDash([6 * cam.dpr, 5 * cam.dpr]);
     ctx.strokeStyle = 'rgba(255,230,120,0.8)';
@@ -1338,7 +1468,9 @@ export class Renderer {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
     const S = b.size;
-    const pt = (u, v) => [((b.x + u - (b.y + v)) * HALF_W - cam.x) * k, ((b.x + u + b.y + v) * HALF_H - cam.y) * k];
+    // (u, v) from the footprint's view corner: the sun stays where it is on the screen.
+    const { vx: X, vy: Y } = this.footAt(b.x, b.y, S);
+    const pt = (u, v) => [((X + u - (Y + v)) * HALF_W - cam.x) * k, ((X + u + Y + v) * HALF_H - cam.y) * k];
     for (const [len, alpha] of [[L, 0.14], [L * 0.55, 0.12]]) {
       const dv = len * 0.4;
       const pts = [pt(S, 0), pt(S + len, dv), pt(S + len, S + dv), pt(len, S + dv), pt(0, S), pt(S, S)];
@@ -1377,7 +1509,11 @@ export class Renderer {
     const { camera: cam, game } = this;
     const map = game.map;
     const k = cam.scale;
-    const pt = (px, py) => [((px - py) * HALF_W - cam.x) * k, ((px + py) * HALF_H - cam.y) * k];
+    // Map corners through the view: each side stays between the same two neighbours.
+    const pt = (px, py) => {
+      const w = cam.mapToWorld(px, py);
+      return [(w.x - cam.x) * k, (w.y - cam.y) * k];
+    };
     return [
       [map.inBounds(x, y - 1) ? map.idx(x, y - 1) : -1, pt(x, y), pt(x + 1, y)],
       [map.inBounds(x + 1, y) ? map.idx(x + 1, y) : -1, pt(x + 1, y), pt(x + 1, y + 1)],
@@ -1453,9 +1589,10 @@ export class Renderer {
       ctx.fillStyle = l.style.fill;
       ctx.beginPath();
       for (let q = 0; q < t.length; q += 2) {
-        // Top corner of the tile, then around the diamond.
-        const sx = ((t[q] - t[q + 1]) * HALF_W - cam.x) * k;
-        const sy = ((t[q] + t[q + 1]) * HALF_H - cam.y) * k;
+        // Top corner of the tile (as the view sees it), then around the diamond.
+        const f = this.footAt(t[q], t[q + 1]);
+        const sx = (f.wx - cam.x) * k;
+        const sy = (f.wy - cam.y) * k;
         ctx.moveTo(sx, sy);
         ctx.lineTo(sx + HALF_W * k, sy + HALF_H * k);
         ctx.lineTo(sx, sy + CONFIG.TILE_H * k);
@@ -1483,7 +1620,8 @@ export class Renderer {
           const i = map.idx(x, y);
           if (strong.has(i) || !isPale(i)) continue;
           paleCount++;
-          this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, colors.pale.fill);
+          const f = this.footAt(x, y);
+          this.fillDiamond(f.wx, f.wy, colors.pale.fill);
           for (const [j, a, b] of sides(x, y)) if (!inside(j)) paleEdges.push(a, b);
         }
       }
@@ -1491,7 +1629,8 @@ export class Renderer {
     for (const i of strong) {
       const x = map.xOf(i);
       const y = map.yOf(i);
-      this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, colors.strong.fill);
+      const f = this.footAt(x, y);
+      this.fillDiamond(f.wx, f.wy, colors.strong.fill);
       for (const [j, a, b] of sides(x, y)) if (!strong.has(j)) strongEdges.push(a, b);
     }
     this.strokeEdges(paleEdges, colors.pale.edge, 1.4);
@@ -1505,7 +1644,9 @@ export class Renderer {
     const map = this.game.map;
     for (let y = y0 - r; y < y0 + S + r; y++) {
       for (let x = x0 - r; x < x0 + S + r; x++) {
-        if (map.inBounds(x, y)) this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, color);
+        if (!map.inBounds(x, y)) continue;
+        const f = this.footAt(x, y);
+        this.fillDiamond(f.wx, f.wy, color);
       }
     }
   }
@@ -1538,8 +1679,7 @@ export class Renderer {
   outlineFootprint(tx, ty, S, color, width = 1.5) {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
-    const wx = (tx - ty) * HALF_W;
-    const wy = (tx + ty) * HALF_H;
+    const { wx, wy } = this.footAt(tx, ty, S);
     const x = (wx - cam.x) * k;
     const y = (wy - cam.y) * k;
     ctx.strokeStyle = color;
@@ -1604,13 +1744,19 @@ export class Renderer {
         const a = -Math.PI / 2 + (s - straight) / R;
         U = B + Math.cos(a) * R * 1.2; v = 2.5 + Math.sin(a) * R; face = Math.sin(a) < 0 ? 1 : -1;
       }
-      const [x, y, dir] = raceSpot(b, U, v);
+      const vt = this.viewTurn;
+      const map = this.game.map;
+      const [x, y, dir] = raceSpot(b, U, v, vt);
       face *= dir;
-      const sec = this.game.buildings.get(this.game.map.buildingAt(Math.floor(x), Math.floor(y))) || b;
+      const sec = this.game.buildings.get(map.buildingAt(Math.floor(x), Math.floor(y))) || b;
       const depths = this.stripsFor(sec);
-      const j = Math.floor(x) - Math.floor(y) - (sec.x - sec.y - sec.size);
+      // Its screen column among the section's strips (in view tiles, as stripsFor counts them).
+      const [tx, ty] = viewTileOf(Math.floor(x), Math.floor(y), vt, map.w, map.h);
+      const sf = this.footAt(sec.x, sec.y, sec.size);
+      const j = tx - ty - (sf.vx - sf.vy - sec.size);
       const d = Math.max(depths[Math.max(0, Math.min(depths.length - 1, j - 1))], depths[Math.max(0, Math.min(depths.length - 1, j))]);
-      items.push({ d: d + 0.0008, kind: K_EXTRA, b, wx: (x - y) * HALF_W, wy: (x + y) * HALF_H, race: { face, color: colors[n], n } });
+      const at = this.worldAt(x, y);
+      items.push({ d: d + 0.0008, kind: K_EXTRA, b, wx: at.x, wy: at.y, race: { face, color: colors[n], n } });
     }
   }
 
@@ -1623,8 +1769,9 @@ export class Renderer {
     const t = motion ? this.time : 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     grounds.forEach((g, n) => {
-      const sx = ((g.x - g.y) * HALF_W - cam.x) * k;
-      const sy = ((g.x + g.y + 1) * HALF_H - cam.y) * k;
+      const c = this.worldAt(g.x + 0.5, g.y + 0.5); // the tile's center
+      const sx = (c.x - cam.x) * k;
+      const sy = (c.y - cam.y) * k;
       if (sx < -80 * k || sy < -80 * k || sx > cam.viewW + 80 * k || sy > cam.viewH + 80 * k) return;
       drawGulls(ctx, sx, sy, k, t, n * 2.3 + g.x * 0.1);
     });
@@ -1635,6 +1782,7 @@ export class Renderer {
     const k = cam.scale;
     const b = it.b;
     const t = this.motionOn ? this.time : 0; // reduced motion: everything holds still
+    const T = artTurn(b, this.viewTurn); // the turn its art is drawn at
     if (it.race) {
       const phase = Math.sin(t * 16 + it.race.n * 2);
       drawChariot(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k * 0.9, it.race.face, phase, it.race.color, b.id + it.race.n);
@@ -1650,9 +1798,9 @@ export class Renderer {
       const ox = (it.wx - cam.x) * k;
       const oy = (it.wy - cam.y) * k;
       if (it.live === 'market') drawShoppers(ctx, ox, oy, k, b.size, t, b.id);
-      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5, b.turn || 0);
+      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5, T);
       else if (it.live === 'altar') {
-        const [fx, fy] = altarFlameOffset(b.size, b.turn || 0);
+        const [fx, fy] = altarFlameOffset(b.size, T);
         drawAltarFlame(ctx, ox + fx * k, oy + fy * k, k, t, b.id);
       }
       return;
@@ -1670,11 +1818,11 @@ export class Renderer {
       ctx.save();
       ctx.setTransform(k, 0, 0, k, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k));
       // (Turned with the building: its own walls drawn again over what they hide.)
-      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock, b.turn || 0, this.pal.snow);
+      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock, T, this.pal.snow);
       else {
         let used = 0;
         for (const key in b.stock) used += b.stock[key];
-        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY, b.turn || 0, this.pal.snow);
+        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY, T, this.pal.snow);
       }
       ctx.restore();
     }
@@ -1751,7 +1899,8 @@ export class Renderer {
     const w = this.game.walkers.get(f.id);
     const moved = f.x !== undefined && (Math.abs(cam.x - f.x) > 0.5 || Math.abs(cam.y - f.y) > 0.5);
     if (!w || w.dead || moved) { this.follow = null; return; }
-    const { wx, wy } = walkerWorld(w, alpha);
+    const map = this.game.map;
+    const { wx, wy } = walkerWorld(w, alpha, this.viewTurn, map.w, map.h);
     cam.setCenter(wx, wy - 10);
     f.x = cam.x;
     f.y = cam.y;
@@ -1791,12 +1940,12 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const { b, H } of marks) {
       const S = b.size;
-      const cx = b.x + S / 2;
-      const cy = b.y + S / 2;
-      // The tail's tip just over the roof (H is the art's headroom, flag poles included).
-      const top = H > 0 ? (b.x + b.y) * HALF_H - H * 0.55 : (cx + cy) * HALF_H;
+      const c = this.worldAt(b.x + S / 2, b.y + S / 2);
+      // The tail's tip just over the roof (H is the art's headroom over the
+      // footprint's top corner, flag poles included).
+      const top = H > 0 ? this.footAt(b.x, b.y, S).wy - H * 0.55 : c.y;
       const bob = this.motionOn ? Math.sin(this.time * 3 + b.id) * 1.2 * s : 0;
-      const sx = Math.round(((cx - cy) * HALF_W - cam.x) * k);
+      const sx = Math.round((c.x - cam.x) * k);
       const sy = Math.round((top - cam.y) * k + bob);
       drawNoRoadSign(ctx, sx, sy, s);
       this.noRoadSpots.push({ id: b.id, x: sx, y: sy - (NO_ROAD_SIGN_R + 4) * s, r: NO_ROAD_SIGN_R * s });
@@ -1842,7 +1991,8 @@ export class Renderer {
       for (let y = it.y - radius; y < it.y + S + radius; y++) {
         for (let x = it.x - radius; x < it.x + S + radius; x++) {
           if (!map.inBounds(x, y)) continue;
-          this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, 'rgba(80,160,255,0.16)');
+          const f = this.footAt(x, y);
+          this.fillDiamond(f.wx, f.wy, 'rgba(80,160,255,0.16)');
         }
       }
     }
@@ -1855,18 +2005,19 @@ export class Renderer {
       const o = it.origin || { x: it.x, y: it.y, w: it.size, h: it.size }; // a hippodrome: its row of sections, along x or y
       for (const e of accessEdgeTiles(game, o.x, o.y, o.w, o.h)) {
         if (!e.open) continue;
-        this.fillDiamond((e.x - e.y) * HALF_W, (e.x + e.y) * HALF_H, ROAD_EDGE_FILL);
+        const f = this.footAt(e.x, e.y);
+        this.fillDiamond(f.wx, f.wy, ROAD_EDGE_FILL);
         this.outlineFootprint(e.x, e.y, 1, ROAD_EDGE_LINE, 1.4);
         this.stats.roadEdges++;
       }
     }
-    // Back to front (a hippodrome turned 2 or 3 lists its front section first: its main).
-    for (const it of ghostOrder(plan.items)) {
+    // Back to front as the view sees them (a hippodrome turned 2 or 3 lists its front section first: its main).
+    const vt = this.viewTurn;
+    for (const it of ghostOrder(plan.items, vt, map.w, map.h)) {
       const color = !it.ok ? 'rgba(230,40,40,0.5)' : plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : it.noRoad ? NO_ROAD_FILL : 'rgba(80,220,90,0.38)';
-      const wx = (it.x - it.y) * HALF_W;
-      const wy = (it.x + it.y) * HALF_H;
+      const { wx, wy } = this.footAt(it.x, it.y, it.size || 1);
       if (plan.tool === 'roadblock' && it.ok) {
-        const axis = map.hasRoad(it.x + 1, it.y) || map.hasRoad(it.x - 1, it.y) ? 'u' : 'v';
+        const axis = viewAxis(map.hasRoad(it.x + 1, it.y) || map.hasRoad(it.x - 1, it.y) ? 'u' : 'v', vt);
         this.fillDiamond(wx, wy, color);
         this.ctx.globalAlpha = 0.8;
         this.blit(this.sprites.get(`rbk${axis}`, () => roadblockSpec(axis)), wx, wy);
@@ -1877,14 +2028,16 @@ export class Renderer {
         // (its own key, before the snow suffix that must stay last).
         // `type`, `state`: a hippodrome's other sections, a waterside building's turn.
         const snow = this.pal.snow;
-        // `turn`: as the player turned it (R), the same key as once built.
+        // `turn`: as the player turned it (R), the same key as once built;
+        // drawn, like every building, turned with the view too.
         const type = it.type || plan.tool;
         const st = it.state || 0;
         const turn = it.turn || 0;
-        const tk = turnKey(turn);
+        const T = (turn + vt) & 3;
+        const tk = turnKey(T);
         const spr = it.noRoad
-          ? this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow, false, turn), NO_ROAD_TINT))
-          : this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow, false, turn));
+          ? this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow, false, T), NO_ROAD_TINT))
+          : this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow, false, T));
         this.stats.ghostTurn = turn;
         this.fillDiamond(wx, wy, color, it.size);
         this.ctx.globalAlpha = 0.72;

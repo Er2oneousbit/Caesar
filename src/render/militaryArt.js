@@ -135,11 +135,14 @@ const BARB_HAIR = ['#c9a14a', '#a0522d', '#7a5a3a', '#d8c07a'];
  * @param {number} t     animation time (s)
  * @param {number} tick  current sim tick (for strike/hit flashes)
  * @param {boolean} [highlight] draw a selection ring (units of the selected fort)
+ * @param {number} [facing] which way it looks on the screen (1 right, -1 left):
+ *   the sim's `u.facing` is for the unturned view, the renderer passes the
+ *   turned view's own (Renderer.unitFace)
  */
-export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride = u.walked || 0) {
+export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride = u.walked || 0, facing = u.facing) {
   const def = UNIT_TYPES[u.type];
-  if (def.naval) { drawWarship(ctx, u, sx, sy, k, t, tick, highlight, stride); return; }
-  const face = u.facing < 0 ? -1 : 1;
+  if (def.naval) { drawWarship(ctx, u, sx, sy, k, t, tick, highlight, stride, facing); return; }
+  const face = facing < 0 ? -1 : 1;
   // Legs step with the distance marched (still when halted or paused, quicker when running).
   const phase = u.moving ? Math.sin(stride * (def.mounted ? HOOF_RAD : STEP_RAD) + u.id) : 0;
   const striking = tick - u.strikeTick < 8;
@@ -363,13 +366,16 @@ function drawHealth(ctx, u, sx, y, k, tick) {
 // Projectiles & flags
 // ---------------------------------------------------------------------------
 
-/** An arrow (short shaft pointing along its flight) or a sling stone. */
-export function drawProjectile(ctx, p, sx, sy, k) {
+/**
+ * An arrow (short shaft pointing along its flight) or a sling stone. (vx, vy):
+ * its velocity in view tiles (the map's own unless the view is turned).
+ */
+export function drawProjectile(ctx, p, sx, sy, k, vx = p.vx || 0, vy = p.vy || 0) {
   if (p.kind === 'firepot') {
     // a clay pot trailing flame
     ctx.fillStyle = 'rgba(255,150,40,0.75)';
     ctx.beginPath();
-    ctx.ellipse(sx - (p.vx - p.vy || 0) * 6 * k, sy - 1.5 * k, 1.4 * k, 2.4 * k, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx - (vx - vy) * 6 * k, sy - 1.5 * k, 1.4 * k, 2.4 * k, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#5a3c22';
     ctx.beginPath();
@@ -385,8 +391,8 @@ export function drawProjectile(ctx, p, sx, sy, k) {
     return;
   }
   // screen direction of travel
-  const dx = (p.vx || 0) - (p.vy || 0);
-  const dy = ((p.vx || 0) + (p.vy || 0)) * 0.5;
+  const dx = vx - vy;
+  const dy = (vx + vy) * 0.5;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;

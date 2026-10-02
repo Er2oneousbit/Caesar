@@ -1,7 +1,8 @@
 /**
  * water.test.mjs - fish (a fifth food), shipyards, wharves and fishing boats
- * (sim/fishing.js, world/map.js computeFishing), with the four guards that
- * keep a city without fish exactly as it was.
+ * (sim/fishing.js, world/map.js computeFishing), the timber a boat takes
+ * (Colonia's own rule), with the four guards that keep a city without fish
+ * exactly as it was.
  */
 
 import test from 'node:test';
@@ -17,6 +18,10 @@ import { checkBuilding } from '../src/sim/construction.js';
 import { removeBuilding, Building, perimeterTiles } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { updateShipyard, updateWharf, wharfBoat, spareBoat, sinkFishingBoats, waterBeside } from '../src/sim/fishing.js';
+import { receiveGoods, deliveryRoom, findDeliveryTarget, rawHasRoom } from '../src/sim/storage.js';
+import { updateWarehouseSupply } from '../src/sim/production.js';
+import { buildingStatus } from '../src/ui/infoPanel.js';
+import { productionReport } from '../src/ui/production.js';
 import { updateMarketBuyer } from '../src/sim/market.js';
 import { updateEmperor } from '../src/sim/emperor.js';
 import { missionCapacity, bestEntertainment, unlockedBuildings } from '../src/sim/capacity.js';
@@ -72,7 +77,12 @@ function runFishingDays(game, n) {
   }
 }
 
-function fishingSetup(opts) {
+/**
+ * A staffed shipyard and wharf on the coast. The yard starts with `timber`
+ * (four boats by default, as the demo fishery's), so the tests of boats and
+ * catches are not about wood; the timber tests pass 0.
+ */
+function fishingSetup({ timber = 4 * CONFIG.SHIPYARD_BOAT_TIMBER, ...opts } = {}) {
   const game = coastGame(opts);
   const spots = shoreSpots(game);
   const yard = placeOnShore(game, 'shipyard', spots);
@@ -80,6 +90,7 @@ function fishingSetup(opts) {
   assert.ok(yard && wharf, 'a shipyard and a wharf on the coast');
   yard.efficiency = 1;
   wharf.efficiency = 1;
+  yard.stock.timber = timber;
   return { game, yard, wharf, spots };
 }
 
@@ -330,6 +341,207 @@ test('Insane winter: the fields rest but the boats still fish', () => {
   game.time.month = 0; // Ianuarius: winter
   runFishingDays(game, 60);
   assert.ok((wharf.catches || 0) > 0, 'catches landed in winter');
+});
+
+// ---------------------------------------------------------------------------
+// Timber for the boats (Colonia's own rule: the original's boats cost nothing)
+// ---------------------------------------------------------------------------
+
+const BOAT_TIMBER = CONFIG.SHIPYARD_BOAT_TIMBER;
+
+test('timber: a boat takes 100, used at launch and logged as used; the yard holds up to 200', () => {
+  assert.equal(BOAT_TIMBER, 100);
+  assert.equal(BUILDINGS.shipyard.inputCap, 2 * BOAT_TIMBER, 'two boats');
+  assert.deepEqual(BUILDINGS.shipyard.inputs, ['timber']);
+  const { game, yard } = fishingSetup({ timber: BOAT_TIMBER });
+  assert.deepEqual(yard.incoming, { timber: 0 });
+  runFishingDays(game, CONFIG.SHIPYARD_BOAT_DAYS - 1);
+  assert.equal(yard.stock.timber, BOAT_TIMBER, 'nothing used while the boat is on the slip');
+  runFishingDays(game, 1);
+  assert.equal(yard.boatsBuilt, 1, 'day 16, as before');
+  assert.equal(yard.stock.timber, 0, 'the lot went into the boat');
+  assert.equal(game.city.goodsFlow.timber.used, BOAT_TIMBER, 'the Production advisor counts it as used');
+  // The cap: a delivery fills it to 200 and no further.
+  assert.equal(receiveGoods(yard, 'timber', 300), 2 * BOAT_TIMBER);
+  assert.equal(yard.stock.timber, 2 * BOAT_TIMBER);
+  assert.equal(receiveGoods(yard, 'timber', 100), 0, 'full');
+  assert.equal(deliveryRoom(yard, 'timber'), 0);
+  assert.equal(receiveGoods(yard, 'iron', 100), 0, 'timber only');
+});
+
+test('timber: with none the yard adds no progress; work waits for a whole boat\'s lot and is never lost', () => {
+  const { game, yard, wharf } = fishingSetup({ timber: 0 });
+  runFishingDays(game, 30);
+  assert.equal(yard.progress, 0, 'no timber, no work');
+  assert.equal(yard.boatsBuilt || 0, 0);
+  yard.stock.timber = BOAT_TIMBER - 1;
+  runFishingDays(game, 10);
+  assert.equal(yard.progress, 0, 'less than a boat\'s lot is not enough');
+  yard.stock.timber = BOAT_TIMBER;
+  runFishingDays(game, 8);
+  const half = yard.progress;
+  assert.ok(half > 45 && half < 55, `half a boat in 8 days (${half})`);
+  // The lot cannot leave the yard in play; if it did, the work would wait, not vanish.
+  yard.stock.timber = 0;
+  runFishingDays(game, 10);
+  assert.equal(yard.progress, half, 'progress kept');
+  yard.stock.timber = BOAT_TIMBER;
+  runFishingDays(game, 9);
+  assert.ok(wharfBoat(game, wharf), 'finished and sent on once the timber is back');
+});
+
+test('timber: two boats from 200 when two wharves want them; then the spare waits for timber', () => {
+  const { game, yard, wharf, spots } = fishingSetup({ timber: 2 * BOAT_TIMBER });
+  const w2 = placeOnShore(game, 'wharf', spots);
+  w2.efficiency = 1;
+  runFishingDays(game, 2 * CONFIG.SHIPYARD_BOAT_DAYS + 3);
+  assert.ok(wharfBoat(game, wharf) && wharfBoat(game, w2), 'both wharves have a boat');
+  assert.equal(yard.stock.timber, 0);
+  runFishingDays(game, 40);
+  assert.equal(spareBoat(game, yard), null, 'no spare without timber');
+  assert.equal(yard.progress, 0);
+  assert.equal(yard.boatsBuilt, 2);
+});
+
+test('timber: the walker cap keeps both the finished boat\'s progress and its timber', () => {
+  const { game, yard } = fishingSetup({ timber: BOAT_TIMBER });
+  yard.progress = 99.99;
+  const fakes = [];
+  for (let k = 0; game.walkers.size < CONFIG.MAX_WALKERS; k++) { const id = 1e9 + k; fakes.push(id); game.walkers.set(id, { id, dead: false }); }
+  updateShipyard(game, yard);
+  assert.ok(yard.progress >= 100, 'finished');
+  assert.equal(spareBoat(game, yard), null, 'no room on the water for it yet');
+  assert.equal(yard.stock.timber, BOAT_TIMBER, 'its timber still in the yard');
+  for (const id of fakes) game.walkers.delete(id);
+  updateShipyard(game, yard);
+  assert.ok(spareBoat(game, yard), 'launched once there is room');
+  assert.equal(yard.stock.timber, 0);
+});
+
+test('timber: Neptune\'s boats are replaced only as timber comes in', () => {
+  const { game, yard, wharf } = fishingSetup({ timber: BOAT_TIMBER });
+  runFishingDays(game, CONFIG.SHIPYARD_BOAT_DAYS + 2);
+  assert.ok(wharfBoat(game, wharf));
+  assert.equal(sinkFishingBoats(game), 1);
+  runFishingDays(game, CONFIG.SHIPYARD_BOAT_DAYS * 2);
+  assert.equal(wharfBoat(game, wharf), null, 'no timber, no new boat');
+  yard.stock.timber = BOAT_TIMBER;
+  runFishingDays(game, CONFIG.SHIPYARD_BOAT_DAYS + 2);
+  assert.ok(wharfBoat(game, wharf), 'a new boat from the new lot');
+});
+
+/** A warehouse joined by road to the shipyard (its road tile), nearest first. */
+function warehouseBy(game, yard) {
+  const { map } = game;
+  const spots = [];
+  for (let y = 2; y < map.h - 5; y++) for (let x = 2; x < map.w - 5; x++) {
+    const d = Math.hypot(x - yard.x, y - yard.y);
+    if (d >= 4 && d < 16) spots.push({ x, y, d });
+  }
+  spots.sort((a, b) => a.d - b.d);
+  const rx = map.xOf(yard.accessRoad);
+  const ry = map.yOf(yard.accessRoad);
+  for (const s of spots) {
+    if (!checkBuilding(game, 'warehouse', s.x, s.y).ok || !build(game, 'warehouse', s.x, s.y).ok) continue;
+    const wh = game.buildings.get(map.building[map.idx(s.x, s.y)]);
+    for (const i of perimeterTiles(map, wh.x, wh.y, wh.size)) {
+      if (map.road[i] || !map.isFree(map.xOf(i), map.yOf(i))) continue;
+      if (build(game, 'road', map.xOf(i), map.yOf(i), rx, ry).ok) break;
+    }
+    game.processRoadChanges();
+    if (wh.accessRoad >= 0 && game.pf.findNearest(wh.accessRoad, (id) => id === yard.id, 100, wh.id)) return wh;
+    removeBuilding(game, wh, 'undo');
+  }
+  return null;
+}
+
+test('timber: carts bring it like a workshop\'s raw material, nearest first, up to 200 counting loads on their way', () => {
+  const { game, yard } = fishingSetup({ timber: 0 });
+  const wh = warehouseBy(game, yard);
+  assert.ok(wh, 'a warehouse joined to the yard by road');
+  wh.efficiency = 1;
+  // A producer's cart (a timber yard's, a dock wagon) finds the shipyard before storage.
+  const t = findDeliveryTarget(game, wh.accessRoad, 'timber', BOAT_TIMBER, wh.id);
+  assert.equal(t && t.id, yard.id, 'timber goes to the shipyard first');
+  // And a warehouse holding timber sends it, one cart a day, until the yard has 200 counting carts on the way.
+  wh.stock.timber = 1000;
+  let sent = 0;
+  for (let d = 0; d < 40; d++) {
+    const before = wh.stock.timber;
+    updateWarehouseSupply(game, wh);
+    sent += before - wh.stock.timber;
+    assert.ok(yard.stock.timber + yard.incoming.timber <= 2 * BOAT_TIMBER, 'never more than 200 held and coming');
+    for (let k = 0; k < TPD; k++) updateWalkers(game);
+  }
+  assert.equal(sent, 2 * BOAT_TIMBER, 'two cart loads');
+  assert.equal(yard.stock.timber, 2 * BOAT_TIMBER, 'delivered');
+  assert.equal(yard.incoming.timber, 0);
+  const t2 = findDeliveryTarget(game, wh.accessRoad, 'timber', BOAT_TIMBER, 0);
+  assert.notEqual(t2 && t2.id, yard.id, 'a full yard takes no more');
+  // The same tier as the workshops: a carpenter with room counts too.
+  const carpenter = new Building(9999, 'furniture_ws', 0, 0);
+  assert.equal(rawHasRoom(carpenter, 'timber', BOAT_TIMBER), true);
+  yard.stock.timber = BOAT_TIMBER;
+  assert.equal(rawHasRoom(yard, 'timber', BOAT_TIMBER), true);
+  assert.equal(rawHasRoom(yard, 'clay', BOAT_TIMBER), false);
+});
+
+test('timber: the panel and the Production advisor say what the yard lacks, and where to get it', () => {
+  const { game, yard, wharf } = fishingSetup({ timber: 0 });
+  yard.laborAccess = wharf.laborAccess = 1000; // workers found (labor is not what this is about)
+  // A wharf waits for a boat: a warning, with the mission's sources.
+  assert.deepEqual(buildingStatus(game, yard), { level: 'warn', text: 'Needs timber: build a Silva Caedua (Timber Yard) or buy timber.' });
+  assert.equal(buildingStatus(game, wharf).text, 'Waiting for a boat: the shipyard has no timber. Build a Silva Caedua (Timber Yard) or buy timber.');
+  game.city.goodsFlowLast = {};
+  const report = productionReport(game);
+  assert.ok(report.troubles.some((t) => t.name === 'Fabrica Navalis' && /^Needs timber/.test(t.text)), 'listed under troubles');
+  assert.ok(report.hints.includes('A Fabrica Navalis is waiting for timber: build more Silvae Caeduae, or import from Tarraco.'), report.hints.join(' | '));
+  // Timber on its way: nothing to ask for.
+  yard.incoming.timber = BOAT_TIMBER;
+  assert.doesNotMatch(buildingStatus(game, yard).text, /timber/);
+  yard.incoming.timber = 0;
+  // No partner sells timber (Paestum, Portus Mercatorum): fell it.
+  game.scenario = { ...game.scenario, partners: ['massilia', 'corinthus'] };
+  assert.equal(buildingStatus(game, yard).text, 'Needs timber: build a Silva Caedua (Timber Yard).');
+  assert.ok(productionReport(game).hints.includes('A Fabrica Navalis is waiting for timber: build more Silvae Caeduae.'));
+  // Every wharf has its boat: only the spare waits, said plainly, not as a trouble.
+  yard.stock.timber = BOAT_TIMBER;
+  runFishingDays(game, CONFIG.SHIPYARD_BOAT_DAYS + 2);
+  assert.ok(wharfBoat(game, wharf));
+  const s = buildingStatus(game, yard);
+  assert.equal(s.level, '');
+  assert.match(s.text, /^Needs timber for a spare boat \(every wharf on this water has one\)/);
+  assert.ok(!productionReport(game).troubles.some((t) => t.name === 'Fabrica Navalis'));
+  // A yard built before any wharf says so, rather than that every wharf has a boat.
+  removeBuilding(game, wharf, 'demolish');
+  assert.match(buildingStatus(game, yard).text, /^Needs timber for a spare boat \(no wharf on this water yet\)/);
+  // A shipyard placed with no timber in sight warns; with a boat's worth in a yard already it does not.
+  const spot = shoreSpots(game).find((p) => checkBuilding(game, 'shipyard', p.x, p.y).ok);
+  assert.ok(checkBuilding(game, 'shipyard', spot.x, spot.y).warnings.some((w) => /^Shipyards need timber/.test(w)));
+  yard.stock.timber = BOAT_TIMBER;
+  assert.ok(!checkBuilding(game, 'shipyard', spot.x, spot.y).warnings.some((w) => /^Shipyards need timber/.test(w)));
+});
+
+test('timber: a save from before it (version 15) gives a yard with a boat started its 100 timber, the others none', () => {
+  const { game, yard } = fishingSetup({ timber: 0 });
+  const idle = placeOnShore(game, 'shipyard', shoreSpots(game));
+  assert.ok(idle);
+  yard.progress = 60;
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  data.version = 15;
+  for (const b of data.buildings) if (b.type === 'shipyard') { b.stock = null; b.incoming = null; }
+  const again = deserializeGame(data);
+  const y2 = again.buildings.get(yard.id);
+  const i2 = again.buildings.get(idle.id);
+  assert.deepEqual([y2.stock, y2.incoming], [{ timber: BOAT_TIMBER }, { timber: 0 }], 'the boat on the slip keeps its wood');
+  assert.deepEqual([i2.stock, i2.incoming], [{ timber: 0 }, { timber: 0 }]);
+  y2.efficiency = 1;
+  runFishingDays(again, 6);
+  assert.equal(y2.boatsBuilt || 0, 0);
+  runFishingDays(again, 1);
+  assert.equal(y2.boatsBuilt, 1, 'launched on schedule (40% left: 6.4 days)');
+  assert.equal(y2.stock.timber, 0);
+  assert.equal(serializeGame(again).version, CONFIG.SAVE_VERSION);
 });
 
 // ---------------------------------------------------------------------------

@@ -733,7 +733,8 @@ export function updateCriminals(game) {
     let dmg = 0;
     let bySoldier = false;
     for (const p of prefects) {
-      if (onFireDuty(p) || Math.max(Math.abs(p.x - c.x), Math.abs(p.y - c.y)) > 1) continue;
+      // (One fighting a raider has his hands full: sim/prefectFight.js.)
+      if (onFireDuty(p) || p.fight || Math.max(Math.abs(p.x - c.x), Math.abs(p.y - c.y)) > 1) continue;
       dmg += CONFIG.CATCH_PREFECT;
       p.held = 1; // stands still while the struggle lasts
     }

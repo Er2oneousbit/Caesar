@@ -27,6 +27,7 @@ import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, emp
 import { generateMap } from '../src/world/mapgen.js';
 import { updateImmigration, immigrationPerDay } from '../src/sim/population.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
+import { checkBuilding } from '../src/sim/construction.js';
 import { newGame } from './helpers.mjs';
 
 log.setLevel('error');
@@ -64,17 +65,19 @@ test('each mission keeps to its planned pace, and the missions get longer step b
     assert.ok(Math.abs(floor - s.paceYears) <= s.paceYears * 0.05, `${s.id}: the goals take ${floor.toFixed(2)} years at the fastest, planned ${s.paceYears}`);
   }
   // By step: a mission is no shorter than the SHORTEST mission of the step
-  // before. Not the longest: the old missions 3 to 5 ask for more people
-  // than their jobs allow, so they run long, and a sibling that fits its
-  // jobs cannot match them (Paestum 3.75 years against Figlina's 3.6 and
-  // Pons Aelius's 5.7).
+  // before. Not the longest: siblings differ (a peaceful province asks for
+  // more culture and peace, which take longer, a military one for fewer
+  // people).
   for (let n = 2; n <= LAST_STEP; n++) {
     const before = Math.min(...missionsAtStep(n - 1).map((s) => s.paceYears));
     for (const s of missionsAtStep(n)) assert.ok(s.paceYears >= before, `${s.id} (${s.paceYears} years) is no shorter than the shortest mission of step ${n - 1} (${before})`);
   }
-  // The first mission a year or more (it took months), the last well over ten.
+  // The first mission a year or more (it took months), the last the longest
+  // of all. (It ran over ten years while its goal of 12,000 people outran
+  // its jobs; fitted to them it asks for 5,800 and about seven years.)
   assert.ok(SCENARIOS[0].paceYears >= 1, rows.join('; '));
-  assert.ok(SCENARIOS[SCENARIOS.length - 1].paceYears >= 12, rows.join('; '));
+  const last = SCENARIOS[SCENARIOS.length - 1];
+  for (const s of SCENARIOS) if (s !== last) assert.ok(last.paceYears > s.paceYears, `${last.id} is the longest (${s.id}: ${s.paceYears}); ${rows.join('; ')}`);
 });
 
 test('each mission\'s goals are within reach of its buildings', () => {
@@ -106,7 +109,7 @@ test('each mission\'s goals are within reach of its buildings', () => {
  * fits; a new mission must never be added to it (LEGACY_OVER holds the list
  * to the missions that were over when the rule came in).
  */
-const KNOWN_OVER = ['c3', 'c4', 'c5', 'c6', 'c7'];
+const KNOWN_OVER = [];
 const LEGACY_OVER = Object.freeze(['c3', 'c4', 'c5', 'c6', 'c7']);
 
 test('each mission\'s population goal fits the jobs its buildings give, and its map', () => {
@@ -224,4 +227,23 @@ test('the first mission is not won in its first year', () => {
   game.runDays(12 * CONFIG.DAYS_PER_MONTH);
   assert.ok(game.city.population > 400, `the town grew (${game.city.population} people)`);
   assert.equal(won, null, 'no victory in the first year');
+});
+
+test('every mission with a shipyard can get timber for its boats: woods for a timber yard, and shore for the yard', () => {
+  // Fishing boats take timber (Colonia's own rule, sim/fishing.js), so a
+  // mission that unlocks the shipyard must let the player fell it. Paestum
+  // (c4p) and Portus Mercatorum (c5) have no partner selling timber: there it
+  // must be felled, so every such map needs woods for a timber yard.
+  const missions = SCENARIOS.filter((s) => unlockedBuildings(s).has('shipyard'));
+  assert.ok(missions.length >= 5, missions.map((s) => s.id).join(' '));
+  for (const s of missions) {
+    assert.ok(unlockedBuildings(s).has('timber_yard'), `${s.id}: the timber yard comes with the shipyard`);
+    const game = new Game({ scenario: s, flags: {} });
+    const anySite = (type) => {
+      for (let y = 0; y < game.map.h - 1; y++) for (let x = 0; x < game.map.w - 1; x++) if (checkBuilding(game, type, x, y).ok) return true;
+      return false;
+    };
+    assert.ok(anySite('shipyard'), `${s.id}: shore for a shipyard`);
+    assert.ok(anySite('timber_yard'), `${s.id}: woods for a timber yard`);
+  }
 });

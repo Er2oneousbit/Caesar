@@ -1248,17 +1248,24 @@ export class Renderer {
     }
   }
 
-  /** The ship (warship or raider ship) drawn under a screen point, or 0. */
-  pickShip(sx, sy) {
+  /**
+   * The ship (warship or raider ship) drawn under a screen point, or 0.
+   * `hull`: only its hull, by the waterline (app.clickTile lets a click
+   * there win over a building on that tile: a raider ship off the shore
+   * sits over the buildings it attacks, and could not be clicked).
+   */
+  pickShip(sx, sy, hull = false) {
     const cam = this.camera;
     const p = cam.screenToWorld(sx, sy);
     const css = cam.dpr / cam.scale; // world px per CSS px
+    const hw = hull ? Math.max(16, 9 * css) : Math.max(24, 12 * css);
+    const top = hull ? Math.max(14, 8 * css) : Math.max(44, 20 * css);
     let best = 0;
     let bestD = Infinity;
     for (const s of this.shipSpots) {
       const dx = p.x - s.wx;
       const dy = p.y - s.wy;
-      if (Math.abs(dx) > Math.max(24, 12 * css) || dy < -Math.max(44, 20 * css) || dy > Math.max(6, 4 * css)) continue;
+      if (Math.abs(dx) > hw || dy < -top || dy > Math.max(6, 4 * css)) continue;
       const d = Math.hypot(dx, dy + 18);
       if (d < bestD) { bestD = d; best = s.id; }
     }

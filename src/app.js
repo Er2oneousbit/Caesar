@@ -697,7 +697,7 @@ export class App {
     // A ship of war under the click (a liburnian or a raider ship) shows its
     // panel; a click on a building's tile is the building's (ships berth
     // beside docks and stations, and their masts rise over them).
-    const ship = screen && !g.map.buildingAt(x, y) ? r.pickShip(screen.x, screen.y) : 0;
+    const ship = screen ? r.pickShip(screen.x, screen.y, true) || (!g.map.buildingAt(x, y) ? r.pickShip(screen.x, screen.y) : 0) : 0;
     if (ship && g.units.has(ship)) { this.ui.info.showUnit(ship); return; }
     // A soldier, raider or imperial legionary under the click (picked when
     // the button went down, as walkers are: they move on by the release).

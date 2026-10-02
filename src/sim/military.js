@@ -51,6 +51,7 @@ import { seaRaidPlan, seaLandingNow, launchSeaInvasion, updateNavy, potHit, flee
 import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training.js';
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
 import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICKS } from './battle.js';
+import { fightPrefect } from './prefectFight.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -115,7 +116,7 @@ export function newMilitaryState(scenario, time, flags = {}) {
     // raid comes by land, exactly as before. The flag searaids=on (Settings'
     // choice for a new mission) wins over the scenario.
     seaRaids: flags.searaids === 'off' ? false : flags.searaids === 'on' ? true : scenario.seaRaids !== false,
-    stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
+    stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, prefectsLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
     caesar: newCaesarState(), // Caesar's legions (sim/legion.js)
     battle: null, // a distant battle Caesar asked troops for (sim/battle.js)
     battles: { won: 0, lost: 0, lastEndMonth: -999 },
@@ -292,6 +293,51 @@ function moveToward(game, u, tx, ty, speed) {
   }
   if (u.moving) u.walked = (u.walked + step) % STRIDE_WRAP;
   return false;
+}
+
+/**
+ * Is the straight line from the unit to (x, y) walkable for it, tile by tile
+ * (no water but bridges, no rock, building or wall; a gate only for Rome)?
+ */
+export function straightClear(game, u, x, y) {
+  const map = game.map;
+  const d = Math.hypot(x - u.x, y - u.y);
+  const n = Math.ceil(d / 0.4);
+  for (let k = 1; k <= n; k++) {
+    const tx = Math.floor(u.x + ((x - u.x) * k) / n);
+    const ty = Math.floor(u.y + ((y - u.y) * k) / n);
+    if (!map.inBounds(tx, ty)) return false;
+    if (tx === Math.floor(u.x) && ty === Math.floor(u.y)) continue;
+    if (!passable(game, u.side, map.idx(tx, ty))) return false;
+  }
+  return true;
+}
+
+/**
+ * One tick toward an enemy: straight at him when the way is open, else along
+ * an A* route (over a bridge, through a gate), planned at once and again when
+ * he has moved off from where it ends or the unit picks another enemy.
+ * Before, a soldier walked straight at a raider across a river and planned a
+ * route only after a day stuck on the bank (playtest).
+ */
+function approach(game, u, target, speed) {
+  const map = game.map;
+  // A route is kept while it still ends near the enemy (soldiers switch
+  // enemies every few ticks to spread out: a fresh route each time walked
+  // them back to their own tile's middle, and they stood jittering).
+  if (u.path && u.pathFor) {
+    const end = u.path[u.path.length - 1];
+    if (Math.hypot(map.xOf(end) + 0.5 - target.x, map.yOf(end) + 0.5 - target.y) > 3) u.path = null;
+    else u.pathFor = target.id;
+  }
+  if (!u.path && !u.noPath && !straightClear(game, u, target.x, target.y)) {
+    replan(game, u, target.x, target.y);
+    u.pathFor = target.id;
+    // From the next tile on: the route's first tile is the one he stands on.
+    if (u.path && u.path.length > 1) u.pathIndex = 1;
+  }
+  if (u.path) { followUnitPath(game, u, speed); return; }
+  moveToward(game, u, target.x, target.y, speed);
 }
 
 /** Plan an A* route for a unit to a tile (used when steering gets stuck or for long marches). */
@@ -889,8 +935,7 @@ function updateRoman(game, u, enemies) {
       if (u.cooldown <= 0) attackUnit(game, u, def, target);
       return;
     }
-    if (u.path) { followUnitPath(game, u, def.speed); return; }
-    moveToward(game, u, target.x, target.y, def.speed);
+    approach(game, u, target, def.speed);
     if (u.stuck > 20) {
       replan(game, u, target.x, target.y);
       if (!u.path) {
@@ -908,8 +953,9 @@ function updateRoman(game, u, enemies) {
   // Close enough, or as close as the terrain allows (post slot blocked).
   if (d < 0.15 || (d < 1.2 && u.stuck > 10)) { u.state = 'idle'; u.moving = false; u.path = null; u.stuck = 0; return; }
   u.state = 'march';
+  if (u.pathFor) { u.path = null; u.pathFor = 0; } // a route toward an enemy who is gone
   if (u.path) { followUnitPath(game, u, def.speed); return; }
-  if (d > 5 && u.stuck === 0 && !u.noPath) {
+  if ((d > 5 || !straightClear(game, u, post.x, post.y)) && u.stuck === 0 && !u.noPath) {
     replan(game, u, post.x, post.y);
     if (u.path) return;
   }
@@ -941,7 +987,7 @@ export function marchTo(game, u, tx, ty, speed) {
   if (u.noPath > 0) u.noPath--;
   const d = Math.hypot(tx - u.x, ty - u.y);
   if (u.path) { followUnitPath(game, u, speed); return d; }
-  if (d > 5 && u.stuck === 0 && !u.noPath) {
+  if ((d > 5 || !straightClear(game, u, tx, ty)) && u.stuck === 0 && !u.noPath) {
     replan(game, u, tx, ty);
     if (u.path) return d;
   }
@@ -987,6 +1033,8 @@ function updateRaider(game, u, romans) {
     moveToward(game, u, target.x, target.y, def.speed);
     return;
   }
+  // A prefect fighting him: he turns on him (sim/prefectFight.js).
+  if (fightPrefect(game, u, def)) return;
   // Otherwise head for the nearest building via the flow field.
   const tx = Math.floor(u.x);
   const ty = Math.floor(u.y);

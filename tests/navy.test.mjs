@@ -536,3 +536,47 @@ test('review: a navalia takes no materials for stations on other water', () => {
     game.map.navBody[slip] = orig;
   }
 });
+
+test('sea combat: a liburnian rowing out to its deployment point fights a raider ship it meets on the way', () => {
+  // Playtest: liburnians sailed right past a raider ship, far from their
+  // station and from where they were sent.
+  const { game, station } = fleetCity();
+  const inv = { id: 9, origin: { x: 0, y: 0 }, size: 3, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false, reached: false, sea: true, landed: false };
+  game.military.active = inv;
+  const berth = shoreBerth(game, station);
+  const lib = spawnUnit(game, 'liburnian', game.map.xOf(berth) + 0.5, game.map.yOf(berth) + 0.5, { station: station.id, slot: 0, state: 'berthed' });
+  // Sent far out; a raider ship waits off its course, far from both the
+  // station and the deployment point, but close to the liburnian on its way.
+  const far = seaTileNear(game, station.x, station.y, 26);
+  assert.ok(deployStation(game, station.id, far.x, far.y));
+  let met = null;
+  for (let t = 0; t < 3000 && !met; t++) {
+    updateMilitary(game);
+    const midway = Math.hypot(lib.x - station.x, lib.y - station.y) > 12;
+    if (midway) {
+      const w = seaTileNear(game, Math.floor(lib.x), Math.floor(lib.y), 5);
+      met = spawnUnit(game, 'raider_ship', w.x + 0.5, w.y + 0.5, { invasion: 9, state: 'offshore', crew: ['raider'], pots: 0 });
+    }
+  }
+  assert.ok(met, 'it got under way');
+  assert.ok(Math.hypot(met.x - station.rally.x, met.y - station.rally.y) > CONFIG.STATION_GUARD_DEPLOYED + CONFIG.STATION_CHASE || Math.hypot(met.x - station.x, met.y - station.y) > CONFIG.STATION_GUARD + CONFIG.STATION_CHASE, 'the raider ship is outside both guard areas');
+  let engaged = false;
+  for (let t = 0; t < 400 && game.units.has(met.id); t++) { updateMilitary(game); if (lib.target === met.id) engaged = true; }
+  assert.ok(engaged, 'it turned to fight');
+});
+
+test('a click on a raider ship\'s hull picks it, even with a building on that tile', async () => {
+  const { Renderer } = await import('../src/render/renderer.js');
+  const { Camera } = await import('../src/render/camera.js');
+  const cam = new Camera();
+  cam.setMapBounds(64, 64);
+  cam.resize(800, 600, 1);
+  cam.centerOnTile(32, 32);
+  const at = { wx: 0, wy: 64 * 16 };
+  const r = { camera: cam, shipSpots: [{ id: 4, ...at }] };
+  const s = cam.toScreen(at.wx + 3, at.wy - 6);
+  assert.equal(Renderer.prototype.pickShip.call(r, s.x / cam.dpr, s.y / cam.dpr, true), 4, 'the hull');
+  const mast = cam.toScreen(at.wx, at.wy - 36);
+  assert.equal(Renderer.prototype.pickShip.call(r, mast.x / cam.dpr, mast.y / cam.dpr, true), 0, 'the mast top is not the hull');
+  assert.equal(Renderer.prototype.pickShip.call(r, mast.x / cam.dpr, mast.y / cam.dpr), 4, 'but is the ship on open water');
+});

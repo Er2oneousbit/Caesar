@@ -2,7 +2,7 @@
  * goodsLedger.js
  * ----------------------------------------------------------------------------
  * The city's goods book: for each good, how much was made, used (eaten,
- * worked up in a workshop, used by homes, spent on recruits, sent to the
+ * worked up in a workshop, built into a boat or ship, used by homes, spent on recruits, sent to the
  * Emperor), imported and exported this month. At the turn of the month it
  * becomes last month's (city.goodsFlowLast), which the Production advisor
  * shows. Bookkeeping only: nothing in the simulation reads it.

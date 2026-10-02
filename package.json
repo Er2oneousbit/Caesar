@@ -1,6 +1,6 @@
 {
   "name": "colonia",
-  "version": "0.16.0",
+  "version": "0.16.2",
   "description": "Colonia: an original, open-source browser city builder inspired by classic Roman city-building games (Caesar III style): housing, services, trade by land and sea, and a military with walls, forts and cavalry.",
   "type": "module",
   "private": true,

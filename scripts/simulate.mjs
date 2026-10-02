@@ -41,7 +41,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, UPTOWN_GOODS } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
 import { launchLegion, legionCount, soldierCount, isOverrun } from '../src/sim/legion.js';
 import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
@@ -56,6 +56,7 @@ import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
 import { goalStatus } from '../src/sim/ratings.js';
 import { setTradeMode } from '../src/sim/trade.js';
+import { spareBoat, hasBoatTimber } from '../src/sim/fishing.js';
 
 const HELP = `
 Headless balance simulation
@@ -78,7 +79,8 @@ Options:
   --harbor [docks]  after 6 months, a Dock (or this many) and a warehouse by the water, every sea
                     route open; the warehouse gets 300 pottery, furniture and oil a month for
                     export (the demo city makes none). Reports ships' stays and trade a year
-  --fishing <n>     also build a shipyard and n fishing wharves (and a granary by them)
+  --fishing <n>     also build a shipyard and n fishing wharves (and a granary by them); the
+                    shipyard starts with 400 timber (the demo city fells none)
   --venues          also build an amphitheater, a colosseum, a gladiator school and a menagerie
   --hippodrome      also build a hippodrome and a chariot maker
   --uptown          lift the homes toward the Insula: plazas, statues, a library, baths, the big
@@ -291,9 +293,22 @@ function harborTick() {
 // against enemies ashore once a day, as a player would (commandGarrison in
 // src/dev/demoCity.js). Without enemies it does nothing, so a garrison that
 // is never raided runs exactly as one left alone.
+// --fishing: the days the shipyard stood staffed with no spare and no timber
+// for its next boat (sim/fishing.js), counted at each day's end. Running a
+// day at a time is the same run: game.runDays only counts ticks.
+const yardWait = { days: 0 };
+function fisheryDay() {
+  const yard = fishery.shipyard; // (none where no water has fish: --type plains)
+  if (!yard || !game.buildings.has(yard.id) || yard.efficiency <= 0 || yard.accessRoad < 0) return;
+  if (!spareBoat(game, yard) && !hasBoatTimber(yard)) yardWait.days++;
+}
 function runDays(n) {
-  if (!opts.garrison) { advanceDays(n); return; }
-  for (let d = 0; d < n; d++) { advanceDays(1); commandGarrison(game, res.center); }
+  if (!opts.garrison && !fishery) { advanceDays(n); return; }
+  for (let d = 0; d < n; d++) {
+    advanceDays(1);
+    if (opts.garrison) commandGarrison(game, res.center);
+    if (fishery) fisheryDay();
+  }
 }
 function advanceDays(n) {
   if (!harbor.docks) { game.runDays(n); return; }
@@ -359,7 +374,7 @@ const c = game.city;
 console.log(`\nSimulated ${opts.years} years in ${Date.now() - t0} ms. Fires ${c.stats.fires}, collapses ${c.stats.collapses}, evolutions ${c.stats.evolutions}, devolutions ${c.stats.devolutions}`);
 console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math.floor(c.ratings.prosperity)} peace ${Math.floor(c.ratings.peace)} favor ${Math.floor(c.ratings.favor)}`);
 const ms = game.military.stats;
-console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
+console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}${ms.raids || ms.prefectsLost ? `, prefects lost ${ms.prefectsLost || 0}` : ''}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
 if (ms.seaRaids || opts.navy) console.log(`Sea: raids by sea ${ms.seaRaids || 0}, raider ships sunk ${ms.shipsSunk || 0}, liburnians built ${ms.shipsBuilt || 0}, lost ${ms.shipsLost || 0}, afloat ${[...game.units.values()].filter((u) => u.type === 'liburnian').length}, fishing boats sunk ${ms.boatsSunk || 0}`);
 if (opts.legion) {
   const cs = game.military.caesar;
@@ -414,8 +429,10 @@ if (fishery) {
   const pigYear = Math.round((CONFIG.CART_CAPACITY * CONFIG.DAYS_PER_MONTH * CONFIG.MONTHS_PER_YEAR * game.difficulty.production) / BUILDINGS.farm_pig.productionDays);
   const yard = [...game.buildings.values()].find((b) => b.def.kind === 'shipyard');
   const staff = wharves.map((b) => Math.round(b.efficiency * 100));
-  fishing = { wharves: wharves.length, perYear, staff, boatsBuilt: yard ? yard.boatsBuilt || 0 : 0, fishMade: c.produced.fish || 0, pigFarmYear: pigYear };
-  console.log(`Fishing: ${wharves.length} wharves (staff ${staff.join('%, ')}%), fish a year per wharf ${perYear.join(', ')} (${BUILDINGS.wharf.workers} workers each); a pig farm at full staff and fertility: ${pigYear} a year (${BUILDINGS.farm_pig.workers} workers); boats built ${fishing.boatsBuilt}`);
+  // The timber: read off the yard the demo built, even if it has burned since.
+  const built = fishery.shipyard;
+  fishing = { wharves: wharves.length, perYear, staff, boatsBuilt: yard ? yard.boatsBuilt || 0 : 0, fishMade: c.produced.fish || 0, pigFarmYear: pigYear, timberUsed: built ? (built.boatsBuilt || 0) * CONFIG.SHIPYARD_BOAT_TIMBER : 0, timberLeft: built ? built.stock.timber : 0, yardWaitDays: yardWait.days };
+  console.log(`Fishing: ${wharves.length} wharves (staff ${staff.join('%, ')}%), fish a year per wharf ${perYear.join(', ')} (${BUILDINGS.wharf.workers} workers each); a pig farm at full staff and fertility: ${pigYear} a year (${BUILDINGS.farm_pig.workers} workers); boats built ${fishing.boatsBuilt}${built ? `; timber used ${fishing.timberUsed}, ${fishing.timberLeft} left in the yard (it started with ${DEMO_YARD_TIMBER}); days the yard waited for timber ${yardWait.days}` : ''}`);
 }
 if (opts.uptown || opts.cloth) {
   const last = clothing.months.at(-1) || { top: 0, wanting: 0, dressed: 0 };

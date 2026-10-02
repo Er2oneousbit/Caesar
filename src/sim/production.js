@@ -41,7 +41,7 @@ import { HERD_MAX, HERD_GROWTH_DAYS, STABLE_CAPACITY } from '../data/units.js';
 import { Terrain } from '../world/map.js';
 import { spawnWalker } from './entities.js';
 import { followPath } from './movement.js';
-import { findDeliveryTarget, findDeliveryFit, takeGoods, isStable, stableRoom, stableTakes } from './storage.js';
+import { findDeliveryTarget, findDeliveryFit, takeGoods, rawHasRoom, isStable, stableRoom, stableTakes } from './storage.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
 import { navalNeed, navaliaHasRoom } from './navy.js';
 import { logGoods } from './goodsLedger.js';
@@ -263,7 +263,8 @@ export function updateWorkshop(game, b) {
  *   1. weapons / arrows (and horses from an older save) to a barracks
  *      equipping recruits, then such horses to a ranch with room, then
  *      timber / iron / linen to a navalia building the fleet's next ship
- *   2. raw materials to the nearest workshop running low on them
+ *   2. raw materials to the nearest workshop running low on them, or
+ *      timber to a shipyard short of it (sim/fishing.js)
  */
 export function updateWarehouseSupply(game, b) {
   if (b.efficiency <= 0 || b.accessRoad < 0) return;
@@ -293,11 +294,8 @@ export function updateWarehouseSupply(game, b) {
   }
   for (const raw of RAW_TYPES) {
     if ((b.stock[raw] || 0) < lot) continue;
-    const found = pf.findNearest(b.accessRoad, (id) => {
-      const ws = buildings.get(id);
-      return ws && ws.def.kind === 'workshop' && ws.def.recipe[raw] !== undefined
-        && ws.stock[raw] + ws.incoming[raw] + lot <= CONFIG.WORKSHOP_RAW_CAP;
-    }, 100, b.id);
+    // A workshop that uses it, or a shipyard short of timber (rawHasRoom).
+    const found = pf.findNearest(b.accessRoad, (id) => rawHasRoom(buildings.get(id), raw, lot), 100, b.id);
     if (found && sendSupplyCart(game, b, buildings.get(found.id), raw, found.path)) return;
   }
 }

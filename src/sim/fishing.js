@@ -8,13 +8,18 @@
  *   computeFishing: derived from the terrain, never saved). Shipyards and
  *   wharves stand on its bank, on land, like a dock.
  *
- *   Shipyard: builds one fishing boat at a time from nothing (no timber, no
- *   money): progress grows by staffing x 100 / SHIPYARD_BOAT_DAYS a day (x
- *   the difficulty's production), so a boat takes 16 days at full staff. The
- *   boat is launched on the water beside the yard and waits there as the
- *   yard's spare: each day the yard sends it to the nearest staffed wharf on
- *   the same water (by water route) that has no boat. While its spare waits
- *   the yard builds nothing, so it keeps at most one boat in hand.
+ *   Shipyard: builds one fishing boat at a time from SHIPYARD_BOAT_TIMBER
+ *   (100) timber: progress grows by staffing x 100 / SHIPYARD_BOAT_DAYS a day
+ *   (x the difficulty's production), so a boat takes 16 days at full staff,
+ *   but only while the yard holds the 100 timber; without it progress waits
+ *   where it is. The timber is used when the boat is launched. Carts bring
+ *   timber like a workshop's raw material (sim/storage.js rawRoomCap: a
+ *   timber yard's carts, warehouses, dock wagons, nearest first) and the yard
+ *   holds up to its inputCap (200, two boats). The boat is launched on the
+ *   water beside the yard and waits there as the yard's spare: each day the
+ *   yard sends it to the nearest staffed wharf on the same water (by water
+ *   route) that has no boat. While its spare waits the yard builds nothing,
+ *   so it keeps at most one boat in hand.
  *
  *   Wharf: its boat waits at the mooring (the water beside the wharf) for
  *   (1.02 - staffing) x BOAT_WAIT_DAYS days (0.2 at full staff, never with
@@ -30,8 +35,12 @@
  *   building goes, its boat goes with it (sinks). Neptune's wrath sinks every
  *   boat (sinkFishingBoats); the yards build new ones.
  *
- * Unlike the original: the boat goes to the nearest wharf on its own water,
- * not the first one built anywhere; a yard never loses a finished boat; the
+ * Unlike the original: a boat takes timber (the original's boats cost
+ * nothing: Colonia's own rule, so a fishing fleet, and replacing one sunk by
+ * Neptune or raiders, has a price in wood); the boat goes to the nearest
+ * staffed wharf on its own water, not the first one built anywhere, staffed
+ * or not; a yard never loses a finished boat (the original threw a boat
+ * away when no water tile beside the yard was open on all sides); the
  * nearest ground is the nearest by water, not as the crow flies; a boat that
  * cannot get home vanishes with a message (at most one a month) instead of
  * being stranded; and the boat waits for the catch to be carted only when
@@ -109,13 +118,22 @@ export function updateShipyard(game, b) {
     return; // the yard starts the next boat tomorrow
   }
   if (b.efficiency <= 0 || b.accessRoad < 0 || slip < 0) return;
+  // No timber for the boat on the slip: the work waits, nothing is lost.
+  if (!hasBoatTimber(b)) return;
   if (b.progress < 100) b.progress += (b.efficiency * 100 * game.difficulty.production) / CONFIG.SHIPYARD_BOAT_DAYS;
   if (b.progress < 100) return;
   const w = spawnWalker(game, 'fishing_boat', slip, b, { state: 'spare', body: game.map.fishBody[slip] });
-  if (!w) return; // walker cap: the finished boat waits on the slip (progress kept)
+  if (!w) return; // walker cap: the finished boat waits on the slip (progress and timber kept)
   b.progress = 0;
+  b.stock.timber -= CONFIG.SHIPYARD_BOAT_TIMBER;
+  logGoods(game, 'timber', 'used', CONFIG.SHIPYARD_BOAT_TIMBER);
   b.spareId = w.id;
   b.boatsBuilt = (b.boatsBuilt || 0) + 1;
+}
+
+/** Does the yard hold the timber for the boat on its slip? */
+export function hasBoatTimber(b) {
+  return (b.stock?.timber || 0) >= CONFIG.SHIPYARD_BOAT_TIMBER;
 }
 
 /**
@@ -135,7 +153,7 @@ function wharvesWanting(game, boat) {
   return out;
 }
 
-/** Does any wharf on this shipyard's water still need a boat? (info panel) */
+/** How many wharves on this shipyard's water have no boat? (info panel) */
 export function wharvesWithoutBoat(game, yard) {
   const body = bodyOf(game, yard);
   let n = 0;

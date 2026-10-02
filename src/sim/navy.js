@@ -733,8 +733,10 @@ export function updateNavy(game, fleet, pirates) {
 }
 
 /**
- * A liburnian's choice of raider ship: one near its anchor (within `guard`)
- * or right next to it (within its aggro), never one past guard + chase.
+ * A liburnian's choice of raider ship: one near its anchor (within `guard`),
+ * or one it meets (within its aggro) wherever it is. A ship it met far from
+ * its anchor used to be left alone: liburnians rowing to a deployment point
+ * sailed right past a raider ship (playtest).
  */
 function pickShip(game, pirates, u, def, anchor, guard) {
   let best = null;
@@ -742,7 +744,6 @@ function pickShip(game, pirates, u, def, anchor, guard) {
   for (const e of pirates) {
     if (!game.units.has(e.id)) continue;
     const dA = dist(e, anchor);
-    if (dA > guard + CONFIG.STATION_CHASE) continue;
     const d = dist(e, u);
     if (dA > guard && d > def.aggro) continue;
     if (d < bestD) { bestD = d; best = e; }
@@ -771,7 +772,8 @@ function updateLiburnian(game, u, pirates) {
   const anchor = anchorOf(game, st);
   const guard = st.rally ? CONFIG.STATION_GUARD_DEPLOYED : CONFIG.STATION_GUARD;
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && dist(target, anchor) > guard + CONFIG.STATION_CHASE) target = null;
+  // Chased while near the anchor, or still close to the ship that met it.
+  if (target && dist(target, anchor) > guard + CONFIG.STATION_CHASE && dist(target, u) > def.aggro * 1.6) target = null;
   if (!target || (game.time.totalTicks + u.id) % 6 === 0) target = pickShip(game, pirates, u, def, anchor, guard) || target;
   u.target = target ? target.id : 0;
   if (target) {

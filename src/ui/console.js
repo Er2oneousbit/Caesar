@@ -11,7 +11,7 @@ import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy, buildDemoAcademy, buildDemoPortus } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy, buildDemoAcademy, buildDemoPortus, DEMO_YARD_TIMBER } from '../dev/demoCity.js';
 import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed, isStable, stableRoom } from '../sim/storage.js';
@@ -49,7 +49,7 @@ export const CONSOLE_HELP = [
   ['sick [id | x y]', 'The home under the cursor (or #id, or at x,y; else the one at most risk) falls sick now'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
-  ['fishing', 'Build a shipyard, two fishing wharves and a granary on the nearest water with fish'],
+  ['fishing', 'Build a shipyard (stocked with timber), two fishing wharves and a granary on the nearest water with fish'],
   ['grounds', 'List the fishing grounds, and every wharf and its boat'],
   ['hippodrome', 'Build a Circus (hippodrome) and a Factio (chariot stable) beside the city'],
   ['cloth', 'Build the cloth industry beside the city: a Linarium, a Textrinum, a Taberna Vestiaria and a Horreum'],
@@ -276,7 +276,7 @@ export class DebugConsole {
         if (cmd === 'fishing') {
           const res = buildDemoFishery(g, center);
           if (res.shipyard) app.renderer.camera.centerOnTile(res.shipyard.x, res.shipyard.y);
-          return res.ok ? `Fishing quarter built: a shipyard, ${res.wharves.length} wharves${res.granary ? ' and a granary' : ''}. The first boat comes in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff.` : 'No water with fishing grounds near the city (try a coast or river map).';
+          return res.ok ? `Fishing quarter built: a shipyard stocked with ${DEMO_YARD_TIMBER} timber (${DEMO_YARD_TIMBER / CONFIG.SHIPYARD_BOAT_TIMBER} boats), ${res.wharves.length} wharves${res.granary ? ' and a granary' : ''}. The first boat comes in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff.` : 'No water with fishing grounds near the city (try a coast or river map).';
         }
         if (cmd === 'cloth') {
           const res = buildDemoCloth(g, center);
@@ -391,7 +391,7 @@ export class DebugConsole {
         if (!lines.length) lines.push('No forts or barracks.');
         lines.push(`Raiders on the map: ${enemyCount(g)}. ${threatSummary(g).text}`);
         lines.push(m.settings ? `Next raid: month ${m.nextRaidMonth} (now ${g.time.totalMonths}); sea raids ${m.seaRaids ? 'on' : 'off'}${g.map.seaEntry ? '' : ' (no water from the sea here)'}.` : 'Raids are off in this game.');
-        lines.push(`Record: ${m.stats.raids} raids (${m.stats.seaRaids || 0} by sea), ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.trained} trained; ${m.stats.shipsBuilt || 0} liburnians built, ${m.stats.shipsLost || 0} lost, ${m.stats.shipsSunk || 0} raider ships sunk, ${m.stats.boatsSunk || 0} fishing boats lost.`);
+        lines.push(`Record: ${m.stats.raids} raids (${m.stats.seaRaids || 0} by sea), ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.prefectsLost || 0} prefects lost, ${m.stats.trained} trained; ${m.stats.shipsBuilt || 0} liburnians built, ${m.stats.shipsLost || 0} lost, ${m.stats.shipsSunk || 0} raider ships sunk, ${m.stats.boatsSunk || 0} fishing boats lost.`);
         return lines.join('\n');
       }
       case 'win':

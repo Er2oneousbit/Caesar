@@ -17,8 +17,8 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.16.0',
-  SAVE_VERSION: 20, // v20: horses live at the Horse Ranch (its stables' stock and incoming), never in warehouses (warehouse stock, incoming and orders have no horses); v16: training takes time: a recruit training at the academy (walker state 'training', trainLeft) and a new ship moored at the Portus (unit trainLeft); v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v19 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  VERSION: '0.16.2',
+  SAVE_VERSION: 20, // v20: horses live at the Horse Ranch (its stables' stock and incoming), never in warehouses (warehouse stock, incoming and orders have no horses); v17: shipyards hold timber (stock, incoming), a boat takes 100; v16: training takes time: a recruit training at the academy (walker state 'training', trainLeft) and a new ship moored at the Portus (unit trainLeft); v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v19 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -113,6 +113,27 @@ export const CONFIG = {
   FIRE_HEAT_PER_DAY: 5, // fire risk a building beside a fire gains per day (once, however many burning tiles it touches)
   PREFECT_RUN_SPEED: 1.6, // prefects run (speed multiplier) when heading to a fire
   PREFECT_ALERT_RADIUS: 24, // prefects within this road distance respond to fires
+  // Prefects against raiders and Caesar's legionaries (sim/prefectFight.js).
+  // A prefect on his rounds stops and fights an enemy this close (tiles, from
+  // the middle of his tile): close by only, he never leaves his street for one.
+  PREFECT_FIGHT_REACH: 2,
+  // ...and keeps standing his ground until the enemy is farther than this,
+  // then goes back to his rounds (a little more than the reach, so an enemy
+  // stepping to and fro at the edge does not start and end a fight every tick).
+  PREFECT_FIGHT_LEASH: 3,
+  // A prefect as a fighter: a watchman with a club, not a soldier. About a
+  // third of a legionary's attack (14) and a little more than a third of his
+  // health (110), light defense, and a blow as often as a legionary's (every
+  // cooldown ticks). Alone he loses to a raider (Normal: about 4 blows of ~10
+  // kill him while he deals ~3.5 a blow to the raider's 70): prefects slow a
+  // warband, they do not stop it. He does not heal; a fresh one comes from
+  // the prefecture once he falls.
+  PREFECT_COMBAT: { hp: 40, attack: 5, defense: 2, cooldown: 20 },
+  // Prefects killed within this many days and PREFECT_LOSS_NEAR tiles of each
+  // other make one message, and only from the second on: one prefect falling
+  // says nothing, a street's watch cut down does.
+  PREFECT_LOSS_DAYS: 10,
+  PREFECT_LOSS_NEAR: 12,
 
   // --- Home mood and crime (sim/mood.js, sim/crime.js) ----------------------
   // Each home has a mood (0-100) for crime only: city mood (sentiment) still
@@ -288,6 +309,11 @@ export const CONFIG = {
   // staff, 5.2 at half, never with nobody), sails to the nearest fishing
   // ground, fishes 4 days and lands one load. Boats sail at walking speed.
   SHIPYARD_BOAT_DAYS: 16,
+  // Colonia's own rule (the original's boats cost nothing): a boat takes one
+  // lot of timber, used at launch, and the yard builds only while it holds
+  // the lot. It holds up to two lots (data/buildings.js inputCap): the boat on
+  // the slip and the next, so a spare that sails off is followed at once.
+  SHIPYARD_BOAT_TIMBER: 100,
   FISH_DAYS: 4, // days a boat fishes per trip (at the difficulty's production 1; slower where it is lower)
   FISH_CATCH: 100, // units of fish a boat lands per trip
   BOAT_WAIT_DAYS: 10, // x (1.02 - staffing): the boat's wait at the wharf between trips

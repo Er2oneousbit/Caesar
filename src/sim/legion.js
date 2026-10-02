@@ -51,6 +51,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { Terrain, Wall } from '../world/map.js';
 import { spawnUnit, removeUnit, passable, fillField, damageBuilding, damageWallAt, moveUnitToward, attackWith, enemyCount, screenDirection, marchTo } from './military.js';
 import { residenceOf } from './governor.js';
+import { fightPrefect } from './prefectFight.js';
 
 /** Fresh state: no attack coming, none so far. Kept on game.military.caesar (saved with it). */
 export function newCaesarState() {
@@ -427,6 +428,8 @@ export function updateLegionary(game, u, romans) {
     }
     return;
   }
+  // A prefect fighting him, halted or not (sim/prefectFight.js).
+  if (fightPrefect(game, u, def)) return;
   if (a.halted) { u.state = 'halt'; u.moving = false; return; }
   marchOnTargets(game, u, def, a);
 }

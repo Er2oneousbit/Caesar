@@ -37,6 +37,21 @@ export function workLine(c) {
   return { value: `${pct}%`, warn, title };
 }
 
+/**
+ * The top bar's north needle at view turn `turn`, in degrees clockwise from
+ * up (north is the game's compass: straight up at turn 0, a step of (-1, -1)
+ * on the map; on the screen a step (dx, dy) moves (dx - dy) * 32 px across
+ * and (dx + dy) * 16 px down). Taken the shortest way round from where it
+ * points now (`from`), so its eased turn follows the city's: from 270 it
+ * goes on to 360, not back three quarters to 0.
+ */
+export function needleAngle(turn, from = null) {
+  const [dx, dy] = viewDir(-1, -1, turn);
+  const deg = (Math.atan2((dx + dy) * 16, (dx - dy) * 32) * 180) / Math.PI + 90;
+  if (from === null || from === undefined) return deg;
+  return from + ((((deg - from) % 360) + 540) % 360) - 180;
+}
+
 export class Hud {
   constructor(app, root) {
     this.app = app;
@@ -157,10 +172,8 @@ export class Hud {
   showViewTurn(turn) {
     if (turn === this.shownTurn) return;
     this.shownTurn = turn;
-    const [dx, dy] = viewDir(-1, -1, turn);
-    // On the screen a step (dx, dy) moves (dx - dy) * 32 px across and (dx + dy) * 16 px down.
-    const deg = (Math.atan2((dx + dy) * 16, (dx - dy) * 32) * 180) / Math.PI + 90; // the arrow points up at 0
-    this.northNeedle.style.transform = `rotate(${Math.round(deg)}deg)`;
+    this.needleDeg = needleAngle(turn, this.needleDeg);
+    this.northNeedle.style.transform = `rotate(${Math.round(this.needleDeg)}deg)`;
     this.northNeedle.parentElement.dataset.turn = String(turn); // (for the browser smoke test)
   }
 }

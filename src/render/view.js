@@ -73,6 +73,22 @@ export function tileAxes(t, W, H) {
   }
 }
 
+/**
+ * The view tiles vx0..vx1 x vy0..vy1 as a rectangle of map tiles (a quarter
+ * turn keeps a rectangle a rectangle): {tx0, tx1, ty0, ty1}. An empty range
+ * (the camera looking past the map's edge) stays empty, never a rectangle
+ * swapped round to reach outside the map.
+ */
+export function mapRectOfView(vx0, vx1, vy0, vy1, t, W, H) {
+  if (vx0 > vx1 || vy0 > vy1) return { tx0: 0, tx1: -1, ty0: 0, ty1: -1 };
+  const ax = tileAxes(t, W, H);
+  const mx0 = ax.ox + ax.xx * vx0 + ax.xy * vy0;
+  const my0 = ax.oy + ax.yx * vx0 + ax.yy * vy0;
+  const mx1 = ax.ox + ax.xx * vx1 + ax.xy * vy1;
+  const my1 = ax.oy + ax.yx * vx1 + ax.yy * vy1;
+  return { tx0: Math.min(mx0, mx1), tx1: Math.max(mx0, mx1), ty0: Math.min(my0, my1), ty1: Math.max(my0, my1) };
+}
+
 /** A w x h footprint at map tile (x, y), in view tiles: its corner nearest the view's top [vx, vy]. */
 export function viewFoot(x, y, w, h, t, W, H) {
   const a = toView(x, y, t, W, H);

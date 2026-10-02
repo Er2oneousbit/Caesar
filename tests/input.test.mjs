@@ -97,6 +97,9 @@ test('input: Q and ] turn the view clockwise, Shift+Q and [ back; the hover foll
   const key = (k) => input.onKeyDown({ key: k, code: k.length === 1 ? `Key${k.toUpperCase()}` : k, target: {}, preventDefault() {} });
   for (const k of ['q', ']', 'Q', '[']) key(k);
   assert.deepEqual(turns, [1, 1, -1, -1]);
+  // Held down, a key turns the view once, not at the keyboard's repeat rate (review).
+  for (const k of ['q', 'q', ']', 'Q', '[']) input.onKeyDown({ key: k, code: 'KeyQ', repeat: true, target: {}, preventDefault() {} });
+  assert.deepEqual(turns, [1, 1, -1, -1]);
   // The view turned under a still cursor: the tile under it is another, and so is a drag's far end.
   let under = { x: 4, y: 5 };
   app.renderer.camera.screenToTile = () => under;

@@ -78,7 +78,7 @@ import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.j
 import { Weather, seasonPalette } from './weather.js';
 import { hash01 } from './draw.js';
 import { turnUV, turnDir } from './turn.js';
-import { toView, viewTileOf, viewSize, tileAxes, viewFoot, viewDir, rotMask, rotNibbles, rotBlend, viewAxis } from './view.js';
+import { toView, viewTileOf, viewSize, tileAxes, viewFoot, viewDir, rotMask, rotNibbles, rotBlend, viewAxis, mapRectOfView } from './view.js';
 import { spanOrigin } from '../sim/entities.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
@@ -549,17 +549,24 @@ export class Renderer {
 
   /**
    * Which way a soldier, raider or ship looks on the screen (1 right, -1
-   * left). Unturned it is the sim's own `u.facing`. Turned, the last way it
-   * moved on the map, seen from the view's side; a heading that no longer
-   * agrees with `u.facing` (it turned to face a foe without moving) gives
-   * way to one that does.
+   * left). Unturned it is the sim's own `u.facing`. Turned, the way it last
+   * looked on the map, seen from the view's side: the way it moved, or,
+   * standing with a foe to fight (`u.target`), toward the foe, as the sim
+   * turns it to strike. A heading that no longer agrees with `u.facing`
+   * (it turned to strike a building without moving) gives way to one that
+   * does.
    */
   unitFace(u, turn) {
     const dx = u.x - u.px;
     const dy = u.y - u.py;
     let h = this.headings.get(u.id);
+    const foe = u.target ? this.game?.units.get(u.target) : null;
     if (Math.abs(dx) + Math.abs(dy) > 1e-6) {
       h = [dx, dy];
+      this.headings.set(u.id, h);
+    } else if (foe && Math.abs(foe.x - u.x) + Math.abs(foe.y - u.y) > 1e-6) {
+      // (A 1-bit facing cannot say which of two sides a foe is on once the view turns a quarter.)
+      h = [foe.x - u.x, foe.y - u.y];
       this.headings.set(u.id, h);
     }
     if (!turn) return u.facing;
@@ -696,14 +703,9 @@ export class Renderer {
     const vy0 = Math.max(0, Math.floor(Math.min(...corners.map((c) => c.y))));
     const vy1 = Math.min(VH - 1, Math.ceil(Math.max(...corners.map((c) => c.y))));
     const groundBottom = vr.y + vr.h + 4;
-    // The same range as map tiles (a quarter turn keeps a rectangle a
-    // rectangle), for the passes that loop over map tiles (hints, coverage).
+    // The same range as map tiles, for the passes that loop over map tiles (hints, coverage).
     const ax = tileAxes(vt, map.w, map.h);
-    const mx0 = ax.ox + ax.xx * vx0 + ax.xy * vy0;
-    const my0 = ax.oy + ax.yx * vx0 + ax.yy * vy0;
-    const mx1 = ax.ox + ax.xx * vx1 + ax.xy * vy1;
-    const my1 = ax.oy + ax.yx * vx1 + ax.yy * vy1;
-    this.viewTiles = { tx0: Math.min(mx0, mx1), tx1: Math.max(mx0, mx1), ty0: Math.min(my0, my1), ty1: Math.max(my0, my1) };
+    this.viewTiles = mapRectOfView(vx0, vx1, vy0, vy1, vt, map.w, map.h);
     this.stats.coverage = null;
     this.stats.waterHint = null;
     this.puffBudget = 4;

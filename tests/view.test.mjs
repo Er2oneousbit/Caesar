@@ -23,7 +23,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { toView, fromView, viewTileOf, viewSize, tileAxes, viewFoot, viewDir, rotMask, rotBlend, viewAxis } from '../src/render/view.js';
+import { toView, fromView, viewTileOf, viewSize, tileAxes, viewFoot, viewDir, rotMask, rotNibbles, rotBlend, viewAxis, mapRectOfView } from '../src/render/view.js';
+import { needleAngle } from '../src/ui/hud.js';
 import { Camera, worldOf } from '../src/render/camera.js';
 import { Renderer, walkerWorld, ghostOrder, blendCode, aqueductMaskAt, buildingKey, artTurn, raceSpot, mapGateOffset, bridgeSpan } from '../src/render/renderer.js';
 import { GameMap, Terrain, Road } from '../src/world/map.js';
@@ -67,7 +68,7 @@ function turnedMap(map, t) {
       const [vx, vy] = viewTileOf(x, y, t, map.w, map.h);
       const i = map.idx(x, y);
       const j = m.idx(vx, vy);
-      for (const layer of ['terrain', 'road', 'aqueduct', 'wall']) m[layer][j] = map[layer][i];
+      for (const layer of ['terrain', 'road', 'aqueduct', 'wall', 'building']) m[layer][j] = map[layer][i];
     }
   }
   return m;
@@ -87,8 +88,13 @@ function patchwork() {
     else if (r < 0.4) map.aqueduct[i] = 1;
     else if (r < 0.48) map.wall[i] = 1;
   }
+  // Reservoirs (building id 90) beside aqueducts: their own bits in an aqueduct's mask.
+  for (let i = 0; i < map.size; i += 7) if (!map.aqueduct[i] && !map.road[i] && !map.wall[i]) map.building[i] = 90;
   return map;
 }
+
+/** The buildings the patchwork's tiles name: reservoirs. */
+const RESERVOIRS = new Map([[90, { def: { kind: 'reservoir' } }]]);
 
 test('view: map and view coordinates at every turn, on a map that is not square', () => {
   const W = 13;
@@ -114,6 +120,24 @@ test('view: map and view coordinates at every turn, on a map that is not square'
       }
     }
     assert.equal(seen.size, W * H, `turn ${t}: one view tile for every map tile`);
+    // The whole view is the whole map; a part of it the same part of the map.
+    assert.deepEqual(mapRectOfView(0, VW - 1, 0, VH - 1, t, W, H), { tx0: 0, tx1: W - 1, ty0: 0, ty1: H - 1 });
+    const part = mapRectOfView(2, 4, 1, 3, t, W, H);
+    for (let vy = 1; vy <= 3; vy++) {
+      for (let vx = 2; vx <= 4; vx++) {
+        const x = ax.ox + ax.xx * vx + ax.xy * vy;
+        const y = ax.oy + ax.yx * vx + ax.yy * vy;
+        assert.ok(x >= part.tx0 && x <= part.tx1 && y >= part.ty0 && y <= part.ty1);
+      }
+    }
+    assert.equal((part.tx1 - part.tx0 + 1) * (part.ty1 - part.ty0 + 1), 9);
+    // Looking past the map's edge (an empty range of view tiles) is no map
+    // tile at all, at every turn: swapped round, it reached outside the map
+    // and the water hints read tiles of the row before or after (review).
+    for (const [a, b, c, d] of [[W + 3, W - 1, 0, H - 1], [0, 4, VH + 2, VH - 1], [-1 + VW + 17, VW - 1, VH + 17, VH - 1]]) {
+      const r = mapRectOfView(a, b, c, d, t, W, H);
+      assert.ok(r.tx0 > r.tx1 || r.ty0 > r.ty1, `turn ${t}: empty, not ${JSON.stringify(r)}`);
+    }
   }
   // Four quarter turns are no turn.
   assert.deepEqual(viewDir(...viewDir(...viewDir(...viewDir(2, 5, 1), 1), 1), 1), [2, 5]);
@@ -138,6 +162,11 @@ test('view: turn 1 turns the city a quarter turn clockwise on the screen', () =>
   // And the needle's north (screen up at turn 0, a step of (-1, -1)) turns right at turn 1.
   assert.deepEqual(screen(0, -1, -1), [0, -1]);
   assert.deepEqual(screen(1, -1, -1), [1, 0]);
+  assert.deepEqual(TURNS.map((t) => Math.round(needleAngle(t))), [0, 90, 180, 270]);
+  // Turning on from 3 to 0 the needle goes on round, not back three quarters (review).
+  assert.equal(Math.round(needleAngle(0, 270)), 360);
+  assert.equal(Math.round(needleAngle(3, 360)), 270);
+  assert.equal(Math.round(needleAngle(1, 360)), 450);
 });
 
 test('view: the tile under a screen point and back, at every turn', () => {
@@ -261,6 +290,7 @@ test('view: neighbour masks turned are those of the map turned for real (roads, 
     const rt = rendererFor(m, 0);
     r0.game.buildings = new Map();
     let blends = 0;
+    let reservoirs = 0;
     for (let y = 0; y < map.h; y++) {
       for (let x = 0; x < map.w; x++) {
         const [vx, vy] = viewTileOf(x, y, t, map.w, map.h);
@@ -268,13 +298,15 @@ test('view: neighbour masks turned are those of the map turned for real (roads, 
         assert.equal(rotMask(r0.roadMask(x, y), t), rt.roadMask(vx, vy), `road ${at}`);
         assert.equal(rotMask(r0.shoreMask(x, y), t), rt.shoreMask(vx, vy), `shore ${at}`);
         assert.equal(rotMask(r0.wallMask(x, y), t), rt.wallMask(vx, vy), `wall ${at}`);
-        assert.equal(rotMask(aqueductMaskAt(map, new Map(), x, y), t), aqueductMaskAt(m, new Map(), vx, vy), `aqueduct ${at}`);
+        assert.equal(rotNibbles(aqueductMaskAt(map, RESERVOIRS, x, y), t), aqueductMaskAt(m, RESERVOIRS, vx, vy), `aqueduct ${at}`);
+        if (aqueductMaskAt(map, RESERVOIRS, x, y) > 15) reservoirs++;
         const code = blendCode(map, x, y);
         if (code) blends++;
         assert.equal(rotBlend(code, t), blendCode(m, vx, vy), `blend ${at}`);
       }
     }
     assert.ok(blends > 20, 'the patchwork has plenty of edges to blend');
+    assert.ok(reservoirs > 2, 'and aqueducts meeting reservoirs');
   }
 });
 
@@ -349,6 +381,19 @@ test('view: soldiers, ships and missiles face the way they go as the view sees i
   assert.equal(r.unitFace(fresh, 2), 1);
   // Missiles: their velocity turned with the view.
   assert.deepEqual(viewDir(1, 0, 1), [-0, 1]);
+  // A soldier who marched south, stopped and fights a foe to his west faces
+  // the foe at every turn (review: at a quarter turn the last step and the
+  // sim's 1-bit facing agreed, and he was drawn facing away).
+  const foe = { id: 8, x: 19, y: 20, px: 19, py: 20, facing: 1 };
+  const soldier = { id: 7, x: 20, y: 20, px: 20, py: 19, facing: -1, target: 0 };
+  r.game.units = new Map([[7, soldier], [8, foe]]);
+  r.unitFace(soldier, 0); // marching south (+y)
+  Object.assign(soldier, { px: 20, py: 20, target: 8 });
+  for (const t of TURNS) {
+    const [a, b] = viewDir(-1, 0, t); // the foe's side, seen at turn t
+    const want = a - b > 0 ? 1 : -1;
+    assert.equal(r.unitFace(soldier, t), t ? want : soldier.facing, `turn ${t}`);
+  }
 });
 
 test('view: the races, the map gate\'s pillars and the walker\'s step turn with the view', () => {

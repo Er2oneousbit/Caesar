@@ -393,8 +393,10 @@ export class Input {
       case '4': a.setSpeed(4); break;
       case 'h': case 'H': a.ui.selectTool('house'); break;
       case 'r': case 'R': this.onTurnKey(); break; // turn the building in hand, else the Road tool
-      case 'q': case ']': a.turnView(1); break; // the view: the city a quarter turn clockwise
-      case 'Q': case '[': a.turnView(-1); break;
+      // The view: the city a quarter turn clockwise, or back. Once a press:
+      // held, the key would spin the city at the keyboard's repeat rate.
+      case 'q': case ']': if (!e.repeat) a.turnView(1); break;
+      case 'Q': case '[': if (!e.repeat) a.turnView(-1); break;
       case 'x': case 'X': case 'Delete': a.ui.selectTool('clear'); break;
       case 'u': case 'U': a.undo(); break;
       case 'm': case 'M': a.toggleMusic(); break;

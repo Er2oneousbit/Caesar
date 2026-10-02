@@ -31,7 +31,8 @@ export class Ambient {
 
   /** Scatter clouds over a map of w x h tiles (call when a game is attached). */
   reset(mapW, mapH) {
-    // World-space extent of the map diamond.
+    // World-space extent of the map diamond, unturned: every map is square
+    // (MAP_SIZES), so the view turn (render/view.js) leaves it the same.
     this.bounds = { x0: -mapH * HALF_W, x1: mapW * HALF_W, y0: 0, y1: (mapW + mapH) * HALF_H };
     const b = this.bounds;
     const area = (b.x1 - b.x0) * (b.y1 - b.y0);

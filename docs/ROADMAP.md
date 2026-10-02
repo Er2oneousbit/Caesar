@@ -395,6 +395,7 @@ Playing smoother:
 * **Interactive tutorial mission**.
 * **Photo mode**: hide the UI, pick the time of day, season and weather, save a screenshot.
 * **Accessibility**: UI scale and a screen-reader pass (reduced motion is already honored).
+* **Challenge games**: one-off scenarios outside the campaign, picked from a Challenges menu, each a fixed map with its own rules, goal and time limit, and a best result kept per difficulty. Ideas: hold a frontier town through ten raids; feed a desert city on imports alone; rebuild a burned city from its rubble; the Emperor's legions already marching when the game starts; a famine winter on Insane; grow to 2,000 people with no prefecture; a Venus festival city judged on mood alone. Each one names what it leaves out or adds, and its numbers are measured with the headless sim like a mission's.
 * **Challenge seeds and ironman**: a fixed map plus rules, with medals and par times; autosave-only games.
 * **Share-a-map link**: seed, landscape, size and difficulty in one link (the URL flags already exist).
 

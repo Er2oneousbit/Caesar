@@ -50,6 +50,7 @@ import { seaRaidPlan, seaLandingNow, launchSeaInvasion, updateNavy, potHit, flee
 import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training.js';
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
 import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICKS } from './battle.js';
+import { fightPrefect } from './prefectFight.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -114,7 +115,7 @@ export function newMilitaryState(scenario, time, flags = {}) {
     // raid comes by land, exactly as before. The flag searaids=on (Settings'
     // choice for a new mission) wins over the scenario.
     seaRaids: flags.searaids === 'off' ? false : flags.searaids === 'on' ? true : scenario.seaRaids !== false,
-    stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
+    stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, prefectsLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
     caesar: newCaesarState(), // Caesar's legions (sim/legion.js)
     battle: null, // a distant battle Caesar asked troops for (sim/battle.js)
     battles: { won: 0, lost: 0, lastEndMonth: -999 },
@@ -1031,6 +1032,8 @@ function updateRaider(game, u, romans) {
     moveToward(game, u, target.x, target.y, def.speed);
     return;
   }
+  // A prefect fighting him: he turns on him (sim/prefectFight.js).
+  if (fightPrefect(game, u, def)) return;
   // Otherwise head for the nearest building via the flow field.
   const tx = Math.floor(u.x);
   const ty = Math.floor(u.y);

@@ -16,6 +16,14 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.16.1)
+
+* **The shipyard needs timber** (Colonia's own; the original's built boats from workers and time alone): a fishing boat takes 100 timber, used at its launch; the yard holds up to 200, carts bring it as they bring a workshop's raw material, and the work waits while the yard holds less than 100. Its panel, the wharf, the Production advisor and the placement preview say when timber is missing. Every mission with a shipyard has a timber yard and woods for it (Paestum and Portus Mercatorum have no partner selling timber). Saves: version 17
+* **Prefects stand up to enemies close by**: a prefect on his rounds fights a raider or one of Caesar's legionaries on land within 2 tiles, holds while it stays within 3 and goes back to his rounds; never while fighting a fire or chasing a criminal, never across water or walls, never a fleeing or waiting enemy. He is a watchman, not a soldier (40 hp, attack 5, defense 2): he slows a warband and often dies doing it, and his prefecture sends the next after its usual 3 days. Prefects lost show in the Military advisor
+* **Soldiers cross by the bridge**: a soldier going after an enemy across a river planned a route only after a day stuck on the bank; now he checks the straight way and takes the bridge (or a gate) at once
+* Headless sim: Easy, Normal, Hard and Insane identical to v0.16.0; with frequent raids and no soldiers, 2 to 3 prefects die in a 6-year run without changing the raids' outcome; Insane raid runs with a garrison over six seeds, 84 raiders slain and 20 buildings lost before, 85 and 19 after
+* 603 unit tests, 131 browser checks
+
 ## Done (v0.16.0)
 
 * **Forts at rest hold their ground**, as in the original: an undeployed fort's legionaries and cavalry fight only an enemy within 2 tiles of its ranks, step out to strike and fall back, and its archers shoot only from their posts; anyone fights back against an enemy striking at him. Deploy a fort to meet raiders in the field. Before, an undeployed fort charged anything within 14 to 26 tiles. The headless sim's garrison mode now deploys its forts onto the enemy nearest the city and recalls them, as a player would

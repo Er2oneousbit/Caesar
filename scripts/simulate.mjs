@@ -374,7 +374,7 @@ const c = game.city;
 console.log(`\nSimulated ${opts.years} years in ${Date.now() - t0} ms. Fires ${c.stats.fires}, collapses ${c.stats.collapses}, evolutions ${c.stats.evolutions}, devolutions ${c.stats.devolutions}`);
 console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math.floor(c.ratings.prosperity)} peace ${Math.floor(c.ratings.peace)} favor ${Math.floor(c.ratings.favor)}`);
 const ms = game.military.stats;
-console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
+console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}${ms.raids || ms.prefectsLost ? `, prefects lost ${ms.prefectsLost || 0}` : ''}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
 if (ms.seaRaids || opts.navy) console.log(`Sea: raids by sea ${ms.seaRaids || 0}, raider ships sunk ${ms.shipsSunk || 0}, liburnians built ${ms.shipsBuilt || 0}, lost ${ms.shipsLost || 0}, afloat ${[...game.units.values()].filter((u) => u.type === 'liburnian').length}, fishing boats sunk ${ms.boatsSunk || 0}`);
 if (opts.legion) {
   const cs = game.military.caesar;

@@ -478,6 +478,7 @@ export class Advisors {
       kv('Forts / barracks / towers', `${forts.length} / ${barracks.length} / ${towers.length}`),
       kv('Record', `${st.repelled} of ${st.raids} raids repelled`),
       kv('Raiders slain / soldiers lost', `${fmt(st.enemiesKilled)} / ${fmt(st.soldiersLost)}`),
+      kv('Prefects lost fighting', fmt(st.prefectsLost || 0)),
       kv('Buildings lost to raids', fmt(st.buildingsLost)));
     // The fleet: only where ships can sail, or once there is a ship.
     const showFleet = seaOk || fleet.ships > 0 || stations.length > 0;

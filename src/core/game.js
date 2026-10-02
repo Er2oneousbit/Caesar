@@ -60,6 +60,7 @@ import { updateRatings, checkOutcome, enemiesInProvince } from '../sim/ratings.j
 import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
 import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
+import { updatePrefectFights } from '../sim/prefectFight.js';
 import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
 import { caesarDaily } from '../sim/legion.js';
 import { battleMonthly, archesToBuild } from '../sim/battle.js';
@@ -266,6 +267,9 @@ export class Game {
     const t = this.time.advance();
     updateWalkers(this);
     updateMilitary(this);
+    // After the units moved, before criminals: a prefect fighting an enemy is
+    // held, so he neither grapples with a thief nor sets off on a hunt.
+    updatePrefectFights(this);
     updateCriminals(this);
     const phase = this.time.tick;
     for (const b of this.buildings.values()) {

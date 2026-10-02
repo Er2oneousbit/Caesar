@@ -516,20 +516,20 @@ Seven steps and ten missions. The first two teach the basics and have no crime o
 
 The new provinces are Roman colonies of the 270s and 260s BC. **Firmum** (264 BC, a hilltop over the Picene country): lakes and woods with no water to the map's edge, so every raid comes over land; the first raid two years in (3 to 4 warriors on Normal), legionaries only (an iron mine, a weaponsmith, a barracks, a Castra, the Campus, towers and walls; archers, cavalry and the fleet wait for step 4), Aquileia and Capua (which buys iron) by land, and Caesar's call for troops for Ariminum in its second year. **Paestum** (273 BC, the Greek temple city of Poseidonia): a coast with Capua by land and Massilia and Corinthus by sea, everything of mission 4 but the army and the fleet. **Beneventum** (268 BC, on the Appian Way): a river map whose four partners all come by land, everything of mission 5 but the army and the fleet.
 
-**Population and jobs.** About a third of your plebeians look for work, and above 10% unemployment the city's mood falls (up to 15 points), so peace stops growing. The first two missions unlock few buildings that hire (farms, a granary, markets, prefects, engineers, a Forum, temples, then fountains, a school and a theater), so their goals are what a sensibly built town of them employs: about 300 people in mission 1, 450 in mission 2. More homes there only add idle hands. Later missions add workshops, shows, schools and baths, and trade: whatever a partner buys keeps farms and workshops staffed, so jobs grow with your exports. The goals of Figlina, Pons Aelius, Portus Mercatorum and missions 6 and 7 are not yet checked against their jobs: they may ask for more people than the city can employ (see the ROADMAP). The three provinces added beside them ask for a little under what a sensibly built city of their buildings employs (Firmum 1,100, Paestum 2,700, Beneventum 3,000; `npm run sim -- --capacity`).
+**Population and jobs.** About a third of your plebeians look for work, and above 10% unemployment the city's mood falls (up to 15 points), so peace stops growing. The first two missions unlock few buildings that hire (farms, a granary, markets, prefects, engineers, a Forum, temples, then fountains, a school and a theater), so their goals are what a sensibly built town of them employs: about 300 people in mission 1, 450 in mission 2. More homes there only add idle hands. Later missions add workshops, shows, schools and baths, and trade: whatever a partner buys keeps farms and workshops staffed, so jobs grow with your exports. Every mission's population goal is a little under what a sensibly built city of its buildings employs at 10% unemployment (`npm run sim -- --capacity`): Figlina 950, Firmum 1,100, Pons Aelius 2,700, Paestum 2,700, Portus Mercatorum 4,600, Beneventum 3,000, Oasis Aurea 3,500, Urbs Magna 5,800. (Missions 3 to 7 asked for 3,500 to 12,000 people, more than their jobs could employ, and could not be won; they will ask for more again when the economy has the jobs for it: see the ROADMAP.)
 
 | Mission | Map | Population | Culture | Prosperity | Peace | Favor | Homes up to | First raid |
 |---|---|---|---|---|---|---|---|---|
 | 1 Novum Castrum | river, 64 | 300 | 15 | | 35 | | Hut | |
 | 2 Aquae Clarae | lakes, 96 | 450 | 35 | 20 | 45 | | Townhouse | |
-| 3 Figlina (peaceful) | plains, 112 | 3,500 | 45 | 30 | 50 | | Domus | |
+| 3 Figlina (peaceful) | plains, 112 | 950 | 45 | 30 | 50 | | Domus | |
 | 3 Firmum (military) | lakes, 112 | 1,100 | 35 | 20 | 48 | | Domus | 2 years |
-| 4 Pons Aelius (military) | river, 128 | 5,000 | 50 | 40 | 55 | | Villa | 5 years |
+| 4 Pons Aelius (military) | river, 128 | 2,700 | 50 | 40 | 55 | | Villa | 5 years |
 | 4 Paestum (peaceful) | coast, 128 | 2,700 | 60 | 50 | 65 | 40 | Villa | |
-| 5 Portus Mercatorum (military) | coast, 128 | 6,500 | 60 | 50 | 60 | 55 | Grand Palatium | 4 years |
+| 5 Portus Mercatorum (military) | coast, 128 | 4,600 | 60 | 50 | 60 | 55 | Grand Palatium | 4 years |
 | 5 Beneventum (peaceful) | river, 128 | 3,000 | 65 | 60 | 70 | 65 | Grand Palatium | |
-| 6 Oasis Aurea | desert, 128 | 7,000 | 60 | 55 | 65 | 60 | Grand Palatium | 3.5 years |
-| 7 Urbs Magna | lakes, 160 | 12,000 | 75 | 70 | 75 | 65 | Imperial Palatium | 3 years |
+| 6 Oasis Aurea | desert, 128 | 3,500 | 60 | 55 | 70 | 60 | Grand Palatium | 3.5 years |
+| 7 Urbs Magna | lakes, 160 | 5,800 | 75 | 70 | 75 | 65 | Imperial Palatium | 3 years |
 
 Mission 3 opens the Amphitheatrum (Amphitheater) and the Ludus Gladiatorius (Gladiator School) for its Domus: a theater alone gives a home at most 16 entertainment (10 for a visit, 6 for the seats), and a Domus needs 20. Mission 4 opens shipyards and fishing wharves, and the cloth industry (Linarium, Textrinum, Taberna Vestiaria) its Insulae need: without clothing its homes would stop at Tenements. Missions 5 and 6 have every building but the Circus (Hippodrome) and its Factio (Chariot Stable), which only mission 7 (and the sandbox) has; without a hippodrome the Imperial Palatium (95 entertainment) is out of reach there.
 

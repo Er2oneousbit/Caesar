@@ -238,8 +238,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'The plains of Figlina are rich in clay. Build an industry, fill warehouses and open your first trade route. Prosperity is now expected of you.',
     map: { size: 112, type: 'plains', seed: 'figlina' },
     funds: 7000, startYear: -255,
-    goals: { population: 3500, culture: 45, prosperity: 30, peace: 50, favor: 0 },
-    paceYears: 3.6,
+    goals: { population: 950, culture: 45, prosperity: 30, peace: 50, favor: 0 },
+    paceYears: 2.5,
     rank: 2, // Engineer (data/ranks.js)
     unlocks: TIER3, partners: ['tarraco', 'aquileia'], requests: true,
     hints: [
@@ -279,8 +279,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'A great river divides this province. Bridge it, harvest its forests and olive groves, and entertain a growing people with gladiatorial games.',
     map: { size: 128, type: 'river', seed: 'pons-aelius' },
     funds: 8000, startYear: -240,
-    goals: { population: 5000, culture: 50, prosperity: 40, peace: 55, favor: 0 },
-    paceYears: 5.7,
+    goals: { population: 2700, culture: 50, prosperity: 40, peace: 55, favor: 0 },
+    paceYears: 2.9,
     rank: 3, // Architect (data/ranks.js)
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
     military: { first: 60, interval: [30, 40], base: 4 },
@@ -314,8 +314,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'A coastal province with iron in its hills and vines on its slopes. Grow a wealthy city worthy of villas, and keep the Emperor happy.',
     map: { size: 128, type: 'coast', seed: 'portus-mercatorum' },
     funds: 9000, startYear: -225,
-    goals: { population: 6500, culture: 60, prosperity: 50, peace: 60, favor: 55 },
-    paceYears: 7.8,
+    goals: { population: 4600, culture: 60, prosperity: 50, peace: 60, favor: 55 },
+    paceYears: 5.1,
     rank: 4, // Quaestor (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME, partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
     military: { first: 48, interval: [22, 32], base: 6 },
@@ -348,8 +348,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'Water is life in the desert. Only the land around the oases can feed your people. Plan every aqueduct carefully.',
     map: { size: 128, type: 'desert', seed: 'oasis-aurea' },
     funds: 10000, startYear: -210,
-    goals: { population: 7000, culture: 60, prosperity: 55, peace: 65, favor: 60 },
-    paceYears: 8.5,
+    goals: { population: 3500, culture: 60, prosperity: 55, peace: 70, favor: 60 },
+    paceYears: 4.2,
     rank: 5, // Procurator (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME_AND_NAVY, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
     military: { first: 42, interval: [20, 30], base: 6 },
@@ -361,8 +361,8 @@ export const SCENARIOS = Object.freeze([
     intro: 'Your last and greatest charge: build a city to rival Rome itself.',
     map: { size: 160, type: 'lakes', seed: 'urbs-magna' },
     funds: 12000, startYear: -190,
-    goals: { population: 12000, culture: 75, prosperity: 70, peace: 75, favor: 65 },
-    paceYears: 15.4,
+    goals: { population: 5800, culture: 75, prosperity: 70, peace: 75, favor: 65 },
+    paceYears: 6.8,
     rank: 6, // Aedile (data/ranks.js)
     unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
     military: { first: 36, interval: [14, 22], base: 8 },

@@ -17,6 +17,14 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.17.0)
+
+* **The campaign runs to step 10, a peaceful and a military province at every step from 3**: Cosa (peaceful, lakes 144, 5,600 people) beside Oasis Aurea at step 6; Copia (peaceful, river 160, 6,000) beside Urbs Magna at step 7; Mutina (military, plains 176, 6,000) and Luna (peaceful, coast 176, 7,000) at step 8; Corduba (military, river 192, 8,000) and Carteia (peaceful, coast 192, 9,500) at step 9; Narbo Martius (military, river 256, 10,000) and Puteoli (peaceful, coast 224, 12,000) at step 10. Every goal is 85 to 90% of what a sensibly built city of its buildings employs (`npm run sim -- --capacity`), with trade demand on the original's tiers; the missions grow longer step by step (6.5 to 15.4 years at the fastest). One rank a step, Procurator at 6 to Proconsul at 10; winning step 10 makes you Caesar
+* **Step 10 is a city of districts**: its maps put the meadow, the woods and the rocky hills each in an area of its own, 81 to 125 tiles apart, and a building hires only within 40 road tiles, so the city must grow a district by each
+* Fixed: raider and legion pathfinding on a big forest could grow without limit (it crashed a 256 map run); one city's name on a crowded empire map could print over another's; a land-only mission's raids could still come by sea when Sea raids was on
+* Headless sim: every level and the raid, garrison, legion, navy and harbor runs identical to v0.16.5
+* 653 unit tests, 138 browser checks
+
 ## Done (v0.16.5)
 
 * **Jobs for big cities, measured** (the ground for steps 6 to 10): the capacity model (`npm run sim -- --capacity`) now plans a small villa quarter (5% of the people where homes can reach the Villa: they use services, food and goods but do not work), food by each kind eaten, docks by ship traffic and the hippodrome once. The 5% comes from play: the demo city with wine for every market or villa blocks (new sim flags `--blocks`, `--villas`, `--wine`, with a capacity check against the model) averaged 4% in villas. Measured against play the model is cautious (a block had 505 to 525 jobs where it plans 396 to 440). Missions 4 to 7's ceilings rise from 2,850 to 6,450 to 3,460 to 7,900; a late province with every building and most of twelve partners comes to about 11,000 to 13,600, so the last steps can ask for 10,000 people. Goals unchanged

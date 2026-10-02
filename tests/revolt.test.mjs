@@ -117,6 +117,20 @@ test('revolt: a prefect on his rounds fights a rebel in reach, and lets one flee
   assert.equal(p.fight || 0, 0, 'a rebel in flight is let go');
 });
 
+test('revolt: what rebels wreck is theirs, not a raid\'s: its ruins and messages say so, and the revolt counts it', () => {
+  const { game, school, venue } = games();
+  spawnWalker(game, 'performer', game.map.idx(school.x, school.y + 3), school, { venue: 'amphitheater', target: venue.id, state: 'toVenue' });
+  startRevolt(game);
+  const before = game.buildings.size;
+  for (let t = 0; t < 20000 && game.buildings.size === before; t++) { game.time.totalTicks++; updateMilitary(game); }
+  assert.ok(game.buildings.size < before, 'a building fell');
+  assert.equal(game.military.stats.buildingsLost, 0, 'no raid lost it');
+  assert.equal(game.military.revolt.buildingsLost, 1);
+  const causes = [...game.ruins.values()].map((r) => r.cause);
+  assert.ok(causes.length && causes.every((c) => c === 'revolt' || c === 'revoltFire'), causes.join());
+  assert.match(game.messages[0].text, /^Rebel gladiators have (set|torn down)/);
+});
+
 test('revolt: a save keeps the revolt and its rebels', () => {
   const { game, school, venue } = games();
   spawnWalker(game, 'performer', game.map.idx(school.x, school.y + 3), school, { venue: 'amphitheater', target: venue.id, state: 'toVenue' });

@@ -23,7 +23,9 @@
  *     Colonia lets them flee, for looks) and are gone.
  *
  * State, saved with the military (core/save.js):
- *   game.military.revolt = { endMonth, turned, over } or null
+ *   game.military.revolt = { endMonth, turned, buildingsLost, over } or null
+ * (buildingsLost: what the rebels wrecked, kept apart from the raids' count;
+ * their ruins read "torn down by rebel gladiators", sim/risk.js).
  * Each rebel is a unit with `revolt: true`.
  * ----------------------------------------------------------------------------
  */
@@ -55,7 +57,7 @@ function schoolWorking(game) {
 export function startRevolt(game, months = REVOLT_MONTHS) {
   const m = game.military;
   if (revoltActive(game) || !schoolWorking(game)) return false;
-  m.revolt = { endMonth: game.time.totalMonths + months, turned: 0, over: false };
+  m.revolt = { endMonth: game.time.totalMonths + months, turned: 0, buildingsLost: 0, over: false };
   game.message(`The gladiators have revolted! Every gladiator who leaves his school turns on the city for the next ${months} months. Soldiers and prefects can put them down.`, 'bad', undefined, undefined, { kind: 'raid' });
   game.events.emit('sound', { name: 'horn' });
   turnGladiators(game);
@@ -104,7 +106,8 @@ export function revoltMonthly(game) {
   }
   if (game.time.totalMonths < r.endMonth) return;
   r.over = true;
-  game.message(`The gladiators' revolt is over: ${r.turned} rose against the city. The last of them flee the province.`, 'good');
+  const lost = r.buildingsLost || 0;
+  game.message(`The gladiators' revolt is over: ${r.turned} rose against the city${lost ? ` and wrecked ${lost} building${lost === 1 ? '' : 's'}` : ''}. The last of them flee the province.`, 'good');
 }
 
 /** Rebels on the map (for the threat summary). */

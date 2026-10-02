@@ -16,7 +16,8 @@
  * the province: they hold up no victory and cost no peace.
  *
  * A pack:
- *   - rests at its spot and every WOLF.roamDays moves on, up to
+ *   - rests at its spot and, WOLF.roamDays after it has gathered there,
+ *     moves on (its wolves at a trot, all together), up to
  *     WOLF.roamReach tiles, to open land (no road or building) with little
  *     desirability (the edge of the city, never its heart; in winter a
  *     little nearer), no building within WOLF.roamClear nor road within
@@ -26,7 +27,7 @@
  *     the day, so nothing about it needs saving but the spot. (Colonia's
  *     own clearances, with the rest after a kill below: with buildings kept
  *     only 3 tiles off and no rest, Mutina's packs settled beside the demo
- *     city and killed 166 walkers in three years; now 5.)
+ *     city and killed 166 walkers in three years; now 1.)
  *   - hunts: a walker who comes within WOLF.notice of a wolf sets the whole
  *     pack on. Each wolf then runs at the nearest walker within
  *     WOLF.huntReach of it (one another wolf is on counts twice as far, so
@@ -49,7 +50,8 @@
  *
  * State (saved, core/save.js `wildlife`):
  *   game.wildlife = { packs: [pack], nextPackId, lastMessageDay, stats }
- *     pack = { id, den: {x, y}, spot: {x, y}, size, nextMoveDay, refillDay
+ *     pack = { id, den: {x, y}, spot: {x, y}, size, nextMoveDay (null:
+ *              not gathered at its spot yet), movedDay, refillDay
  *              (null: full), hunting, lastPreyTick, fedUntil (a tick),
  *              told, walkersKilled }
  *     stats = { wolvesKilled, walkersKilled, packsCleared }
@@ -153,7 +155,7 @@ export function placePacks(game, wl) {
 function makePack(game, wl, den, rng) {
   const pack = {
     id: wl.nextPackId++, den: { x: den.x, y: den.y }, spot: { x: den.x, y: den.y }, size: rng.range(WOLF.packMin, WOLF.packMax),
-    nextMoveDay: game.time.totalDays + WOLF.roamDays, refillDay: null, hunting: false, lastPreyTick: 0, fedUntil: 0, told: false, walkersKilled: 0,
+    nextMoveDay: game.time.totalDays + WOLF.roamDays, movedDay: game.time.totalDays, refillDay: null, hunting: false, lastPreyTick: 0, fedUntil: 0, told: false, walkersKilled: 0,
   };
   wl.packs.push(pack);
   for (let n = 0; n < pack.size; n++) spawnWolf(game, pack, rng);
@@ -281,7 +283,7 @@ function updateWolf(game, u, pack, def, foe, chased, now) {
   const goal = `${pack.spot.x},${pack.spot.y}`;
   if (u.goal !== goal) { u.path = null; u.goal = goal; }
   u.state = 'prowl';
-  marchTo(game, u, tx, ty, def.speed * 0.6);
+  marchTo(game, u, tx, ty, def.speed);
 }
 
 /** A walker within `d` tiles of the wolf, that a wolf can bite? */
@@ -303,7 +305,7 @@ function preyFor(game, u, pack, chased, now) {
   const onGround = (w) => Math.hypot(w.x + 0.5 - (pack.spot.x + 0.5), w.y + 0.5 - (pack.spot.y + 0.5)) <= WOLF.huntLeash;
   let w = u.prey ? game.walkers.get(u.prey) : null;
   if (w && (!canHarm(w) || !onGround(w))) w = null;
-  if (w && (now + u.id) % 6 !== 0) return w;
+  if ((now + u.id) % 6 !== 0) return w; // (a scan of every walker: every few ticks only)
   let best = w;
   let bestD = w ? Math.hypot(w.x + 0.5 - u.x, w.y + 0.5 - u.y) : Infinity;
   for (const p of game.walkers.values()) {
@@ -397,13 +399,23 @@ export function wildlifeDaily(game) {
         pack.refillDay = n + 1 < pack.size ? day + WOLF.refillDays : null;
       }
     } else pack.refillDay = null;
-    // At rest, it moves on every few days, and at once when the city has
-    // built up its ground (a building or road too near its spot).
+    // At rest it moves on WOLF.roamDays after it has gathered at its spot
+    // (most of its wolves there: the days count from their arrival, or a
+    // pack strung out over 16 tiles was always on the move, its wolves
+    // crossing ground the spot's rules never looked at), or after
+    // WOLF.gatherDays whatever the stragglers do; and at once when the city
+    // has built up its ground (a building or road too near its spot).
+    if (pack.nextMoveDay === null || pack.nextMoveDay === undefined) {
+      if (gathered(game, pack) || day - (pack.movedDay ?? day) >= WOLF.gatherDays) pack.nextMoveDay = day + WOLF.roamDays;
+    }
     const crowded = !openGround(game.map, pack.spot.x, pack.spot.y);
-    if (!pack.hunting && (day >= pack.nextMoveDay || crowded)) {
+    if (!pack.hunting && ((pack.nextMoveDay !== null && pack.nextMoveDay !== undefined && day >= pack.nextMoveDay) || crowded)) {
       const spot = roamSpot(game, pack, new RNG(`${game.seed}:wolves:${pack.id}:${day}`));
-      if (spot) pack.spot = spot;
-      pack.nextMoveDay = day + WOLF.roamDays;
+      if (spot) {
+        pack.spot = spot;
+        pack.nextMoveDay = null; // (counted again once they have gathered there)
+        pack.movedDay = day;
+      } else pack.nextMoveDay = day + WOLF.roamDays;
     }
   }
 }
@@ -436,6 +448,18 @@ export function roamSpot(game, pack, rng) {
     return { x, y };
   }
   return null;
+}
+
+/** Has the pack gathered at its spot: half its wolves or more within 3 tiles of it? */
+function gathered(game, pack) {
+  let near = 0;
+  let all = 0;
+  for (const u of game.units.values()) {
+    if (u.type !== 'wolf' || u.pack !== pack.id) continue;
+    all++;
+    if (Math.hypot(u.x - (pack.spot.x + 0.5), u.y - (pack.spot.y + 0.5)) <= 3) near++;
+  }
+  return all > 0 && near * 2 >= all;
 }
 
 /** No building within WOLF.roamClear of (x, y), and no road within WOLF.roamRoad: the wolves' kind of ground. */

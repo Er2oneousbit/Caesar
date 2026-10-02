@@ -31,6 +31,7 @@ import {
 } from '../src/sim/military.js';
 import { Terrain } from '../src/world/map.js';
 import { drawUnit } from '../src/render/militaryArt.js';
+import { buildDemoCity } from '../src/dev/demoCity.js';
 import { newGame } from './helpers.mjs';
 
 log.setLevel('error');
@@ -240,6 +241,21 @@ test('peoples: a people\'s slingers strike the city\'s people in a city with few
     }
     assert.equal(w.hp !== undefined && w.hp < 20 || w.dead, hurt, `${people} with ${soldiers} soldiers`);
   }
+});
+
+test('peoples: a raid by sea of a named people (the console\'s "searaid 12 carthaginians") carries that people\'s warriors', () => {
+  const game = newGame({ type: 'coast', size: 64, seed: 'demo' });
+  const res = buildDemoCity(game, { level: 2 });
+  assert.ok(res.ok, res.reason);
+  game.runDays(16 * 3);
+  assert.equal(game.military.people, GENERIC_PEOPLE);
+  const inv = launchInvasion(game, null, 12, { sea: true, people: 'carthaginians' });
+  assert.equal(inv.sea, true, 'by sea');
+  assert.equal(inv.people, 'carthaginians');
+  const crews = [...game.units.values()].filter((u) => u.type === 'raider_ship').flatMap((u) => u.crew);
+  assert.equal(crews.length, 12);
+  for (const t of crews) assert.ok(PEOPLES.carthaginians.mix[t], `a Carthaginian aboard, not a ${t}`);
+  assert.equal(Object.values(game.military.stats.warriors).reduce((a, b) => a + b, 0), 12, 'counted once each');
 });
 
 test('peoples: an elephant takes half a missile\'s damage', () => {

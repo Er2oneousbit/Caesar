@@ -727,20 +727,22 @@ export function damageBuilding(game, b, dmg, { fromSea = false, legion = null, r
     const cs = game.military.caesar;
     if (cs) cs.stats.buildingsLost = (cs.stats.buildingsLost || 0) + 1;
   }
-  game.military.stats.buildingsLost++;
+  // (The raids' count; a revolt keeps its own, sim/revolt.js.)
+  if (!revolt) game.military.stats.buildingsLost++;
+  else if (game.military.revolt) game.military.revolt.buildingsLost = (game.military.revolt.buildingsLost || 0) + 1;
   game.city.ratings.peace = Math.max(0, game.city.ratings.peace - 1);
   const now = game.time.totalDays;
   const loud = now - game.military.lastLossMessageDay >= 4;
   if (loud) game.military.lastLossMessageDay = now;
   // Raiders torch most of what they break.
   // (A hippodrome's outer sections burn as the hippodrome does.)
-  const who = legion ? 'legion' : 'raid';
+  const who = legion ? 'legion' : revolt ? 'revolt' : 'raid';
   if (game.rng.chance(0.6) && riskRates(mainOf(game, b)).fire > 0) igniteBuilding(game, b, loud ? who : `${who}Quiet`);
   else collapseBuilding(game, b, loud ? who : `${who}Quiet`);
 }
 
-/** Raiders (or, `legion`, Caesar's men) hit a wall or gate on tile i. */
-function damageWall(game, i, dmg, legion = false) {
+/** Raiders (or, `legion`, Caesar's men; `revolt`, rebel gladiators) hit a wall or gate on tile i. */
+function damageWall(game, i, dmg, legion = false, revolt = false) {
   const map = game.map;
   const kind = map.wall[i];
   if (!kind) return;
@@ -750,13 +752,13 @@ function damageWall(game, i, dmg, legion = false) {
   map.wall[i] = Wall.NONE;
   if (!map.road[i]) {
     map.rubble[i] = 1;
-    recordRuin(game, [i], TOOLS.wall.name, legion ? 'legionWall' : 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
+    recordRuin(game, [i], TOOLS.wall.name, legion ? 'legionWall' : revolt ? 'revoltWall' : 'raidWall', { type: 'wall', x: game.map.xOf(i), y: game.map.yOf(i), size: 1 });
   }
   map.touch();
   const now = game.time.totalDays;
   if (now - game.military.lastWallMessageDay >= 5) {
     game.military.lastWallMessageDay = now;
-    const who = legion ? 'Caesar\'s legions have' : 'Raiders have';
+    const who = legion ? 'Caesar\'s legions have' : revolt ? 'Rebel gladiators have' : 'Raiders have';
     game.message(kind === Wall.GATE ? `${who} smashed a gate!` : `${who} broken through a wall!`, 'bad', map.xOf(i), map.yOf(i));
   }
   game.events.emit('collapse', { x: map.xOf(i), y: map.yOf(i), size: 1 });
@@ -1220,7 +1222,7 @@ function updateRaider(game, u, romans) {
       u.cooldown = def.cooldown;
       u.strikeTick = game.time.totalTicks;
       const dmg = def.siege * enemyPower(game, u) * (0.75 + game.rng.next() * 0.5);
-      if (bestKind === 'wall') damageWall(game, best, dmg);
+      if (bestKind === 'wall') damageWall(game, best, dmg, false, !!rebel);
       else {
         const b = game.buildings.get(map.building[best]);
         if (b) damageBuilding(game, b, dmg, { revolt: !!rebel });
@@ -1245,10 +1247,11 @@ function volleyAtWalkers(game, u, def, inv, romans) {
   let w = u.prey ? game.walkers.get(u.prey) : null;
   const reach = (p) => canHarm(p) && Math.hypot(p.x + 0.5 - u.x, p.y + 0.5 - u.y) <= def.range;
   if (w && !reach(w)) w = null;
-  if (!w || (game.time.totalTicks + u.id) % 6 === 0) {
+  // Looked for every few ticks only (a scan of every walker), held between.
+  if ((game.time.totalTicks + u.id) % 6 === 0) {
     let bestD = def.range;
     for (const p of game.walkers.values()) {
-      if (!canHarm(p)) continue;
+      if (Math.abs(p.x + 0.5 - u.x) > def.range || Math.abs(p.y + 0.5 - u.y) > def.range || !canHarm(p)) continue;
       const d = Math.hypot(p.x + 0.5 - u.x, p.y + 0.5 - u.y);
       if (d <= bestD) { bestD = d; w = p; }
     }
@@ -1635,7 +1638,14 @@ export function launchInvasion(game, origin, size, { sea = false, people = null 
     const inv = launchSeaInvasion(game, Math.max(1, size || peopleSize(raidSize(game), folk)));
     if (inv) {
       stampRaid(game, inv, folkId);
-      for (const u of game.units.values()) if (u.invasion === inv.id) for (const t of u.crew || []) countWarrior(m, t);
+      // sim/navy.js rolled the crews from the province's people: a raid of
+      // another (the console's "searaid 12 gauls") rolls them again.
+      const own = folkId === (m.people || GENERIC_PEOPLE);
+      for (const u of game.units.values()) {
+        if (u.invasion !== inv.id || !u.crew) continue;
+        if (!own) u.crew = u.crew.map(() => warbandType(game, folk));
+        for (const t of u.crew) countWarrior(m, t);
+      }
       computeRaidField(game);
       return inv;
     }

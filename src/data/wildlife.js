@@ -14,12 +14,17 @@
  * ----------------------------------------------------------------------------
  */
 
-/** Missions whose maps have wolf packs (by id; data/scenarios.js). */
+/**
+ * Missions whose maps have wolf packs (by id; data/scenarios.js). Only
+ * missions that can build a fort or a watchtower: a pack grows back while
+ * one wolf lives, and prefects alone lose to wolves, so where the army is
+ * not unlocked a pack could never be cleared (Luna, the peaceful
+ * province of the white mountains, was left out for that).
+ */
 export const WOLVES_BY_MISSION = Object.freeze({
   c3m: true, // Firmum: the Picene hills
   c4: true, // Pons Aelius: the wooded valley of the Arno
   c8m: true, // Mutina: the Ligurian hills
-  c8p: true, // Luna: the white mountains above the town
   c10m: true, // Narbo Martius: the Cevennes behind the coast
 });
 
@@ -32,7 +37,8 @@ export const WOLF = Object.freeze({
   denFromEntry: 30, // tiles from the map's entry and exit, at least
   denFromRoad: 10, // ...and from the Imperial road
   denApart: 25, // ...and from each other
-  roamDays: 3, // a pack moves on every 3 days (the original's 6 checks, twice a day)
+  roamDays: 3, // a pack moves on 3 days after it has gathered at its spot (the original's 6 checks, twice a day)
+  gatherDays: 12, // ...or this long after it set out, whatever its stragglers do
   roamReach: 16, // up to this far from where it is
   roamLeash: 22, // never farther than this from its den
   roamDesire: 1, // desirability a spot may have (the city's edge, not its heart)

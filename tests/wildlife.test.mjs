@@ -21,7 +21,7 @@ import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
-import { findScenario, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
+import { SCENARIOS, findScenario, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { WOLF } from '../src/data/wildlife.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
 import { UNIT_TYPES } from '../src/data/units.js';
@@ -72,8 +72,13 @@ function tick(game, n = 1) {
 }
 
 test('wolves: on the missions of the north and the hills, never the first two or the desert; a sandbox only when asked', () => {
-  for (const id of ['c3m', 'c4', 'c8m', 'c8p', 'c10m']) assert.equal(wolvesWanted(findScenario(id)), true, id);
-  for (const id of ['c1', 'c2', 'c6', 'c7', 'c10p']) assert.equal(wolvesWanted(findScenario(id)), false, id);
+  for (const id of ['c3m', 'c4', 'c8m', 'c10m']) assert.equal(wolvesWanted(findScenario(id)), true, id);
+  for (const id of ['c1', 'c2', 'c6', 'c7', 'c8p', 'c10p']) assert.equal(wolvesWanted(findScenario(id)), false, id);
+  // Only where a pack can be cleared: a mission with wolves can build a fort or a watchtower.
+  for (const s of SCENARIOS) {
+    if (!wolvesWanted(s)) continue;
+    assert.ok(s.unlocks === 'all' || s.unlocks.some((k) => k.startsWith('fort_') || k === 'tower'), `${s.id} can fight its wolves`);
+  }
   assert.equal(wolvesWanted(sandboxScenario()), false, 'sandbox: off by default');
   assert.equal(wolvesWanted({ ...sandboxScenario(), wolves: true }), true);
   assert.equal(wolvesWanted({ ...sandboxScenario({ type: 'desert' }), wolves: true }), false, 'never in the desert');
@@ -119,14 +124,19 @@ test('wolves: a walker who comes near sets the pack on; he dies in 5 bites on Ea
     assert.equal(Math.ceil(WALKER_HP / DIFFICULTY[level].wolfBite), bites, level);
     const { game, pack } = packOnPlains(level);
     const w = walkerBy(game, pack, 2);
-    const seen = [];
+    // Count the bites: each one the level's, however many wolves are on him at once.
+    let bitten = 0;
+    let hp = WALKER_HP;
     for (let t = 0; t < 400 && !w.dead; t++) {
       tick(game);
-      if (w.hp !== undefined && seen[seen.length - 1] !== w.hp) seen.push(w.hp);
+      const now = w.hp ?? WALKER_HP;
+      const lost = hp - now;
+      assert.ok(lost % DIFFICULTY[level].wolfBite === 0, `${level}: a bite of ${DIFFICULTY[level].wolfBite} (lost ${lost})`);
+      bitten += lost / DIFFICULTY[level].wolfBite;
+      hp = now;
     }
     assert.ok(w.dead, `${level}: killed`);
-    // Every bite is the level's: the hp he passed through after each, then dead.
-    assert.equal(seen.length, bites - 1, `${level}: ${bites} bites (hp ${seen.join(', ')})`);
+    assert.equal(bitten, bites, `${level}: ${bites} bites`);
     assert.equal(game.wildlife.stats.walkersKilled, 1);
     assert.match(game.messages[0].text, /^Wolves killed a cart pusher near/);
   }
@@ -204,11 +214,29 @@ test('wolves: a prefect on his rounds fights a wolf in reach, and the wolf turns
   assert.ok(p.dead || p.hp < CONFIG.PREFECT_COMBAT.hp, 'the wolf bites him back');
 });
 
-test('wolves: a pack moves on every few days, keeps to its ground, and leaves ground the city has built on', () => {
+test('wolves: a pack moves on a few days after it gathers, mostly together, keeps to its ground, and leaves ground the city has built on', () => {
   const { game, at, pack } = packOnPlains();
   const spots = new Set();
-  for (let d = 0; d < 60; d++) { game.time.totalDays++; wildlifeDaily(game); spots.add(`${pack.spot.x},${pack.spot.y}`); }
-  assert.ok(spots.size > 3, `it moved (${spots.size} spots)`);
+  let atSpot = 0;
+  let together = 0;
+  let samples = 0;
+  for (let d = 0; d < 90; d++) {
+    game.runDays(1); // (the whole game: wolves move by the tick, the pack by the day)
+    spots.add(`${pack.spot.x},${pack.spot.y}`);
+    const wolves = wolvesOf(game, pack);
+    const mx = wolves.reduce((s, u) => s + u.x, 0) / wolves.length;
+    const my = wolves.reduce((s, u) => s + u.y, 0) / wolves.length;
+    for (const u of wolves) {
+      samples++;
+      if (Math.hypot(u.x - (pack.spot.x + 0.5), u.y - (pack.spot.y + 0.5)) <= 3) atSpot++;
+      if (Math.hypot(u.x - mx, u.y - my) <= 3) together++;
+    }
+  }
+  assert.ok(spots.size > 4, `it moved (${spots.size} spots)`);
+  // The days count from the pack's arrival, and the wolves trot there
+  // together: a pack, not wolves strung out over its ground.
+  assert.ok(together / samples > 0.8, `together ${Math.round((100 * together) / samples)}% of the time`);
+  assert.ok(atSpot / samples > 0.35, `at its spot ${Math.round((100 * atSpot) / samples)}% of the time`);
   for (const s of spots) {
     const [x, y] = s.split(',').map(Number);
     assert.ok(Math.hypot(x - pack.den.x, y - pack.den.y) <= WOLF.roamLeash, 'never far from its den');

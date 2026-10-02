@@ -42,7 +42,7 @@
  */
 import { BUILDINGS } from '../data/buildings.js';
 
-export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall', 'legionFire', 'legion', 'legionWall']);
+export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall', 'legionFire', 'legion', 'legionWall', 'revoltFire', 'revolt', 'revoltWall']);
 
 /** Remember what fell on these tiles (they hold rubble now); `site`: see the header. */
 export function recordRuin(game, tiles, what, cause, site = null) {

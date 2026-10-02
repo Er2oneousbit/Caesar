@@ -102,6 +102,9 @@ const RUIN_WORDS = {
   legionFire: 'burned by Caesar\'s legions',
   legion: 'torn down by Caesar\'s legions',
   legionWall: 'broken down by Caesar\'s legions',
+  revoltFire: 'burned by rebel gladiators',
+  revolt: 'torn down by rebel gladiators',
+  revoltWall: 'broken down by rebel gladiators',
 };
 
 /**

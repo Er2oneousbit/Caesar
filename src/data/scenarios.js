@@ -18,8 +18,7 @@
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
  *                                 population: no more than the mission's buildings
  *                                 can employ (sim/capacity.js; a test holds it
- *                                 there, missions 3 to 7 excepted for now;
- *                                 never the missions added beside them)
+ *                                 there)
  *   paceYears                     the planned floor: the fewest game years the
  *                                 goals allow (sim/pace.js; a test holds the
  *                                 goals to it). A year is 8 minutes at 1x
@@ -27,6 +26,15 @@
  *   partners: string[]            trade partner ids (see TRADE_PARTNERS). Only list
  *                                 sea partners on maps with navigable water
  *                                 (river, coast, or a big lake at the map edge)
+ *   demand                        optional { partner: { good: units } }: what a
+ *                                 partner buys a year in this mission, on the
+ *                                 tiers DEMAND_TIERS (sim/tradeDemand.js), in
+ *                                 place of its own table's amount
+ *   demandChanges                 optional [{ year, partner, good, to }]: in the
+ *                                 mission's year `year`, in a month from Martius
+ *                                 to October drawn from the map's seed, the
+ *                                 partner's yearly amount of `good` becomes `to`
+ *                                 (0 stops it); the player is told
  *   requests: boolean             Emperor makes requests
  *   crime, disease: false         none of it in this mission (the first two,
  *                                 which teach the basics); missing = on
@@ -76,6 +84,9 @@ import { GOD_KEYS } from './gods.js';
  *          sits just inland of its harbor; Cirta is inland too, and its
  *          ships put in on the coast below it
  *   color  sail / banner color
+ *   labelSides  optional: the sides of its dot the empire map tries for its
+ *          name, in order (default above, below, right, left); Delos and
+ *          Rhodus lie close to Corinthus and each other
  *
  * Cloth (not in the original), by what each place was known for: Egypt's
  * linen was the finest in the Mediterranean (Alexandria sells the most), and
@@ -83,6 +94,16 @@ import { GOD_KEYS } from './gods.js';
  * Corinthus buy clothing. A mission whose homes can reach the Insula, where
  * clothing is first needed, also unlocks the Linarium, Textrinum and
  * Taberna Vestiaria (TIER4 on), so linen bought in only saves a flax field.
+ *
+ * Three partners for the late campaign, by sea from the far ends of the sea:
+ * Gades, the Phoenician port beyond the Pillars of Hercules and Rome's ally
+ * from 206 BC (its olives and the iron of Hispania's mines); Rhodus, the
+ * trading republic and its wine, hungry for grain, timber and iron for its
+ * fleet; and Delos, a free port from 166 BC, the market of the Aegean. They
+ * buy on the original's quota tiers (1,500, 2,500 and 4,000 a year, see
+ * sim/tradeDemand.js), and so do the late missions' own `demand` fields; a
+ * route this busy sends its ships more often. Urbs Magna keeps the nine it
+ * always had (its list is written out), the sandbox has all twelve.
  */
 export const TRADE_PARTNERS = Object.freeze({
   tarraco: { name: 'Tarraco', route: 'land', openCost: 500, pos: at(1.25, 41.12), color: '#b8573a', sells: { timber: 1200, olives: 1000, linen: 600 }, buys: { wheat: 1500, pottery: 800 } },
@@ -94,7 +115,13 @@ export const TRADE_PARTNERS = Object.freeze({
   cirta: { name: 'Cirta', route: 'sea', openCost: 900, pos: at(6.61, 36.37), color: '#c9962e', sells: { horses: 600, fruit: 800 }, buys: { weapons: 600, pottery: 800, oil: 600 } },
   corinthus: { name: 'Corinthus', route: 'sea', openCost: 1200, pos: at(22.92, 37.9), color: '#2f8a8a', sells: { marble: 800, oil: 800 }, buys: { wine: 1000, wheat: 2000, iron: 1000, arrows: 600, clothing: 600 } },
   alexandria: { name: 'Alexandria', route: 'sea', openCost: 1400, pos: at(29.9, 31.15), color: '#d6ab3c', sells: { wheat: 2500, vegetables: 1000, linen: 1000 }, buys: { wine: 800, oil: 800, weapons: 600, furniture: 600 } },
+  gades: { name: 'Gades', route: 'sea', openCost: 1300, pos: at(-6.25, 36.52), color: '#b03f5e', sells: { olives: 1500, iron: 1000 }, buys: { pottery: 1500, furniture: 1500, clothing: 1500, wine: 1500 } },
+  rhodus: { name: 'Rhodus', route: 'sea', openCost: 1300, pos: at(28.22, 36.43), labelSides: ['below', 'right', 'above', 'left'], color: '#d9783b', sells: { wine: 1500 }, buys: { wheat: 2500, timber: 1500, iron: 1500, weapons: 1000 } },
+  delos: { name: 'Delos', route: 'sea', openCost: 1500, pos: at(25.27, 37.4), labelSides: ['right', 'below', 'above', 'left'], color: '#c25fa0', sells: { linen: 1000, marble: 800 }, buys: { oil: 2500, wine: 2500, clothing: 1500, furniture: 1500 } },
 });
+
+/** The nine partners of the first seven missions (Urbs Magna trades with all of them). */
+export const FIRST_NINE = Object.freeze(['tarraco', 'massilia', 'lugdunum', 'aquileia', 'capua', 'carthago', 'cirta', 'corinthus', 'alexandria']);
 
 /**
  * Where the player's province sits on the empire map: the Etruscan coast by
@@ -131,9 +158,10 @@ export const INVASION_PRESETS = Object.freeze({
  * ask for what a sensibly built town employs: measured with the demo city
  * (`npm run sim -- --scenario c1 --unlocks --homes 40`: 312 people, 4% out
  * of work) and held under the capacity model's sensible ceiling by a test
- * (sim/capacity.js, `npm run sim -- --capacity`). Missions 3 to 7 keep their
- * goals for now, though their buildings cannot yet employ those populations:
- * see the ROADMAP note "The late missions need more jobs".
+ * (sim/capacity.js, `npm run sim -- --capacity`). Missions 3 to 7 ask for a
+ * little under what a city of working homes alone employs; the model now
+ * counts a few villas too, which leaves them room to spare (see the ROADMAP
+ * note "The late missions need more jobs").
  *
  * Length: each mission's goals are set so the fastest possible city takes the
  * mission's paceYears (sim/pace.js). In missions 1 and 2 peace sets it (a
@@ -364,7 +392,7 @@ export const SCENARIOS = Object.freeze([
     goals: { population: 5800, culture: 75, prosperity: 70, peace: 75, favor: 65 },
     paceYears: 6.8,
     rank: 6, // Aedile (data/ranks.js)
-    unlocks: 'all', partners: Object.keys(TRADE_PARTNERS), requests: true,
+    unlocks: 'all', partners: FIRST_NINE, requests: true,
     military: { first: 36, interval: [14, 22], base: 8 },
     distantBattles: [{ year: 3, city: 'messana', enemy: 40 }, { year: 9, city: 'placentia', enemy: 52 }],
     hints: [

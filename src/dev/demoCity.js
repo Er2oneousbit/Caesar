@@ -22,10 +22,11 @@
 import { planAction, applyPlan, undoLast } from '../sim/construction.js';
 import { removeBuilding } from '../sim/entities.js';
 import { openRoute, setTradeMode, dockBerth } from '../sim/trade.js';
-import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { TRADE_PARTNERS, FIRST_NINE } from '../data/scenarios.js';
 import { Terrain, WaterBits } from '../world/map.js';
 import { CONFIG } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
+import { BUILDINGS } from '../data/buildings.js';
 import { deployFort, recallFort } from '../sim/military.js';
 
 /** Undo records of the builds made inside the current attempt() (null outside one). */
@@ -86,10 +87,14 @@ function place(game, type, x, y, size) {
 }
 
 /**
- * Locate the best rectangle for the demo city.
+ * Locate the best rectangle for the demo city. `search`: road tiles tried,
+ * nearest first to the map's middle, or to `near` (a later block of a bigger
+ * city: buildDemoQuarters), whose sites score less the farther they lie from
+ * it; `fields` false: farmland in reach does not count (a villa block has
+ * no farms of its own).
  * @returns {{toLocal:Function, W:number, D:number}|null}
  */
-function findSite(game, W, D) {
+function findSite(game, W, D, { search = 60, near = null, fields = true } = {}) {
   const { map } = game;
   // Build along roads that reach the map entry (settlers come that way), not
   // along a street the player left unconnected.
@@ -99,8 +104,8 @@ function findSite(game, W, D) {
   for (let i = 0; i < map.size; i++) if (map.road[i] && map.roadNet[i] === entryNet) road.push(i);
   if (!road.length) return null;
   // Imperial road tiles sorted by distance to the map center.
-  const cx = map.w / 2;
-  const cy = map.h / 2;
+  const cx = near ? near.x : map.w / 2;
+  const cy = near ? near.y : map.h / 2;
   road.sort((a, b) => Math.hypot(map.xOf(a) - cx, map.yOf(a) - cy) - Math.hypot(map.xOf(b) - cx, map.yOf(b) - cy));
   // Farmland within walking reach: meadow tiles up to FIELD_REACH steps over
   // land (not across water) from the site's middle, outside the town itself.
@@ -131,7 +136,7 @@ function findSite(game, W, D) {
     return meadow;
   };
   let best = null;
-  for (const i of road.slice(0, 60)) {
+  for (const i of road.slice(0, search)) {
     const rx = map.xOf(i);
     const ry = map.yOf(i);
     const alongX = map.hasRoad(rx + 1, ry) && map.hasRoad(rx - 1, ry);
@@ -154,7 +159,7 @@ function findSite(game, W, D) {
       const mid = toWorld(W >> 1, D >> 1);
       if (!map.inBounds(mid.x, mid.y)) continue;
       // Enough land to build on, then as much farmland in reach as 4-6 farms want.
-      const score = free * 0.25 + Math.min(120, fieldsNear(mid.x, mid.y, inTown));
+      const score = free * 0.25 + (fields ? Math.min(120, fieldsNear(mid.x, mid.y, inTown)) : 0) - (near ? Math.hypot(mid.x - near.x, mid.y - near.y) : 0);
       if (!best || score > best.score) best = { free, score, toWorld };
     }
   }
@@ -170,16 +175,23 @@ function findSite(game, W, D) {
  * homes climb past Huts as a sensible player's do; level 2's stay Huts.
  * `homes` sizes the town to a mission's jobs (npm run sim -- --homes): the
  * whole rectangle houses far more people than mission 1's buildings employ.
- * @returns {{ok:boolean, center?:{x:number,y:number}, reason?:string}}
+ * `villa` (level 3) lays the block out for villas instead (buildDemoQuarters):
+ * every service in the two outer bands, homes only in the two inner ones, so
+ * nothing breaks the 2x2 squares Tenements, Insulae and Villas grow into.
+ * `siteSearch`: road tiles nearest the map's middle (or `near`) tried for the
+ * site (the first block takes the nearest; more blocks need a wider search).
+ * @returns {{ok:boolean, center?:{x:number,y:number}, reason?:string, firstId?:number}}
  */
 export function buildDemoCity(game, opts = {}) {
   const level = opts.level ?? 2;
   const homes = opts.homes ?? Infinity;
   const can = (type) => game.isUnlocked(type);
+  const villa = !!opts.villa && level >= 3;
   const W = 18;
   const D = 11;
-  const site = findSite(game, W, D);
+  const site = findSite(game, W, D, { search: opts.siteSearch ?? 60, near: opts.near ?? null, fields: !villa });
   if (!site) return { ok: false, reason: 'No free land next to the road' };
+  const firstId = game.nextBuildingId; // every building of this block has this id or a later one
   const at = site.toWorld;
   const R = (a0, b0, a1, b1) => {
     const p = at(a0, b0);
@@ -192,18 +204,18 @@ export function buildDemoCity(game, opts = {}) {
   for (const b of [2, 5, 8]) R(0, b, W - 1, b);
 
   // Services dropped into the housing bands (local a, b of their top-left tile).
-  const services = [
+  const services = villa ? villaServices() : [
     ['well', 3, 0, 1], ['well', 10, 0, 1], ['well', 3, 3, 1], ['well', 11, 6, 1], ['well', 6, 9, 1], ['well', 13, 9, 1],
     ['prefecture', 7, 1, 1], ['engineer_post', 8, 1, 1], ['prefecture', 14, 4, 1], ['engineer_post', 5, 7, 1],
     ['market', 5, 3, 2], ['temple_ceres', 12, 3, 2], ['temple_mercury', 1, 6, 2],
   ];
-  if (level >= 2) {
+  if (level >= 2 && !villa) {
     services.push(
       ['school', 9, 6, 2], ['theater', 15, 6, 2], ['barber', 2, 9, 1], ['forum', 15, 9, 2], ['temple_mars', 9, 9, 2],
       ['market', 5, 9, 2], ['temple_neptune', 12, 0, 2], ['temple_venus', 1, 0, 2], ['clinic', 16, 3, 1],
     );
   }
-  if (level >= 3) {
+  if (level >= 3 && !villa) {
     // Fountains in free slots of the housing bands (fed by pipeWater below).
     services.push(['fountain', 4, 1, 1], ['fountain', 11, 1, 1], ['fountain', 8, 4, 1], ['fountain', 3, 7, 1], ['fountain', 14, 7, 1], ['fountain', 8, 10, 1]);
   }
@@ -219,10 +231,13 @@ export function buildDemoCity(game, opts = {}) {
   // so a moved service never takes another's slot). Skipping them silently
   // once left the balance sim's city without a Forum, so it never taxed.
   const failed = services.filter(([type, a, b, size]) => can(type) && !placeLocal(type, a, b, size));
+  // A villa block keeps its services out of the homes' bands (rows 3, 4, 6, 7).
+  const homeRow = (b) => (villa ? [3, 4, 6, 7].includes(b) : ![2, 5, 8].includes(b));
   for (const [type, a0, b0, size] of failed) {
     const slots = [];
     for (let b = 0; b + size <= D; b++) {
       if ([2, 5, 8].some((s) => s >= b && s < b + size)) continue; // not across a street
+      if (villa && [3, 4, 6, 7].some((h) => h >= b && h < b + size)) continue;
       for (let a = 1; a + size <= W - 1; a++) slots.push({ a, b, d: Math.abs(a - a0) + Math.abs(b - b0) });
     }
     slots.sort((s, t) => s.d - t.d);
@@ -232,7 +247,7 @@ export function buildDemoCity(game, opts = {}) {
   let plots = 0;
   for (let b = 0; b < D; b++) {
     for (let a = 1; a < W - 1; a++) {
-      if (b === 2 || b === 5 || b === 8 || plots >= homes) continue;
+      if (!homeRow(b) || plots >= homes) continue;
       const p = at(a, b);
       if (game.map.isFree(p.x, p.y) && build(game, 'house', p.x, p.y)) plots++;
     }
@@ -246,18 +261,37 @@ export function buildDemoCity(game, opts = {}) {
   }
 
   // Level 2+: a small pottery industry beside the city (jobs + goods).
-  if (level >= 2 && can('clay_pit') && can('pottery_ws')) placeIndustry(game, at(W / 2, D / 2));
+  // (A villa block shares the city's farms and workshops: none of its own.)
+  if (level >= 2 && !villa && can('clay_pit') && can('pottery_ws')) placeIndustry(game, at(W / 2, D / 2));
   // Level 3: piped water for the fountains.
   if (level >= 3 && can('reservoir')) pipeWater(game, at(W / 2, D / 2));
 
   // Farms + granary on the best meadow within reach.
-  const farms = can('farm_wheat') ? placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2) : 0;
+  const farms = can('farm_wheat') && !villa ? placeFarms(game, at(W / 2, D / 2), level >= 2 ? 4 : 2) : 0;
   roadEveryBuilding(game);
   const c = at(W / 2, D / 2);
   const p = at(0, 0);
   const q = at(W - 1, D - 1);
   const bounds = { x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y) };
-  return { ok: true, center: c, farms, bounds };
+  return { ok: true, center: c, farms, bounds, firstId };
+}
+
+/**
+ * A villa block's services (buildDemoCity `villa`), all in the outer bands
+ * (rows 0-1 by the Imperial road, 9-10 at the back): one of each walker
+ * service a Villa needs (two prefects and engineers, one for each side),
+ * three gods, a theater, and fountains on the rows nearest the homes, each
+ * covering its radius of both home bands. Its farms, workshops and shows are
+ * the city's (buildDemoQuarters).
+ */
+function villaServices() {
+  return [
+    ['prefecture', 1, 0, 1], ['engineer_post', 1, 1, 1], ['market', 2, 0, 2], ['barber', 4, 0, 1], ['fountain', 4, 1, 1],
+    ['temple_ceres', 5, 0, 2], ['school', 7, 0, 2], ['temple_mercury', 9, 0, 2], ['clinic', 11, 0, 1], ['fountain', 12, 1, 1],
+    ['library', 13, 0, 2], ['forum', 15, 0, 2],
+    ['theater', 1, 9, 2], ['fountain', 3, 9, 1], ['prefecture', 3, 10, 1], ['temple_venus', 4, 9, 2], ['fountain', 11, 9, 1],
+    ['engineer_post', 11, 10, 1],
+  ];
 }
 
 /**
@@ -891,16 +925,18 @@ export const UPTOWN_GOODS = Object.freeze(['pottery', 'furniture', 'oil']);
  * food (and more of it: the town's four wheat farms feed it as Huts).
  * `monthly()` stocks the markets with pottery, furniture and oil (see
  * UPTOWN_GOODS). With buildDemoCloth too, every need of an Insula is met.
- * `res`: what buildDemoCity returned (its center and bounds).
+ * `res`: what buildDemoCity returned (its center and bounds). `villa`: a
+ * villa block's (buildDemoQuarters): its own walkers are planned in its
+ * layout and the city's farms feed it, so no second rounds and no farms.
  * @returns {{ok:boolean, built:object, monthly:Function}}
  */
-export function buildDemoUptown(game, res) {
+export function buildDemoUptown(game, res, { villa = false } = {}) {
   const { center, bounds } = res;
   const built = {};
   if (bounds && game.isUnlocked('plaza')) built.plaza = build(game, 'plaza', bounds.x0, bounds.y0, bounds.x1, bounds.y1);
   // Second rounds of the walkers that cover the most demanding needs, from
   // the other side of town (one of each left homes out of reach for weeks).
-  for (const [type, size, minD, maxD] of [['library', 2, 3, 12], ['library', 2, 8, 14], ['school', 2, 8, 14], ['clinic', 1, 3, 12], ['market', 2, 3, 12]]) {
+  for (const [type, size, minD, maxD] of villa ? [] : [['library', 2, 3, 12], ['library', 2, 8, 14], ['school', 2, 8, 14], ['clinic', 1, 3, 12], ['market', 2, 3, 12]]) {
     if (game.isUnlocked(type)) built[type] = (built[type] || 0) + (placeNear(game, type, size, center, minD, maxD) ? 1 : 0);
   }
   // The baths inside a reservoir's piped area (they run on piped water).
@@ -910,7 +946,7 @@ export function buildDemoUptown(game, res) {
   for (let k = 0; k < 3 && game.isUnlocked('baths'); k++) if (placeJoined(game, 'baths', 2, center, 16, piped)) built.baths++;
   Object.assign(built, Object.fromEntries(Object.entries(buildDemoVenues(game, center)).map(([k, b]) => [k, !!b])));
   built.farm_veg = 0;
-  for (let k = 0; k < 3 && game.isUnlocked('farm_veg'); k++) if (placeNear(game, 'farm_veg', 3, center, 8, 34, true)) built.farm_veg++;
+  for (let k = 0; k < (villa ? 0 : 3) && game.isUnlocked('farm_veg'); k++) if (placeNear(game, 'farm_veg', 3, center, 8, 34, true)) built.farm_veg++;
   // Statues around the town, the grand ones first (each lifts every home
   // within its reach).
   let statues = 0;
@@ -927,6 +963,121 @@ export function buildDemoUptown(game, res) {
     }
   };
   return { ok: !!(built.library && built.baths), built, monthly };
+}
+
+// ---------------------------------------------------------------------------
+// A bigger city with a villa quarter (simulate.mjs --blocks, --villas): the
+// capacity model checked in play (sim/capacity.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Workshops each block builds for its own homes' goods, with the raw
+ * producer that feeds each (a block's potter is skipped where placeIndustry built one).
+ * Their goods reach the homes through the uptown's stand-in (UPTOWN_GOODS);
+ * they are built for their jobs, as a player's city has them.
+ */
+const BLOCK_WORKSHOPS = Object.freeze([['pottery_ws', 'clay_pit'], ['furniture_ws', 'timber_yard'], ['oil_ws', 'farm_olive']]);
+/** ...and a villa block's: wine. */
+const VILLA_WORKSHOPS = Object.freeze([['wine_ws', 'farm_vine']]);
+
+/**
+ * A raw producer near `center` where its placement allows (a timber yard by
+ * the woods, a farm on meadow), joined by road to the streets.
+ */
+function placeRaw(game, type, center) {
+  const { map } = game;
+  const def = BUILDINGS[type];
+  const size = def.size;
+  const fits = def.placement === 'nearTrees' ? (x, y) => map.isNearTerrain(x, y, size, Terrain.TREES, 1)
+    : def.placement === 'nearWater' ? (x, y) => map.isNearTerrain(x, y, size, Terrain.WATER, 2)
+      : def.placement === 'nearRock' ? (x, y) => map.isNearTerrain(x, y, size, Terrain.ROCK, 1)
+        : def.placement === 'meadow' ? (x, y) => map.countTerrain(x, y, size, Terrain.MEADOW) >= size * size * 0.6
+          : () => true;
+  return placeJoined(game, type, size, center, 40, fits, 20);
+}
+
+/**
+ * A city of several blocks, for checking the capacity model in play: besides
+ * the first block (`first`, buildDemoCity at level 3, already built with its
+ * uptown and cloth when asked), `blocks - 1` more working blocks and `villas`
+ * villa blocks (buildDemoCity `villa`), each with its own uptown (always for a
+ * villa block, without farms or second rounds of walkers), a working block's
+ * cloth industry (with `cloth`), and workshops for its goods (BLOCK_WORKSHOPS,
+ * VILLA_WORKSHOPS). A villa quarter shares the city's farms and workshops. `monthly()` stocks the villa blocks'
+ * markets with wine and ships the winery's wine away (a stand-in for its
+ * export): Insulae want wine for the next level, so wine in any warehouse
+ * would turn every block's Insulae into villas, where a player keeps the
+ * villas to their quarter; with `wine`, every market gets it (the villas grow
+ * wherever homes are served best). The first block's uptown stocks every
+ * market's other goods (buildDemoUptown).
+ * @returns {{blocks:object[], villas:object[], workshops:object, monthly:Function}}
+ */
+export function buildDemoQuarters(game, first, { blocks = 1, villas = 0, uptown = false, cloth = false, wine = false } = {}) {
+  const made = [];
+  const block = (villa) => {
+    // Beside the first block, as a city grows (a villa quarter far off would share none of its farms).
+    const res = buildDemoCity(game, { level: 3, villa, siteSearch: 600, near: first.center });
+    if (!res.ok) return null;
+    if (uptown || villa) buildDemoUptown(game, res, { villa });
+    if (cloth && !villa) buildDemoCloth(game, res.center);
+    res.lastId = game.nextBuildingId; // (its buildings: firstId up to here)
+    made.push({ res, villa });
+    return res;
+  };
+  // What a player adds to a block the demo's plan leaves short (first block
+  // included): a granary within the market buyers' reach of its homes (the
+  // first farm may lie too far out for one by it), a second barber for its
+  // Apartment Houses, and baths in its piped area.
+  const near = (type, c, d) => [...game.buildings.values()].some((b) => b.type === type && Math.hypot(b.x - c.x, b.y - c.y) <= d);
+  const topUp = (res) => {
+    const c = res.center;
+    if (!near('granary', c, 20)) {
+      const g = placeNear(game, 'granary', 3, c, 4, 24);
+      if (g) guard(game, g.x + 1, g.y + 1);
+    }
+    placeNear(game, 'barber', 1, c, 2, 12);
+    const piped = (x, y) => (game.map.water[game.map.idx(x, y)] & WaterBits.PIPED) !== 0 && (game.map.water[game.map.idx(x + 1, y + 1)] & WaterBits.PIPED) !== 0;
+    if (!near('baths', c, 12) && !placeJoined(game, 'baths', 2, c, 16, piped)) {
+      // No piped water in reach of the block (its reservoir found no shore near enough): another try from here.
+      pipeWater(game, c);
+      placeJoined(game, 'baths', 2, c, 16, piped);
+    }
+  };
+  const extra = [];
+  for (let k = 1; k < blocks; k++) extra.push(block(false));
+  const villaBlocks = [];
+  for (let k = 0; k < villas; k++) villaBlocks.push(block(true));
+  topUp(first);
+  for (const { res } of made) topUp(res);
+  const workshops = {};
+  const shops = (res, list) => {
+    for (const [ws, raw] of list) {
+      if (!game.isUnlocked(ws) || !game.isUnlocked(raw)) continue;
+      if (ws === 'pottery_ws' && near(ws, res.center, 24)) continue; // its own potter (placeIndustry) stands
+      const w = placeJoined(game, ws, BUILDINGS[ws].size, res.center, 24);
+      const r = w ? placeRaw(game, raw, w) : null;
+      if (w) guard(game, w.x, w.y);
+      workshops[ws] = (workshops[ws] || 0) + (w ? 1 : 0);
+      workshops[raw] = (workshops[raw] || 0) + (r ? 1 : 0);
+    }
+  };
+  // (With `wine` and no villa block the city's winery goes by the first block,
+  // with or without the uptown's workshops.)
+  shops(first, [...(uptown ? BLOCK_WORKSHOPS : []), ...(wine && !villas ? VILLA_WORKSHOPS : [])]);
+  for (const { res, villa } of made) shops(res, villa ? VILLA_WORKSHOPS : (uptown ? BLOCK_WORKSHOPS : []));
+  const villaMarkets = new Set();
+  for (const res of villaBlocks.filter(Boolean)) {
+    for (const b of game.buildings.values()) if (b.id >= res.firstId && b.id < res.lastId && b.def.kind === 'market') villaMarkets.add(b.id);
+  }
+  // With `wine`, every market has it, as in a city with a winery and wine
+  // imports for all: the best-served homes anywhere may become villas.
+  const monthly = () => {
+    for (const b of game.buildings.values()) {
+      if (b.def.kind === 'market' && (wine || villaMarkets.has(b.id))) b.stock.wine = Math.max(b.stock.wine, CONFIG.MARKET_GOODS_CAP);
+      else if (b.def.kind === 'market' || b.def.kind === 'warehouse') b.stock.wine = 0;
+    }
+  };
+  return { blocks: [first, ...extra.filter(Boolean)], villas: villaBlocks.filter(Boolean), workshops, monthly };
 }
 
 // ---------------------------------------------------------------------------
@@ -984,7 +1135,10 @@ export function buildDemoHarbor(game, center) {
   const warehouse = placeNear(game, 'warehouse', 3, { x: dock.x, y: dock.y }, 3, 12);
   const routes = [];
   for (const [id, r] of Object.entries(game.city.trade.routes)) {
-    if (TRADE_PARTNERS[id].route !== 'sea') continue;
+    // The first nine partners' only (FIRST_NINE): the harbor showcase and its
+    // balance runs (npm run sim -- --harbor) trade as they did before the sandbox
+    // had Gades, Rhodus and Delos.
+    if (TRADE_PARTNERS[id].route !== 'sea' || !FIRST_NINE.includes(id)) continue;
     game.cheats.freeBuild = true;
     if (openRoute(game, id).ok) routes.push(id);
     game.cheats.freeBuild = false;

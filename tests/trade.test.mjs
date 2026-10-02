@@ -275,12 +275,15 @@ test('ships come at the original pace; on Insane, half as many traders in winter
   const { updateTrade } = await import('../src/sim/trade.js');
   const { DIFFICULTY } = await import('../src/data/difficulty.js');
   assert.ok(CONFIG.SHIP_INTERVAL_DAYS[0] >= 2 * CONFIG.CARAVAN_INTERVAL_DAYS[0] - 1, 'ships half as often as caravans');
-  // Every sea partner's yearly trade still fits in its visits (the fewest a year).
-  const visits = Math.floor((CONFIG.DAYS_PER_MONTH * 12) / CONFIG.SHIP_INTERVAL_DAYS[1]);
+  // Every partner's yearly trade fits in its traders at their average pace: a
+  // busy route's come more often (sim/tradeDemand.js), so Delos's 8,000 a
+  // year by sea fits as Capua's 2,600 by land does.
+  const { visitsPerYear, routeVolume } = await import('../src/sim/tradeDemand.js');
   for (const [id, p] of Object.entries(TRADE_PARTNERS)) {
-    if (routeKind(id) !== 'sea') continue;
-    const most = Math.max(Object.values(p.buys).reduce((a, b) => a + b, 0), Object.values(p.sells).reduce((a, b) => a + b, 0));
-    assert.ok(visits * CONFIG.SHIP_MAX_TRADE >= most * 0.9, `${id}: ${most} a year in ${visits} ships of ${CONFIG.SHIP_MAX_TRADE}`);
+    const kind = routeKind(id);
+    const most = routeVolume(p.buys, p.sells);
+    const carry = (kind === 'sea' ? CONFIG.SHIP_MAX_TRADE : CONFIG.CARAVAN_MAX_TRADE) * visitsPerYear(kind, most);
+    assert.ok(carry >= most * 0.99, `${id}: ${most} a year, ${Math.round(carry)} carried`);
   }
   assert.ok(CONFIG.DOCK_CAPACITY >= CONFIG.SHIP_MAX_TRADE, 'a dock holds a whole ship');
   // Insane's winter: the wait runs at half speed; Normal's does not.

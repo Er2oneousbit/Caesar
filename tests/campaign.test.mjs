@@ -9,8 +9,7 @@
  * longer won in a few months. The goals also have to be within reach of each
  * mission's buildings: the housing level its unlocks allow, the culture and
  * prosperity it can earn, and the people a sensibly built city of its
- * buildings can employ and its map can house and feed (sim/capacity.js;
- * missions 3 to 7 are known exceptions for now).
+ * buildings can employ and its map can house and feed (sim/capacity.js).
  * ----------------------------------------------------------------------------
  */
 
@@ -20,10 +19,11 @@ import assert from 'node:assert/strict';
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
-import { SCENARIOS, findScenario, LAST_STEP, missionsAtStep } from '../src/data/scenarios.js';
+import { SCENARIOS, findScenario, LAST_STEP, missionsAtStep, TRADE_PARTNERS } from '../src/data/scenarios.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { goalMonths, populationMonths, monthsToMinutes } from '../src/sim/pace.js';
-import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, employmentCeiling, employsEnough, landCeiling, landOf, peoplePerTile, lowProduction, LEAN, SENSIBLE } from '../src/sim/capacity.js';
+import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, employmentCeiling, employsEnough, landCeiling, landOf, peoplePerTile, lowProduction, topProduction, docksFor, demandAt, LEAN, SENSIBLE, PATRICIAN_SHARE, VILLA_LEVEL } from '../src/sim/capacity.js';
+import { demandChangeAt } from '../src/sim/tradeDemand.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { updateImmigration, immigrationPerDay } from '../src/sim/population.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
@@ -169,6 +169,90 @@ test('capacity model: shows, patricians, trade and winter fields', () => {
   assert.ok(employmentCeiling({ ...c3, partners: [] }) < employmentCeiling(c3));
   // The land's food at Insane: production 0.8, and no growth for 3 months in 12.
   assert.ok(Math.abs(lowProduction() - 0.8 * 0.75) < 1e-9);
+});
+
+test('capacity model: a villa quarter where the Villa can be reached, its people using services but not working', () => {
+  // Urbs Magna at 8,000 people: 5% in Villas (400 people on 36 tiles), the
+  // rest Insulae. Its 7,600 plebeians put 2,432 to work, so 2,189 jobs keep
+  // unemployment at 10%; the city plans 2,167, just short (the ceiling is
+  // 7,900). With every home a working one the same city has 2,106 jobs for
+  // 2,560 workers (its ceiling 6,450).
+  const c7 = findScenario('c7');
+  const plan = planCity(c7, 8000, SENSIBLE);
+  assert.equal(PATRICIAN_SHARE, 0.05);
+  assert.equal(plan.villaLevel, VILLA_LEVEL);
+  assert.equal(HOUSE_TIERS[VILLA_LEVEL].name, 'Villa');
+  assert.deepEqual([plan.plebs, plan.villas], [7600, 400]);
+  assert.ok(Math.abs(plan.villaTiles - 400 / 11) < 1e-9, 'Villas hold 11 a tile');
+  assert.equal(plan.jobs, 2167);
+  assert.ok(!employsEnough(c7, 8000, SENSIBLE), 'short of 2,189');
+  assert.ok(employsEnough(c7, 7900, SENSIBLE));
+  assert.equal(employmentCeiling(c7, SENSIBLE), 7900);
+  const working = planCity(c7, 8000, { ...SENSIBLE, villas: 0 });
+  assert.deepEqual([working.plebs, working.villas, working.jobs], [8000, 0, 2106]);
+  assert.equal(employmentCeiling(c7, { ...SENSIBLE, villas: 0 }), 6450);
+  // The villas' walkers are the city's: no service doubled for them, only
+  // more of it for their tiles, and their wine.
+  const count = (p, key) => p.items.find((it) => it.key === key)?.count || 0;
+  for (const key of ['prefecture', 'engineer_post', 'market', 'forum', 'senate', 'barber', 'baths']) assert.ok(count(plan, key) <= count(working, key) + 1, `${key}: ${count(working, key)} -> ${count(plan, key)}`);
+  assert.ok(count(plan, 'farm_vine') > count(working, 'farm_vine'), 'the villas drink wine');
+  // Missions 1 to 3 cannot reach the Villa: no quarter, and their ceilings stay.
+  for (const [id, ceiling] of [['c1', 300], ['c2', 450], ['c3', 980], ['c3m', 1160]]) {
+    const s = findScenario(id);
+    assert.equal(planCity(s, 500, SENSIBLE).villas, 0, `${id}: no villas`);
+    assert.equal(employmentCeiling(s, SENSIBLE), ceiling, id);
+  }
+});
+
+test('capacity model: only the plebeians look for work', () => {
+  // Urbs Magna at 7,900: its 7,505 plebeians put 2,402 to work, and its 2,163
+  // jobs employ 90% of them. Counting all 7,900 it would need 2,275.
+  const c7 = findScenario('c7');
+  const plan = planCity(c7, 7900, SENSIBLE);
+  const enough = (n) => plan.jobs >= n * CONFIG.WORKFORCE_RATIO * (1 - CONFIG.UNEMPLOYMENT_MOOD_FREE);
+  assert.equal(plan.jobs, 2163);
+  assert.ok(enough(plan.plebs) && !enough(7900));
+  assert.ok(employsEnough(c7, 7900, SENSIBLE));
+  // A city all of villas has no workforce: it never lacks jobs.
+  assert.equal(planCity(c7, 1000, { ...SENSIBLE, villas: 1 }).plebs, 0);
+  assert.ok(employsEnough(c7, 1000, { ...SENSIBLE, villas: 1 }));
+  // And the room they take: Villas hold half an Insula's people a tile.
+  const land = { buildable: 10000, meadow: 1e6 };
+  assert.equal(landCeiling(c7, land, { villas: 0 }), 73333);
+  assert.equal(landCeiling(c7, land), 69841);
+});
+
+test('capacity model: food by the kinds the homes eat, docks by the ships, the demand in force', () => {
+  // Insulae eat two kinds, half the ration each (sim/housing.js): 4,000 people
+  // eat 1,000 a month, 500 of wheat (a farm fills a load in 20 days: 5 farms
+  // at Easy's pace) and 500 of vegetables (22 days: 6), and 3 spare farms on
+  // the wheat. One kind (Domus, mission 3): all of it on the wheat.
+  const c5 = { ...findScenario('c5'), partners: [] };
+  const count = (p, key) => p.items.find((it) => it.key === key)?.count || 0;
+  const farms = planCity(c5, 4000, SENSIBLE);
+  const perFarm = (days) => (CONFIG.CART_CAPACITY * CONFIG.DAYS_PER_MONTH * topProduction()) / days;
+  assert.equal(count(farms, 'farm_wheat'), Math.ceil(500 / perFarm(20)) + SENSIBLE.spareFarms);
+  assert.equal(count(farms, 'farm_veg'), Math.ceil(500 / perFarm(22)));
+  assert.ok(count(farms, 'farm_veg') >= 1 && count(farms, 'farm_fruit') === 0);
+  const c3 = { ...findScenario('c3'), partners: [] };
+  assert.equal(count(planCity(c3, 900, SENSIBLE), 'farm_veg'), 0, 'a Domus eats one kind');
+  // Docks: each sea route's ships a year staying 25 days. Portus Mercatorum's
+  // five sea partners send 12 ships a year (2 docks); buying 4,000 a year of
+  // several goods, Corinthus and Alexandria send theirs more often (3).
+  const portus = findScenario('c5');
+  assert.equal(docksFor(portus), 2);
+  assert.equal(docksFor(findScenario('c4p')), 1);
+  assert.equal(docksFor({ ...portus, demand: { corinthus: { wine: 4000, wheat: 4000, iron: 2500 }, alexandria: { wine: 4000, oil: 4000 } } }), 3);
+  assert.equal(docksFor(findScenario('c5p')), 0, 'Beneventum trades by land');
+  // The demand the model plans for: a mission's own tiers, and its changes
+  // only if they come before its goals can be met (its paceYears). Here the
+  // year-3 rise comes in October of year 3 (month 33 of the mission).
+  const cosa = { ...portus, map: { ...portus.map, seed: 'cosa' }, paceYears: 3, demand: { corinthus: { wine: 2500 } }, demandChanges: [{ year: 3, partner: 'corinthus', good: 'wine', to: 4000 }] };
+  assert.equal(demandChangeAt('cosa', cosa.demandChanges[0], 0), 33);
+  assert.equal(demandAt(cosa, 'corinthus').wine, 4000, 'before month 36');
+  assert.equal(demandAt({ ...cosa, paceYears: 2.75 }, 'corinthus').wine, 2500, 'after the goals: not counted');
+  assert.equal(demandAt({ ...cosa, paceYears: 2.75 }, 'corinthus').wheat, TRADE_PARTNERS.corinthus.buys.wheat, 'the rest from its table');
+  assert.ok(employmentCeiling(cosa, SENSIBLE) > employmentCeiling({ ...cosa, paceYears: 2.75 }, SENSIBLE), 'more demand, more jobs');
 });
 
 test('mission 1, built only with its own buildings and sized to its jobs, is won', () => {

@@ -38,6 +38,7 @@ import {
   MAP_W, MAP_H, SEA, ISLANDS, WATERS, RIVERS, NILE, DELTA, MOUNTAINS, REGIONS, ROUTES, at, isLand,
 } from '../data/empireGeo.js';
 import { routeKind, FIRST_VISIT_DAYS } from '../sim/trade.js';
+import { routeInterval } from '../sim/tradeDemand.js';
 import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS } from '../sim/military.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
 import { battleSummary, recallSummary } from '../sim/battle.js';
@@ -66,7 +67,9 @@ export const FRONTIER_DIR = 'north';
 /**
  * The longest a caravan or ship is shown on the way. A route's next visit is
  * at least this many days after the last one (CARAVAN_INTERVAL_DAYS), so at
- * most one traveler per route is ever on the map.
+ * most one traveler per route is ever on the map. A busy route's traders
+ * come more often (sim/tradeDemand.js): theirs is shown over no more than
+ * its shortest interval (empireTravelers).
  */
 const MAX_TRIP_DAYS = CONFIG.CARAVAN_INTERVAL_DAYS[0];
 const MIN_TRIP_DAYS = 10;
@@ -243,9 +246,11 @@ export function empireTravelers(game) {
     if (sea && !seaOk) continue; // no ship ever comes (cannot be opened there anyway)
     const left = Math.max(0, r.nextVisit - now);
     // No trader has reached the city yet: the one on the way set out when the
-    // route opened, FIRST_VISIT_DAYS before it is due. (Later ones are due at
-    // least MAX_TRIP_DAYS after the last, so they always set out from home.)
-    const trip = r.visits ? tripDays(id) : Math.min(tripDays(id), FIRST_VISIT_DAYS);
+    // route opened, FIRST_VISIT_DAYS before it is due. Later ones are due at
+    // least the route's shortest interval after the last (MAX_TRIP_DAYS, or
+    // less on a busy route), and are shown over no more than that, so they
+    // always set out from home and never two at once.
+    const trip = Math.min(r.visits ? tripDays(id) : FIRST_VISIT_DAYS, tripDays(id), routeInterval(game, id)[0]);
     const onWay = left <= trip;
     const frac = onWay ? clamp01(1 - left / trip) : 0;
     out.push({ kind: sea ? 'ship' : 'caravan', id, name: p.name, color: p.color, days: Math.ceil(left), trip, onWay, frac, pos: routePoint(id, frac) });
@@ -486,7 +491,7 @@ export function drawEmpire(ctx, game, opts = {}) {
   const names = [
     { text: game.city.name || 'Your province', pos: HOME_POS, r: 2 * k, bold: true, sides: ['above', 'right', 'left', 'below'] },
     { text: 'Rome', pos: ROME_POS, r: 1.2 * k, bold: true, sides: ['left', 'below', 'right', 'above'] },
-    ...Object.keys(routes).filter((id) => TRADE_PARTNERS[id]).map((id) => ({ text: TRADE_PARTNERS[id].name, pos: TRADE_PARTNERS[id].pos, r: 1.1 * k, bold: false, sides: ['above', 'below', 'right', 'left'] })),
+    ...Object.keys(routes).filter((id) => TRADE_PARTNERS[id]).map((id) => ({ text: TRADE_PARTNERS[id].name, pos: TRADE_PARTNERS[id].pos, r: 1.1 * k, bold: false, sides: TRADE_PARTNERS[id].labelSides || ['above', 'below', 'right', 'left'] })),
     // (The threatened city's name on the side away from the enemy coming at it.)
     ...(bs ? [{ text: bs.name, pos: THREATENED_CITIES[bs.city].pos, r: 1.2 * k, bold: false, sides: enemyLine(bs.city)[0][1] > THREATENED_CITIES[bs.city].pos[1] ? ['above', 'right', 'left', 'below'] : ['below', 'right', 'left', 'above'] }] : []),
   ];

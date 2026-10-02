@@ -24,7 +24,7 @@ import { buildingStatus } from '../src/ui/infoPanel.js';
 import { productionReport } from '../src/ui/production.js';
 import { updateMarketBuyer } from '../src/sim/market.js';
 import { updateEmperor } from '../src/sim/emperor.js';
-import { missionCapacity, bestEntertainment, unlockedBuildings } from '../src/sim/capacity.js';
+import { missionCapacity, bestEntertainment, unlockedBuildings, topLevels, planCity, SENSIBLE } from '../src/sim/capacity.js';
 import { healthLacks } from '../src/sim/disease.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { newGame, build } from './helpers.mjs';
@@ -615,17 +615,25 @@ test('guard: the Emperor asks for fish only while a wharf is at work', () => {
   assert.equal(pick(game).has('fish'), true, 'a working wharf: fish can be asked for');
 });
 
-test('guard: the capacity model ignores wharves and plans no hippodrome (its numbers do not move)', () => {
+test('guard: the capacity model ignores wharves, and plans the hippodrome once a city for its jobs, never for shows', () => {
   for (const s of SCENARIOS) {
     const keys = unlockedBuildings(s);
-    const without = { ...s, unlocks: [...keys].filter((k) => !['wharf', 'shipyard', 'hippodrome', 'chariot_maker'].includes(k)) };
-    const a = missionCapacity(s);
-    const b = missionCapacity(without);
-    assert.deepEqual({ ...a, top: 0 }, { ...b, top: 0 }, `${s.id}: the same people and jobs with or without them`);
+    const noFish = { ...s, unlocks: [...keys].filter((k) => !['wharf', 'shipyard'].includes(k)) };
+    assert.deepEqual(missionCapacity(s), missionCapacity(noFish), `${s.id}: the same people and jobs with or without wharves`);
     assert.equal(bestEntertainment(keys) <= 80, true, `${s.id}: the model's venues stop at the colosseum`);
-    // Only which levels a city could reach at all sees the hippodrome: the top one needs it.
+    // Only which levels a city could reach at all sees the hippodrome's
+    // shows: the top one needs it. A city where it is unlocked builds one
+    // (and its chariot stable) for its jobs, whatever its size.
+    const without = { ...s, unlocks: [...keys].filter((k) => !['hippodrome', 'chariot_maker'].includes(k)) };
     const hip = keys.has('hippodrome');
-    assert.equal(HOUSE_TIERS[a.top].name === 'Imperial Palatium', hip && HOUSE_TIERS[b.top].name === 'Grand Palatium', `${s.id}: top level`);
+    assert.equal(HOUSE_TIERS[topLevels(s).top].name === 'Imperial Palatium', hip && HOUSE_TIERS[topLevels(without).top].name === 'Grand Palatium', `${s.id}: top level`);
+    const count = (plan, key) => plan.items.find((it) => it.key === key)?.count || 0;
+    for (const people of [500, 5000]) {
+      const a = planCity(s, people, SENSIBLE);
+      const b = planCity(without, people, SENSIBLE);
+      assert.equal(count(a, 'hippodrome'), hip ? 1 : 0, `${s.id}: one hippodrome at ${people}`);
+      assert.equal(a.jobs - b.jobs, hip ? BUILDINGS.hippodrome.workers + BUILDINGS.chariot_maker.workers : 0, `${s.id}: its jobs and nothing else at ${people}`);
+    }
   }
 });
 

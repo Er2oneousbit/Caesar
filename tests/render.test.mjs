@@ -33,7 +33,7 @@ import { CONFIG, HALF_W, HALF_H } from '../src/config.js';
 import { Camera, worldOf } from '../src/render/camera.js';
 import { SpriteCache } from '../src/render/sprites.js';
 import { skyAt, dayTime, DAY_TICKS } from '../src/render/lighting.js';
-import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf } from '../src/render/weather.js';
+import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf, FLAKE_COLOR } from '../src/render/weather.js';
 import { groundColor } from '../src/render/terrainArt.js';
 import { GameTime } from '../src/sim/time.js';
 import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf, meadowHintLayer, aqueductMaskAt, altarFlameOffset } from '../src/render/renderer.js';
@@ -637,6 +637,17 @@ test('water hints: housing shows well and fountain water, piped-water buildings 
   assert.equal(waterHintLayers('baths')[0].style, piped);
   // Wells and reservoirs show their own coverage while placed; others nothing.
   for (const tool of ['well', 'reservoir', 'road', 'prefecture', null]) assert.deepEqual(waterHintLayers(tool), [], String(tool));
+});
+
+test('falling snow: a flake per 4,000 px of screen at full snow, a little see-through', () => {
+  // One per 3,000 at 0.9 opacity read as a blizzard over the city (playtest).
+  const w = new Weather(seeded(5));
+  w.snow = 1;
+  w.rain = 0;
+  const { ctx } = recordingContext();
+  for (let f = 0; f < 30; f++) w.draw(ctx, 1000, 800, 1, 0.016, 0); // the flakes grow in over a few frames
+  assert.equal(w.flakes.length, 200);
+  assert.ok(Number(FLAKE_COLOR.match(/,\s*([\d.]+)\)$/)[1]) <= 0.8, FLAKE_COLOR);
 });
 
 test('meadow hint: every farm placed on meadow shows the meadow while in hand, clearly enough to read over snow', () => {

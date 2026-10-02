@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.2)
+
+* **Lighter snowfall**: about a quarter fewer flakes (one per 4,000 px of screen at full snow, from 3,000) and a little see-through, so falling snow no longer reads as a blizzard over the city. The snow on the ground is unchanged
+* 550 unit tests
+
 ## Done (v0.15.1)
 
 * **Fountain water is easy to see while you build**: with the Housing tool the fountains' area had a pale fill and a thin, half-clear edge that vanished over a housing block; it now has a clear blue edge two pixels wide. Placing a fountain now also shows where the fountains already give water, even with the cursor off the map (it showed only the reservoirs' piped area there), and their edge is stronger while the new fountain's area is shown

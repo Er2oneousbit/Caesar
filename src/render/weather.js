@@ -180,6 +180,10 @@ export function coverLevelOf(cover, prev = 0) {
   return lvl;
 }
 
+/** Falling snow: CSS px of screen per flake at full snow, and the flakes' colour. */
+export const FLAKE_AREA = 4000;
+export const FLAKE_COLOR = 'rgba(250,252,255,0.8)';
+
 export class Weather {
   /** @param {() => number} [random] */
   constructor(random = Math.random) {
@@ -323,7 +327,9 @@ export class Weather {
   draw(ctx, W, H, dpr, dt, time) {
     const area = (W * H) / (dpr * dpr);
     this.updateDrops(this.drops, Math.round((this.rain * area) / 2400), () => this.newDrop(W, H, dpr, true));
-    this.updateDrops(this.flakes, Math.round((this.snow * area) / 3000), () => this.newFlake(W, H, dpr, true));
+    // A flake per 4,000 CSS px at full snow, and a little see-through: one
+    // per 3,000 at 0.9 read as a blizzard over the city (playtest, v0.15.2).
+    this.updateDrops(this.flakes, Math.round((this.snow * area) / FLAKE_AREA), () => this.newFlake(W, H, dpr, true));
     this.fillNow = false;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -357,7 +363,7 @@ export class Weather {
       this.splashes = [];
     }
     if (this.flakes.length) {
-      ctx.fillStyle = 'rgba(250,252,255,0.9)';
+      ctx.fillStyle = FLAKE_COLOR;
       ctx.beginPath();
       for (const f of this.flakes) {
         f.y += f.vy * dt;

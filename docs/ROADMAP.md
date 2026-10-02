@@ -14,6 +14,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.0)
+
+* **Rotate buildings**: R (or the turn button) turns the building in hand; every building's art is drawn turned whole (temples, the theater, the arch and others fixed by hand), the hippodrome can run north-south, and the turn is saved with the building, kept for Rebuild and remembered per kind for the session. Waterside buildings and the triumphal arch face their water or road and do not turn. Saves: version 22 (older saves load unturned)
+* **Rotate the view** (parity #7): Q and ] turn the city clockwise, Shift+Q and [ back, with turn buttons and a north needle on the top bar; the tile in the middle stays put. Terrain, roads, walls, aqueducts, buildings, walkers, soldiers, ships, overlays, the placement ghost, clicks and drags all follow, and the minimap turns with the view. Frame times within 2% of the unturned view
+* Headless sim: every level identical to v0.17.4
+* 755 unit tests, 167 browser checks
+
 ## Done (v0.17.4)
 
 * **Auto-pause on events**: six switches in Settings pause the game when a fire breaks out, the scouts report a raid (or Caesar's legions set out), raiders or legions arrive, Caesar makes a request or calls for troops, a building collapses, or disease breaks out. Only "raiders or legions arriving" is on at first. A note says what paused the game; a click on it goes to the place, the empire map or the Imperial advisor

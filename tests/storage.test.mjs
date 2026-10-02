@@ -98,7 +98,9 @@ test('storage orders: today\'s defaults, and a click cycles Accept, Refuse, Get'
   const wh = up(0, 'warehouse');
   const gr = up(10, 'granary');
   // Warehouses refuse food by default (food goes to granaries); granaries take every food.
-  for (const g of GOOD_KEYS) assert.equal(wh.orders[g], FOOD_TYPES.includes(g) ? 'refuse' : 'accept', g);
+  // Horses have no order at all: they stay at the Horse Ranch.
+  for (const g of GOOD_KEYS) assert.equal(wh.orders[g], g === 'horses' ? undefined : FOOD_TYPES.includes(g) ? 'refuse' : 'accept', g);
+  assert.equal('horses' in wh.stock, false, 'no place for horses in a warehouse');
   for (const f of FOOD_TYPES) assert.equal(gr.orders[f], 'accept', f);
   assert.equal(wh.emptying, false);
   assert.equal(gr.emptying, false);

@@ -548,7 +548,7 @@ export const BUILDINGS = Object.freeze({
   horse_ranch: B({
     name: 'Equaria', en: 'Horse Ranch', category: 'farms', kind: 'farm', produces: 'horses', cost: 70, size: 3, workers: 10, labor: 'military',
     des: [-3, 1, 1, 2], fire: 0, damage: 0, placement: 'meadow', productionDays: 30,
-    desc: 'Breeds horses on meadow pasture for the cavalry. The breeding herd starts with 2 mares and grows over time (on Insane, not in winter), so a ranch gets more productive as it matures.',
+    desc: 'Breeds horses on meadow pasture for the cavalry. The breeding herd starts with 2 mares and grows over time (on Insane, not in winter), so a ranch gets more productive as it matures. Its stables keep up to 8 horses until a Tirocinium needs them; warehouses never keep horses.',
   }),
   barracks: B({
     name: 'Tirocinium', en: 'Barracks', category: 'military', kind: 'barracks', cost: 150, size: 3, workers: 10, labor: 'military',

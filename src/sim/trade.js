@@ -25,15 +25,23 @@
  *       export: sell only while city stock is ABOVE the level
  *       import: buy only while city stock is BELOW the level
  *   - Each partner buys/sells at most a fixed amount per good per year.
+ *   - Horses are kept at the Horse Ranch, never in a warehouse (data/goods.js
+ *     keptAt), so for horses the ranches stand in for the warehouses: a
+ *     caravan sells into and buys from the ranches on its warehouse's roads,
+ *     dock workers fetch exports from staffed ranches within DOCK_REACH and
+ *     cart imports to a barracks that needs them or a ranch with room. With
+ *     no ranch, no horses are imported (importBlockedText says so).
  * ----------------------------------------------------------------------------
  */
 
 import { CONFIG } from '../config.js';
 import { GOODS, GOOD_KEYS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { BUILDINGS } from '../data/buildings.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath, walkTo, goHome } from './movement.js';
-import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage, receiveGoods, storageByRoad } from './storage.js';
+import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage, receiveGoods, storageByRoad, isStable, stableRoom, stablesOf } from './storage.js';
+import { militaryNeed } from './military.js';
 import { dispatchCart, cartsOut } from './production.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
@@ -201,12 +209,35 @@ export function tradeAt(game, partnerId, wh) {
   const out = { earned: 0, spent: 0, sold: {}, bought: {} };
   const route = game.city.trade.routes[partnerId];
   if (!TRADE_PARTNERS[partnerId] || !route) return out;
-  sellExports(game, partnerId, [wh], CONFIG.CARAVAN_MAX_TRADE, out);
+  // Horses are not the warehouse's to sell or take in: the caravan's drovers
+  // deal with the ranches on its roads instead (looked up only if needed).
+  let stables = null;
+  const near = () => (stables = stables || ranchesNear(game, wh));
+  const sources = (good) => (GOODS[good].keptAt ? near().filter((b) => isStable(b, good)) : [wh]);
+  sellExports(game, partnerId, sources, CONFIG.CARAVAN_MAX_TRADE, out);
   // The caravan unloads into the warehouse itself, so staffing does not matter
   // here; its orders do (Refuse or Empty: no imports of that good here).
-  buyImports(game, partnerId, CONFIG.CARAVAN_MAX_TRADE, out, (good) => (storageAccepts(wh, good) ? Math.max(0, storageCapacityLeft(wh)) : 0), (good, n) => { wh.stock[good] += n; });
+  const spaceFor = (good) => {
+    if (GOODS[good].keptAt) return sources(good).reduce((n, b) => n + stableRoom(b), 0);
+    return storageAccepts(wh, good) ? Math.max(0, storageCapacityLeft(wh)) : 0;
+  };
+  const put = (good, n) => {
+    if (!GOODS[good].keptAt) { wh.stock[good] += n; return; }
+    for (const b of sources(good)) { // nearest ranch first
+      const k = Math.min(n, stableRoom(b));
+      b.stock[good] += k;
+      n -= k;
+    }
+  };
+  buyImports(game, partnerId, CONFIG.CARAVAN_MAX_TRADE, out, spaceFor, put);
   route.visits++;
   return out;
+}
+
+/** The Horse Ranches on a warehouse's road network, nearest first (a caravan's horse trade). */
+function ranchesNear(game, wh) {
+  if (wh.accessRoad < 0) return [];
+  return storageByRoad(game, wh.accessRoad, (b) => isStable(b, b.def.produces)).map((s) => s.b);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,13 +446,67 @@ export function importsComing(game, good, exceptShip = 0, ships = true) {
 }
 
 /**
- * Staffed warehouses within DOCK_REACH road tiles of a dock, as
- * Map(id -> road tiles from the dock): where its workers fetch exports.
+ * How much more of a good kept at its own building (horses) can come in by
+ * sea: room in the staffed ranches' stables plus what the barracks still
+ * need, less what already waits on a quay, a dock worker's load with no place
+ * held for it (one carrying it back to the quay), and other moored ships'
+ * cargo (unless `ships` is false). A dock worker delivering horses is not
+ * taken off again: the room he goes to is already held for him (the ranch's
+ * `incoming`, or the barracks' in militaryNeed). 0 with no ranch at all.
+ */
+export function keptImportRoom(game, good, exceptShip = 0, ships = true) {
+  const stables = stablesOf(game, good);
+  if (!stables.length) return 0;
+  let room = BUILDINGS.barracks.inputs.includes(good) ? militaryNeed(game, good) : 0;
+  for (const b of stables) if (b.efficiency > 0) room += stableRoom(b);
+  for (const b of game.buildings.values()) if (b.def.kind === 'dock') room -= b.stock[good] || 0;
+  for (const w of game.walkers.values()) {
+    if (w.dead) continue;
+    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) room -= w.unload?.[good] || 0;
+    else if (w.type === 'cart' && !w.claim && !w.reserve && w.cargo?.good === good && game.buildings.get(w.origin)?.def.kind === 'dock') room -= w.cargo.amount;
+  }
+  return Math.max(0, room);
+}
+
+/**
+ * The Trade advisor's warnings: for each good set to Import that an open
+ * route sells but that cannot come in now (importBlockedText), its reason.
+ * Nothing for a good not on Import: a player who does not buy horses need
+ * not be told to build a ranch for them.
+ */
+export function importWarnings(game) {
+  const { routes, settings } = game.city.trade;
+  const open = Object.keys(routes).filter((id) => routes[id].open && TRADE_PARTNERS[id]);
+  return GOOD_KEYS
+    .filter((g) => settings[g]?.mode === 'import' && open.some((id) => TRADE_PARTNERS[id].sells[g]))
+    .map((g) => importBlockedText(game, g))
+    .filter(Boolean);
+}
+
+/**
+ * Why a good cannot be imported now, for the Trade advisor, or null:
+ * horses with no Horse Ranch to keep them, or every ranch's stables full.
+ */
+export function importBlockedText(game, good) {
+  const home = GOODS[good]?.keptAt;
+  if (!home) return null;
+  const ranch = BUILDINGS[home];
+  const what = GOODS[good].name.toLowerCase();
+  if (!stablesOf(game, good).length) return `No ${ranch.name} (${ranch.en}): ${what} cannot be imported. They live at a ranch, never in a warehouse.`;
+  if (keptImportRoom(game, good) <= 0) return `Every ${ranch.name}'s stables are full (or unstaffed): no more ${what} can come in until some leave for a Tirocinium.`;
+  return null;
+}
+
+/**
+ * Staffed warehouses (and Horse Ranches, for horses) within DOCK_REACH road
+ * tiles of a dock, as Map(id -> road tiles from the dock): where its workers
+ * fetch exports.
  */
 function exportSources(game, dock) {
   const out = new Map();
   if (dock.accessRoad < 0) return out;
-  for (const s of storageByRoad(game, dock.accessRoad, 'warehouse')) {
+  const store = (b) => b.def.kind === 'warehouse' || isStable(b, b.def.produces);
+  for (const s of storageByRoad(game, dock.accessRoad, store)) {
     if (s.dist <= CONFIG.DOCK_REACH && s.b.efficiency > 0) out.set(s.b.id, s.dist);
   }
   return out;
@@ -453,7 +538,9 @@ export function shipManifest(game, partnerId, dock, exceptShip = 0) {
   for (const [good, cap] of Object.entries(p.sells)) {
     const s = settings[good];
     if (!s || s.mode !== 'import') continue;
-    const n = lots(Math.min(cap - (route.bought[good] || 0), s.level - cityStock(game, good) - importsComing(game, good, exceptShip), budget));
+    // Horses only as many as the ranches (and barracks) can take in.
+    const room = GOODS[good].keptAt ? keptImportRoom(game, good, exceptShip) : Infinity;
+    const n = lots(Math.min(cap - (route.bought[good] || 0), s.level - cityStock(game, good) - importsComing(game, good, exceptShip), budget, room));
     if (n > 0) { unload[good] = n; budget -= n; }
   }
   const claims = exportClaims(game);
@@ -534,8 +621,10 @@ function stayDone(game, w) {
  * to DOCK_LOAD, as much as the quay has room for and the city can pay.
  * `level`: also no more than the city is still short of its import level
  * (a caravan or another ship may have filled it meanwhile), counting dock
- * workers' loads on their way to storage. That looks at every building, so
- * the crane asks only when a lot is due.
+ * workers' loads on their way to storage, and for horses no more than the
+ * ranches and barracks can take in (keptImportRoom). That looks at every
+ * building, so the crane asks only when a lot is due. Horses are dropped
+ * when the city has no ranch left.
  */
 function landable(game, w, dock, good, level = false) {
   const s = game.city.trade.settings[good];
@@ -544,9 +633,12 @@ function landable(game, w, dock, good, level = false) {
   if (!s || s.mode !== 'import' || !p || !route) return -1;
   const quota = (p.sells[good] || 0) - (route.bought[good] || 0);
   if (quota < CONFIG.CART_CAPACITY) return -1;
+  const kept = !!GOODS[good].keptAt;
+  if (kept && !stablesOf(game, good).length) return -1; // the last ranch is gone: no horses can come in
   const afford = game.cheats.freeBuild ? Infinity : Math.floor(Math.max(0, game.city.treasury) / GOODS[good].buy) * 100;
   const short = level ? s.level - cityStock(game, good) - importsComing(game, good, 0, false) : Infinity;
-  return lots(Math.min(CONFIG.DOCK_LOAD, w.unload[good], CONFIG.DOCK_CAPACITY - dockUsed(dock), quota, afford, short));
+  const room = level && kept ? keptImportRoom(game, good, 0, false) : Infinity;
+  return lots(Math.min(CONFIG.DOCK_LOAD, w.unload[good], CONFIG.DOCK_CAPACITY - dockUsed(dock), quota, afford, short, room));
 }
 
 /** One tick of the crane: the next lot in turn lands once its time is up. */
@@ -784,7 +876,7 @@ export function dockFetchArrive(game, w) {
   const ship = mooredShip(game, dock);
   const s = c ? game.city.trade.settings[c.good] : null;
   let got = 0;
-  if (c && wh && wh.def.kind === 'warehouse' && ship && ship.id === c.ship && s && s.mode === 'export') {
+  if (c && wh && (wh.def.kind === 'warehouse' || isStable(wh, c.good)) && ship && ship.id === c.ship && s && s.mode === 'export') {
     const others = (exportClaims(game).open[c.good] || 0) - c.amount;
     got = takeGoods(wh, c.good, lots(Math.min(c.amount, wh.stock[c.good] || 0, cityStock(game, c.good) - s.level - others)));
   }
@@ -857,8 +949,8 @@ export function updateDock(game, b) {
 // Shared trading rules
 // ---------------------------------------------------------------------------
 
-/** The partner buys goods marked for export, taking them from `sources` in order. */
-function sellExports(game, partnerId, sources, budget, out) {
+/** The partner buys goods marked for export, taking them from `sources(good)` in order. */
+function sellExports(game, partnerId, sourcesFor, budget, out) {
   const p = TRADE_PARTNERS[partnerId];
   const route = game.city.trade.routes[partnerId];
   const settings = game.city.trade.settings;
@@ -869,7 +961,7 @@ function sellExports(game, partnerId, sources, budget, out) {
     const surplus = cityStock(game, good) - s.level;
     let want = Math.floor(Math.min(quota, surplus, budget) / 100) * 100;
     let n = 0;
-    for (const wh of sources) {
+    for (const wh of want > 0 ? sourcesFor(good) : []) {
       if (want <= 0) break;
       const take = Math.floor(Math.min(wh.stock[good] || 0, want) / 100) * 100;
       if (take <= 0) continue;

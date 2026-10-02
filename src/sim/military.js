@@ -7,7 +7,8 @@
  *   Weaponsmith (iron)          ---weapons---\
  *   Fletcher (timber + iron)    ---arrows----+--> Barracks --recruit walks by road--> Fort
  *   Horse Ranch (breeding herd) ---horses----/
- *   Warehouses forward stored weapons/arrows/horses to barracks too.
+ *   Warehouses forward stored weapons/arrows to barracks too; horses stay at
+ *   the ranch (never in a warehouse) until a barracks needs them.
  *   One recruit: legionary 50 weapons, archer 50 arrows, cavalryman 1 horse.
  *
  * Units (both sides) move freely over open land in continuous tile

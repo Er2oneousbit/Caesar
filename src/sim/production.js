@@ -14,7 +14,10 @@
  *   warehouses that notice a workshop running low.
  *
  *   Horse Ranch: a farm whose output also scales with its breeding herd
- *   (2 mares at first, up to 8 as the ranch matures).
+ *   (2 mares at first, up to 8 as the ranch matures). Its horses stay in its
+ *   stables (STABLE_CAPACITY, 8 horses; a full ranch foals no more) until a
+ *   Tirocinium needs them for cavalry: then a groom leads them straight
+ *   there (shipHorses). They never go to a warehouse.
  *
  *   Winter (December to Februarius) multiplies farm growth by the
  *   difficulty's `winterGrowth`: 0 on Insane, so every farm (crops, pigs,
@@ -22,9 +25,10 @@
  *   Martius. Workers stay on (and are paid) and carts still haul the harvest
  *   already in store. farmSeasonNotice() tells the player.
  *
- *   Warehouses also forward weapons, arrows and horses to barracks when the
- *   forts need recruits, and timber, iron and linen to a navalia while a
- *   naval station has an empty berth (sim/navy.js).
+ *   Warehouses also forward weapons and arrows to barracks when the forts
+ *   need recruits, and timber, iron and linen to a navalia while a naval
+ *   station has an empty berth (sim/navy.js). Horses an older save left in a
+ *   warehouse go the same way, or to a ranch with room.
  * ----------------------------------------------------------------------------
  */
 
@@ -33,11 +37,11 @@ import { MONTH_NAMES, seasonOf } from './time.js';
 import { RAW_TYPES, FOOD_TYPES } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
-import { HERD_MAX, HERD_GROWTH_DAYS } from '../data/units.js';
+import { HERD_MAX, HERD_GROWTH_DAYS, STABLE_CAPACITY } from '../data/units.js';
 import { Terrain } from '../world/map.js';
 import { spawnWalker } from './entities.js';
 import { followPath } from './movement.js';
-import { findDeliveryTarget, findDeliveryFit, takeGoods, rawHasRoom } from './storage.js';
+import { findDeliveryTarget, findDeliveryFit, takeGoods, rawHasRoom, isStable, stableRoom, stableTakes } from './storage.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
 import { navalNeed, navaliaHasRoom } from './navy.js';
 import { logGoods } from './goodsLedger.js';
@@ -135,8 +139,11 @@ export function updateProducer(game, b) {
   const ok = def.kind === 'farm' ? b.fertility > 0 : resourceAvailable(game, b);
   b.resourceOk = ok;
   const season = def.kind === 'farm' ? farmSeasonRate(game) : 1;
+  const ranch = isStable(b, good);
   if (b.herd !== undefined) growHerd(b, season);
-  if (ok && b.efficiency > 0 && b.stock[good] < CONFIG.PRODUCER_MAX_STOCK) {
+  // A ranch foals while its stables have room for one more horse (imports on their way count).
+  const full = ranch ? stableRoom(b) < CONFIG.CART_CAPACITY : b.stock[good] >= CONFIG.PRODUCER_MAX_STOCK;
+  if (ok && b.efficiency > 0 && !full) {
     // season 0 (an Insane winter): no growth, but a field Ceres ripened still harvests.
     let rate = (b.efficiency * 100 * season) / def.productionDays;
     if (def.kind === 'farm') rate *= 0.25 + 0.75 * b.fertility;
@@ -150,7 +157,41 @@ export function updateProducer(game, b) {
       if (FOOD_TYPES.includes(good)) game.city.foodFlow.harvested += CONFIG.CART_CAPACITY;
     }
   }
-  shipOutput(game, b, good, def.kind === 'farm' ? CONFIG.FARM_CART_LOAD : CONFIG.CART_LOAD);
+  if (ranch) shipHorses(game, b);
+  else shipOutput(game, b, good, def.kind === 'farm' ? CONFIG.FARM_CART_LOAD : CONFIG.CART_LOAD);
+}
+
+/** Is a ranch's stable full (no room for another horse)? For the info panel. */
+export function stablesFull(b) {
+  return isStable(b, b.def.produces) && b.stock.horses >= STABLE_CAPACITY;
+}
+
+/**
+ * Horse Ranch: its horses wait in the stables until the forts need cavalry
+ * recruits. Then a groom leads as many as they still need (a farm wagon's
+ * worth at most) straight to a Tirocinium with room, never anywhere else
+ * (findDeliveryTarget: no warehouse, no other ranch). Two grooms out at most.
+ * `noStorage`: the forts need horses but no barracks with room is reachable.
+ *
+ * A groom whose barracks would not take his horses brings them home, and
+ * home takes them all, even past STABLE_CAPACITY (the ranch foaled into the
+ * room they left meanwhile): no horse is ever lost. The excess then goes,
+ * a horse a day, to another staffed ranch with room; with none it stays
+ * here until a barracks needs it.
+ */
+function shipHorses(game, b) {
+  b.noStorage = false;
+  const lot = CONFIG.CART_CAPACITY;
+  if (b.stock.horses < lot || cartsOut(game, b) >= 2) return;
+  const need = militaryNeed(game, 'horses');
+  if (need > 0) {
+    const amount = Math.min(CONFIG.FARM_CART_LOAD, Math.floor(b.stock.horses / lot) * lot, Math.ceil(need / lot) * lot);
+    if (dispatchCart(game, b, 'horses', amount, true)) return;
+  }
+  if (b.stock.horses - STABLE_CAPACITY < lot || b.accessRoad < 0) return;
+  const { buildings, pf } = game;
+  const found = pf.findNearest(b.accessRoad, (id) => stableTakes(buildings.get(id), 'horses', lot), 120, b.id);
+  if (found) sendSupplyCart(game, b, buildings.get(found.id), 'horses', found.path);
 }
 
 /** Horse Ranch: a staffed ranch gains a breeding mare every HERD_GROWTH_DAYS (of growing season). */
@@ -219,7 +260,8 @@ export function updateWorkshop(game, b) {
 
 /**
  * Daily: a warehouse sends one cart per day where it is needed most:
- *   1. weapons / arrows / horses to a barracks equipping recruits, then
+ *   1. weapons / arrows (and horses from an older save) to a barracks
+ *      equipping recruits, then such horses to a ranch with room, then
  *      timber / iron / linen to a navalia building the fleet's next ship
  *   2. raw materials to the nearest workshop running low on them, or
  *      timber to a shipyard short of it (sim/fishing.js)
@@ -237,6 +279,11 @@ export function updateWarehouseSupply(game, b) {
     }, 100, b.id);
     if (found && sendSupplyCart(game, b, buildings.get(found.id), good, found.path)) return;
   }
+  // Horses an older save left here (no warehouse takes them now) go to a ranch with room.
+  if ((b.stock.horses || 0) >= lot) {
+    const found = pf.findNearest(b.accessRoad, (id) => stableTakes(buildings.get(id), 'horses', lot), 100, b.id);
+    if (found && sendSupplyCart(game, b, buildings.get(found.id), 'horses', found.path)) return;
+  }
   for (const good of BUILDINGS.navalia.inputs) {
     if ((b.stock[good] || 0) < lot || navalNeed(game, good) <= 0) continue;
     const found = pf.findNearest(b.accessRoad, (id) => {
@@ -253,7 +300,7 @@ export function updateWarehouseSupply(game, b) {
   }
 }
 
-/** Load one cart (CART_CAPACITY units) from a warehouse and send it to `dest`. */
+/** Load one cart (CART_CAPACITY units) from a warehouse (or a ranch's excess horses) and send it to `dest`. */
 function sendSupplyCart(game, b, dest, good, path) {
   const amount = takeGoods(b, good, CONFIG.CART_CAPACITY);
   if (amount <= 0) return false;

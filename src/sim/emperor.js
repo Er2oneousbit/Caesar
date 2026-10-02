@@ -13,9 +13,10 @@
  */
 
 import { CONFIG } from '../config.js';
-import { GOODS } from '../data/goods.js';
+import { GOODS, formatAmount } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
-import { cityStock, takeFromCity } from './storage.js';
+import { STABLE_CAPACITY } from '../data/units.js';
+import { cityStock, takeFromCity, stablesOf } from './storage.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
 import { hasWorkingWharf } from './fishing.js';
@@ -38,6 +39,8 @@ function requestableGoods(game) {
     if (!def.produces || !game.isUnlocked(key)) continue;
     if (def.kind === 'wharf' && !hasWorkingWharf(game)) continue;
     if (CLOTH_GOODS.has(def.produces) && !hasBuilding(game, key)) continue;
+    // Horses live only at a ranch (data/goods.js keptAt): asked for only while one stands.
+    if (GOODS[def.produces]?.keptAt === key && !hasBuilding(game, key)) continue;
     out.add(def.produces);
   }
   // Import-able goods also count if a route could be opened.
@@ -82,16 +85,31 @@ export function updateEmperor(game) {
     c.request = { kind: 'money', amount: round50((300 + 150 * scale) * requestSize), deadline: now + months };
   } else {
     const good = game.rng.pick(goods);
-    const amount = round50(Math.min(2400, 200 + 100 * game.rng.range(1, 2 + scale)) * requestSize);
+    const amount = keptCap(game, good, round50(Math.min(2400, 200 + 100 * game.rng.range(1, 2 + scale)) * requestSize));
     c.request = { kind: 'goods', good, amount, deadline: now + months };
   }
   game.message(`The Emperor requests ${describeRequest(c.request)} within ${months} months. Open the Imperial advisor to send it.`, 'imperial');
   game.events.emit('sound', { name: 'fanfare' });
 }
 
+/**
+ * A request for a good counted by the head (horses: unitSize) is in whole
+ * horses, and one for a good kept only at its own building no more than
+ * those buildings can hold between them (ranches x STABLE_CAPACITY), so it
+ * can always be met. Applied after the draw, so the random sequence is the
+ * same as before; other goods pass unchanged.
+ */
+export function keptCap(game, good, amount) {
+  const g = GOODS[good];
+  if (g.unitSize) amount = Math.max(g.unitSize, Math.round(amount / g.unitSize) * g.unitSize);
+  if (g.keptAt) amount = Math.min(amount, stablesOf(game, good).length * STABLE_CAPACITY);
+  return amount;
+}
+
 export function describeRequest(r) {
   if (!r) return '';
-  return r.kind === 'money' ? `${r.amount} Dn` : `${r.amount} ${GOODS[r.good].name.toLowerCase()}`;
+  if (r.kind === 'money') return `${r.amount} Dn`;
+  return GOODS[r.good].unitSize ? formatAmount(r.good, r.amount) : `${r.amount} ${GOODS[r.good].name.toLowerCase()}`;
 }
 
 /** Can the current request be sent right now? */

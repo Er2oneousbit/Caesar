@@ -16,7 +16,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS, GATE, LABOR_CATEGORIES, VENUE_POINTS, VENUE_BOTH_BONUS, VENUE_SUPPLIERS, PERFORMER_NAMES, ENT_BASE_MAX, ENT_SEATS_MAX, fullName } from '../data/buildings.js';
 import { HOUSE_TIERS, MAX_TIER, houseCapacity } from '../data/housing.js';
 import { GOODS, FOOD_TYPES, HOUSE_GOODS, RECRUIT_COST, formatAmount } from '../data/goods.js';
-import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX, STATION_CAPACITY } from '../data/units.js';
+import { UNIT_TYPES, FORT_CAPACITY, HERD_MAX, STATION_CAPACITY, STABLE_CAPACITY } from '../data/units.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { WALKER_TYPES, ROADBLOCK_GROUPS } from '../data/walkers.js';
 import { TERRAIN_NAMES, WaterBits, Road, Wall, ROADBLOCK } from '../world/map.js';
@@ -35,7 +35,7 @@ import { trainedText, trainingNote, schoolStatus, inTrainingText } from './train
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
-import { farmDormant, daysToNextMare } from '../sim/production.js';
+import { farmDormant, daysToNextMare, stablesFull } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
 import { ruinAt } from '../sim/ruins.js';
@@ -112,6 +112,15 @@ export function ruinText(rec) {
 }
 
 /**
+ * A Dock's quay filling with imports no cart can take. Horses never go to
+ * storage, so with horses on the quay it names where they do go.
+ */
+export function importsPilingText(dock) {
+  const horses = (dock.stock.horses || 0) > 0 ? ' Horses go only to an Equaria (Horse Ranch) with room or a Tirocinium that needs them.' : '';
+  return `Imports are piling up: no warehouse, granary or workshop with room is reachable by road.${horses}`;
+}
+
+/**
  * Is this shipyard held up for timber: no spare waiting, less than a boat's
  * timber in the yard and not enough on its way either (sim/fishing.js)?
  */
@@ -148,6 +157,8 @@ export function buildingStatus(game, b) {
       break;
     case 'farm':
       if (b.fertility <= 0) return { level: 'bad', text: 'No meadow under this field: nothing grows.' };
+      if (b.herd !== undefined && b.noStorage) return { level: 'warn', text: 'The forts need horses, but no staffed Tirocinium (Barracks) with room is reachable by road.' };
+      if (stablesFull(b)) return { level: 'warn', text: `The stables are full (${STABLE_CAPACITY / 100} horses): no more foals until some leave for a Tirocinium or are sold.` };
       if (b.noStorage) return { level: 'warn', text: 'Harvest is piling up: no granary or warehouse with room is reachable.' };
       if (farmDormant(game, b)) return { level: 'warn', text: 'Winter: nothing grows until spring (Martius). Stored harvest still goes out.' };
       break;
@@ -199,7 +210,7 @@ export function buildingStatus(game, b) {
     case 'dock':
       if (!game.map.seaEntry) return { level: 'bad', text: 'No river or sea here reaches the map edge: ships cannot come.' };
       if (dockBerth(game, b) < 0) return { level: 'bad', text: 'Not beside water that ships can sail.' };
-      if (b.noStorage && dockUsed(b) > 0) return { level: 'warn', text: 'Imports are piling up: no warehouse, granary or workshop with room is reachable by road.' };
+      if (b.noStorage && dockUsed(b) > 0) return { level: 'warn', text: importsPilingText(b) };
       if (dockHint(game, b)) return { level: 'warn', text: dockHint(game, b) };
       break;
     case 'fort': {
@@ -551,8 +562,9 @@ export class InfoPanel {
             b.herd < HERD_MAX ? kv('Next mare', nextMareText(g, b)) : null,
             kv('Pasture (meadow)', pct(b.fertility)),
             kv('Next foal', pct(b.progress / 100)), bar(b.progress, 100),
-            kv('Horses waiting', formatAmount('horses', b.stock.horses)),
-            h('div', { class: 'muted' }, 'A bigger herd foals faster: a new ranch is 4x slower than a mature one. Horses go to a Tirocinium that needs them, otherwise to a warehouse.')));
+            kv('Horses in the stables', `${formatAmount('horses', b.stock.horses)} / ${STABLE_CAPACITY / 100}`), bar(b.stock.horses, STABLE_CAPACITY),
+            b.incoming?.horses ? kv('Bought, on their way', formatAmount('horses', b.incoming.horses)) : null,
+            h('div', { class: 'muted' }, `A bigger herd foals faster: a new ranch is 4x slower than a mature one. Horses stay here, ${STABLE_CAPACITY / 100} at most (a full ranch foals no more), until a Tirocinium needs them for cavalry or a trader buys them. No warehouse keeps horses: imported ones come here.`)));
           break;
         }
         parts.push(sec('Farm', kv('Crop', GOODS[def.produces].name), kv('Fertility', pct(b.fertility)),
@@ -789,6 +801,8 @@ export class InfoPanel {
       h('h5', {}, 'Storage'),
       kv('Used', `${fmt(used)} / ${fmt(cap)}`), bar(used, cap),
       orderLines(g, b).map((line) => h('div', { class: `status ${line.level}`, style: { marginTop: '6px' } }, line.text)),
+      // Horses from an older save (sim/production.js updateWarehouseSupply moves them on).
+      b.stock.horses > 0 ? h('div', { class: 'status warn', style: { marginTop: '6px' } }, `${formatAmount('horses', b.stock.horses)} wait here for an Equaria (Horse Ranch) with room or a Tirocinium that needs them: warehouses no longer keep horses.`) : null,
       h('div', { class: 'row', style: { marginTop: '6px', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
         h('button', {
           class: `btn small empty-btn${b.emptying ? ' active' : ''}`,

@@ -16,6 +16,14 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.16.3)
+
+* **A deployed fort takes no recruits**: a fort or Naval Station with a rally point, or with men or ships away at a distant battle, takes no new soldiers (and the Navalia builds it no liburnians) until it is recalled and home; one already on his way still joins. Before, new recruits joined a deployed fort and stood about the city
+* **Recall from a distant battle**: a Recall button on the fort and station panels and in the Imperial advisor. A rider carries the order (half the months already marched, at least one); the men march on until he reaches them, then come home taking as long as they had marched out. Men recalled before the battle no longer count for it; recalling everyone counts as nobody sent. The empire map shows the rider and the men coming home. Saves: version 19
+* **Horses live at the Horse Ranch**: a ranch keeps up to 8 horses and stops foaling when full; a groom leads them straight to a barracks while forts need cavalry; warehouses never hold horses. Ships and caravans buy from and sell into ranches (no ranch, no horse imports); the Emperor asks for horses only while a ranch stands, in whole horses, never more than the ranches hold. Older saves' warehouse horses move to ranches with room. Saves: version 20
+* Headless sim: Easy, Normal, Hard and Insane identical to v0.16.2
+* 632 unit tests, 133 browser checks
+
 ## Done (v0.16.2)
 
 * **Missions 3 to 7 can be won**: they asked for 3,500 to 12,000 people, more than their buildings could employ (`npm run sim -- --capacity`: about 980 to 6,060 at 10% unemployment), and a Pons Aelius playtest met every goal but its 5,000 people. Each now asks for a little under its job ceiling, as the branch missions do: Figlina 950, Pons Aelius 2,700, Portus Mercatorum 4,600, Oasis Aurea 3,500 (its peace goal 70, from 65, so it stays longer than step 5), Urbs Magna 5,800. Their planned pace is measured again (2.5, 2.9, 5.1, 4.2 and 6.8 years at the fastest), and the campaign test holds every mission to its jobs, with no exceptions left. Saves keep their city and take the new goals

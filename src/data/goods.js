@@ -12,6 +12,10 @@
  *   buy:   Dn the city PAYS per cart (100 units) when importing
  *   sell:  Dn the city EARNS per cart when exporting
  *   color: used for cart cargo, warehouse stacks and UI chips
+ *   keptAt: (horses) the building type that keeps this good instead of a
+ *          warehouse: horses live in the Horse Ranch's stables. Warehouses
+ *          never take it; trade, the Emperor and the city's stock counts
+ *          use those buildings as its store (sim/storage.js)
  * ----------------------------------------------------------------------------
  */
 
@@ -48,14 +52,17 @@ export const GOODS = Object.freeze({
   arrows: { name: 'Arrows', kind: 'goods', color: '#b89a64', buy: 130, sell: 95, icon: '🏹' },
   // Clothing (Clothing Maker: linen -> clothing): homes need it from the Insula up.
   clothing: { name: 'Clothing', kind: 'goods', color: '#4a6fa5', buy: 220, sell: 165, icon: '👕' },
-  // Military stock: 100 units = one horse
-  horses: { name: 'Horses', kind: 'stock', color: '#8a5a3c', buy: 420, sell: 300, icon: '🐎', unitSize: 100, unitName: 'horse' },
+  // Military stock: 100 units = one horse. Horses stay at the Horse Ranch
+  // (keptAt): a warehouse is no place for a living animal.
+  horses: { name: 'Horses', kind: 'stock', color: '#8a5a3c', buy: 420, sell: 300, icon: '🐎', unitSize: 100, unitName: 'horse', keptAt: 'horse_ranch' },
 });
 
 export const GOOD_KEYS = Object.freeze(Object.keys(GOODS));
 export const FOOD_TYPES = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'food'));
 export const RAW_TYPES = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'raw'));
 export const MANUFACTURED = Object.freeze(GOOD_KEYS.filter((k) => GOODS[k].kind === 'goods'));
+/** What a warehouse stores and has orders for: every good but those kept elsewhere (horses). */
+export const WAREHOUSE_GOODS = Object.freeze(GOOD_KEYS.filter((k) => !GOODS[k].keptAt));
 
 /**
  * The four foods that grow on land (the original's four food slots). Fish is

@@ -378,7 +378,7 @@ test('save: a rider out and men coming home survive a save and carry on', () => 
   months(game, 2);
   recallFromBattle(game, bFort.id); // 5 marched: a 3-month ride
   const data = JSON.parse(JSON.stringify(serializeGame(game)));
-  assert.equal(data.version, 19);
+  assert.ok(data.version >= 19, 'recalls came with version 19');
   const copy = deserializeGame(data);
   assert.deepEqual(copy.military.recalls, game.military.recalls);
   assert.equal(recallOf(copy, bFort.id).rider, 3);

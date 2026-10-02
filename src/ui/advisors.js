@@ -41,7 +41,7 @@ import { GODS, GOD_KEYS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
 import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
-import { openRoute, setTradeMode, routeKind, shipsWaitingText } from '../sim/trade.js';
+import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } from '../sim/trade.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
@@ -430,6 +430,8 @@ export class Advisors {
         })),
         h('td', { class: 'muted', style: { fontSize: '12px' } }, s.mode === 'export' ? 'keep' : s.mode === 'import' ? 'target' : ''));
     });
+    // Goods on Import from an open route that cannot come in now (horses with no Horse Ranch).
+    const blocked = importWarnings(g);
     const log = t.log.slice(0, 6).map((e) => h('div', { class: 'muted', style: { fontSize: '12px' } }, `${e.date} ${e.kind === 'sea' ? '⛵' : '🐪'} ${e.partner}: +${fmt(e.earned)} / −${fmt(e.spent)} Dn`));
     return [
       h('div', { class: 'card empire-card' },
@@ -442,6 +444,7 @@ export class Advisors {
       h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
       h('h4', {}, 'Goods'),
       h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'In storage'), h('th', {}, 'Mode'), h('th', {}, 'Level'), h('th', {}, '')), rows),
+      blocked.map((text) => h('div', { class: 'status warn', style: { marginTop: '6px' } }, text)),
       log.length ? h('h4', {}, 'Recent caravans and ships') : null, log,
     ];
   }

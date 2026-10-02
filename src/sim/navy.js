@@ -51,7 +51,7 @@ import { Terrain } from '../world/map.js';
 import { RNG } from '../core/rng.js';
 import { spawnUnit, removeUnit, passable, fillField, computeField, damageBuilding, enemyPower, rollDamage, hurt, screenDirection, warbandType, unitDefense } from './military.js';
 import { portusFor, startDrill, endDrill, drilled, trainsNow } from './training.js';
-import { awayCounts, awayOf, leaveForBattle, dropAway, AWAY_MAX_TICKS } from './battle.js';
+import { awayCounts, awayOf, leaveForBattle, dropAway, postsAway, takesNewMen, AWAY_MAX_TICKS } from './battle.js';
 import { dockBerth } from './trade.js';
 import { killWalker, STRIDE_WRAP } from './entities.js';
 import { riskRates } from './risk.js';
@@ -335,15 +335,18 @@ export function freeSlot(game, st) {
 /**
  * Stations on navigable water `body` with an empty berth, emptiest first
  * (ties: the older station). `staffed`: only those with workers (the
- * Navalia sends new ships only there).
+ * Navalia sends new ships only there). `newShips`: only those that take a
+ * new ship (not deployed, none of theirs away: sim/battle.js takesNewMen).
  */
-function stationsWithRoom(game, body, { staffed = true, except = 0 } = {}) {
+function stationsWithRoom(game, body, { staffed = true, except = 0, newShips = false } = {}) {
   const counts = squadronCounts(game);
   const away = awayCounts(game); // (berths kept for ships at a distant battle, sim/battle.js)
+  const gone = newShips ? postsAway(game) : null;
   const out = [];
   for (const st of game.buildings.values()) {
     if (st.def.kind !== 'station' || st.id === except) continue;
     if (staffed && st.efficiency <= 0) continue;
+    if (gone && !takesNewMen(game, st, gone)) continue;
     if (!body || waterOf(game, st) !== body) continue;
     const have = (counts.get(st.id) || 0) + (away.get(st.id) || 0);
     if (have < STATION_CAPACITY) out.push({ st, have });
@@ -420,8 +423,13 @@ export function updateNavalia(game, b) {
   const slip = shoreBerth(game, b);
   if (b.efficiency <= 0 || b.accessRoad < 0) { b.blocked = b.accessRoad < 0 ? 'No road access.' : 'No workers.'; return; }
   if (slip < 0) { b.blocked = 'It does not stand by water a ship can sail.'; return; }
-  const [dest] = stationsWithRoom(game, game.map.navBody[slip]);
-  if (!dest) { b.blocked = 'No staffed Statio (Naval Station) on this water has an empty berth.'; return; }
+  const [dest] = stationsWithRoom(game, game.map.navBody[slip], { newShips: true });
+  if (!dest) {
+    b.blocked = stationsWithRoom(game, game.map.navBody[slip]).length
+      ? 'No new liburnians while deployed: the stations on this water with an empty berth are deployed or have ships away.'
+      : 'No staffed Statio (Naval Station) on this water has an empty berth.';
+    return;
+  }
   const cost = CONFIG.LIBURNIAN_COST;
   const missing = Object.keys(cost).filter((g) => (b.stock[g] || 0) < cost[g]);
   if (missing.length) { b.blocked = `Waiting for ${missing.map((g) => GOODS[g].name.toLowerCase()).join(', ')}.`; return; }
@@ -454,9 +462,10 @@ export function updateNavalDemand(game) {
   const roomBy = new Map();
   const counts = squadronCounts(game);
   const away = awayCounts(game); // ships at a distant battle keep their berths (sim/battle.js)
+  const gone = postsAway(game); // (a station deployed or with ships away takes no new ones)
   for (const b of game.buildings.values()) {
     if (b.def.kind === 'navalia') yards.push(b);
-    else if (b.def.kind === 'station' && b.efficiency > 0) {
+    else if (b.def.kind === 'station' && b.efficiency > 0 && takesNewMen(game, b, gone)) {
       const body = waterOf(game, b);
       if (body) roomBy.set(body, (roomBy.get(body) || 0) + Math.max(0, STATION_CAPACITY - (counts.get(b.id) || 0) - (away.get(b.id) || 0)));
     }

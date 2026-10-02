@@ -49,8 +49,8 @@ import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } fro
 import { setSalary, donate } from '../sim/governor.js';
 import { RANKS } from '../data/ranks.js';
 import { rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, salaryNow } from './governorInfo.js';
-import { battleSummary, sendTroops, sendBlocked, strengthOf, awayCounts } from '../sim/battle.js';
-import { legionText, battleLines, archLine, serviceButton } from './empireInfo.js';
+import { battleSummary, sendTroops, sendBlocked, strengthOf, awayCounts, awayOf, recallSummary } from '../sim/battle.js';
+import { legionText, battleLines, archLine, serviceButton, recallControls, recallLines, postsInBattle } from './empireInfo.js';
 import { productionReport } from './production.js';
 import { homesWithFood } from '../sim/population.js';
 import { loanTerms, takeLoan } from '../sim/loans.js';
@@ -785,6 +785,7 @@ export class Advisors {
     if (!s) {
       return h('div', { class: 'card battle-card', style: { marginTop: '10px' } }, head,
         h('div', { class: 'muted' }, 'Caesar has asked for no troops. When he does, switch forts (and, for a city by the sea, naval stations) to Empire service and send them from here.'),
+        recallLines(recallSummary(g)).map((l) => h('div', { class: l.cls || '' }, l.text)),
         kv('Battles won / lost', `${record.won} / ${record.lost}`),
         archLine(g));
     }
@@ -794,7 +795,7 @@ export class Advisors {
       if (why) { this.app.ui.toastError(why); return; }
       const ready = s.ready;
       const what = `${ready.men} soldier${ready.men === 1 ? '' : 's'}${ready.ships ? ` and ${ready.ships} liburnian${ready.ships === 1 ? '' : 's'}` : ''}`;
-      this.app.ui.confirm(`${what} (strength ${ready.strength} against ${s.words}, about ${s.enemy}) will leave at once and cannot be called back. Their forts stay empty until they return.`, () => {
+      this.app.ui.confirm(`${what} (strength ${ready.strength} against ${s.words}, about ${s.enemy}) will leave at once. Their forts take no recruits until they are home. You can recall them, but a rider must catch up with them first.`, () => {
         const res = sendTroops(g);
         if (!res.ok) this.app.ui.toastError(res.reason);
         this.app.ui.openAdvisors('imperial');
@@ -814,10 +815,29 @@ export class Advisors {
             h('td', {}, serviceButton(g, b, () => this.render())));
         })) : null,
       pending && !forts.length ? h('div', { class: 'muted' }, 'You have no forts to send. Build a Tirocinium (Barracks) and a fort (Military menu).') : null,
+      s.phase === 'pending' && s.sent ? this.recallTable(g) : null,
       pending ? h('button', { class: 'btn primary send-troops', style: { marginTop: '6px' }, disabled: !!sendBlocked(g), title: sendBlocked(g) || '', onclick: send }, `Send the troops (strength ${s.ready.strength})`) : null,
       h('button', { class: 'btn small', style: { marginTop: '6px', marginLeft: '6px' }, onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map'),
       kv('Battles won / lost', `${record.won} / ${record.lost}`),
       archLine(g));
+  }
+
+  /**
+   * Imperial tab, troops sent: each fort and station with men away, how
+   * many, and a Recall button (or its rider, or its way home).
+   */
+  recallTable(g) {
+    const posts = postsInBattle(g);
+    if (!posts.length) return null;
+    return h('table', { class: 'tbl', style: { marginTop: '6px' } },
+      h('tr', {}, h('th', {}, 'Post'), h('th', { class: 'r' }, 'Away'), h('th', {}, 'Recall')),
+      posts.map((b) => {
+        const away = awayOf(g, b.id).length + [...g.units.values()].filter((u) => u.away && (u.fort || u.station) === b.id).length;
+        return h('tr', {},
+          h('td', {}, b.def.name),
+          h('td', { class: 'r num' }, fmt(away)),
+          h('td', {}, recallControls(g, b, () => this.render(), (why) => this.app.ui.toastError(why))));
+      }));
   }
 
   /**

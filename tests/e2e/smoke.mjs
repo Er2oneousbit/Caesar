@@ -1247,6 +1247,19 @@ try {
     return { sent: !!(b && b.sent), away: [...g.units.values()].filter((u) => u.away).length, strength: b && b.sent ? b.sent.strength : 0, kind: window.colonia.ui.modalKind, card: document.querySelector('.battle-card')?.textContent || '' };
   });
   check('the Imperial advisor shows Caesar\'s call for troops and sends the forts switched to Empire service', /Placentia/.test(callText) && sent.sent && sent.away > 0 && sent.strength > 0 && sent.kind === 'advisors' && /strength/.test(sent.card) && errors.length === 0, JSON.stringify({ call: callText.slice(0, 90), ...sent, card: sent.card.slice(0, 120) }));
+  // The recall: once they have left the province, a rider goes after one fort's men (they still count until he reaches them).
+  const recall = await page.evaluate(() => {
+    const g = window.colonia.game;
+    // (Set down at the map exit, they leave within a day: the clock barely moves for the steps that follow.)
+    for (const u of g.units.values()) if (u.away) { u.x = u.px = g.map.exit.x + 0.5; u.y = u.py = g.map.exit.y + 0.5; u.path = null; }
+    g.runDays(1);
+    window.colonia.ui.openAdvisors('imperial');
+    const btn = document.querySelector('.battle-card .recall-battle');
+    if (!btn) return { btn: false };
+    btn.click();
+    return { btn: true, riders: (g.military.recalls || []).map((r) => r.rider), card: document.querySelector('.battle-card')?.textContent || '' };
+  });
+  check('the Imperial advisor recalls the men of a fort from the road: a rider goes after them', recall.btn && recall.riders.length === 1 && recall.riders[0] >= 1 && /A rider carries your recall/.test(recall.card) && errors.length === 0, JSON.stringify({ ...recall, card: (recall.card || '').slice(0, 160) }));
   await page.keyboard.press('Escape');
   await page.evaluate(() => window.colonia.ui.console.run('legion now 3'));
   await page.waitForTimeout(400);
@@ -1257,6 +1270,7 @@ try {
   const legionRows = await page.evaluate(() => [...document.querySelectorAll('.empire-side .empire-row')].map((e) => e.textContent));
   check('Caesar\'s legions arrive: the top bar names them, and the empire map shows them with the troops on their way', !!legionHud && !legionHud.hidden && /Caesar's legionaries/.test(legionHud.title)
     && legionRows.some((t) => /Caesar's legions in the province: 3 left/.test(t)) && legionRows.some((t) => /Your troops \(strength \d+\) on the way to Placentia/.test(t)), JSON.stringify({ legionHud, legionRows }));
+  check('the empire map shows the rider of a recall riding after the troops', legionRows.some((t) => /A rider carrying your recall to the troops of the/.test(t)), JSON.stringify(legionRows));
   await page.keyboard.press('Escape');
   await page.evaluate(() => {
     // Caesar's men gone again (as if destroyed), so the steps that follow see the city as it was.

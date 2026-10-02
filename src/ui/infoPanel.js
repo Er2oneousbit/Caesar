@@ -45,7 +45,7 @@ import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
 import { rankLine } from './governorInfo.js';
 import { awayOf } from '../sim/battle.js';
-import { serviceButton, serviceNote } from './empireInfo.js';
+import { serviceButton, serviceNote, recallControls, newMenNote } from './empireInfo.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -581,6 +581,7 @@ export class InfoPanel {
         parts.push(sec('Garrison',
           kv(`${unit.name}s`, `${n} / ${FORT_CAPACITY}`), bar(n, FORT_CAPACITY),
           b.recruiting ? kv('Recruits on the way', `${b.recruiting}`) : null,
+          newMenNote(g, b) ? h('div', { class: 'status warn new-men-note' }, newMenNote(g, b)) : null,
           kv('Training', trainedText(g, b)),
           inTrainingText(g, b) ? kv('Recruits at the Campus', inTrainingText(g, b)) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
@@ -591,7 +592,8 @@ export class InfoPanel {
           h('div', { class: 'row', style: { marginTop: '6px' } },
             h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the map where they should stand', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
             h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallFort(g, b.id); this.render(); } }, '↩ Recall'),
-            serviceButton(g, b, () => this.render()))));
+            serviceButton(g, b, () => this.render())),
+          recallControls(g, b, () => this.render(), (why) => this.app.ui.toastError(why))));
         break;
       }
       case 'dock': {
@@ -650,6 +652,7 @@ export class InfoPanel {
         const n = squadronCounts(g).get(b.id) || 0;
         parts.push(sec('Squadron',
           kv('Liburnians', `${n} / ${STATION_CAPACITY}`), bar(n, STATION_CAPACITY),
+          newMenNote(g, b) ? h('div', { class: 'status warn new-men-note' }, newMenNote(g, b)) : null,
           kv('Crews', trainedText(g, b)),
           inTrainingText(g, b) ? kv('New ships at the Portus', inTrainingText(g, b)) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
@@ -662,7 +665,8 @@ export class InfoPanel {
             h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the water where they should go', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
             h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, '↩ Recall'),
             serviceButton(g, b, () => this.render())),
-          serviceNote(g, b) ? h('div', { class: 'muted', style: { fontSize: '12px' } }, serviceNote(g, b)) : null));
+          serviceNote(g, b) ? h('div', { class: 'muted', style: { fontSize: '12px' } }, serviceNote(g, b)) : null,
+          recallControls(g, b, () => this.render(), (why) => this.app.ui.toastError(why))));
         break;
       }
       case 'military_academy':

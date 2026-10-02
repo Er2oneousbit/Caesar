@@ -28,7 +28,7 @@ import { routeKind } from '../sim/trade.js';
 import { battleSummary } from '../sim/battle.js';
 import {
   MAP_W, MAP_H, drawEmpire, empireTravelers, empireHitAt, travelerLabel, isDrawn, figureCenter, figureScale,
-  drawCaravan, drawShip, drawBanner, drawCity, drawRome, drawRoute, drawStandard, drawBattleCity,
+  drawCaravan, drawShip, drawBanner, drawCity, drawRome, drawRoute, drawStandard, drawBattleCity, drawRider,
   SCOUT_MONTHS, RUMOUR_MONTHS,
 } from './empireMap.js';
 
@@ -185,7 +185,7 @@ export class EmpireView {
     else if (hit.kind === 'traveler' && hit.t.id) this.select(hit.t.id);
     else if (hit.kind === 'traveler' && hit.t.kind === 'warband' && !hit.t.rumour && !hit.t.noShore) this.goToEdge(hit.t);
     else if (hit.kind === 'traveler' && (hit.t.kind === 'raid' || (hit.t.kind === 'legion' && hit.t.here))) { this.app.ui.closeModal(); this.app.focusThreat(); }
-    else if (hit.kind === 'battle' || (hit.kind === 'traveler' && ['legion', 'enemy', 'troops'].includes(hit.t.kind))) this.app.ui.openAdvisors('imperial');
+    else if (hit.kind === 'battle' || (hit.kind === 'traveler' && ['legion', 'enemy', 'troops', 'rider'].includes(hit.t.kind))) this.app.ui.openAdvisors('imperial');
   }
 
   /**
@@ -235,7 +235,7 @@ export class EmpireView {
       else if (hit.t.kind === 'warband' && hit.t.noShore) text += '. Expect them overland, from a side the scouts cannot yet tell.';
       else if (hit.t.kind === 'warband') text += `. ${verb} to see ${hit.t.sea ? 'the shore where it will land' : 'the map edge it will enter by'}.`;
       else if (hit.t.kind === 'raid' || (hit.t.kind === 'legion' && hit.t.here)) text += `. ${verb} to look at them.`;
-      else if (hit.t.kind === 'legion' || hit.t.kind === 'enemy' || hit.t.kind === 'troops') text += `. ${verb} for the Imperial advisor.`;
+      else if (hit.t.kind === 'legion' || hit.t.kind === 'enemy' || hit.t.kind === 'troops' || hit.t.kind === 'rider') text += `. ${verb} for the Imperial advisor.`;
     } else if (hit && hit.kind === 'city') {
       text = cityLine(g, hit.id);
     } else if (hit && hit.kind === 'battle') {
@@ -252,10 +252,10 @@ export class EmpireView {
   renderPanel(g) {
     if (!g) return;
     const trade = this.travelers.filter((t) => t.kind === 'caravan' || t.kind === 'ship');
-    const threats = this.travelers.filter((t) => ['warband', 'raid', 'legion', 'enemy', 'troops'].includes(t.kind));
+    const threats = this.travelers.filter((t) => ['warband', 'raid', 'legion', 'enemy', 'troops', 'rider'].includes(t.kind));
     const anyOpen = Object.values(g.city.trade.routes).some((r) => r.open);
     const imperial = () => this.app.ui.openAdvisors('imperial');
-    const figure = (t) => glyph((ctx) => (t.kind === 'legion' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#6d2a6b') : t.kind === 'troops' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b') : drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid', !!t.sea)), 5, 4.4);
+    const figure = (t) => glyph((ctx) => (t.kind === 'legion' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#6d2a6b') : t.kind === 'troops' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b') : t.kind === 'rider' ? drawRider(ctx, 2.5, 3.8, 1.2) : drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid', !!t.sea)), 5, 4.4);
     const button = (t) => {
       if (t.kind === 'warband' && t.rumour) return h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Road not yet known');
       if (t.kind === 'warband' && t.noShore) return h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Coming overland');
@@ -263,7 +263,7 @@ export class EmpireView {
       if (t.kind === 'raid' || (t.kind === 'legion' && t.here)) return h('button', { class: 'btn small primary', onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show them');
       return h('button', { class: 'btn small', title: 'Caesar\'s anger and his calls for troops', onclick: imperial }, 'Imperial advisor');
     };
-    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea, t.state, t.home, !!t.rumour, !!t.noShore]), !!g.military.settings]), () => [
+    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea, t.state, t.home, !!t.rumour, !!t.noShore, t.post]), !!g.military.settings]), () => [
       h('h4', {}, 'Threats'),
       threats.length
         ? threats.map((t) => h('div', { class: 'empire-row' },
@@ -359,5 +359,6 @@ function legend() {
     row((ctx) => drawBanner(ctx, 3.1, 3.8, null), 'Warband and its size'),
     row((ctx) => drawStandard(ctx, 2.5, 4.4, null, 1, '#6d2a6b'), 'Caesar\'s legions, when he is angry'),
     row((ctx) => drawBattleCity(ctx, [2.5, 2.3], false), 'A city Caesar asks troops for'),
-    row((ctx) => drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b'), 'Your troops sent to it'));
+    row((ctx) => drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b'), 'Your troops sent to it'),
+    row((ctx) => drawRider(ctx, 2.5, 3.8, 1.2), 'A rider carrying your recall to them'));
 }

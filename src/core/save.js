@@ -127,6 +127,12 @@
  *      academy. Older saves need nothing: nobody in them is mid-training
  *      (a recruit or ship still on its way trains on arrival), and a soldier
  *      caught on a trip to the academy comes straight home (updateRoman).
+ *  19  recall from a distant battle (sim/battle.js): military.recalls, a
+ *      list of riders carrying a fort's or station's recall and of recalled
+ *      troops on their way home, each { post, city, march, rider,
+ *      riderTotal, homeIn, homeTotal, men, ships } (records like
+ *      battle.sent's). Older saves load with no rider out and nobody
+ *      recalled, see upgradeRecallsV18().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -443,6 +449,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 13) upgradeGovernorV12(game);
   if (data.version < 14) upgradeEmpireV13(game);
   if (data.version < 15) upgradeWarningsV14(game);
+  if (data.version < 19) upgradeRecallsV18(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -694,6 +701,15 @@ export function upgradeWarningsV14(game) {
   else if (m.settings && !m.active && left !== null && left <= RUMOUR_MONTHS && game.city.population >= RAID_MIN_POP) m.warnStage = 1;
   else m.warnStage = 0;
   if (m.caesar) m.caesar.noticeStage = noticeStageFor(m.caesar.countdown);
+}
+
+/**
+ * A save before version 19 (before the recall from a distant battle): no
+ * rider is out and nobody is on the way home from a recall. Troops away at
+ * a battle stay with the army, and may be recalled from now on.
+ */
+export function upgradeRecallsV18(game) {
+  if (game.military) game.military.recalls = [];
 }
 
 /**

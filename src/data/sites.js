@@ -91,7 +91,3 @@ export function homeSiteId(game) {
   return siteIdOf(game?.scenario);
 }
 
-/** Where the province is drawn on the empire map (map units). */
-export function homePos(game) {
-  return SITES[homeSiteId(game)].pos;
-}

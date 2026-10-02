@@ -388,7 +388,7 @@ export function deserializeGame(data, flags = {}) {
   // A sandbox saved before the province could move has no site: the
   // Etruscan coast, where it always was (data/sites.js siteIdOf). One that
   // names a site this game does not know cannot be put on the map.
-  assert(scenario.site === undefined || Object.hasOwn(SITES, scenario.site), `unknown province site "${scenario.site}"`);
+  assert(scenario.site === undefined || (typeof scenario.site === 'string' && Object.hasOwn(SITES, scenario.site)), `unknown province site "${scenario.site}"`);
 
   const map = GameMap.deserialize(data.map, decodeLayer);
   const rng = new RNG(1);

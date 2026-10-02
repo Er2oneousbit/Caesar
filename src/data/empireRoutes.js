@@ -124,8 +124,9 @@ const LANES = [
   [[-6.36, 36.8], [-6.45, 36.3]],
   ['@carteia', STRAIT],
   ['@carteia', BAETICA],
-  // Off Saguntum: a dead end, for the army's ships (a distant battle) only.
-  [[2.5, 38.75], [0.2, 39.6]],
+  // Off Saguntum: a dead end, for the army's ships (a distant battle) only,
+  // north of Ibiza (straight to the coast, its curve crossed the island).
+  [[2.5, 38.75], [1.3, 39.4], [0.2, 39.6]],
   // Campania.
   ['@puteoli', [14.05, 40.7], OFF_CAPRI, TYRRHENIAN],
   [OFF_CAPRI, CALABRIA],

@@ -235,14 +235,17 @@ test('empire: warbands close in over land on land and by sea at sea, from every 
   assert.equal(isLand(warbandPoint(ETRURIA, 'south-west', 0, true)), false);
   // A band that comes by land from the sea side is drawn on the nearest side
   // over land (it once stood in the sea): from the south, the Apennines.
+  // A band keeps to its element all the way in, from every side: from
+  // Puteoli a ship from the south once crossed Calabria, from Narbo one from
+  // the north Provence. Corduba, up its river, is raided only by land.
+  assert.equal(SCENARIOS.find((s) => s.id === 'c9m').seaRaids, false);
   for (const site of Object.keys(SITES)) {
     for (const d of dirs) {
-      for (const f of [0, 0.5, 1]) assert.ok(isLand(warbandPoint(site, d, f)), `${site}: a band by land from the ${d} is on land`);
+      for (let f = 0; f <= 1.0001; f += 0.05) {
+        assert.ok(isLand(warbandPoint(site, d, f)), `${site}: a band by land from the ${d} is on land at ${f.toFixed(2)}`);
+        if (site !== 'corduba') assert.equal(isLand(warbandPoint(site, d, f, true)), false, `${site}: a band by sea from the ${d} is at sea at ${f.toFixed(2)}`);
+      }
     }
-  }
-  // At sea from every site raided by sea (the sandbox's sites, Populonia).
-  for (const site of [...SANDBOX_SITES, 'populonia']) {
-    for (const f of [0, 1]) assert.equal(isLand(warbandPoint(site, 'south', f, true)), false, `${site}: by sea`);
   }
 });
 

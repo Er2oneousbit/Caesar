@@ -22,13 +22,13 @@ import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { SCENARIOS, TRADE_PARTNERS, sandboxScenario, findScenario } from '../src/data/scenarios.js';
 import { SITES, SITE_IDS, SANDBOX_SITES, HOME_SITE, siteIdOf, homeSiteId } from '../src/data/sites.js';
-import { routeWaypoints, routePath, tripDays, networkEdges, lineOver, legionWay, smoothLine, TRIP_DAYS_PER_UNIT } from '../src/data/empireRoutes.js';
+import { routeWaypoints, routePath, tripDays, networkEdges, lineOver, lineLength, legionWay, smoothLine, TRIP_DAYS_PER_UNIT } from '../src/data/empireRoutes.js';
 import { at, isLand, ROUTES, RIVERS_LL, project } from '../src/data/empireGeo.js';
 import { THREATENED_CITIES, THREATENED_IDS, SANDBOX_THREATENED_IDS, marchLine, marchMonths } from '../src/data/battles.js';
 import { routeInterval, visitInterval, routeVolume, buysInForce, usualInterval } from '../src/sim/tradeDemand.js';
 import { openRoute, routeKind, updateTrade, firstVisitDays, FIRST_VISIT_DAYS } from '../src/sim/trade.js';
 import { requestTroops, battleSummary } from '../src/sim/battle.js';
-import { empireTravelers, empireHitAt, warbandPoint, frontierDir, legionRoad } from '../src/ui/empireMap.js';
+import { empireTravelers, empireHitAt, warbandPoint, frontierDir, legionRoad, markerSpots } from '../src/ui/empireMap.js';
 
 log.setLevel('error');
 
@@ -259,6 +259,29 @@ test('battles: the march from the Etruscan coast is as it was; each mission marc
   for (const site of SANDBOX_SITES) for (const id of SANDBOX_THREATENED_IDS) assert.ok(marchMonths(site, id) <= 12, `${site} ${id}: ${marchMonths(site, id)}`);
 });
 
+test('battles: every march is drawn over land or at sea by its kind, curve and all (the way to Saguntum once crossed Ibiza)', () => {
+  const pairs = [];
+  for (const s of SCENARIOS) for (const e of s.distantBattles || []) pairs.push([s.site, e.city]);
+  for (const site of SANDBOX_SITES) for (const city of SANDBOX_THREATENED_IDS) pairs.push([site, city]);
+  for (const [site, city] of pairs) {
+    const sea = THREATENED_CITIES[city].route === 'sea';
+    const line = marchLine(site, city);
+    // A ship leaves its harbor and reaches its city over 2 map units of shore, and Corduba's go down the river first.
+    const river = sea && SITES[site].river ? SITES[site].river.length : 0;
+    const skipStart = sea ? lineLength(line.slice(0, river + 1)) + 2 : 0;
+    const r = lineOver(smoothLine(line), !sea, { step: 0.2, skipStart, skipEnd: sea ? 2 : 0 });
+    assert.ok(r.ok, `${site} to ${city}: ${sea ? 'land' : 'water'} at ${r.at?.map((v) => v.toFixed(2))}`);
+  }
+});
+
+test('battles: the Corduba briefing says what the march is', () => {
+  const c9m = findScenario('c9m');
+  const hint = c9m.hints.find((h) => /Italica/.test(h));
+  assert.equal(marchMonths('corduba', 'italica'), 3);
+  assert.match(hint, /about three months/);
+  for (const s of SCENARIOS) for (const h of s.hints || []) assert.doesNotMatch(h, /a year at sea/, s.id);
+});
+
 test('battles: Corduba\'s troops march to Italica, down the Baetis, in 3 months; the request and the advisor say so', () => {
   const game = new Game({ scenario: findScenario('c9m') });
   assert.equal(homeSiteId(game), 'corduba');
@@ -294,6 +317,15 @@ test('map: the province\'s star is where its site is, and a click finds it besid
   const travelers = empireTravelers(game);
   assert.deepEqual(empireHitAt(game, travelers, ...SITES.puteoli.pos, 2), { kind: 'home' });
   assert.deepEqual(empireHitAt(game, travelers, ...TRADE_PARTNERS.capua.pos, 2), { kind: 'city', id: 'capua' }, 'Capua, 0.7 units off, can still be clicked');
+  // Raiders and Caesar's legions in the province are drawn beside it on land, apart (at Firmum and Puteoli they once stood in the sea).
+  for (const site of SITE_IDS) {
+    const { raid, legion } = markerSpots(site);
+    assert.ok(isLand(raid) && isLand(legion), `${site}: markers on land`);
+    assert.ok(Math.hypot(raid[0] - legion[0], raid[1] - legion[1]) >= 2, `${site}: markers apart`);
+    for (const p of [raid, legion]) assert.ok(Math.hypot(p[0] - SITES[site].pos[0], p[1] - SITES[site].pos[1]) < 5, `${site}: beside it`);
+  }
+  // The Etruscan coast keeps the spots it always had.
+  assert.deepEqual(markerSpots('etruria'), { raid: [SITES.etruria.pos[0] + 2.6, SITES.etruria.pos[1] - 2.4], legion: [SITES.etruria.pos[0] - 2.6, SITES.etruria.pos[1] + 3.6] });
   // A sandbox on the Etruscan coast finds its province there, not at Puteoli.
   const home = sandboxAt('etruria');
   assert.deepEqual(empireHitAt(home, [], ...SITES.etruria.pos, 2), { kind: 'home' });
@@ -315,4 +347,7 @@ test('saves: a campaign save loads at its mission\'s site, a sandbox keeps its o
   const bad = JSON.parse(JSON.stringify(serializeGame(narbo)));
   bad.scenario.site = 'atlantis';
   assert.throws(() => deserializeGame(bad), /Invalid save file: unknown province site "atlantis"/);
+  // Not a name at all (a hand-edited file): refused, not quietly put on the Etruscan coast.
+  bad.scenario.site = ['narbo'];
+  assert.throws(() => deserializeGame(bad), /Invalid save file: unknown province site/);
 });

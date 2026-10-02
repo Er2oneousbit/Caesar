@@ -54,9 +54,10 @@ export const THREATENED_CITIES = Object.freeze({
     path: [[10.1, 43.3], [10.25, 42.7], [10.9, 41.6], [12.4, 40.0], [14.4, 38.9], [15.2, 38.45]], enemyFrom: [12.5, 37.8], enemyMonths: 7,
   },
   // The town Scipio founded on the Baetis for his wounded veterans (206 BC),
-  // raided by the Lusitanians from 155 BC. The way: along the coast of
-  // Hispania, through the strait and up the river (the last leg is the
-  // river, drawn straight).
+  // raided by the Lusitanians from 155 BC. The way from the Etruscan
+  // coast: along the coast of Hispania, through the strait and up the
+  // river (the last leg is the river, drawn straight). From Corduba, its
+  // own province, the army goes down the Baetis instead (marchLine).
   italica: {
     name: 'Italica', enemy: 'the Lusitanians', pos: at(-6.04, 37.44), route: 'sea',
     path: [[9.85, 43.6], [8.6, 43.4], [6.5, 42.6], [4.5, 41.6], [2.6, 40.6], [1.2, 40.0], [0.4, 38.9], [-0.6, 37.9], [-1.6, 37.2], [-3.0, 36.6], [-4.6, 36.4], [-5.6, 35.95], [-6.2, 36.2], [-6.45, 36.72]],

@@ -140,21 +140,22 @@ export function frontierDir(siteId) {
   return (SITES[siteId] || SITES.etruria).frontier;
 }
 
-/** Is the way in from `d` over land, from `far` map units out to WARBAND_NEAR? (Sampled every half unit.) */
-function landWayIn(home, d, far) {
+/** Is the whole way in from `d`, from `far` map units out to WARBAND_NEAR, land (`land`) or water? (Sampled every half unit.) */
+function wayIn(home, d, far, land) {
   const [dx, dy] = DIR_STEP[d];
-  for (let r = far; r >= WARBAND_NEAR - 1e-9; r -= 0.5) if (!isLand([home[0] + dx * r, home[1] + dy * r])) return false;
+  for (let r = far; r >= WARBAND_NEAR - 1e-9; r -= 0.5) if (isLand([home[0] + dx * r, home[1] + dy * r]) !== land) return false;
   return true;
 }
 
 /**
  * Where a warband from `dir` stands on the map from a site, `frac` of the
- * way in. One that comes by sea (`sea`) sails on the sea: from `dir`, or the
- * nearest direction round from it whose way in is sea at both ends. One that
- * comes by land walks over land: from `dir`, or the nearest direction round
- * from it whose whole way in is land; on a narrow coast where none is (Firmum
- * between the Apennines and the Adriatic), from a little nearer. The label
- * keeps the side of the city's map it comes from.
+ * way in. It keeps to its element all the way: one that comes by sea (`sea`)
+ * sails from `dir`, or the nearest direction round from it whose whole way
+ * in is water (from Puteoli a ship from the south would cross Calabria); one
+ * that comes by land walks from the nearest direction whose whole way in is
+ * land. Where no side is (Firmum between the Apennines and the Adriatic), it
+ * starts a little nearer. The label keeps the side of the city's map it
+ * comes from.
  */
 export function warbandPoint(siteId, dir, frac, sea = false) {
   const home = (SITES[siteId] || SITES.etruria).pos;
@@ -166,20 +167,37 @@ export function warbandPoint(siteId, dir, frac, sea = false) {
   const order = Object.keys(DIR_STEP);
   const k = Math.max(0, order.indexOf(dir));
   const round = [0, 1, -1, 2, -2, 3, -3, 4].map((step) => order[(k + step + 8) % 8]);
-  if (sea) {
-    for (const d of round) {
-      const [dx, dy] = DIR_STEP[d];
-      const far = [home[0] + dx * WARBAND_FAR, home[1] + dy * WARBAND_FAR];
-      const near = [home[0] + dx * WARBAND_NEAR, home[1] + dy * WARBAND_NEAR];
-      if (!isLand(far) && !isLand(near)) return point(d);
-    }
-    return point(dir);
-  }
-  for (let far = WARBAND_FAR; far >= WARBAND_NEAR + 1; far -= 2) {
-    const d = round.find((side) => landWayIn(home, side, far));
+  for (let far = WARBAND_FAR; far >= WARBAND_NEAR + 1; far--) {
+    const d = round.find((side) => wayIn(home, side, far, !sea));
     if (d) return point(d, far);
   }
   return point(dir);
+}
+
+/**
+ * A spot beside the province for a marker (raiders in the province,
+ * Caesar's legions camped there): the first of `offsets` (map units from
+ * the site) that is on land, so it is never drawn in the sea at a coastal
+ * site, and not `avoid` (another marker's spot).
+ */
+function besideHome(home, offsets, avoid = null) {
+  for (const [dx, dy] of offsets) {
+    const p = [home[0] + dx, home[1] + dy];
+    if (isLand(p) && !(avoid && Math.hypot(p[0] - avoid[0], p[1] - avoid[1]) < 2)) return p;
+  }
+  return [home[0] + offsets[0][0], home[1] + offsets[0][1]];
+}
+
+/** Where raiders in the province are drawn: up and to the right of its star (its name is above it), else the first side over land. */
+const RAID_SPOTS = [[2.6, -2.4], [2.6, 2.4], [-2.6, -2.4], [-2.6, 2.4], [3.4, 0], [-3.4, 0], [0, 3.2], [1.6, -1.6], [1.6, 1.6], [-1.6, -1.6], [-1.6, 1.6]];
+/** Where Caesar's legions in the province are drawn: below and to the left of it, else the first side over land clear of the raiders. */
+const LEGION_SPOTS = [[-2.6, 3.6], [2.6, 3.6], [-2.6, -3.6], [2.6, -3.6], [-3.4, 0], [3.4, 0], [0, 3.6], [-1.6, 2.2], [1.6, 2.2], [-1.6, -2.2], [1.6, -2.2]];
+
+/** The spots beside a site where raiders and Caesar's legions in the province are drawn (map units). */
+export function markerSpots(siteId) {
+  const home = (SITES[siteId] || SITES.etruria).pos;
+  const raid = besideHome(home, RAID_SPOTS);
+  return { raid, legion: besideHome(home, LEGION_SPOTS, raid) };
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -213,7 +231,6 @@ export function empireTravelers(game) {
   const now = nowDays(game);
   const seaOk = !!game.map.seaEntry;
   const site = siteOf(game);
-  const home = homeAt(game);
   for (const [id, r] of Object.entries(game.city.trade.routes)) {
     const p = TRADE_PARTNERS[id];
     if (!p || !r.open) continue;
@@ -237,7 +254,7 @@ export function empireTravelers(game) {
   }
   if (m && m.active) {
     const n = enemyCount(game) - legionCount(game); // (Caesar's men are shown apart, below)
-    if (n > 0) out.push({ kind: 'raid', size: n, pos: [home[0] + 2.6, home[1] - 2.4] });
+    if (n > 0) out.push({ kind: 'raid', size: n, pos: markerSpots(site).raid });
   }
   out.push(...empireArmies(game));
   return out;
@@ -306,14 +323,13 @@ function cutShort(pts, cut) {
 export function empireArmies(game) {
   const out = [];
   const site = siteOf(game);
-  const home = homeAt(game);
   const ls = legionSummary(game);
   if (ls.state === 'marching') {
     const days = ls.days - game.time.tick / CONFIG.TICKS_PER_DAY;
     const frac = clamp01(1 - days / (game.military.caesar.marchDays || CONFIG.LEGION_MARCH_DAYS));
     out.push({ kind: 'legion', size: ls.size, months: ls.months, frac, pos: linePoint(legionRoad(site), frac) });
   } else if (ls.state !== 'none') {
-    out.push({ kind: 'legion', here: true, state: ls.state, size: ls.men, pos: [home[0] - 2.6, home[1] + 3.6] }); // (below and left of the province: its name is above it, raiders to its right)
+    out.push({ kind: 'legion', here: true, state: ls.state, size: ls.men, pos: markerSpots(site).legion });
   }
   const bs = battleSummary(game);
   const part = nowMonths(game) - game.time.totalMonths; // how far into this month

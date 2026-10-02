@@ -1852,8 +1852,27 @@ try {
     await np.close();
   }
 
+  // 6d. A sandbox founded at another place on the empire map: the setup's
+  //     choice reaches the game, and a route's card says how far it is.
+  {
+    const sp = await browser.newPage();
+    const serrors = [];
+    sp.on('pageerror', (e) => serrors.push(e.message));
+    await sp.goto(`${url}?mute=1`);
+    await sp.click('text=Sandbox');
+    await sp.selectOption('select.site-select', 'puteoli');
+    await sp.click('text=Found the city');
+    await sp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const site = await sp.evaluate(() => window.colonia.game.scenario.site);
+    await sp.keyboard.press('F2');
+    await sp.click('.tab:has-text("Trade")');
+    const pace = await sp.$$eval('.modal .route-pace', (els) => els.map((e) => e.textContent));
+    check('sandbox at Puteoli: the setup\'s place reaches the game, and the Capua card says it is a day off', site === 'puteoli' && pace.includes('About 1 day on the road each way; a caravan every 32 to 56 days.') && serrors.length === 0, JSON.stringify({ site, pace: pace.slice(0, 4), serrors }));
+    await sp.close();
+  }
+
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
-  const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const phone =await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];
   phone.on('pageerror', (e) => perrors.push(e.message));
   await phone.goto(`${url}?skipmenu=1&map=small&seed=phone`); // a map where the demo city gets a warehouse

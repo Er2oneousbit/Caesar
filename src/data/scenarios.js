@@ -532,7 +532,7 @@ export const SCENARIOS = Object.freeze([
     hints: [
       'Weapons are Corduba\'s trade: a Ferraria (Iron Mine) by the rocks and a Fabrica (Weaponsmith). Carthago, Alexandria and Cirta buy them, Gades sells iron, and within a few years Carthago wants 4,000 a year.',
       'The Lusitanians come over the hills, never by water: towers and walls with gates across the roads in, and a mixed army.',
-      'Twice Caesar will call for troops to save Italica, along the coast and up its river: a year at sea, so send them early. Soldiers sail, and Stationes (Naval Stations) can send their squadrons too.',
+      'Twice Caesar will call for troops to save Italica, down the Baetis from Corduba: about three months by water. Soldiers sail, and Stationes (Naval Stations) can send their squadrons too.',
       'Gades, beyond the Pillars of Hercules, and Rhodus trade by the river: build Emporia (Trade Docks) on its banks.',
     ],
   },

@@ -40,10 +40,12 @@ function demandGame({ demand, demandChanges, seed = 'demand-test', type = 'coast
   return new Game({ scenario, flags: { unlockall: true, money: 50000, seed } });
 }
 
-test('demand: the first seven missions buy what the partners\' tables say, all mission long, at the usual pace', () => {
-  for (const s of SCENARIOS) {
-    assert.equal(s.demand, undefined, `${s.id}: no demand of its own`);
-    assert.equal(s.demandChanges, undefined, `${s.id}: no demand changes`);
+test('demand: the missions with no demand of their own buy what the partners\' tables say, all mission long, at the usual pace', () => {
+  // The late siblings (Cosa, Copia and on) set demand of their own; the
+  // missions that came before them keep their partners' tables.
+  const plain = SCENARIOS.filter((s) => !s.demand && !s.demandChanges);
+  assert.deepEqual(plain.map((s) => s.id), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c7']);
+  for (const s of plain) {
     for (const id of s.partners) {
       for (let month = 0; month <= (s.paceYears + 3) * 12; month += 5) {
         assert.deepEqual(partnerBuys(at(s, month), id), TRADE_PARTNERS[id].buys, `${s.id} ${id} month ${month}`);
@@ -59,7 +61,7 @@ test('demand: the first seven missions buy what the partners\' tables say, all m
   assert.ok(routeVolume(TRADE_PARTNERS.corinthus.buys, TRADE_PARTNERS.corinthus.sells) / carryPerYear('sea') < 0.91);
   // Urbs Magna keeps the nine partners it always had; the sandbox has all twelve.
   assert.equal(SCENARIOS.find((s) => s.id === 'c7').partners.length, 9);
-  assert.ok(!SCENARIOS.some((s) => s.partners.some((id) => ['gades', 'rhodus', 'delos'].includes(id))));
+  assert.ok(!plain.some((s) => s.partners.some((id) => ['gades', 'rhodus', 'delos'].includes(id))));
   assert.equal(sandboxScenario().partners.length, 12);
 });
 

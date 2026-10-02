@@ -3,8 +3,8 @@
  * ----------------------------------------------------------------------------
  * Run:  npm test
  *
- * From step 3 to step 5 the campaign offers two provinces at the same rank,
- * one peaceful and one military (data/scenarios.js steps and tracks): which
+ * From step 3 on the campaign offers two provinces at the same rank, one
+ * peaceful and one military (data/scenarios.js steps and tracks): which
  * missions a record of wins opens, what a win leads to (one mission, or the
  * choice of two), the savings a win stores for both missions of the next
  * step and the sibling fallback for records from before the branches, ranks,
@@ -34,6 +34,8 @@ import { postCard, threatLine, introLine, goalsLine, trackName, choiceLine } fro
 log.setLevel('error');
 
 const NEW = ['c3m', 'c4p', 'c5p'];
+/** The siblings of the late campaign (steps 6 on), each beside a mission of the other kind. */
+const LATE = ['c6p', 'c7p'];
 const ids = (list) => list.map((s) => s.id);
 const has = (s, k) => s.unlocks === 'all' || s.unlocks.includes(k);
 
@@ -41,12 +43,12 @@ const has = (s, k) => s.unlocks === 'all' || s.unlocks.includes(k);
 // The data
 // ---------------------------------------------------------------------------
 
-test('steps: two provinces at steps 3, 4 and 5, one peaceful and one military; one at the others', () => {
+test('steps: two provinces at every step from 3 on, one peaceful and one military; one at steps 1 and 2', () => {
   assert.equal(LAST_STEP, 7);
-  assert.deepEqual(ids(SCENARIOS), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c7'], 'each new mission right after the one beside it');
+  assert.deepEqual(ids(SCENARIOS), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p', 'c7', 'c7p'], 'each new mission right after the one beside it');
   for (let n = 1; n <= LAST_STEP; n++) {
     const at = missionsAtStep(n);
-    if ([3, 4, 5].includes(n)) {
+    if (n >= 3) {
       assert.equal(at.length, 2, `step ${n}`);
       assert.deepEqual(at.map((s) => s.track).sort(), ['military', 'peaceful'], `step ${n}: one of each`);
       const [a, b] = at;
@@ -57,8 +59,8 @@ test('steps: two provinces at steps 3, 4 and 5, one peaceful and one military; o
       assert.equal(at[0].track, undefined, `step ${n} has no track`);
     }
   }
-  assert.deepEqual(Object.fromEntries(['c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p'].map((id) => [id, findScenario(id).track])),
-    { c3: 'peaceful', c3m: 'military', c4: 'military', c4p: 'peaceful', c5: 'military', c5p: 'peaceful' });
+  assert.deepEqual(Object.fromEntries(SCENARIOS.filter((s) => s.step >= 3).map((s) => [s.id, s.track])),
+    { c3: 'peaceful', c3m: 'military', c4: 'military', c4p: 'peaceful', c5: 'military', c5p: 'peaceful', c6: 'military', c6p: 'peaceful', c7: 'military', c7p: 'peaceful' });
   // Fixed map seeds, each its own.
   const seeds = SCENARIOS.map((s) => s.map.seed);
   assert.equal(new Set(seeds).size, seeds.length);
@@ -66,6 +68,10 @@ test('steps: two provinces at steps 3, 4 and 5, one peaceful and one military; o
     { size: 112, type: 'lakes', seed: 'firmum-picenum' },
     { size: 128, type: 'coast', seed: 'paestum' },
     { size: 128, type: 'river', seed: 'beneventum' },
+  ]);
+  assert.deepEqual(LATE.map((id) => findScenario(id).map), [
+    { size: 144, type: 'lakes', seed: 'cosa-portus' },
+    { size: 160, type: 'river', seed: 'copia' },
   ]);
 });
 
@@ -76,18 +82,22 @@ test('steps: lookups by id (stepOf, missionsAtStep, nextMissions, siblingOf)', (
   assert.deepEqual(ids(nextMissions('c2')), ['c3', 'c3m']);
   assert.deepEqual(ids(nextMissions('c3')), ['c4', 'c4p']);
   assert.deepEqual(ids(nextMissions('c3m')), ['c4', 'c4p']);
-  assert.deepEqual(ids(nextMissions('c5p')), ['c6']);
+  assert.deepEqual(ids(nextMissions('c5p')), ['c6', 'c6p']);
+  assert.deepEqual(ids(nextMissions('c6p')), ['c7', 'c7p']);
+  assert.deepEqual(ids(nextMissions('c7p')), []);
   assert.deepEqual(ids(nextMissions('c7')), []);
   assert.deepEqual(ids(nextMissions('sandbox')), []);
   assert.equal(siblingOf('c4').id, 'c4p');
   assert.equal(siblingOf('c4p').id, 'c4');
   assert.equal(siblingOf('c3m').id, 'c3');
+  assert.equal(siblingOf('c6').id, 'c6p');
+  assert.equal(siblingOf('c7p').id, 'c7');
   assert.equal(siblingOf('c1'), null);
   assert.equal(siblingOf('sandbox'), null);
 });
 
 test('a military province: raids early, forts a step sooner, a distant battle; a peaceful one: none, and higher goals', () => {
-  for (const n of [3, 4, 5]) {
+  for (let n = 3; n <= LAST_STEP; n++) {
     const war = missionsAtStep(n).find((s) => s.track === 'military');
     const peace = missionsAtStep(n).find((s) => s.track === 'peaceful');
     assert.ok(war.military && war.distantBattles?.length, `${war.id}: raids and a call for troops`);
@@ -137,6 +147,25 @@ test('the new missions fit their jobs and keep to their pace', () => {
   }
 });
 
+test('the late siblings ask for a little under the people their jobs allow, and the people set their pace', () => {
+  // From step 6 the goals are set from the model with its villa quarter
+  // (sim/capacity.js): between 80% and 92% of the sensible ceiling, a margin
+  // for the quarter, the model's riskiest assumption. The ceiling counts the
+  // demand in force when the goals can first be met.
+  for (const id of LATE) {
+    const s = findScenario(id);
+    const ceiling = employmentCeiling(s, SENSIBLE);
+    const goal = s.goals.population;
+    assert.ok(goal <= ceiling * 0.92 && goal >= ceiling * 0.8, `${id}: ${goal} people of a ceiling of ${ceiling}`);
+    assert.ok(employsEnough(s, goal, SENSIBLE), `${id}: a city of ${goal} has the jobs`);
+    const m = goalMonths(s.goals);
+    assert.equal(m.fastest, m.population, `${id}: the people set the pace`);
+    // Their demand is on the original's tiers.
+    for (const goods of Object.values(s.demand)) for (const v of Object.values(goods)) assert.ok([1500, 2500, 4000].includes(v), `${id}: ${v}`);
+    for (const c of s.demandChanges) assert.ok([0, 1500, 2500, 4000].includes(c.to) && s.partners.includes(c.partner), `${id}: ${c.partner} ${c.good}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Progress: what opens, what a win leads to
 // ---------------------------------------------------------------------------
@@ -148,7 +177,8 @@ test('unlocks: a step opens when any mission of the step before is won (worked e
   assert.deepEqual(open(['c1', 'c2']), ['c1', 'c2', 'c3', 'c3m']);
   assert.deepEqual(open(['c1', 'c2', 'c3m']), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p']);
   assert.deepEqual(open(['c1', 'c2', 'c3', 'c4p']), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p']);
-  assert.deepEqual(open(['c1', 'c2', 'c3', 'c4', 'c5p']), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6']);
+  assert.deepEqual(open(['c1', 'c2', 'c3', 'c4', 'c5p']), ['c1', 'c2', 'c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p']);
+  assert.deepEqual(open(['c6p']), ['c1', 'c6p', 'c7', 'c7p'], 'a peaceful win at step 6 opens both of step 7');
   // A record from before the branches needs no rewrite: it opens everything
   // it did, and the new missions beside the steps it reached.
   assert.deepEqual(open(['c1', 'c2', 'c3', 'c4', 'c5', 'c6']), ids(SCENARIOS));
@@ -175,10 +205,16 @@ test('after a win: the next step\'s two provinces as cards; one mission alone as
   assert.equal(after3[0].threat, 'First raid after about 5 years; forts and a mixed army; Caesar may call for troops.');
   assert.equal(after3[1].threat, 'No raiders and no forts: Rome judges you by culture, prosperity and the Emperor\'s favor.');
   assert.equal(choiceLine(nextMissions('c3m')), 'Rome offers you two provinces, each for an Architect. Read one briefing, go back and read the other before you choose.');
-  // Win c5p: one mission, Oasis Aurea, no choice.
-  assert.deepEqual(ids(nextMissions('c5p')), ['c6']);
+  // Win c5p: Oasis Aurea (military) and Cosa (peaceful).
+  const after5 = nextMissions('c5p').map(postCard);
+  assert.deepEqual(after5.map((c) => [c.id, c.track]), [['c6', 'Military'], ['c6p', 'Peaceful']]);
+  assert.equal(after5[1].threat, 'No raiders and no forts: Rome judges you by culture, prosperity and the Emperor\'s favor.');
+  assert.equal(after5[1].map, 'Lake District, 144×144');
+  assert.equal(choiceLine(nextMissions('c5p')), 'Rome offers you two provinces, each for a Procurator. Read one briefing, go back and read the other before you choose.');
+  // A step of one mission still leads on to it alone.
+  assert.deepEqual(ids(nextMissions('c1')), ['c2']);
   // Every intro carries a line of history: the colony and its year.
-  for (const [id, year] of [['c3m', 264], ['c4p', 273], ['c5p', 268]]) assert.match(findScenario(id).intro, new RegExp(`${year} BC`), id);
+  for (const [id, year] of [['c3m', 264], ['c4p', 273], ['c5p', 268], ['c6p', 273], ['c7p', 193]]) assert.match(findScenario(id).intro, new RegExp(`${year} BC`), id);
   assert.equal(trackName(findScenario('c1')), null);
   assert.equal(introLine({ intro: 'One. Two.' }), 'One.');
   assert.equal(goalsLine(findScenario('c1')), 'population 300, culture 15, peace 35');
@@ -189,7 +225,8 @@ test('after a loss: the same step\'s choice again, where the step has two', () =
   // The defeat screen offers missionsAtStep(stepOf(lost)) when it holds two.
   assert.deepEqual(ids(missionsAtStep(stepOf('c3m'))), ['c3', 'c3m']);
   assert.deepEqual(ids(missionsAtStep(stepOf('c4'))), ['c4', 'c4p']);
-  assert.deepEqual(ids(missionsAtStep(stepOf('c6'))), ['c6'], 'one mission: Try again, no choice');
+  assert.deepEqual(ids(missionsAtStep(stepOf('c6'))), ['c6', 'c6p']);
+  assert.deepEqual(ids(missionsAtStep(stepOf('c2'))), ['c2'], 'one mission: Try again, no choice');
   assert.deepEqual(ids(missionsAtStep(stepOf('sandbox'))), []);
 });
 
@@ -206,10 +243,12 @@ test('savings: a win stores them for both missions of the next step; the last wi
   assert.equal(record.c4p, 1200);
   storeCampaignSavings(record, 'c3', 900); // step 3 won again, the other way
   assert.deepEqual([record.c4, record.c4p], [900, 900]);
-  assert.deepEqual(storeCampaignSavings(record, 'c5p', 2000), ['c6']);
-  assert.equal(record.c6, 2000);
+  assert.deepEqual(storeCampaignSavings(record, 'c5p', 2000), ['c6', 'c6p']);
+  assert.deepEqual([record.c6, record.c6p], [2000, 2000]);
+  assert.deepEqual(storeCampaignSavings(record, 'c6p', 3000), ['c7', 'c7p']);
+  assert.deepEqual([record.c7, record.c7p], [3000, 3000]);
   const before = { ...record };
-  assert.deepEqual(storeCampaignSavings(record, 'c7', 5000), []);
+  for (const s of missionsAtStep(LAST_STEP)) assert.deepEqual(storeCampaignSavings(record, s.id, 5000), [], s.id);
   assert.deepEqual(record, before, 'nothing written after the last step');
   // Each mission starts from them, and a game started with them has them.
   assert.equal(campaignSavings(record, 'c4p'), 900);
@@ -234,7 +273,7 @@ test('savings: an old record falls back to the sibling\'s entry, with no rewrite
 
 test('ranks: both missions of a step at the step\'s rank (worked examples)', () => {
   const rank = (id) => new Game({ scenario: findScenario(id), flags: {} }).city.governor.rank;
-  assert.deepEqual(['c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p'].map(rank), [2, 2, 3, 3, 4, 4]);
+  assert.deepEqual(['c3', 'c3m', 'c4', 'c4p', 'c5', 'c5p', 'c6', 'c6p', 'c7', 'c7p'].map(rank), [2, 2, 3, 3, 4, 4, 5, 5, 6, 6]);
 });
 
 // ---------------------------------------------------------------------------
@@ -242,7 +281,7 @@ test('ranks: both missions of a step at the step\'s rank (worked examples)', () 
 // ---------------------------------------------------------------------------
 
 test('saves: each new mission saves as its id and loads back as itself', () => {
-  for (const id of NEW) {
+  for (const id of [...NEW, ...LATE]) {
     const game = new Game({ scenario: withDifficulty(findScenario(id), 'hard'), flags: {}, savings: 400 });
     game.runDays(3);
     const data = JSON.parse(JSON.stringify(serializeGame(game)));

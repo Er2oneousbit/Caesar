@@ -194,20 +194,22 @@ const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic
 const TIER4 = [...TIER3, 'bridge', 'timber_yard', 'furniture_ws', 'farm_olive', 'oil_ws', 'farm_pig', 'dock', 'farm_flax', 'linen_ws', 'clothing_ws',
   'iron_mine', 'weapons_ws', 'fletcher_ws', 'barracks', 'fort_legion', 'fort_archer', 'military_academy', 'tower', 'wall', 'shipyard', 'wharf', ...NAVY_KEYS];
 /**
- * Missions 5 and 6: every building and tool but the hippodrome and its
- * chariot maker, which wait for the last mission's great city (only it asks
- * for Palatia, where the hippodrome matters; earlier it would only make the
- * missions easier).
+ * Steps 5 and 6: every building and tool but the hippodrome and its chariot
+ * maker, which come with step 7, the first whose homes can reach the
+ * Imperial Palatium (it needs the hippodrome's shows; earlier the Circus
+ * would only make the missions easier). From step 7 every province has it.
  */
 const HIPPODROME_KEYS = ['hippodrome', 'hippodrome_part', 'chariot_maker'];
-const ALL_BUT_HIPPODROME = [...Object.keys(TOOLS), ...Object.keys(BUILDINGS)].filter((k) => !HIPPODROME_KEYS.includes(k));
+/** Every building and tool, as a list (for `'all'` with some taken out). */
+const ALL_KEYS = [...Object.keys(TOOLS), ...Object.keys(BUILDINGS)];
+const ALL_BUT_HIPPODROME = ALL_KEYS.filter((k) => !HIPPODROME_KEYS.includes(k));
 /** Mission 6's desert has no water a ship can sail: no fleet there (a test holds every mission's fleet to its water). */
 const ALL_BUT_HIPPODROME_AND_NAVY = ALL_BUT_HIPPODROME.filter((k) => !NAVY_KEYS.includes(k));
 
 /*
- * Campaign branches: from step 3 to step 5 each step offers two provinces at
- * the same rank, one peaceful and one military, as the original's career
- * did from its third rank. The military one has raids early, forts a step
+ * Campaign branches: from step 3 on each step offers two provinces at the
+ * same rank, one peaceful and one military, as the original's career did
+ * from its third rank. The military one has raids early, forts a step
  * sooner and Caesar's calls for troops; the peaceful one has no raids, no
  * army and higher culture, prosperity and favor goals. The iron mine, the
  * weaponsmith and the fletcher are industry, not army: their goods sell, so
@@ -372,7 +374,7 @@ export const SCENARIOS = Object.freeze([
     ],
   },
   {
-    id: 'c6', step: 6, name: 'Oasis Aurea', title: 'Sands of Gold',
+    id: 'c6', step: 6, track: 'military', name: 'Oasis Aurea', title: 'Sands of Gold',
     intro: 'Water is life in the desert. Only the land around the oases can feed your people. Plan every aqueduct carefully.',
     map: { size: 128, type: 'desert', seed: 'oasis-aurea' },
     funds: 10000, startYear: -210,
@@ -385,8 +387,28 @@ export const SCENARIOS = Object.freeze([
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
   {
-    id: 'c7', step: 7, name: 'Urbs Magna', title: 'The Great City',
-    intro: 'Your last and greatest charge: build a city to rival Rome itself.',
+    id: 'c6p', step: 6, track: 'peaceful', name: 'Cosa', title: 'The Loyal Colony',
+    intro: 'Cosa, a Latin colony of 273 BC, stands on a hill above the Etruscan coast and its lagoon. Hannibal has been in Italy for eight years, and the colonies are tired of sending men and money; when twelve of them refused, Cosa was among the eighteen that kept faith. Plant vines, send wine to Gaul and Greece from the lagoon harbor, and give Rome a colony it can count on. No enemy reaches this coast: Rome will judge you by what you build.',
+    // A lake of the seed reaches the map's edge: the lagoon, open to ships.
+    map: { size: 144, type: 'lakes', seed: 'cosa-portus' },
+    funds: 10000, startYear: -210,
+    goals: { population: 5600, culture: 70, prosperity: 65, peace: 75, favor: 70 },
+    paceYears: 6.5,
+    rank: 5, // Procurator, as Oasis Aurea (data/ranks.js)
+    unlocks: withoutArmy(ALL_BUT_HIPPODROME), partners: ['lugdunum', 'capua', 'massilia', 'corinthus', 'alexandria'], requests: true,
+    // Wine on the original's tiers: Corinthus's thirst grows in the third year.
+    demand: { corinthus: { wine: 2500 }, alexandria: { wine: 1500 }, lugdunum: { wine: 1500 } },
+    demandChanges: [{ year: 3, partner: 'corinthus', good: 'wine', to: 4000 }],
+    hints: [
+      'Wine is Cosa\'s trade: a Vinea (Vineyard) on meadow and a Cella Vinaria (Winery). Corinthus, Alexandria and the Gauls of Lugdunum buy it, and within a few years Corinthus will want more.',
+      'The lagoon reaches the sea: an Emporium (Trade Dock) on its shore receives the ships of Massilia, Corinthus and Alexandria.',
+      'No raiders come to Cosa, and you may build no forts. Rome watches your favor instead: meet Caesar\'s requests and send gifts, for if his favor runs out his legions come.',
+      'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity: give them a quarter of their own, away from the workshops.',
+    ],
+  },
+  {
+    id: 'c7', step: 7, track: 'military', name: 'Urbs Magna', title: 'The Great City',
+    intro: 'Your greatest charge yet: build a city to rival Rome itself.',
     map: { size: 160, type: 'lakes', seed: 'urbs-magna' },
     funds: 12000, startYear: -190,
     goals: { population: 5800, culture: 75, prosperity: 70, peace: 75, favor: 65 },
@@ -399,6 +421,25 @@ export const SCENARIOS = Object.freeze([
       'Palatia need four gods, a Medicus (Physician) and a Valetudinarium (Hospital), wine from two sources (a staffed winery and an import route) and plenty of shows.',
       'A Curia (Senate House) adds to culture and prosperity. Expect regular raids: walls with gates, towers and a mixed army keep the capital safe.',
       'The Circus (Hippodrome, one per city, 15 x 5 tiles) races chariots from a Factio (Chariot Stable): its charioteers bring 30 entertainment to the homes they pass, and every home gains a little more.',
+    ],
+  },
+  {
+    id: 'c7p', step: 7, track: 'peaceful', name: 'Copia', title: 'Plenty',
+    intro: 'In 193 BC Rome planted a Latin colony on the plain where Greek Thurii stood, beside the ruins of Sybaris, and named it Copia: plenty. The richest farmland of the south is yours, and Greece and Hispania are hungry. Feed your city and theirs: here the fields are the work. No enemy threatens the plain; Rome will judge you by culture, prosperity and the Emperor\'s favor.',
+    map: { size: 160, type: 'river', seed: 'copia' },
+    funds: 12000, startYear: -190,
+    goals: { population: 6000, culture: 77, prosperity: 73, peace: 78, favor: 70 },
+    paceYears: 7.1,
+    rank: 6, // Aedile, as Urbs Magna (data/ranks.js)
+    unlocks: withoutArmy(ALL_KEYS), partners: ['tarraco', 'lugdunum', 'aquileia', 'capua', 'massilia', 'corinthus'], requests: true,
+    // Food by the shipload and the caravan, Tarraco's wheat rising in the fourth year.
+    demand: { corinthus: { wheat: 4000 }, tarraco: { wheat: 2500 }, massilia: { vegetables: 2500 }, lugdunum: { fruit: 1500 }, aquileia: { meat: 1500 } },
+    demandChanges: [{ year: 4, partner: 'tarraco', good: 'wheat', to: 4000 }],
+    hints: [
+      'Corinthus and Tarraco buy wheat by the shipload and the caravan, Massilia vegetables, Lugdunum fruit and Aquileia meat: Copia\'s people work in the fields. Within a few years Tarraco will want more.',
+      'Traders take goods only from warehouses, and carts fill the granaries first: give a Horreum (Warehouse) by the fields a Get order for wheat.',
+      'The Circus (Hippodrome, one per city) comes with this province: its charioteers bring entertainment to every home they pass, and the Imperial Palatium needs its races.',
+      'No raiders come to Copia, and you may build no forts. Keep Caesar\'s favor high with his requests and gifts, for if it runs out his legions come.',
     ],
   },
 ]);

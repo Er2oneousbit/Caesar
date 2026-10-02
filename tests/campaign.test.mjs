@@ -72,22 +72,23 @@ test('each mission keeps to its planned pace, and the missions get longer step b
     const before = Math.min(...missionsAtStep(n - 1).map((s) => s.paceYears));
     for (const s of missionsAtStep(n)) assert.ok(s.paceYears >= before, `${s.id} (${s.paceYears} years) is no shorter than the shortest mission of step ${n - 1} (${before})`);
   }
-  // The first mission a year or more (it took months), the last the longest
-  // of all. (It ran over ten years while its goal of 12,000 people outran
-  // its jobs; fitted to them it asks for 5,800 and about seven years.)
+  // The first mission a year or more (it took months), and every mission of
+  // the last step longer than every mission before it: the career ends on
+  // its longest provinces.
   assert.ok(SCENARIOS[0].paceYears >= 1, rows.join('; '));
-  const last = SCENARIOS[SCENARIOS.length - 1];
-  for (const s of SCENARIOS) if (s !== last) assert.ok(last.paceYears > s.paceYears, `${last.id} is the longest (${s.id}: ${s.paceYears}); ${rows.join('; ')}`);
+  for (const last of missionsAtStep(LAST_STEP)) {
+    for (const s of SCENARIOS) if (s.step < LAST_STEP) assert.ok(last.paceYears > s.paceYears, `${last.id} is longer than ${s.id} (${s.paceYears}); ${rows.join('; ')}`);
+  }
 });
 
 test('each mission\'s goals are within reach of its buildings', () => {
   // The housing ladder through the campaign: Huts, Townhouses, Domus (the
   // amphitheater: a theater alone gives at most 16 entertainment, a Domus
-  // needs 20), Villas, then Grand Palatia in missions 5 and 6 and every level
-  // in mission 7, whose hippodrome the Imperial Palatium (95) needs. Siblings
+  // needs 20), Villas, then Grand Palatia at steps 5 and 6 and every level
+  // from step 7, whose hippodrome the Imperial Palatium (95) needs. Siblings
   // reach the same level as the mission beside them.
   assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, topLevel(s)])),
-    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c7: 20 });
+    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c6p: 19, c7: 20, c7p: 20 });
   for (const s of SCENARIOS) {
     const g = s.goals;
     const keys = unlockedBuildings(s);

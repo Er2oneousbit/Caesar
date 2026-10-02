@@ -65,7 +65,7 @@ test('ranks: eleven, Citizen to Caesar, with the salary table from 0 to 100 Dn a
 });
 
 test('ranks: one per step (step 1 a Citizen, step 7 an Aedile), both siblings alike; the sandbox picks one, the middle by default', () => {
-  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, s.rank])), { c1: 0, c2: 1, c3: 2, c3m: 2, c4: 3, c4p: 3, c5: 4, c5p: 4, c6: 5, c7: 6 });
+  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, s.rank])), { c1: 0, c2: 1, c3: 2, c3m: 2, c4: 3, c4p: 3, c5: 4, c5p: 4, c6: 5, c6p: 5, c7: 6, c7p: 6 });
   for (const s of SCENARIOS) assert.equal(s.rank, s.step - 1, s.id);
   assert.equal(withDifficulty(findScenario('c4'), 'hard').rank, 3, 'a difficulty keeps the rank');
   assert.equal(sandboxScenario({}).rank, 5);
@@ -336,8 +336,8 @@ test('donations: savings into the treasury, a ledger line of their own that is n
 
 test('savings carry from mission to mission (worked example 5); replaying a mission starts from what it started with', () => {
   const record = {};
-  assert.deepEqual(storeCampaignSavings(record, 'c5', 2000), ['c6']);
-  assert.deepEqual(record, { c6: 2000 });
+  assert.deepEqual(storeCampaignSavings(record, 'c5', 2000), ['c6', 'c6p']);
+  assert.deepEqual(record, { c6: 2000, c6p: 2000 });
   assert.equal(campaignSavings(record, 'c6'), 2000);
   const game = new Game({ scenario: findScenario('c6'), savings: campaignSavings(record, 'c6') });
   assert.equal(game.city.governor.savings, 2000);
@@ -538,7 +538,7 @@ test('words: the Imperial advisor, the briefing and the victory screen', () => {
   assert.equal(briefingGovernorLine(findScenario('c7'), 2500), 'You govern as an Aedile, with a salary of 30 Dn a month and 2,500 Dn of savings from your last post.');
   const won = new Game({ scenario: findScenario('c3'), savings: 1234 });
   assert.equal(victoryGovernorLine(won), 'Rome promotes you to Architect. Your savings of 1,234 Dn go with you to your next post.', 'two provinces at step 4: neither named');
-  assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c5p'), savings: 2000 })), 'Rome promotes you to Procurator. Your savings of 2,000 Dn go with you to Oasis Aurea.');
+  assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c5p'), savings: 2000 })), 'Rome promotes you to Procurator. Your savings of 2,000 Dn go with you to your next post.', 'two provinces at step 6');
   assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c1') })), 'Rome promotes you to Clerk. Your savings of 0 Dn go with you to Aquae Clarae.');
   assert.equal(victoryGovernorLine(new Game({ scenario: findScenario('c7') })), 'Your savings of 0 Dn are yours to keep.');
   assert.equal(victoryGovernorLine(game), null);

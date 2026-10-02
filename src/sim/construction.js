@@ -30,7 +30,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
-import { addBuilding, perimeterTiles, removeBuilding, linkedGroup } from './entities.js';
+import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
 import { waterBeside } from './fishing.js';
@@ -130,10 +130,13 @@ export function checkBuilding(game, type, x, y) {
     case 'nearRock':
       if (!map.isNearTerrain(x, y, S, Terrain.ROCK, 1)) return fail('Must be right next to rocks', cost);
       break;
-    case 'shore':
+    case 'shore': {
       if (!map.seaEntry) return fail('No river or sea here reaches the map edge: ships cannot come to this province', cost);
-      if (map.navigableBeside(x, y, S) < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
+      const i = map.navigableBeside(x, y, S);
+      if (i < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
+      out.water = i;
       break;
+    }
     case 'fishingShore': {
       const i = map.fishWaterBeside(x, y, S);
       if (i < 0) return fail('Must touch the bank of a river, the sea or a big lake (a pond has no fish)', cost);
@@ -284,11 +287,8 @@ export function anchorFor(type, cx, cy) {
  * the water (the art's state), as once it is built.
  */
 function ghostState(game, def, x, y, water) {
-  if (def.placement !== 'fishingShore' || !(water >= 0)) return 0;
-  const { map } = game;
-  const mx = map.xOf(water);
-  const my = map.yOf(water);
-  return my < y ? 0 : mx >= x + def.size ? 1 : my >= y + def.size ? 2 : 3;
+  if ((def.placement !== 'fishingShore' && def.placement !== 'shore') || !(water >= 0)) return 0;
+  return sideToward(game.map, water, x, y, def.size);
 }
 
 // ---------------------------------------------------------------------------

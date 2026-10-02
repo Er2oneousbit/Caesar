@@ -288,6 +288,38 @@ export function computeAccessRoad(game, b) {
  * `quiet`: no 'buildingAdded' event, so the renderer does not raise it out of
  * the ground (homes split off a bigger home were there all along).
  */
+/**
+ * Which edge of a footprint at (x, y) touches the water tile `water`
+ * (0 = -y, 1 = +x, 2 = +y, 3 = -x), as the waterside art is turned.
+ */
+export function sideToward(map, water, x, y, size) {
+  const wx = map.xOf(water);
+  const wy = map.yOf(water);
+  return wy < y ? 0 : wx >= x + size ? 1 : wy >= y + size ? 2 : 3;
+}
+
+/**
+ * The water a waterside building at (x, y) would face, or -1: navigable
+ * water for those ships tie up at (the Emporium, the Navalia, a Naval
+ * Station, the Portus), fishing water for a shipyard or wharf.
+ */
+export function shoreWaterAt(map, def, x, y, size = def.size) {
+  if (def.placement === 'shore') return map.navigableBeside(x, y, size);
+  if (def.placement === 'fishingShore') return map.fishWaterBeside(x, y, size);
+  return -1;
+}
+
+/**
+ * Turn a waterside building to face its water. Done as it is placed (and
+ * for an older save, as it loads): before, the side was worked out only
+ * when a ship or boat first used the building, and a Portus or Naval
+ * Station stood turned the wrong way until then (playtest).
+ */
+export function faceWater(game, b) {
+  const i = shoreWaterAt(game.map, b.def, b.x, b.y, b.size);
+  if (i >= 0) b.waterSide = sideToward(game.map, i, b.x, b.y, b.size);
+}
+
 export function addBuilding(game, type, x, y, size, { quiet = false } = {}) {
   const id = game.nextBuildingId++;
   const b = new Building(id, type, x, y, size);
@@ -303,6 +335,7 @@ export function addBuilding(game, type, x, y, size, { quiet = false } = {}) {
   }
   game.buildings.set(id, b);
   computeAccessRoad(game, b);
+  faceWater(game, b);
   b.createdDay = game.time.totalDays;
   game.markDirty('des', 'water');
   map.touch();

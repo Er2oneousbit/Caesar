@@ -130,7 +130,7 @@ import { Game } from './game.js';
 import { RNG } from './rng.js';
 import { GameMap } from '../world/map.js';
 import { GameTime } from '../sim/time.js';
-import { Building, Walker, footprintTiles } from '../sim/entities.js';
+import { Building, Walker, footprintTiles, faceWater } from '../sim/entities.js';
 import { Unit } from '../sim/military.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
@@ -430,6 +430,9 @@ export function deserializeGame(data, flags = {}) {
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
+  // A waterside building that no ship or boat had used yet was saved with no
+  // side: turn it to its water now, with the water layers rebuilt (sim/entities.js faceWater).
+  for (const b of game.buildings.values()) if (b.waterSide === undefined) faceWater(game, b);
   return game;
 }
 

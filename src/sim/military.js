@@ -12,8 +12,9 @@
  *
  * Units (both sides) move freely over open land in continuous tile
  * coordinates (tile centers are at .5). Roman soldiers stand on formation
- * spots around their fort (or a rally point the player picks) and engage
- * raiders inside their guard radius. Raiders follow a "flow field": one
+ * spots around their fort (or a rally point the player picks). At the fort they
+ * hold their ground (fight only what comes to them); deployed, they engage
+ * raiders around the rally point. Raiders follow a "flow field": one
  * Dijkstra pass from every building tile gives each land tile the cost to
  * reach the nearest building, so every raider just walks downhill. Walls cost
  * extra in that field, so raiders pick the cheapest place to break through.
@@ -44,16 +45,22 @@ import { igniteBuilding, collapseBuilding, riskRates } from './risk.js';
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 import { seaRaidPlan, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
-import { recruitDetour, recruitTrained, updateDrill, drillSpot, drilled, endDrill, abandonDrill } from './training.js';
+import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training.js';
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
 import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICKS } from './battle.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
 const SLOT_OFFSETS = [[0, 0], [0.26, -0.26], [-0.26, 0.26], [0.26, 0.26], [-0.26, -0.26]];
-// How far from its fort a garrison reacts to raiders (tiles). Deployed troops
-// guard def.aggro * 1.5 around their rally point instead.
-const GUARD_RADIUS = { legionary: 16, archer: 14, cavalry: 26 };
+// A fort that is not deployed holds its ground, as the original's legions did
+// until sent out: a legionary or cavalryman takes on only an enemy within
+// HOLD_REACH tiles of his post (he steps out, strikes and steps back), an
+// archer only one his arrows reach from his post. A fight already begun is
+// let go once the enemy is HOLD_LEASH tiles beyond that. To fight in the
+// field, the player deploys the fort (a rally point): deployed troops guard
+// def.aggro * 1.5 around it and chase up to 4 tiles farther (fightZone).
+const HOLD_REACH = 2;
+const HOLD_LEASH = 1;
 const WALL_HP = { [Wall.WALL]: 220, [Wall.GATE]: 320 };
 const FIELD_WALL_COST = 14; // how much raiders dislike breaking a wall vs walking
 const TOWER_RANGE = 8;
@@ -132,7 +139,7 @@ export class Unit {
     this.py = y;
     this.walked = 0; // tiles walked, modulo STRIDE_WRAP (drives the leg animation)
     this.trained = false; // Roman: trained at a Military Academy or the Portus (sim/training.js)
-    this.drill = 0; // Roman: id of the academy or Portus he is on his way to, 0 = none
+    this.drill = 0; // Roman ship: id of the Portus it is on its way to, 0 = none (soldiers no longer go)
     this.drillDay = 0; // ...the day he set out
     this.drillDays = 0; // ...and how long the trip may take (sim/training.js startDrill)
   }
@@ -416,7 +423,7 @@ export function deployFort(game, fortId, tx, ty) {
   const fort = game.buildings.get(fortId);
   if (!fort || fort.def.kind !== 'fort') return false;
   fort.rally = { x: tx + 0.5, y: ty + 0.5 };
-  for (const u of unitsOfFort(game, fortId)) { endDrill(u); u.target = 0; u.state = 'march'; } // (a man at the drill yard comes too)
+  for (const u of unitsOfFort(game, fortId)) { u.path = null; u.target = 0; u.state = 'march'; }
   return true;
 }
 
@@ -696,14 +703,15 @@ export function rollDamage(game, attDef, tgtDef, power = 1, defense = tgtDef.def
 /**
  * Is a Roman soldier holding position: standing his ground, at his post (by
  * the fort, or where it was deployed) or standing to fight a raider in reach,
- * and not running after one, marching or on his way to the drill yard? A
- * trained legionary holding position is in close order. (Colonia's soldiers
- * go out to meet raiders inside their guard area rather than wait in line, so
- * standing still is the test, not the spot: a test of "at his post" alone
- * gave a garrison that charges no close order at all.)
+ * and not running after one or marching? A trained legionary holding
+ * position is in close order. (Colonia's soldiers step out to meet a raider
+ * near their post, and deployed ones go out to meet raiders around their
+ * rally point, rather than wait in line, so standing still is the test, not
+ * the spot: a test of "at his post" alone gave a garrison that charges no
+ * close order at all.)
  */
 export function holdingPosition(game, u) {
-  if (u.moving || u.drill || !u.fort) return false;
+  if (u.moving || !u.fort) return false;
   if (u.state === 'idle') return true;
   if (u.state !== 'engage') return false;
   // Standing to fight means his raider is in reach: one blocked from reaching
@@ -768,20 +776,64 @@ function nearestHostile(list, x, y, range) {
 }
 
 /**
- * A soldier's choice of raider: anyone threatening his post (within `guard`
- * of the anchor) or right next to him (within his aggro), but never one that
- * would lure him more than guard + 4 tiles away. Raiders already fought by
- * several soldiers count as farther away, so a squad spreads its attacks.
+ * Where a soldier may fight right now (see HOLD_REACH). A zone is `spots`
+ * (the ground it is measured from: an enemy's distance is to the nearest),
+ * `guard` (an enemy this close to it is taken on), `leash` (a fight is given
+ * up beyond this), `near` (an enemy this close to the soldier himself is
+ * taken on too, inside the leash) and, holding the fort, `self` (an enemy
+ * this close to him is fought wherever he is: a man marching home who is
+ * struck strikes back) and `hold` (so is one striking at him, see inZone).
+ *   Deployed: around the rally point, guard def.aggro * 1.5, leash 4 more,
+ *   near his aggro; nothing beyond the leash.
+ *   Holding the fort: a legionary or cavalryman, the fort's ranks (every
+ *   spot of its formation: the men hold their ground together, or raiders
+ *   cut down the front man while the rest look on), guard HOLD_REACH; an
+ *   archer, his own post, guard his range. Leash HOLD_LEASH more.
  */
-function pickTarget(enemies, u, def, anchor, guard) {
+function fightZone(game, def, fort, post) {
+  if (fort.rally) {
+    const guard = def.aggro * 1.5;
+    return { spots: [fort.rally], guard, leash: guard + 4, near: def.aggro, self: -1, hold: false };
+  }
+  const guard = def.ranged ? def.range : HOLD_REACH;
+  const spots = def.ranged ? [post] : formationSpots(game, fort);
+  return { spots, guard, leash: guard + HOLD_LEASH, near: -1, self: def.range, hold: true };
+}
+
+/** Distance from an enemy to the nearest spot of a zone. */
+function zoneDistance(zone, e) {
+  let best = Infinity;
+  for (const s of zone.spots) best = Math.min(best, Math.hypot(e.x - s.x, e.y - s.y));
+  return best;
+}
+
+/**
+ * May the soldier fight this enemy? `keeping`: one he is fighting already
+ * (held to the leash, not the guard). A man holding the fort also answers an
+ * enemy striking at him from wherever it stands (a slinger out of reach of
+ * the ranks has come to him all the same), and only while it does.
+ */
+function inZone(zone, u, e, keeping) {
+  const d = Math.hypot(e.x - u.x, e.y - u.y);
+  if (d <= zone.self) return true;
+  if (zone.hold && e.target === u.id && d <= UNIT_TYPES[e.type].range + 0.5) return true;
+  const dZone = zoneDistance(zone, e);
+  if (dZone > zone.leash) return false;
+  return keeping || dZone <= zone.guard || d <= zone.near;
+}
+
+/**
+ * A soldier's choice of enemy: one inside his fight zone. Raiders already
+ * fought by several soldiers count as farther away, so a squad spreads its
+ * attacks.
+ */
+function pickTarget(enemies, u, zone) {
   let best = null;
   let bestScore = Infinity;
   for (const e of enemies) {
     if (u.ignore && u.ignore.includes(e.id)) continue;
-    const dAnchor = Math.hypot(e.x - anchor.x, e.y - anchor.y);
-    if (dAnchor > guard + 4) continue;
+    if (!inZone(zone, u, e, false)) continue;
     const d = Math.hypot(e.x - u.x, e.y - u.y);
-    if (dAnchor > guard && d > def.aggro) continue;
     const score = d + (e.pressure || 0) * 0.8;
     if (score < bestScore) { bestScore = score; best = e; }
   }
@@ -794,13 +846,15 @@ function updateRoman(game, u, enemies) {
   if (!fort) { removeUnit(game, u, 'disbanded'); return; }
   if (u.noPath > 0) u.noPath--;
   if (u.ignore && game.time.totalTicks > u.ignoreUntil) u.ignore = null;
+  // On a trip to the drill yard in an older save: soldiers at rest no longer
+  // go (sim/training.js), so he comes straight home, untrained.
+  if (u.drill) endDrill(u);
   const post = postOf(game, u, fort);
-  const anchor = anchorOf(game, fort);
-  const guard = fort.rally ? def.aggro * 1.5 : GUARD_RADIUS[u.type] || def.aggro;
+  const zone = fightZone(game, def, fort, post);
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && (target.side !== 'enemy' || Math.hypot(target.x - anchor.x, target.y - anchor.y) > guard + 4)) target = null;
+  if (target && (target.side !== 'enemy' || !inZone(zone, u, target, true))) target = null;
   if ((game.time.totalTicks + u.id) % 6 === 0 || !target) {
-    const pick = pickTarget(enemies, u, def, anchor, guard);
+    const pick = pickTarget(enemies, u, zone);
     if (pick !== target) {
       if (target) target.pressure = Math.max(0, (target.pressure || 0) - 1);
       if (pick) pick.pressure = (pick.pressure || 0) + 1;
@@ -832,8 +886,7 @@ function updateRoman(game, u, enemies) {
     }
     return;
   }
-  // No enemy: on his way to the drill yard (sim/training.js), or to (or at) his post.
-  if (u.drill && drillMarch(game, u, def)) return;
+  // No enemy: to (or at) his post.
   const d = Math.hypot(post.x - u.x, post.y - u.y);
   // Close enough, or as close as the terrain allows (post slot blocked).
   if (d < 0.15 || (d < 1.2 && u.stuck > 10)) { u.state = 'idle'; u.moving = false; u.path = null; u.stuck = 0; return; }
@@ -845,31 +898,6 @@ function updateRoman(game, u, enemies) {
   }
   moveToward(game, u, post.x, post.y, def.speed);
   if (u.stuck > 20) replan(game, u, post.x, post.y);
-}
-
-/**
- * A soldier sent to the Military Academy marches there over open land, as to
- * his post, and is trained on reaching its road; then he marches home. No
- * route there: the trip is given up. @returns {boolean} true while still going
- */
-function drillMarch(game, u, def) {
-  const academy = game.buildings.get(u.drill);
-  // Gone, or no road left beside it (nowhere to drill): the trip is off.
-  if (!academy || academy.def.kind !== 'military_academy' || academy.accessRoad < 0) { endDrill(u); return false; }
-  const spot = drillSpot(game, academy);
-  const d = Math.hypot(spot.x - u.x, spot.y - u.y);
-  if (d < 0.3 || (d < 1.5 && u.stuck > 10)) { u.stuck = 0; drilled(game, u, academy); return false; }
-  u.state = 'drill';
-  if (u.path) { followUnitPath(game, u, def.speed); return true; }
-  if (d > 5 && u.stuck === 0 && !u.noPath) {
-    replan(game, u, spot.x, spot.y);
-    if (u.path) return true;
-    abandonDrill(game, u);
-    return false;
-  }
-  moveToward(game, u, spot.x, spot.y, def.speed);
-  if (u.stuck > 20) replan(game, u, spot.x, spot.y);
-  return true;
 }
 
 /**

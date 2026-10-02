@@ -583,7 +583,7 @@ export class InfoPanel {
           b.recruiting ? kv('Recruits on the way', `${b.recruiting}`) : null,
           kv('Training', trainedText(g, b)),
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
-          kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding the fort'),
+          kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Holding the fort'),
           awayOf(g, b.id).length ? kv('Away', `${awayOf(g, b.id).length} at a distant battle (their places are kept)`) : null,
           kv('Pay', `${fmt(unit.upkeep * (n + awayOf(g, b.id).length))} Dn / month`),
           h('div', { class: 'muted' }, unit.desc),
@@ -666,12 +666,12 @@ export class InfoPanel {
       case 'military_academy':
         parts.push(sec('Drill yard',
           kv('Soldiers trained here', fmt(b.trainedHere || 0)),
-          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Tirocinium marches first to the academy nearest his fort, then on to it; soldiers resting in a fort come over one at a time (never while deployed or while raiders are about). Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
+          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Tirocinium marches first to the academy nearest his fort, then on to it; soldiers already in a fort stay at their posts and are never sent. Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
         break;
       case 'portus':
         parts.push(sec('Training harbor',
           kv('Crews trained here', fmt(b.trainedHere || 0)),
-          h('div', { class: 'muted' }, `Only a fully staffed Portus (${def.workers} workers) trains a crew. A new liburnian rows past the Portus nearest its station on the same water first, then to its berth; ships at their berths come over one at a time. A trained crew rows faster (${(UNIT_TYPES.liburnian.trainedSpeed * CONFIG.TICKS_PER_DAY).toFixed(1)} tiles a day to ${(UNIT_TYPES.liburnian.speed * CONFIG.TICKS_PER_DAY).toFixed(1)}), rams harder (${UNIT_TYPES.liburnian.trainedRam} to ${UNIT_TYPES.liburnian.ram}) and is harder to hit (+${UNIT_TYPES.liburnian.trainedDefense} defense). Rome's first war fleet, in 260 BC, learned to row on benches on dry land while its ships were built.`)));
+          h('div', { class: 'muted' }, `Only a fully staffed Portus (${def.workers} workers) trains a crew. A new liburnian rows past the Portus nearest its station on the same water first, then to its berth; ships already at their berths stay there. A trained crew rows faster (${(UNIT_TYPES.liburnian.trainedSpeed * CONFIG.TICKS_PER_DAY).toFixed(1)} tiles a day to ${(UNIT_TYPES.liburnian.speed * CONFIG.TICKS_PER_DAY).toFixed(1)}), rams harder (${UNIT_TYPES.liburnian.trainedRam} to ${UNIT_TYPES.liburnian.ram}) and is harder to hit (+${UNIT_TYPES.liburnian.trainedDefense} defense). Rome's first war fleet, in 260 BC, learned to row on benches on dry land while its ships were built.`)));
         break;
       case 'tower':
         parts.push(sec('Turris',

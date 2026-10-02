@@ -23,24 +23,20 @@
  *   stop, as long as the roads join barracks, academy and fort. He walks to
  *   its road, is trained there, and walks on to his fort.
  *
- *   A soldier at rest (Colonia's own: in the original a legion already full
- *   never got a recruit, so it was never trained): each day a fort that is
- *   not deployed, while no raid is on, sends its first untrained idle soldier
- *   (the lowest slot) to the academy nearest it, DRILL_PER_POST at a time, so
- *   a fort is never emptied for the drill yard. He marches over open land like
- *   any soldier (sim/military.js), is trained at the academy's road and
- *   marches back to his post.
+ *   No trips at rest: a soldier in a fort stays at his post until his fort is
+ *   deployed (sim/military.js), as the original's legions did, so a man who
+ *   joined untrained stays so; only the next recruits, passing the academy,
+ *   come trained.
  *
  *   A new liburnian: launched at the Navalia for its station (sim/navy.js), it
  *   rows first to the berth of the training Portus nearest that station on the
- *   same water, then on to its own berth. Ships berthed at a station take
- *   turns as soldiers at rest do.
+ *   same water, then on to its own berth. Ships at their berths stay there, as
+ *   soldiers at rest do.
  *
- *   A raid, or the fort or station being deployed, calls everyone on a trip
- *   home at once (they are needed), and no new trip starts until it is over.
- *   A trip not done in time (DRILL_MAX_DAYS, or twice the walk for a far
- *   school, see startDrill) is given up; that fort or
- *   station then waits DRILL_RETRY_DAYS before sending anyone again.
+ *   A raid, or the station being deployed, calls a new ship on its way to the
+ *   Portus straight to its station (it is needed), and a ship launched then
+ *   does not go. A trip not done in time (DRILL_MAX_DAYS, or twice the row for
+ *   a far Portus, see startDrill) is given up.
  *
  * What training gives (Colonia has no morale, so the original's effects
  * become stats, data/units.js): trained legionaries holding position take a
@@ -165,7 +161,7 @@ export function recruitAtAcademy(game, w) {
 }
 
 // ---------------------------------------------------------------------------
-// Trips: soldiers at rest, new ships, ships at rest
+// Trips: a new ship to the Portus
 // ---------------------------------------------------------------------------
 
 /**
@@ -178,10 +174,10 @@ export function recruitTrained(game, w) {
 }
 
 /**
- * Send a soldier or a ship to an academy or Portus. The trip may take at
- * least DRILL_MAX_DAYS, and for a far school twice the straight-line journey
- * there at its speed (there and back, with room for detours), so a fort far
- * across a big map is not given up on halfway there.
+ * Send a new ship to the Portus. The trip may take at least DRILL_MAX_DAYS,
+ * and for a far Portus twice the straight-line row there at its speed (with
+ * room for detours), so a station far across a big map is not given up on
+ * halfway there.
  */
 export function startDrill(game, u, school) {
   const tiles = Math.hypot(school.x + school.size / 2 - u.x, school.y + school.size / 2 - u.y);
@@ -193,7 +189,7 @@ export function startDrill(game, u, school) {
   u.state = 'drill';
 }
 
-/** The trip is over (or called off): back to the post. */
+/** The trip is over (or called off): on to the berth. */
 export function endDrill(u) {
   u.drill = 0;
   u.drillDay = 0;
@@ -201,7 +197,7 @@ export function endDrill(u) {
   u.path = null;
 }
 
-/** A soldier or ship arrived: trained for good. */
+/** A ship arrived: its crew is trained for good. */
 export function drilled(game, u, school) {
   u.trained = true;
   endDrill(u);
@@ -216,57 +212,20 @@ function countTrained(game, school, kind) {
   else st.soldiersTrained = (st.soldiersTrained || 0) + 1;
 }
 
-/** Give up a trip (no way there): the post waits before sending anyone again. */
-export function abandonDrill(game, u) {
-  const post = game.buildings.get(u.fort || u.station);
-  if (post) post.drillWait = game.time.totalDays + CONFIG.DRILL_RETRY_DAYS;
-  endDrill(u);
-}
-
 /**
- * Daily (sim/military.js militaryDaily): trips for the men and ships at rest.
- * Does nothing at all, and draws nothing, in a city with no academy or Portus.
+ * Daily (sim/military.js militaryDaily): the new ships on their way to the
+ * Portus. A raid, or the station deployed or gone, calls one straight to its
+ * berth; a trip not done in time (no way there, say) is given up. Nobody is
+ * sent from here: men and ships at rest stay at their posts. (A soldier on a
+ * trip in an older save is sent home by updateRoman, sim/military.js.)
  */
 export function updateDrill(game) {
-  let academies = false;
-  let ports = false;
-  for (const b of game.buildings.values()) {
-    if (b.def.kind === 'military_academy') academies = true;
-    else if (b.def.kind === 'portus') ports = true;
-  }
-  if (!academies && !ports) return;
   const raid = !!game.military.active || !!game.military.caesar?.army; // (Caesar's legions too, sim/legion.js)
   const today = game.time.totalDays;
-  const byPost = new Map(); // fort or station id -> its units
   for (const u of game.units.values()) {
-    const post = u.side === 'rome' ? u.fort || u.station : 0;
-    if (!post) continue;
-    if (!byPost.has(post)) byPost.set(post, []);
-    byPost.get(post).push(u);
+    if (!u.drill || u.side !== 'rome') continue;
+    const post = game.buildings.get(u.station || u.fort);
+    if (raid || !post || post.rally) endDrill(u); // needed at home
+    else if (today - u.drillDay > (u.drillDays || CONFIG.DRILL_MAX_DAYS)) endDrill(u);
   }
-  for (const b of game.buildings.values()) {
-    const fort = b.def.kind === 'fort';
-    if (!(fort && academies) && !(b.def.kind === 'station' && ports)) continue;
-    const men = byPost.get(b.id) || [];
-    let away = 0;
-    for (const u of men) {
-      if (!u.drill) continue;
-      if (raid || b.rally) endDrill(u); // needed at home
-      else if (today - u.drillDay > (u.drillDays || CONFIG.DRILL_MAX_DAYS)) abandonDrill(game, u);
-      else away++;
-    }
-    if (raid || b.rally || away >= CONFIG.DRILL_PER_POST || (b.drillWait || 0) > today) continue;
-    const rest = fort ? 'idle' : 'berthed';
-    let pupil = null;
-    for (const u of men) if (!u.trained && !u.drill && u.state === rest && (!pupil || u.slot < pupil.slot)) pupil = u;
-    if (!pupil) continue;
-    const school = fort ? academyFor(game, b) : portusFor(game, b);
-    if (school) startDrill(game, pupil, school);
-  }
-}
-
-/** Where a soldier goes to be trained: the academy's road tile (the caller checks it has one). */
-export function drillSpot(game, academy) {
-  const i = academy.accessRoad;
-  return { x: game.map.xOf(i) + 0.5, y: game.map.yOf(i) + 0.5 };
 }

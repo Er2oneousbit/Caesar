@@ -5,7 +5,8 @@
  *
  * Covers the troop supply chains (weapons, Fletcher arrows from timber+iron,
  * horse breeding), recruiting, raids against defended and undefended cities,
- * watchtowers, walls and gates, and saving/loading the military state.
+ * a fort at rest holding its ground and a deployed one going out, watchtowers,
+ * walls and gates, and saving/loading the military state.
  * ----------------------------------------------------------------------------
  */
 
@@ -19,9 +20,9 @@ import { Terrain, Wall } from '../src/world/map.js';
 import { addBuilding, removeBuilding } from '../src/sim/entities.js';
 import { updateWorkshop, updateProducer } from '../src/sim/production.js';
 import { planAction, applyPlan, undoLast } from '../src/sim/construction.js';
-import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts } from '../src/sim/military.js';
+import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts, fortPost } from '../src/sim/military.js';
 import { HERD_START, HERD_MAX, HERD_GROWTH_DAYS, FORT_CAPACITY, UNIT_TYPES } from '../src/data/units.js';
-import { buildDemoCity, buildDemoGarrison } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, commandGarrison } from '../src/dev/demoCity.js';
 import { newGame, build, findFree, unitCounts } from './helpers.mjs';
 
 log.setLevel('error');
@@ -147,15 +148,22 @@ test('an undefended city is raided: buildings are wrecked and the raiders leave'
   assert.equal([...game.units.values()].filter((u) => u.side === 'enemy').length, 0, 'raiders gone');
 });
 
-test('a garrison repels a raid and peace rises', () => {
+test('a garrison deployed against a raid repels it and peace rises; the forts come home after', () => {
   const { game, center } = grownCity();
-  buildDemoGarrison(game, center, { stock: true });
+  const gar = buildDemoGarrison(game, center, { stock: true });
   game.runDays(100);
   const soldiers = [...game.units.values()].filter((u) => u.side === 'rome').length;
   assert.ok(soldiers >= 10, `garrison recruited (${soldiers})`);
   const peace0 = game.city.ratings.peace;
   launchInvasion(game, null, 5);
-  for (let d = 0; d < 140 && game.military.active; d++) game.runDays(1);
+  let out = 0;
+  for (let d = 0; d < 140 && game.military.active; d++) {
+    game.runDays(1);
+    out = Math.max(out, commandGarrison(game, center)); // (forts at rest only hold their ground: a player sends them out)
+  }
+  assert.ok(out >= 1, 'forts were deployed against the raid');
+  commandGarrison(game, center);
+  assert.ok(gar.forts.every((f) => !f.rally), 'and recalled once it was over');
   assert.equal(game.military.active, null, 'raid finished');
   assert.equal(game.military.stats.repelled, 1, 'raid repelled');
   assert.ok(game.military.stats.enemiesKilled >= 4, `raiders killed: ${game.military.stats.enemiesKilled}`);
@@ -200,6 +208,150 @@ test("deploy sends a fort's soldiers to a rally point and recall brings them hom
   assert.equal(near.length, men.length, 'all soldiers at the rally point');
   assert.ok(recallFort(game, fort.id));
   assert.equal(fort.rally, null);
+});
+
+// ---------------------------------------------------------------------------
+// Holding the fort, and going out
+// ---------------------------------------------------------------------------
+
+/**
+ * A fort of `type` on open plains with `n` soldiers standing at their posts,
+ * nothing else near, and a raid under way (so raiders fight rather than flee).
+ */
+function heldFort(type = 'fort_legion', n = 1) {
+  const game = newGame({ type: 'plains' });
+  const spot = clearedLand(game, 22, 16);
+  assert.ok(spot, 'open land');
+  const fort = addBuilding(game, type, spot.x + 8, spot.y + 2);
+  fort.efficiency = 1;
+  const post = fortPost(game, fort);
+  const men = [];
+  for (let slot = 0; slot < n; slot++) men.push(spawnUnit(game, fort.def.unit, post.x, post.y, { fort: fort.id, slot, state: 'march' }));
+  for (let t = 0; t < 2000 && !men.every((u) => u.state === 'idle'); t++) updateMilitary(game);
+  assert.ok(men.every((u) => u.state === 'idle'), 'at their posts');
+  game.military.active = { id: 1, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false, reached: false };
+  return { game, fort, men, post: { x: men[0].x, y: men[0].y } };
+}
+
+/** A w x h rectangle with no water, rock, road or building, its trees cleared to grass. */
+function clearedLand(game, w, h) {
+  const { map } = game;
+  const blocked = (i) => map.terrain[i] === Terrain.WATER || map.terrain[i] === Terrain.ROCK || map.road[i] || map.fixedRoad[i] || map.building[i];
+  for (let y = 2; y < map.h - h - 2; y++) {
+    for (let x = 2; x < map.w - w - 2; x++) {
+      let ok = true;
+      for (let dy = 0; dy < h && ok; dy++) for (let dx = 0; dx < w && ok; dx++) if (blocked(map.idx(x + dx, y + dy))) ok = false;
+      if (!ok) continue;
+      for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (map.terrain[map.idx(x + dx, y + dy)] === Terrain.TREES) map.terrain[map.idx(x + dx, y + dy)] = Terrain.GRASS;
+      map.touch();
+      return { x, y };
+    }
+  }
+  return null;
+}
+
+/** Tick `ticks` times with an enemy pinned at (x, y); the farthest the soldier got from `from`. */
+function pinned(game, u, foe, x, y, ticks, from) {
+  let far = 0;
+  for (let t = 0; t < ticks; t++) {
+    foe.x = x;
+    foe.y = y;
+    updateMilitary(game);
+    if (game.units.has(u.id)) far = Math.max(far, Math.hypot(u.x - from.x, u.y - from.y));
+  }
+  return far;
+}
+
+test('a fort at rest holds its ground: a raider 6 tiles off is left alone, one that comes to the post is fought (legion and cavalry, raiders and Caesar\'s men)', () => {
+  for (const type of ['fort_legion', 'fort_cavalry']) {
+    for (const [foeType, init] of [['raider', { invasion: 1 }], ['imperial', { legion: 1 }]]) {
+      const { game, men: [u], post } = heldFort(type);
+      const foe = spawnUnit(game, foeType, post.x, post.y + 6, init);
+      const say = `${type} against ${foeType}`;
+      const far = pinned(game, u, foe, post.x, post.y + 6, 120, post);
+      assert.ok(far < 0.1, `${say}: he stays at his post (went ${far.toFixed(2)} tiles)`);
+      assert.equal(u.target, 0, say);
+      assert.equal(foe.hp, foe.maxHp, `${say}: nobody struck`);
+      // One within reach of the post: he steps out, strikes, and steps back.
+      const far2 = pinned(game, u, foe, post.x, post.y + 1.8, 60, post);
+      assert.ok(foe.hp < foe.maxHp || !game.units.has(foe.id), `${say}: struck once he came to the post`);
+      assert.ok(far2 < 2, `${say}: no farther than a step out (${far2.toFixed(2)})`);
+      foe.hp = 1e6; // (so he lives on to be pulled away)
+      pinned(game, u, foe, post.x, post.y + 6, 200, post);
+      assert.equal(u.target, 0, `${say}: let go once the raider is off again`);
+      assert.ok(Math.hypot(u.x - post.x, u.y - post.y) < 0.2, `${say}: back at his post`);
+    }
+  }
+});
+
+test('an archer at rest shoots from his post at what comes in range, and never walks out after a raider', () => {
+  const { game, men: [u], post } = heldFort('fort_archer');
+  const foe = spawnUnit(game, 'raider', post.x, post.y + 9, { invasion: 1 });
+  const far = pinned(game, u, foe, post.x, post.y + 9, 120, post);
+  assert.ok(far < 0.1, `out of range: he stays (went ${far.toFixed(2)})`);
+  assert.equal(game.projectiles.length, 0, 'and shoots nothing');
+  let shots = 0;
+  for (let t = 0; t < 120; t++) {
+    const before = game.projectiles.length;
+    foe.x = post.x;
+    foe.y = post.y + 5;
+    updateMilitary(game);
+    if (game.projectiles.length > before) shots++;
+  }
+  assert.ok(shots >= 2, `in range: he shoots (${shots})`);
+  assert.ok(Math.hypot(u.x - post.x, u.y - post.y) < 0.1, 'from his post');
+});
+
+test('a fort at rest fights as one: a raider at the front man is taken on by the men behind him too', () => {
+  const { game, men } = heldFort('fort_legion', 8);
+  const front = men.reduce((a, b) => (b.y > a.y ? b : a));
+  const rear = men.reduce((a, b) => (b.y < a.y ? b : a));
+  const x = front.x;
+  const y = front.y + 1.5;
+  assert.ok(Math.hypot(rear.x - x, rear.y - y) > 2.5, 'the rear man\'s own post is out of reach');
+  const foe = spawnUnit(game, 'raider', x, y, { invasion: 1 });
+  foe.hp = 1e6;
+  let rearEngaged = false;
+  for (let t = 0; t < 60 && !rearEngaged; t++) {
+    foe.x = x;
+    foe.y = y;
+    updateMilitary(game);
+    rearEngaged = rear.target === foe.id;
+  }
+  assert.ok(rearEngaged, 'the rear man comes up to fight');
+});
+
+test('a man at rest answers a slinger striking at him, and lets him go when he stops', () => {
+  const { game, men: [u], post } = heldFort('fort_legion');
+  const foe = spawnUnit(game, 'slinger', post.x, post.y + 4.5, { invasion: 1 });
+  foe.hp = 1e6;
+  let answered = false;
+  for (let t = 0; t < 120 && !answered; t++) {
+    foe.x = post.x;
+    foe.y = post.y + 4.5;
+    updateMilitary(game);
+    answered = u.target === foe.id && foe.target === u.id;
+  }
+  assert.ok(answered, 'he goes for the slinger shooting at him');
+  // Out of his sling's range (still watching him): no longer striking at him, so he is let go.
+  pinned(game, u, foe, post.x, post.y + 8, 300, post);
+  assert.equal(u.target, 0);
+  assert.ok(Math.hypot(u.x - post.x, u.y - post.y) < 0.2, 'back at his post');
+});
+
+test('a deployed fort still goes out: its men chase a raider 10 tiles from the standard, not one 20 off', () => {
+  const { game, fort, men: [u], post } = heldFort('fort_legion');
+  const rx = Math.floor(post.x);
+  const ry = Math.floor(post.y) + 2;
+  assert.ok(deployFort(game, fort.id, rx, ry));
+  for (let t = 0; t < 2000 && u.state !== 'idle'; t++) updateMilitary(game);
+  const rally = { x: rx + 0.5, y: ry + 0.5 };
+  assert.ok(Math.hypot(u.x - rally.x, u.y - rally.y) < 1, 'at the rally point');
+  const foe = spawnUnit(game, 'raider', rally.x + 20, rally.y, { invasion: 1 });
+  const idle = pinned(game, u, foe, rally.x + 20, rally.y, 60, rally);
+  assert.ok(idle < 0.5, 'one 20 tiles off is left alone');
+  const far = pinned(game, u, foe, rally.x + 10, rally.y, 200, rally);
+  assert.ok(far > 4, `he went out after the one 10 tiles off (${far.toFixed(1)} tiles)`);
 });
 
 // ---------------------------------------------------------------------------

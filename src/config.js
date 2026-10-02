@@ -326,14 +326,10 @@ export const CONFIG = {
   STATION_GUARD_DEPLOYED: 8, // ...deployed, this close to its rally point...
   STATION_CHASE: 4, // ...and chases one at most this much farther
 
-  // Training at a Military Academy or the Portus (sim/training.js). Men and
-  // ships at rest go one at a time per fort or station (a fort is never
-  // emptied for the drill yard); a trip not done in DRILL_MAX_DAYS (no way
-  // there, say) is given up, and that fort or station waits DRILL_RETRY_DAYS
-  // before sending anyone again.
-  DRILL_PER_POST: 1,
+  // Training at the Portus (sim/training.js): a new ship's trip there that is
+  // not done in DRILL_MAX_DAYS (no way there, say) is given up, and the ship
+  // rows on to its berth untrained.
   DRILL_MAX_DAYS: 40,
-  DRILL_RETRY_DAYS: 30,
 
   // --- Ratings ------------------------------------------------------------
   // Culture and prosperity move toward what the city deserves by at most

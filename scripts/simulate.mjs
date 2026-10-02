@@ -41,7 +41,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, UPTOWN_GOODS } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, UPTOWN_GOODS } from '../src/dev/demoCity.js';
 import { launchLegion, legionCount, soldierCount, isOverrun } from '../src/sim/legion.js';
 import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
@@ -72,7 +72,9 @@ Options:
   --seed <s>        map seed (default "demo")
   --years <n>       years to simulate (default 3)
   --level <1-3>     demo city complexity (default 2)
-  --garrison        also build a barracks, forts, towers and a wall (equipped)
+  --garrison        also build a barracks, forts, towers and a wall (equipped); while enemies are
+                    ashore every fort is deployed onto the one nearest the city, as a player would
+                    (forts at rest only hold their ground), and recalled when they are gone
   --harbor [docks]  after 6 months, a Dock (or this many) and a warehouse by the water, every sea
                     route open; the warehouse gets 300 pottery, furniture and oil a month for
                     export (the demo city makes none). Reports ships' stays and trade a year
@@ -285,7 +287,15 @@ function harborTick() {
     harbor.moored.delete(id);
   }
 }
+// --garrison: forts at rest only hold their ground, so a general deploys them
+// against enemies ashore once a day, as a player would (commandGarrison in
+// src/dev/demoCity.js). Without enemies it does nothing, so a garrison that
+// is never raided runs exactly as one left alone.
 function runDays(n) {
+  if (!opts.garrison) { advanceDays(n); return; }
+  for (let d = 0; d < n; d++) { advanceDays(1); commandGarrison(game, res.center); }
+}
+function advanceDays(n) {
   if (!harbor.docks) { game.runDays(n); return; }
   for (let t = 0; t < n * CONFIG.TICKS_PER_DAY; t++) {
     const year = game.time.year;

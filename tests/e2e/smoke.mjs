@@ -1088,9 +1088,15 @@ try {
     const fort = forts.find((f) => [...g.units.values()].some((u) => u.fort === f.id)) || forts[0];
     const bk = [...g.buildings.values()].find((b) => b.type === 'barracks');
     const why = bk ? { eff: bk.efficiency, labor: bk.laborAccess, road: bk.accessRoad, stock: bk.stock, workforce: g.city.workforce, jobs: g.city.jobs, prio: g.city.laborPriority, fortsStaffed: forts.filter((f) => f.efficiency > 0).length } : { barracks: false };
-    return { out, forts: forts.length, soldiers, fortId: fort ? fort.id : 0, fx: fort ? fort.x : 0, fy: fort ? fort.y : 0, why, seed: g.seed };
+    // Undeployed forts hold their ground: every soldier stands by his fort (its formation reaches 5 tiles from its post).
+    const strays = [...g.units.values()].filter((u) => u.side === 'rome' && u.fort).filter((u) => {
+      const f = g.buildings.get(u.fort);
+      return !f || f.rally || Math.hypot(u.x - (f.x + f.size / 2), u.y - (f.y + f.size / 2)) > f.size / 2 + 7;
+    }).length;
+    return { out, forts: forts.length, soldiers, strays, fortId: fort ? fort.id : 0, fx: fort ? fort.x : 0, fy: fort ? fort.y : 0, why, seed: g.seed };
   });
   check('garrison: forts built and soldiers recruited', gar.forts >= 1 && gar.soldiers >= 1, `${gar.forts} forts, ${gar.soldiers} soldiers; ${gar.out}; ${JSON.stringify(gar.why)}; seed ${gar.seed}`);
+  check('garrison: undeployed soldiers stand by their forts', gar.strays === 0, `${gar.strays} of ${gar.soldiers} away from their fort`);
   if (gar.fortId) {
     await page.evaluate((id) => { window.colonia.renderer.camera.centerOnTile(window.colonia.game.buildings.get(id).x, window.colonia.game.buildings.get(id).y); window.colonia.ui.info.showBuilding(id); }, gar.fortId);
     await page.click('#info-panel button:has-text("Deploy")');

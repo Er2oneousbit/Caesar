@@ -27,8 +27,8 @@ export function trainingNote(game, post) {
   const name = BUILDINGS[fort ? 'military_academy' : 'portus'].name;
   if (school) {
     return fort
-      ? `Recruits train at the ${name} at ${school.x}, ${school.y} on their way here, and men at rest go over one at a time.`
-      : `New ships row past the ${name} at ${school.x}, ${school.y} first, and ships at rest go over one at a time.`;
+      ? `Recruits train at the ${name} at ${school.x}, ${school.y} on their way here; men already in the fort stay at their posts.`
+      : `New ships row past the ${name} at ${school.x}, ${school.y} first; ships at their berths stay there.`;
   }
   const kind = fort ? 'military_academy' : 'portus';
   const any = [...game.buildings.values()].some((b) => b.def.kind === kind && (fort || waterOf(game, b) === waterOf(game, post)));

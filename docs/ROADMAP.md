@@ -17,6 +17,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.17.1)
+
+* **Your province sits where it was**: each mission's province has its own place on the empire map (Firmum in Picenum, Paestum, Beneventum, Cosa, Copia, Mutina, Luna, Corduba up the Baetis, Carteia by the strait, Narbo, Puteoli; Pons Aelius and Urbs Magna stay on the Etruscan coast), and the sandbox setup offers a choice of six. Trade routes are worked out from there over a network of roads and sea lanes (the twelve Etruscan routes come out exactly as before), and distance now sets trade times (Colonia's own rule; in the original it did not): a trader takes half a day per map unit each way, a quiet route sends one no more often than a round trip, a busy one still often enough to sell its year, and the first comes once it has made the trip. Seven routes slow down, Alexandria's ships to Corduba from 2.4 a year to 1.9. Distant battles march along the new routes (Corduba's Italica battles: three months), raids and legions come from the new home's directions, and each route card shows its days on the road
+* Headless sim: every level and the capacity and pace runs identical to v0.17.0; the coast harbor run's first ship comes after its trip (13 to 14 ships in 3.5 years)
+* 671 unit tests, 141 browser checks
+
 ## Done (v0.17.0)
 
 * **The campaign runs to step 10, a peaceful and a military province at every step from 3**: Cosa (peaceful, lakes 144, 5,600 people) beside Oasis Aurea at step 6; Copia (peaceful, river 160, 6,000) beside Urbs Magna at step 7; Mutina (military, plains 176, 6,000) and Luna (peaceful, coast 176, 7,000) at step 8; Corduba (military, river 192, 8,000) and Carteia (peaceful, coast 192, 9,500) at step 9; Narbo Martius (military, river 256, 10,000) and Puteoli (peaceful, coast 224, 12,000) at step 10. Every goal is 85 to 90% of what a sensibly built city of its buildings employs (`npm run sim -- --capacity`), with trade demand on the original's tiers; the missions grow longer step by step (6.5 to 15.4 years at the fastest). One rank a step, Procurator at 6 to Proconsul at 10; winning step 10 makes you Caesar

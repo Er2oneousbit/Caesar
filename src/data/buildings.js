@@ -55,7 +55,7 @@
  *   needsPiped     requires piped water from a reservoir to operate
  *   inputs         goods a building accepts by cart for its own use
  *                  (barracks: weapons, arrows, horses; navalia: timber, iron,
- *                  linen), with inputCap units each
+ *                  linen; shipyard: timber), with inputCap units each
  *   unit           soldier type a fort garrisons (see data/units.js)
  *   hp             hit points against raiders (default: by size)
  *                  Forts never burn or decay (fire/damage 0): only raiders
@@ -529,12 +529,14 @@ export const BUILDINGS = Object.freeze({
 
   // --- Fishing (sim/fishing.js) ---------------------------------------------
   // On the bank of water with fish (a river, the sea or a big lake, where gulls
-  // circle over the fishing grounds). No inputs: a shipyard builds a boat from
-  // nothing in 16 days at full staff, and keeps one spare ready.
+  // circle over the fishing grounds). A shipyard builds a boat from 100 timber
+  // in 16 days at full staff, and keeps one spare ready. The timber is
+  // Colonia's own rule (the original's boats cost nothing): carts bring it
+  // like a workshop's raw material, and the yard holds two boats' worth.
   shipyard: B({
     name: 'Fabrica Navalis', en: 'Shipyard', category: 'industry', kind: 'shipyard', cost: 100, size: 2, workers: 10, labor: 'industry',
-    des: [-6, 1, 1, 3], fire: 1, damage: 1, placement: 'fishingShore',
-    desc: 'Builds fishing boats (one every 16 days at full staff) and sends each to the nearest wharf on its water that has none. Keeps one spare boat ready. Build it on the bank of a river, the sea or a big lake with fish.',
+    des: [-6, 1, 1, 3], fire: 1, damage: 1, placement: 'fishingShore', inputs: ['timber'], inputCap: 200,
+    desc: 'Builds fishing boats from 100 timber each (one every 16 days at full staff) and sends each to the nearest wharf on its water that has none. Keeps one spare boat ready. Carts bring timber from a Silva Caedua (Timber Yard) or a warehouse; it holds up to 200. Build it on the bank of a river, the sea or a big lake with fish.',
   }),
   wharf: B({
     name: 'Piscatoria', en: 'Fishing Wharf', category: 'farms', kind: 'wharf', produces: 'fish', cost: 60, size: 2, workers: 6, labor: 'food',

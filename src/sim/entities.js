@@ -161,6 +161,10 @@ function initKind(b, def) {
       b.built = 0; // liburnians launched here
       b.blocked = ''; // what is holding it up (info panel)
       break;
+    case 'shipyard': // sim/fishing.js
+      b.stock = emptyStock(def.inputs); // timber for the boat on the slip and the next
+      b.incoming = emptyStock(def.inputs);
+      break;
     case 'station': // sim/navy.js
       b.rally = null; // where its squadron is deployed {x, y} (on the water), or null = at its berths
       break;

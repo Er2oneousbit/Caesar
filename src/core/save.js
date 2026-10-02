@@ -127,6 +127,12 @@
  *      academy. Older saves need nothing: nobody in them is mid-training
  *      (a recruit or ship still on its way trains on arrival), and a soldier
  *      caught on a trip to the academy comes straight home (updateRoman).
+ *  17  shipyards need timber (sim/fishing.js; Colonia's own rule): a
+ *      shipyard holds `stock.timber` and `incoming.timber`, and a boat takes
+ *      100, used at launch. Older saves load with
+ *      100 timber in a yard that has a boat started (progress above 0), so
+ *      the boat on the slip finishes as it would have, and none in the
+ *      others, see upgradeShipyardTimberV16().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -443,6 +449,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 13) upgradeGovernorV12(game);
   if (data.version < 14) upgradeEmpireV13(game);
   if (data.version < 15) upgradeWarningsV14(game);
+  if (data.version < 17) upgradeShipyardTimberV16(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -694,6 +701,21 @@ export function upgradeWarningsV14(game) {
   else if (m.settings && !m.active && left !== null && left <= RUMOUR_MONTHS && game.city.population >= RAID_MIN_POP) m.warnStage = 1;
   else m.warnStage = 0;
   if (m.caesar) m.caesar.noticeStage = noticeStageFor(m.caesar.countdown);
+}
+
+/**
+ * A save before version 17 (before shipyards needed timber): a yard with a
+ * boat started (progress above 0, or one finished and waiting for room on
+ * the water) holds the 100 timber that boat is built from, so it is launched
+ * when it would have been; a yard with nothing started holds none and waits
+ * for its first load. A spare already on the water was built and stays.
+ */
+export function upgradeShipyardTimberV16(game) {
+  for (const b of game.buildings.values()) {
+    if (b.def.kind !== 'shipyard') continue;
+    b.stock = { timber: (b.progress || 0) > 0 ? CONFIG.SHIPYARD_BOAT_TIMBER : 0 };
+    b.incoming = { timber: 0 };
+  }
 }
 
 /**

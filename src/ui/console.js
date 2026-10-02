@@ -10,7 +10,7 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
-import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy, buildDemoAcademy, buildDemoPortus } from '../dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy, buildDemoAcademy, buildDemoPortus, DEMO_YARD_TIMBER } from '../dev/demoCity.js';
 import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
@@ -48,7 +48,7 @@ export const CONSOLE_HELP = [
   ['sick [id | x y]', 'The home under the cursor (or #id, or at x,y; else the one at most risk) falls sick now'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
-  ['fishing', 'Build a shipyard, two fishing wharves and a granary on the nearest water with fish'],
+  ['fishing', 'Build a shipyard (stocked with timber), two fishing wharves and a granary on the nearest water with fish'],
   ['grounds', 'List the fishing grounds, and every wharf and its boat'],
   ['hippodrome', 'Build a Circus (hippodrome) and a Factio (chariot stable) beside the city'],
   ['cloth', 'Build the cloth industry beside the city: a Linarium, a Textrinum, a Taberna Vestiaria and a Horreum'],
@@ -272,7 +272,7 @@ export class DebugConsole {
         if (cmd === 'fishing') {
           const res = buildDemoFishery(g, center);
           if (res.shipyard) app.renderer.camera.centerOnTile(res.shipyard.x, res.shipyard.y);
-          return res.ok ? `Fishing quarter built: a shipyard, ${res.wharves.length} wharves${res.granary ? ' and a granary' : ''}. The first boat comes in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff.` : 'No water with fishing grounds near the city (try a coast or river map).';
+          return res.ok ? `Fishing quarter built: a shipyard stocked with ${DEMO_YARD_TIMBER} timber (${DEMO_YARD_TIMBER / CONFIG.SHIPYARD_BOAT_TIMBER} boats), ${res.wharves.length} wharves${res.granary ? ' and a granary' : ''}. The first boat comes in ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff.` : 'No water with fishing grounds near the city (try a coast or river map).';
         }
         if (cmd === 'cloth') {
           const res = buildDemoCloth(g, center);

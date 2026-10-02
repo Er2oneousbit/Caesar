@@ -746,7 +746,8 @@ function sendQuayLot(game, dock, ship, stuck) {
     if (have < CONFIG.CART_CAPACITY || stuck.has(good)) continue;
     if (ship && (ship.wants[good] || 0) > 0) continue; // the ship takes it (handOverFromQuay)
     // Up to a wagon, as much as the best place can take: a workshop that uses
-    // it holds only WORKSHOP_RAW_CAP, and still comes before a warehouse.
+    // it holds only WORKSHOP_RAW_CAP (a shipyard its 200 timber), and still
+    // comes before a warehouse.
     if (dispatchCart(game, dock, good, Math.min(CONFIG.DOCK_LOAD, lots(have)), true)) return true;
     stuck.add(good);
   }

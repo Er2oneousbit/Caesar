@@ -304,7 +304,7 @@ export class Advisors {
           h('td', { class: 'r num' }, num(r.exported)),
           h('td', { class: 'r num' }, fmt(Math.round(r.stock))),
           h('td', { class: `r num ${r.net > 0.5 ? 'ok' : r.net < -0.5 ? 'no' : ''}` }, Math.abs(r.net) < 0.5 ? '0' : `${r.net > 0 ? '+' : ''}${fmt(Math.round(r.net))}`)))) : h('div', { class: 'muted' }, 'Nothing made or stored yet.'),
-      h('div', { class: 'muted' }, 'Used: eaten, worked up in workshops, used by homes, spent on recruits and sent to the Emperor. In store: granaries, warehouses and docks.'),
+      h('div', { class: 'muted' }, 'Used: eaten, worked up in workshops, built into boats and ships, used by homes, spent on recruits and sent to the Emperor. In store: granaries, warehouses and docks.'),
       h('h4', {}, 'Buildings not working as they should'),
       rep.troubles.length ? h('table', { class: 'tbl' },
         rep.troubles.map((grp) => h('tr', {},

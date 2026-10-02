@@ -38,7 +38,7 @@ npm i --no-save playwright && npx playwright install chromium
 | `npm run test:e2e` | Plays the built game in headless Chromium (`--file <html>` tests another build, `--shots <dir>` saves screenshots) |
 | `npm run check` | test + build + e2e, the same as CI |
 | `npm run sim -- --years 5 --type lakes` | Headless balance run, one line of stats per month (`--help` lists the options: difficulty, raids, garrison, size, seed...) |
-| `npm run sim -- --type coast --fishing 2` | Also a shipyard and 2 fishing wharves: fish a year per wharf against a pig farm's harvest |
+| `npm run sim -- --type coast --fishing 2` | Also a shipyard (stocked with 400 timber: the demo city fells none) and 2 fishing wharves: fish a year per wharf against a pig farm's harvest, the timber used and the days the yard waited for timber |
 | `npm run sim -- --level 3 --venues --hippodrome` | Also an amphitheater, a colosseum (and their schools), a hippodrome and a chariot maker |
 | `npm run sim -- --size 96 --level 3 --uptown --cloth --years 5` | Insulae: `--uptown` adds what they need but clothing (plazas, statues, a library, baths, the big venues, vegetable farms; markets topped up with pottery, furniture and oil each month as a stand-in for those industries), `--cloth` a Linarium, Textrinum and Taberna Vestiaria (flax field, linen weaver, clothing maker); `--cloth-off <month>` demolishes the cloth quarter then. The report adds a `Clothing:` line: what was made, and homes at the Insula or above |
 | `npm run sim -- --pace` | The campaign's pace: the fewest months each mission's goals take (`src/sim/pace.js`) |

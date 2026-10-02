@@ -85,8 +85,9 @@ function reachable(game, m) {
   const sells = (good) => partners.some((id) => TRADE_PARTNERS[id].sells[good]);
   const makes = (good, depth = 0) => depth < 3 && Object.entries(BUILDINGS).some(([k, d]) => d.produces === good && has(k)
     && (!d.recipe || Object.keys(d.recipe).every((raw) => makes(raw, depth + 1) || sells(raw))));
-  // Fish needs water with fish (fishing grounds) as well as the shipyard and wharf.
-  const fishes = () => game.map.fishingGrounds.length > 0 && has('shipyard') && has('wharf');
+  // Fish needs water with fish (fishing grounds) as well as the shipyard and
+  // wharf, and timber for the boats (felled or bought).
+  const fishes = () => game.map.fishingGrounds.length > 0 && has('shipyard') && has('wharf') && (makes('timber') || sells('timber'));
   const gets = (good) => (good === 'fish' ? fishes() : makes(good) || sells(good));
   switch (m.key) {
     case 'water': return m.need >= 2 ? has('fountain') : has('well') || has('fountain');

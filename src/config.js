@@ -113,6 +113,27 @@ export const CONFIG = {
   FIRE_HEAT_PER_DAY: 5, // fire risk a building beside a fire gains per day (once, however many burning tiles it touches)
   PREFECT_RUN_SPEED: 1.6, // prefects run (speed multiplier) when heading to a fire
   PREFECT_ALERT_RADIUS: 24, // prefects within this road distance respond to fires
+  // Prefects against raiders and Caesar's legionaries (sim/prefectFight.js).
+  // A prefect on his rounds stops and fights an enemy this close (tiles, from
+  // the middle of his tile): close by only, he never leaves his street for one.
+  PREFECT_FIGHT_REACH: 2,
+  // ...and keeps standing his ground until the enemy is farther than this,
+  // then goes back to his rounds (a little more than the reach, so an enemy
+  // stepping to and fro at the edge does not start and end a fight every tick).
+  PREFECT_FIGHT_LEASH: 3,
+  // A prefect as a fighter: a watchman with a club, not a soldier. About a
+  // third of a legionary's attack (14) and a little more than a third of his
+  // health (110), light defense, and a blow as often as a legionary's (every
+  // cooldown ticks). Alone he loses to a raider (Normal: about 4 blows of ~10
+  // kill him while he deals ~3.5 a blow to the raider's 70): prefects slow a
+  // warband, they do not stop it. He does not heal; a fresh one comes from
+  // the prefecture once he falls.
+  PREFECT_COMBAT: { hp: 40, attack: 5, defense: 2, cooldown: 20 },
+  // Prefects killed within this many days and PREFECT_LOSS_NEAR tiles of each
+  // other make one message, and only from the second on: one prefect falling
+  // says nothing, a street's watch cut down does.
+  PREFECT_LOSS_DAYS: 10,
+  PREFECT_LOSS_NEAR: 12,
 
   // --- Home mood and crime (sim/mood.js, sim/crime.js) ----------------------
   // Each home has a mood (0-100) for crime only: city mood (sentiment) still

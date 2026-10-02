@@ -23,6 +23,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { PERFORMER_NAMES } from '../data/buildings.js';
 import { daysMoored } from '../sim/trade.js';
+import { prefectFoe, foeLabel } from '../sim/prefectFight.js';
 
 /** Days a walker keeps saying the same thing. */
 const LINE_DAYS = 8;
@@ -68,6 +69,7 @@ function workLines(game, w) {
   const god = w.god && GODS[w.god] ? GODS[w.god].name : 'the gods';
   switch (w.type) {
     case 'prefect':
+      if (prefectFoe(game, w)) return [`Fighting ${foeLabel(prefectFoe(game, w))}!`, 'Hold them here! Not one step further into the city!'];
       if (w.state === 'toFire') return ['Out of the way! Fire!'];
       if (w.state === 'hunt') return ['Stop, in the name of the law!', 'After him! Do not let him get away!'];
       if (w.state === 'extinguish') return ['More water! Keep it coming!'];
@@ -201,6 +203,7 @@ export function walkerSays(game, w) {
   const work = workLines(game, w);
   // Busy with something urgent: no time for gossip.
   if (w.state === 'toFire' || w.state === 'extinguish' || w.state === 'toSick' || w.state === 'treat') return pick(work, w, game);
+  if (prefectFoe(game, w)) return work[0]; // a prefect in a fight shouts what he is doing, every time
   const trouble = cityTrouble(game);
   // Every other walker mentions the city's trouble; the rest talk shop.
   const gossip = pick([true, false], w, game, 1);
@@ -231,6 +234,8 @@ function shipName(game, w) {
 /** What the walker is doing, in a few words. */
 export function walkerDoing(game, w) {
   const target = w.target ? game.buildings.get(w.target) : null;
+  const foe = prefectFoe(game, w);
+  if (foe) return `Fighting ${foeLabel(foe)}`;
   switch (w.state) {
     case 'roam': return 'Walking the streets';
     case 'return':
@@ -334,6 +339,8 @@ export function walkerInfo(game, w) {
   }
   if (w.people > 0) rows.push(['People', String(w.people)]);
   if (w.type === 'priest' && w.god && GODS[w.god]) rows.push(['God', GODS[w.god].name]);
+  // A prefect who has fought: his wounds stay with him (sim/prefectFight.js).
+  if (w.type === 'prefect' && w.hp !== undefined) rows.push(['Health', `${Math.max(0, Math.ceil(w.hp))} of ${CONFIG.PREFECT_COMBAT.hp}`]);
   if ((w.type === 'caravan' || w.type === 'ship') && TRADE_PARTNERS[w.partner]) rows.push(...tradeRows(game, w));
   return { title: def.name, desc: def.desc, rows, says: walkerSays(game, w) };
 }

@@ -387,7 +387,7 @@ export class DebugConsole {
         if (!lines.length) lines.push('No forts or barracks.');
         lines.push(`Raiders on the map: ${enemyCount(g)}. ${threatSummary(g).text}`);
         lines.push(m.settings ? `Next raid: month ${m.nextRaidMonth} (now ${g.time.totalMonths}); sea raids ${m.seaRaids ? 'on' : 'off'}${g.map.seaEntry ? '' : ' (no water from the sea here)'}.` : 'Raids are off in this game.');
-        lines.push(`Record: ${m.stats.raids} raids (${m.stats.seaRaids || 0} by sea), ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.trained} trained; ${m.stats.shipsBuilt || 0} liburnians built, ${m.stats.shipsLost || 0} lost, ${m.stats.shipsSunk || 0} raider ships sunk, ${m.stats.boatsSunk || 0} fishing boats lost.`);
+        lines.push(`Record: ${m.stats.raids} raids (${m.stats.seaRaids || 0} by sea), ${m.stats.repelled} repelled, ${m.stats.enemiesKilled} raiders slain, ${m.stats.soldiersLost} soldiers lost, ${m.stats.prefectsLost || 0} prefects lost, ${m.stats.trained} trained; ${m.stats.shipsBuilt || 0} liburnians built, ${m.stats.shipsLost || 0} lost, ${m.stats.shipsSunk || 0} raider ships sunk, ${m.stats.boatsSunk || 0} fishing boats lost.`);
         return lines.join('\n');
       }
       case 'win':

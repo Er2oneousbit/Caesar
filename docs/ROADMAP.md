@@ -8,10 +8,18 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
-2. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
+1. **v0.18: rotation**: rotate buildings while placing them (R), every building's art turned as a whole (the hippodrome laid north-south too; gates, the arch and waterside buildings keep following their road or water), with a facing in the save; then rotating the view (parity #7), reusing the turned art, with the renderer, ground pieces, walker directions, picking, overlays and the minimap working from any of four sides.
+2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
+3. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.17.4)
+
+* **Auto-pause on events**: six switches in Settings pause the game when a fire breaks out, the scouts report a raid (or Caesar's legions set out), raiders or legions arrive, Caesar makes a request or calls for troops, a building collapses, or disease breaks out. Only "raiders or legions arriving" is on at first. A note says what paused the game; a click on it goes to the place, the empire map or the Imperial advisor
+* **Cycle buildings of a kind**: a building's panel has previous and next buttons (keys , and .) for the others of its kind and a Next idle button; I and Shift+I step through idle buildings of every kind, also from the Production advisor
+* Headless sim: every level and the raid, garrison and harbor runs identical to v0.17.3
+* 714 unit tests, 155 browser checks
 
 ## Done (v0.17.3)
 

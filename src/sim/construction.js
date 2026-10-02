@@ -392,6 +392,52 @@ function pathTileCost(game, tool, i) {
   return map.road[i] ? 1.5 : t === Terrain.TREES ? 1.6 : 1;
 }
 
+/**
+ * Is a road-and-aqueduct tile a proper crossing: the road straight through
+ * along one axis, the aqueduct straight along the other, so the road passes
+ * under one arch at right angles (as through a gate)? `road(j)` and `aq(j)`
+ * say whether tile j has a road or an aqueduct (after the change being
+ * planned). A road may not run along under an aqueduct, turn or branch
+ * under it, nor an aqueduct turn over a road (playtest).
+ */
+export function crossingOk(map, i, road, aq) {
+  const x = map.xOf(i);
+  const y = map.yOf(i);
+  const at = (dx, dy, f) => map.inBounds(x + dx, y + dy) && f(map.idx(x + dx, y + dy));
+  const roadH = at(-1, 0, road) || at(1, 0, road);
+  const roadV = at(0, -1, road) || at(0, 1, road);
+  const aqH = at(-1, 0, aq) || at(1, 0, aq);
+  const aqV = at(0, -1, aq) || at(0, 1, aq);
+  return !(roadH && roadV) && !(aqH && aqV) && !(roadH && aqH) && !(roadV && aqV);
+}
+
+/**
+ * Mark the path items that would leave a road-and-aqueduct tile that is not
+ * a proper crossing (crossingOk): the path's own tiles, or a crossing
+ * beside them that the new road or aqueduct would join along its length.
+ */
+function checkCrossings(game, tool, tiles, items) {
+  const { map } = game;
+  if (tool !== 'road' && tool !== 'aqueduct') return;
+  const added = new Set(tiles);
+  const road = (j) => !!map.road[j] || (tool === 'road' && added.has(j));
+  const aq = (j) => !!map.aqueduct[j] || (tool === 'aqueduct' && added.has(j));
+  const W = map.w;
+  tiles.forEach((i, k) => {
+    const it = items[k];
+    if (!it.ok || it.exists) return;
+    for (const j of [i, i - 1, i + 1, i - W, i + W]) {
+      if (j < 0 || j >= map.size || Math.abs(map.xOf(j) - map.xOf(i)) > 1) continue;
+      if (!(road(j) && aq(j))) continue;
+      if (!crossingOk(map, j, road, aq)) {
+        it.ok = false;
+        it.reason = 'A road crosses an aqueduct only straight through, at right angles: never along it, nor turning under it';
+        return;
+      }
+    }
+  });
+}
+
 function tileClearCost(game, i) {
   const { map } = game;
   return (map.terrain[i] === Terrain.TREES ? CONFIG.CLEAR_TREE_COST : 0) + (map.rubble[i] ? CONFIG.CLEAR_RUBBLE_COST : 0);
@@ -441,6 +487,11 @@ function planPath(game, tool, x0, y0, x1, y1) {
     if (ok && !exists) { budget -= tileCost; cost += tileCost; count++; if (gate) gates++; }
     items.push({ x: map.xOf(i), y: map.yOf(i), size: 1, ok, reason, exists, gate, cost: tileCost });
   }
+  checkCrossings(game, tool, tiles, items);
+  // A tile refused for its crossing does not count or cost.
+  cost = 0;
+  count = 0;
+  for (const it of items) if (it.ok && !it.exists) { cost += it.cost; count++; }
   const bad = items.find((it) => !it.ok);
   const warnings = gates > 0 ? [`${gates} gate${gates === 1 ? '' : 's'} (${TOOLS.wall.gateCost} Dn each): citizens pass, raiders must break ${gates === 1 ? 'it' : 'them'}`] : [];
   return { tool, kind: 'path', items, cost, count, warnings, reason: bad ? bad.reason : null };

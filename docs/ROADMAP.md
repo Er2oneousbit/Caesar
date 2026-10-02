@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.8)
+
+* **Roads and aqueducts cross at right angles**: a road could run along under an aqueduct. Now a road passes under an aqueduct only straight across it, through one arch, and neither turns, branches nor runs along on the crossing tile; an aqueduct may not run along or turn over a road either. Refused tiles show red with the reason; roads already under aqueducts in an older city stay. Headless sim identical on every level and on the campaign maps that lay aqueducts
+* 574 unit tests
+
 ## Done (v0.15.7)
 
 * **Raid warnings as the enemy closes in** (parity #24): the original warned three times as an army drew near; Colonia's raids now get three warnings too. About 6 months out traders speak of a warband (only the months; not under 300 people); at 3 months the scouts report its size, side and whether it comes by land or sea, as before; a month out a last warning names the side again (and, by sea, the landing, looked for again: with no landing the warning says they come overland). Caesar's legions remind you halfway through their 12-month march and a month out, each time saying what today's favor would make them do. The first warnings open the empire map with the warband or the legions picked out; the last glides to the place. A raid dated late skips the stages already past; a save from before loads with the stages whose moment has passed counted as given

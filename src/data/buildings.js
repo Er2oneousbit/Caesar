@@ -103,7 +103,7 @@ export const TOOLS = Object.freeze({
   plaza: { name: 'Platea', en: 'Plaza', category: 'roads', cost: 15, drag: 'area', desc: 'Paves existing roads with decorative stone. Raises desirability nearby.' },
   bridge: { name: 'Pons', en: 'Bridge', category: 'roads', cost: 40, drag: 'line', desc: 'A straight road across water. Start and end on the banks.' },
   roadblock: { name: 'Claustra', en: 'Roadblock', category: 'roads', cost: 12, drag: 'single', desc: 'Placed on a road: walkers roaming the streets turn back here, so a building serves only the homes you mean it to. Carts, market buyers, settlers and anyone else heading somewhere pass. Click it to let some kinds of walker through.' },
-  aqueduct: { name: 'Aquaeductus', en: 'Aqueduct', category: 'water', cost: 8, drag: 'path', desc: 'Carries water between reservoirs. Can cross roads.' },
+  aqueduct: { name: 'Aquaeductus', en: 'Aqueduct', category: 'water', cost: 8, drag: 'path', desc: 'Carries water between reservoirs. Crosses a road only straight over it, at right angles: a road passes under one arch.' },
   wall: { name: 'Murus', en: 'Wall', category: 'military', cost: 12, gateCost: 40, drag: 'path', desc: 'Stone walls that raiders must break through. Drag a wall across a road to build a gate that citizens (not raiders) can pass.' },
   clear: { name: 'Clear Land', category: null, cost: 0, drag: 'area', desc: 'Demolish buildings, roads, roadblocks, walls and aqueducts, or clear trees and rubble.' },
 });

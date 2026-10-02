@@ -167,3 +167,39 @@ test('roads: the door is only drawn; a road along any of the four sides serves a
     }
   }
 });
+
+test('a road crosses an aqueduct only straight through, at right angles; never along it, nor turning under it', () => {
+  // Playtest: roads could run along under an aqueduct.
+  const game = newGame({ size: 64, type: 'plains', seed: 'aq-cross' });
+  const s = findFree(game, 12, 12);
+  const ax = s.x + 1;
+  const ay = s.y + 6;
+  const ok = (tool, x0, y0, x1, y1) => planAction(game, tool, x0, y0, x1, y1);
+  assert.ok(build(game, 'aqueduct', ax, ay, ax + 9, ay).ok, 'an aqueduct east-west');
+  // A road straight across it, north-south: fine.
+  const across = ok('road', ax + 3, ay - 3, ax + 3, ay + 3);
+  assert.ok(across.items.every((it) => it.ok), JSON.stringify(across.items.filter((it) => !it.ok)));
+  assert.ok(build(game, 'road', ax + 3, ay - 3, ax + 3, ay + 3).ok);
+  // Along it, east-west under the arches: refused.
+  const along = ok('road', ax + 5, ay, ax + 8, ay);
+  assert.ok(along.items.some((it) => !it.ok && /right angles/.test(it.reason || '')), JSON.stringify(along.items));
+  // A crossing beside the first one would join it along the aqueduct: refused.
+  const beside = ok('road', ax + 4, ay - 3, ax + 4, ay + 3);
+  assert.ok(beside.items.some((it) => !it.ok), 'two roads side by side under the arches make a road along it');
+  // A road that turns under the aqueduct: refused.
+  const turn = ok('road', ax + 7, ay - 3, ax + 7, ay);
+  assert.ok(turn.items.every((it) => it.ok), 'a road ending under the arch, straight in, is fine');
+  assert.ok(build(game, 'road', ax + 7, ay - 3, ax + 7, ay).ok);
+  const branch = ok('road', ax + 8, ay + 3, ax + 8, ay + 1);
+  assert.ok(branch.items.every((it) => it.ok), 'a road beside the aqueduct, not under it, is fine');
+  // An aqueduct laid along an existing road: refused; across it: fine.
+  assert.ok(build(game, 'road', s.x, s.y + 10, s.x + 9, s.y + 10).ok, 'a road east-west');
+  const aqAlong = ok('aqueduct', s.x + 2, s.y + 10, s.x + 6, s.y + 10);
+  assert.ok(aqAlong.items.some((it) => !it.ok), 'an aqueduct along a road');
+  const aqAcross = ok('aqueduct', s.x + 2, s.y + 8, s.x + 2, s.y + 11);
+  assert.ok(aqAcross.items.every((it) => it.ok), JSON.stringify(aqAcross.items.filter((it) => !it.ok)));
+  // An aqueduct that comes down onto the road and turns along it: refused.
+  assert.ok(build(game, 'aqueduct', s.x + 7, s.y + 8, s.x + 7, s.y + 10).ok, 'an aqueduct ending on the road, straight in');
+  const aqTurn = ok('aqueduct', s.x + 8, s.y + 10, s.x + 8, s.y + 10);
+  assert.ok(aqTurn.items.some((it) => !it.ok), 'turning along the road from the crossing');
+});

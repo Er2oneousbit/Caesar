@@ -40,6 +40,7 @@ import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 import { residenceOf } from './governor.js';
 import { archesToBuild } from './battle.js';
 import { boatTiles, lowBridgeCuts, refreshWaterways } from './bridges.js';
+import { nativeLandWarning } from './natives.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -207,6 +208,8 @@ export function checkBuilding(game, type, x, y, turn = 0) {
     const sells = (game.scenario.partners || []).some((id) => TRADE_PARTNERS[id]?.sells.timber);
     out.warnings.push(`Shipyards need timber (${CONFIG.SHIPYARD_BOAT_TIMBER} a boat): build a Silva Caedua (Timber Yard) by woods${sells ? ' or import it' : ''}`);
   }
+  const land = nativeLandWarning(game, type, x, y, W, H); // (sim/natives.js)
+  if (land) out.warnings.push(land);
   if (def.venue === 'hippodrome' && def.kind === 'venue' && !countOf(game, 'chariot_maker')) {
     out.warnings.push('No Factio (Chariot Stable) yet: build one, connected by road, to start the races');
   }
@@ -672,6 +675,13 @@ function planClear(game, x0, y0, x1, y1) {
     const i = map.idx(x, y);
     const id = map.building[i];
     if (id) {
+      if (!seen.has(id) && buildings.get(id)?.def.kind === 'village') {
+        // A native village is not the city's to clear (sim/natives.js).
+        const b = buildings.get(id);
+        seen.add(id);
+        items.push({ x: b.x, y: b.y, size: b.size, ok: false, reason: 'A native village is not yours to clear', cost: 0 });
+        continue;
+      }
       if (!seen.has(id)) {
         // A hippodrome comes down whole: show every section it takes with it.
         const b = buildings.get(id);

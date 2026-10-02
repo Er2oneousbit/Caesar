@@ -205,6 +205,8 @@ export function walkerSays(game, w) {
     case 'protester': return protesterLine(game, w);
     case 'thief': return pick(['Nothing to see here, friend. Keep walking.', 'Who, me? Just taking the air.', 'A man has to eat.'], w, game);
     case 'rioter': return pick(['Burn it! Burn it all!', 'They will listen to us now!', 'Down with the governor!'], w, game);
+    case 'native_trader': return pick(['Your pots are good. We will come again.', 'Peace is better for trade than spears.', 'My people sent me with silver, not with a spear.'], w, game);
+    case 'missionary': return pick(['A gift and a kind word keep more peace than a cohort.', 'The elders of the village know me now.', 'They ask only that we leave their land be.'], w, game);
     default: break;
   }
   const work = workLines(game, w);
@@ -271,6 +273,8 @@ export function walkerDoing(game, w) {
     case 'toFort': return `Marching to ${the(target)}${w.trained ? ', trained at the Campus' : ''}`;
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;
+    case 'nativeBuy': return `Going to ${the(target)} to buy goods for the village`;
+    case 'nativeHome': return 'Going home to the village';
     case 'spare': return 'Waiting by the shipyard for a wharf';
     case 'toWharf': return `Sailing to ${the(game.buildings.get(w.origin))}`;
     case 'moored': return 'Tied up at the wharf';
@@ -365,5 +369,10 @@ export function walkerInfo(game, w) {
   // A prefect who has fought: his wounds stay with him (sim/prefectFight.js).
   if (w.type === 'prefect' && w.hp !== undefined) rows.push(['Health', `${Math.max(0, Math.ceil(w.hp))} of ${CONFIG.PREFECT_COMBAT.hp}`]);
   if ((w.type === 'caravan' || w.type === 'ship') && TRADE_PARTNERS[w.partner]) rows.push(...tradeRows(game, w));
+  // A native village's trader (sim/natives.js): what he bought, and for how much.
+  if (w.type === 'native_trader' && w.deal) {
+    const items = Object.entries(w.deal.sold || {}).map(([g, n]) => amountText(g, n));
+    if (items.length) rows.push(['Bought', `${items.join(', ')} for ${w.deal.earned} Dn`]);
+  }
   return { title: def.name, desc: def.desc, rows, says: walkerSays(game, w) };
 }

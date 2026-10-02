@@ -75,6 +75,7 @@ export const URL_FLAGS = [
   ['unlockall=1', 'Every building and every campaign mission available.'],
   ['raids=off|occasional|frequent', 'Override raids for new games (testing).'],
   ['searaids=off|on', 'Sea raids switch for new games (off: every raid comes by land).'],
+  ['natives=1', 'With skipmenu=1: the sandbox has native villages.'],
   ['mute=1', 'Start with sound off.'],
 ];
 
@@ -120,6 +121,8 @@ function content(tab) {
         h('h4', {}, 'The campaign'),
         h('p', {}, `${LAST_STEP} steps, each opened by winning a mission of the step before. ${stepsText(branchSteps())} offer two provinces at the same rank: a peaceful one (no raids and no army; higher culture and prosperity goals, and from step 4 more favor too) and a military one (raids, forts and Caesar's calls for troops; at step 3 Firmum brings raids and forts a step sooner than the campaign had them). After a win, choose your next post from the two cards on the victory screen; you may switch between peaceful and military at every step. Each card's Start opens the province's briefing, and Back returns to the choice. If a city at a step with two provinces is overrun, the defeat screen offers that step's choice again. The Campaign list shows both provinces of a step side by side, and keeps every mission you have won open to replay.`),
         h('p', {}, `From step 6 the provinces trade on bigger quotas (a partner may buy 1,500, 2,500 or 4,000 of a good a year, and a message tells you when that changes) and ask for more people. The last step's maps are the largest, and their fields, forests and rocky hills lie far apart: since a building hires only from homes within ${CONFIG.LABOR_RANGE} road tiles, the city grows in districts, each with its own homes, markets and services. Win either province of step ${LAST_STEP} and Rome hails you ${RANKS[TOP_RANK].name}: your career is crowned.`),
+        h('h4', {}, 'Native villages'),
+        h('p', {}, 'In Mutina and Luna (and a sandbox that asks for them) the Ligurians still live in villages of their own: a meeting place with huts round it. Their land is every tile within 3 of a hut and 6 of a meeting place (the Native land overlay shows it). A village starts angry, and anything you build on its land (not a road or a wall) sets it attacking: its men break your building down. A Sacellum Pacis (Mission Post, Temples menu) sends a missionary along the roads: every hut and meeting place within 4 tiles of him is calmed for 100 days. Soldiers, towers and prefects fight villagers only while they attack. While a mission post is staffed, calmed villages send traders to buy up to 3 loads of your exports from the nearest warehouse.'),
         h('h4', {}, 'Hall of Fame'),
         h('p', {}, 'Every campaign win is scored: its four ratings added, plus 100 x its people / the population goal (at most 200), plus 100 x the mission\'s planned years / the years it took (at most 150), all times the difficulty (Easy x0.5, Normal x1, Hard x1.5, Insane x2), plus 50 for each distant battle won and 25 for each raid repelled. The Hall of Fame (main menu, campaign screen) lists the ten best wins, each province once with its best, and your career: the best win at each step, plus 500 once Rome hails you Caesar. The sandbox is not scored.'),
         h('h4', {}, 'Day, night, seasons, weather and music'),

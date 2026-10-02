@@ -159,7 +159,7 @@ export class App {
       log.warn(`Unknown scenario "${this.flags.scenario}"`);
     }
     if (this.flags.skipmenu) {
-      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: this.flags.difficulty || 'normal', funds: 8000 });
+      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: this.flags.difficulty || 'normal', funds: 8000, natives: this.flags.natives });
       return;
     }
     this.toMainMenu();
@@ -254,6 +254,7 @@ export class App {
       rank: opts.rank,
       site: opts.site,
     });
+    if (opts.natives) scenario.natives = true; // native villages, asked for in the setup (data/natives.js nativesFor)
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
     farmSeasonNotice(this.game, true); // Insane: the city is founded in winter, when nothing grows

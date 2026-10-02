@@ -2309,6 +2309,81 @@ try {
     await sp.close();
   }
 
+  // 6e0. Native villages (sim/natives.js) in a sandbox that asks for them:
+  //      the mission post in the Temples menu, a hut's panel, the Native
+  //      land overlay, an attack on a building put on their land, and the
+  //      village drawn at every view turn without an error.
+  {
+    const vp = await ctx.newPage();
+    const verrors = [];
+    vp.on('pageerror', (e) => verrors.push(`pageerror: ${e.message}`));
+    vp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) verrors.push(m.text()); });
+    await vp.goto(`${url}?skipmenu=1&natives=1&map=small&seed=demo&mute=1&money=90000`);
+    await vp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const village = await vp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      const g = app.game;
+      const huts = [...g.buildings.values()].filter((b) => b.type === 'native_hut');
+      const m = [...g.buildings.values()].find((b) => b.type === 'native_meeting');
+      if (!m || !huts.length) return null;
+      app.renderer.camera.zoomIndex = 2;
+      app.renderer.camera.centerOnTile(m.x + 1, m.y + 1);
+      app.ui.info.showBuilding(huts[0].id);
+      const panel = document.querySelector('#info-panel')?.textContent || '';
+      app.ui.info.close();
+      return { m: { x: m.x, y: m.y }, huts: huts.length, panel, people: g.city.natives?.people };
+    });
+    check('a sandbox with native villages: huts round a meeting place, a hut\'s panel says it is angry', !!village && village.huts >= 4 && /Tugurium \(Native Hut\)/.test(village.panel) && /Angry/.test(village.panel), JSON.stringify(village && { ...village, panel: village.panel.slice(0, 200) }));
+    await vp.click('.cat-btn[title^="Temples"]');
+    const post = await vp.evaluate(() => document.querySelector('.build-item[data-key="mission_post"] .nm')?.textContent || '');
+    check('the Sacellum Pacis (Mission Post) is in the Temples menu where there are villages', /Sacellum Pacis/.test(post), post);
+    if (village) {
+      // A garden placed with the mouse on the meeting place's land; a day on, the village attacks.
+      const spot = await vp.evaluate(({ m }) => {
+        const g = window.colonia.game;
+        for (let d = 3; d <= 5; d++) for (let dx = -d; dx <= d + 1; dx++) if (g.map.isFree(m.x + dx, m.y - d) && g.map.terrain[g.map.idx(m.x + dx, m.y - d)] !== 2) return { x: m.x + dx, y: m.y - d };
+        return null;
+      }, village);
+      const vScreen = (tx, ty) => vp.evaluate(([x, y]) => {
+        const cam = window.colonia.renderer.camera;
+        const wx = (x + 0.5 - (y + 0.5)) * 32;
+        const wy = (x + 0.5 + (y + 0.5)) * 16;
+        const r = window.colonia.canvas.getBoundingClientRect();
+        return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+      }, [tx, ty]);
+      let attack = null;
+      if (spot) {
+        await vp.evaluate(() => window.colonia.ui.selectTool('garden'));
+        const p = await vScreen(spot.x, spot.y);
+        await vp.mouse.move(p.x, p.y);
+        await vp.waitForTimeout(150);
+        const warn = await vp.evaluate(() => document.querySelector('#sidebar')?.textContent || document.body.textContent);
+        await vp.mouse.click(p.x, p.y);
+        attack = await vp.evaluate(({ x, y }) => {
+          const app = window.colonia;
+          const g = app.game;
+          app.ui.selectTool(null);
+          const placed = !!g.map.building[g.map.idx(x, y)];
+          const before = g.city.natives.attacks;
+          g.runDays(1);
+          return { placed, before, after: g.city.natives.attacks, villagers: [...g.units.values()].filter((u) => u.side === 'native').length };
+        }, spot);
+        attack.warned = /Native land/.test(warn);
+      }
+      check('a garden put with the mouse on an angry village\'s land (warned as it is placed) sets off an attack: villagers come out',
+        !!attack && attack.placed && attack.warned && attack.after === attack.before + 1 && attack.villagers > 0, JSON.stringify({ spot, attack }));
+      await vp.selectOption('select.hud-select', 'natives').catch(() => {});
+      for (let t = 0; t < 4; t++) {
+        await vp.keyboard.press('q');
+        await vp.waitForTimeout(150);
+      }
+      const ov = await vp.evaluate(() => window.colonia.renderer.overlay?.key);
+      check('the Native land overlay and the village draw at every view turn without an error', ov === 'natives' && verrors.length === 0, JSON.stringify({ ov, verrors }));
+    }
+    await vp.close();
+  }
+
   // 6e. A low bridge (sim/bridges.js) dragged across the river with the
   //     mouse: its tiles are bridges no boat passes, its tile panel names
   //     it, and the city draws without an error at every view turn.

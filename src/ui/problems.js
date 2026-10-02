@@ -144,6 +144,7 @@ export function problemOf(game, b) {
     if (!blocked.every((n) => needReachable(game, n))) return null;
     return { v: 0.55, color: colorOf(blocked[0]), text: `${tier.name}. To become a ${HOUSE_TIERS[hs.tier + 1].name}: ${describeNeed(blocked[0])}${more}` };
   }
+  if (b.def.kind === 'village') return null; // a native village: its land shows on its own overlay (sim/natives.js)
   const s = buildingStatus(game, b);
   if (s.level === 'bad') return { v: 1, color: BAD, text: `${b.def.name}: ${s.text}` };
   if (s.level === 'warn') return { v: 0.55, color: WARN, text: `${b.def.name}: ${s.text}` };

@@ -142,7 +142,7 @@ export class Minimap {
     // soldiers (white) and raiders (red), drawn live every frame
     for (const u of game.units.values()) {
       const [px, py] = at(u.x, u.y);
-      ctx.fillStyle = u.side === 'enemy' ? '#ff3b2f' : '#f4f0e6';
+      ctx.fillStyle = u.side === 'enemy' ? '#ff3b2f' : u.side === 'native' ? '#f0a030' : '#f4f0e6';
       ctx.fillRect(px - 1, py - 1, 2.5, 2.5);
     }
     // entry/exit markers (tile centers)

@@ -29,6 +29,7 @@ import { crimeBand, crimeTip } from '../ui/crimeInfo.js';
 import { healthColumn, healthTip } from '../ui/healthInfo.js';
 import { SICK_COLOR } from '../data/disease.js';
 import { riskRates } from '../sim/risk.js';
+import { landLayer } from '../sim/natives.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
@@ -86,6 +87,23 @@ export const OVERLAYS = [
     show: is('engineer_post'),
     value: (b) => (riskRates(b).damage > 0 ? Math.min(1, b.damageRisk / 100) : null),
     walkers: ['engineer'],
+  },
+  {
+    // The native villages' land (sim/natives.js): red where an angry village
+    // attacks whatever is built, green where a calmed one's lies (until the
+    // calm wears off). The original showed it in its risk overlay.
+    key: 'natives', name: 'Native land',
+    tile(game, i) {
+      if (!game.city.natives) return null;
+      const v = landLayer(game)[i];
+      return v === 2 ? 'rgba(205,60,40,0.34)' : v === 1 ? 'rgba(60,165,80,0.3)' : null;
+    },
+    show: (b) => b.def.kind === 'village' || b.type === 'mission_post',
+    legend: [
+      ['rgba(205,60,40,0.8)', 'Angry village\'s land: building here starts an attack'],
+      ['rgba(60,165,80,0.8)', 'Calmed by a missionary (for 100 days)'],
+    ],
+    walkers: ['missionary', 'native_trader'],
   },
   {
     key: 'desirability', name: 'Desirability',

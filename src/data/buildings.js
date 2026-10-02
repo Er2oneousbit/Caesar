@@ -36,7 +36,10 @@
  *                    barracks | fort | tower | shipyard | wharf | part |
  *                    navalia | station | military_academy | portus |
  *                    residence (the governor's) | arch (a triumphal arch,
- *                    built across a road)
+ *                    built across a road) | village (a native village's
+ *                    hut, meeting place or crops: sim/natives.js; never
+ *                    built, cleared, burned or broken by the player's city)
+ *   natives        unlocked only in a city with native villages (the mission post)
  *   span           sections in a row along the map's x axis (the hippodrome:
  *                  3 of size x size). The first is the building itself, the
  *                  others are `part` buildings linked to it (sim/linked.js)
@@ -610,6 +613,29 @@ export const BUILDINGS = Object.freeze({
     des: [-6, 1, 1, 3], fire: 0, damage: 0, hp: 800, placement: 'shore',
     desc: 'A stone quay with berths for a squadron of 4 liburnians, which fight raider ships near it. Click it and press Deploy to send its squadron anywhere on its water. Build it on the bank of a river or sea that ships can sail.',
   }),
+  // --- Native villages (sim/natives.js) ------------------------------------
+  // Placed with the map (world/natives.js), never by the player: no
+  // category, no road, no staff, and nothing burns or falls down.
+  mission_post: B({
+    name: 'Sacellum Pacis', en: 'Mission Post', category: 'religion', kind: 'service', cost: 100, size: 2, workers: 20, labor: 'govReligion',
+    des: [-3, 1, 1, 2], fire: 0, damage: 0, walker: 'missionary', spawnDays: 2, natives: true,
+    desc: 'A shrine of peace with lodgings for envoys to the villages. Its missionary walks the roads, and every native hut and meeting place within 4 tiles of him is calmed: no attack for 100 days, however close the city builds. While it is staffed, calmed villages send a trader every 9 days to buy goods you export. Only where there are native villages.',
+  }),
+  native_hut: B({
+    name: 'Tugurium', en: 'Native Hut', category: null, kind: 'village', village: 'hut', cost: 0, size: 1, workers: 0,
+    des: [0, 1, 0, 0], fire: 0, damage: 0, needsRoad: false,
+    desc: 'A round hut of wattle and thatch. Its land is every tile within 3 of it: build there while its people are angry and they attack.',
+  }),
+  native_meeting: B({
+    name: 'Concilium', en: 'Meeting Place', category: null, kind: 'village', village: 'meeting', cost: 0, size: 2, workers: 0,
+    des: [0, 1, 0, 0], fire: 0, damage: 0, needsRoad: false,
+    desc: 'Where the village meets around its fire. Its land is every tile within 6 of it: build there while its people are angry and they attack.',
+  }),
+  native_crops: B({
+    name: 'Arvum', en: 'Native Crops', category: null, kind: 'village', village: 'crops', cost: 0, size: 1, workers: 0,
+    des: [0, 1, 0, 0], fire: 0, damage: 0, needsRoad: false,
+    desc: 'The village\'s own small field.',
+  }),
 });
 
 export const BUILDING_KEYS = Object.freeze(Object.keys(BUILDINGS));
@@ -653,6 +679,7 @@ const PLURALS = Object.freeze({
   market: 'Macella', granary: 'Granaria', warehouse: 'Horrea', dock: 'Emporia', shipyard: 'Fabricae Navales', wharf: 'Piscatoriae',
   horse_ranch: 'Equariae', barracks: 'Tirocinia', military_academy: 'Campi', fort_legion: 'Castra', fort_archer: 'Praesidia', fort_cavalry: 'Castra Equitum',
   tower: 'Turres', navalia: 'Navalia', portus: 'Portus', naval_station: 'Stationes',
+  mission_post: 'Sacella Pacis', native_hut: 'Tuguria', native_meeting: 'Concilia', native_crops: 'Arva',
 });
 
 /** A building type's Latin plural ("Horrea"); its name with an "s" for one missing from the table. */

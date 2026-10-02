@@ -240,6 +240,7 @@ export function sandboxMenu(app) {
     seaRaids: app.settings.seaRaids !== false,
     rank: SANDBOX_RANK,
     site: HOME_SITE,
+    natives: false, // native villages (sim/natives.js): off by default
   };
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
@@ -272,7 +273,10 @@ export function sandboxMenu(app) {
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Where your city stands on the empire map: the way each partner\'s traders come, how long a far one takes (it comes less often) and how far your army marches to a distant battle. The landscape above is the map you build on.')),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', checked: state.seaRaids, onchange: (e) => { state.seaRaids = e.target.checked; } }),
-        h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP)))),
+        h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP))),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', class: 'natives-check', checked: state.natives, onchange: (e) => { state.natives = e.target.checked; } }),
+        h('span', {}, 'Native villages', h('div', { class: 'muted', style: { fontSize: '12px' } }, 'One to three villages of the land\'s own people, away from the road. They attack what you build on their land until a missionary from a Sacellum Pacis (Mission Post) calms them; calmed, they come to buy your exports.')))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),

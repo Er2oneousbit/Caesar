@@ -36,6 +36,11 @@ export const WALKER_TYPES = Object.freeze({
   // Twice as fast and twice as far as the other entertainers, as in the original.
   charioteer: { name: 'Charioteer', kind: 'roamer', group: 'entertainment', effect: 'venue', tunic: '#2f6db5', item: 'chariot', roam: 52, speed: 2, desc: 'Drives a racing chariot through the streets to bring people to the races.' },
   taxman: { name: 'Tax Collector', kind: 'roamer', group: 'tax', effect: 'tax', tunic: '#3d3d6b', item: 'purse', roam: 30, desc: 'Registers households for taxation.' },
+  // Native villages (sim/natives.js): the mission post's walker calms every
+  // hut and meeting place within 4 tiles of him (not SERVICE_RADIUS); a
+  // village's trader walks over open land to a warehouse and back.
+  missionary: { name: 'Missionary', kind: 'roamer', group: 'religion', effect: 'mission', tunic: '#d9cfa6', item: 'staff', roam: 32, desc: 'An envoy from the mission post who visits the native villages and keeps the peace with them.' },
+  native_trader: { name: 'Village Trader', kind: 'traveler', tunic: '#7d6a3e', item: 'bundle', desc: 'A villager come to buy the goods you export, a few loads a visit.' },
   vendor: { name: 'Market Vendor', kind: 'roamer', group: 'market', effect: 'market', tunic: '#b86b2a', item: 'basket', roam: 30, desc: 'Sells food and goods door to door.' },
 
   cart: { name: 'Cart Pusher', kind: 'carrier', tunic: '#9a7b4f', item: 'cart', desc: 'Moves goods between buildings.' },

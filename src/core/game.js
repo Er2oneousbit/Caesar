@@ -16,7 +16,8 @@
  *                      stats, entertainment base, wine sources, mid-month
  *                      goods use, immigration, fires, sick homes, home moods
  *                      (day 8), trade, raid progress, Caesar's legions (their
- *                      march, the siege) and the check for a city overrun
+ *                      march, the siege), the check for a city overrun and
+ *                      the native villages (anger, attacks, traders)
  *   5. on a new month: consumption, finances, army pay, the governor's
  *                      salary, raid warnings, city mood, home moods,
  *                      religion, ratings, city health, Emperor, distant
@@ -70,6 +71,7 @@ import { closeGoodsMonth } from '../sim/goodsLedger.js';
 import { updateHomeMoods } from '../sim/mood.js';
 import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../sim/crime.js';
 import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear, refreshDiseaseGate } from '../sim/disease.js';
+import { foundVillages, nativesDaily } from '../sim/natives.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -191,6 +193,8 @@ export class Game {
     this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
     for (const g of GOD_KEYS) this.city.gods[g] ??= newGodMood(); // a god a save lacks starts afresh
     this.city.venusBoost ??= 0;
+    this.city.natives ??= null; // a city with native villages: their state (sim/natives.js); none in older saves
+    if (!restore) foundVillages(this); // a new game: the native villages of the missions that have them
     this.projectiles = []; // arrows and sling stones in flight (not saved)
     this.enemyField = null; // raider flow field (derived, see military.js)
     this.events.on('buildingRemoved', ({ building }) => {
@@ -207,6 +211,8 @@ export class Game {
     // A triumphal arch is never unlocked by a mission: Caesar grants one for
     // each distant battle won (sim/battle.js), whatever the scenario allows.
     if (BUILDINGS[key]?.kind === 'arch') return archesToBuild(this) > 0;
+    // The mission post only where there are native villages (sim/natives.js).
+    if (BUILDINGS[key]?.natives && !this.city.natives) return false;
     if (this.flags.unlockall || this.scenario.unlocks === 'all') return true;
     // A tool that comes with another (the low bridge with the ship bridge):
     // the missions' lists name only the first.
@@ -348,6 +354,7 @@ export class Game {
     updateTrade(this);
     militaryDaily(this);
     caesarDaily(this); // Caesar's legions, and the loss of a city overrun (sim/legion.js)
+    nativesDaily(this); // native villages: anger, attacks, traders (sim/natives.js)
     if (enemiesInProvince(this)) this.city.raidMonth = true; // no peace gained this month (sim/ratings.js)
     this.events.emit('day', this.time);
   }

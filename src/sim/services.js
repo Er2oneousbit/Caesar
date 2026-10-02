@@ -19,11 +19,14 @@ import { spawnWalker, mainOf } from './entities.js';
 import { startRoaming } from './movement.js';
 import { vendorSupply } from './market.js';
 import { cureHome } from './disease.js';
+import { missionaryVisit } from './natives.js';
 
 /** Apply a roamer's effect to every building within reach of its tile. */
 export function roamerVisit(game, w) {
   const { map, buildings } = game;
   const def = WALKER_TYPES[w.type];
+  // A missionary reaches farther than SERVICE_RADIUS, and only native villages (sim/natives.js).
+  if (def.effect === 'mission') { missionaryVisit(game, w); return; }
   const r = CONFIG.SERVICE_RADIUS;
   const origin = w.origin ? buildings.get(w.origin) : null;
   const seen = [];

@@ -136,11 +136,12 @@ export function collapseBuilding(game, b, cause = 'decay') {
   const aLabel = withArticle(label);
   removeBuilding(game, b, 'collapse');
   for (const i of tiles) game.map.rubble[i] = 1;
-  const ruin = cause === 'raid' || cause === 'raidQuiet' ? 'raid' : cause === 'legion' || cause === 'legionQuiet' ? 'legion' : 'collapse';
+  const ruin = cause === 'raid' || cause === 'raidQuiet' ? 'raid' : cause === 'legion' || cause === 'legionQuiet' ? 'legion' : cause === 'natives' ? 'natives' : 'collapse';
   recordRuin(game, tiles, label, ruin, siteOf(main));
   game.city.stats.collapses++;
   if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause === 'legion') game.message(`Caesar's legions have torn down ${aLabel}!`, 'bad', b.x, b.y);
+  else if (cause === 'natives') game.message(`Angry villagers have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause !== 'raidQuiet' && cause !== 'legionQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y, { kind: 'collapse' });
   game.events.emit('collapse', { x: b.x, y: b.y, size: b.size });
   game.events.emit('sound', { name: 'collapse' });

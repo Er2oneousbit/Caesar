@@ -26,6 +26,7 @@ import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive,
 import { physicianArrive, physicianAfterWait } from './disease.js';
 import { boatArrive, boatAfterWait } from './fishing.js';
 import { boatBlocked } from './bridges.js';
+import { nativeTraderArrive, nativeTraderReroute } from './natives.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
 /** Advance every walker by one tick. */
@@ -107,7 +108,10 @@ function onArriveTile(game, w) {
     // Rioters and prefects chasing them cross open land: only a new building
     // or wall in the way makes them plan again.
     if (w.offRoad) {
-      if (!landPassable(game, next, w.type === 'rioter' ? w.target : 0)) offRoadReroute(game, w);
+      if (!landPassable(game, next, w.type === 'rioter' ? w.target : 0)) {
+        if (w.type === 'native_trader') nativeTraderReroute(game, w); // (sim/natives.js)
+        else offRoadReroute(game, w);
+      }
       else setNextTile(game, w, next);
       return;
     }
@@ -223,6 +227,12 @@ function onPathEnd(game, w) {
       break;
     case 'hunt':
       hunterArrive(game, w);
+      break;
+    case 'nativeBuy': // a native village's trader at a warehouse (sim/natives.js)
+      nativeTraderArrive(game, w);
+      break;
+    case 'nativeHome':
+      killWalker(game, w);
       break;
     default:
       killWalker(game, w);

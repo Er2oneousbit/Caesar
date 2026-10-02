@@ -52,6 +52,7 @@ import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
 import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, postsAway, takesNewMen, AWAY_MAX_TICKS } from './battle.js';
 import { fightPrefect } from './prefectFight.js';
+import { updateVillager } from './natives.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
 // share tiles using these sub-tile offsets.
@@ -209,6 +210,9 @@ export function removeUnit(game, u, cause = 'died') {
       }
       u.crew = [];
       game.events.emit('sound', { name: 'splash' });
+    } else if (u.side === 'native') {
+      // A villager (sim/natives.js): no enemy of the province's, no soldier of Rome's.
+      if (game.city.natives) game.city.natives.slain++;
     } else if (u.side === 'enemy') {
       st.enemiesKilled++;
       if (u.legion) {
@@ -228,6 +232,16 @@ export function unitsOfFort(game, fortId) {
   const out = [];
   for (const u of game.units.values()) if (u.fort === fortId) out.push(u);
   return out;
+}
+
+/**
+ * Is this unit one Rome's soldiers, towers and prefects fight? Raiders and
+ * Caesar's men (side 'enemy') always; a native villager (side 'native',
+ * sim/natives.js) only while his village attacks. The one test for "hostile
+ * to Rome", so a new kind of foe needs only this.
+ */
+export function hostileToRome(u) {
+  return u.side === 'enemy' || (u.side === 'native' && !!u.attacking);
 }
 
 /** Raiders in the province: on land, and still aboard their ships. */
@@ -259,7 +273,7 @@ export function passable(game, side, i) {
   if (map.building[i]) return false;
   const w = map.wall[i];
   if (w === Wall.WALL) return false;
-  if (w === Wall.GATE && side === 'enemy') return false;
+  if (w === Wall.GATE && side !== 'rome') return false; // (citizens pass; raiders and villagers must break it, or go round)
   return true;
 }
 
@@ -277,7 +291,7 @@ function canEnter(game, u, nx, ny) {
  * Step toward a point, sliding along obstacles.
  * @returns {boolean} true when (almost) there
  */
-function moveToward(game, u, tx, ty, speed) {
+export function moveToward(game, u, tx, ty, speed) {
   const dx = tx - u.x;
   const dy = ty - u.y;
   const d = Math.hypot(dx, dy);
@@ -658,6 +672,7 @@ export function buildingMaxHp(b) {
  * army struck it (sim/legion.js), which is no part of a raid.
  */
 export function damageBuilding(game, b, dmg, { fromSea = false, legion = null } = {}) {
+  if (b.def.kind === 'village') return; // a native village is not the province's to lose
   if (b.hp === undefined) b.hp = buildingMaxHp(b);
   b.hp -= dmg;
   b.lastRaided = game.time.totalDays;
@@ -720,7 +735,7 @@ export function computeField(game) {
   const map = game.map;
   let field = game.enemyField;
   if (!field || field.length !== map.size) field = game.enemyField = new Float32Array(map.size);
-  fillField(game, field, () => true);
+  fillField(game, field, (id) => game.buildings.get(id)?.def.kind !== 'village'); // (raiders pass native villages by)
   game.enemyFieldRev = map.revision;
   game.enemyFieldTick = game.time.totalTicks;
 }
@@ -834,7 +849,7 @@ export function hurt(game, target, dmg) {
 }
 
 /** Melee hit or launch a missile at another unit. */
-function attackUnit(game, u, def, target) {
+export function attackUnit(game, u, def, target) {
   u.strikeTick = game.time.totalTicks;
   u.cooldown = def.cooldown;
   const sdx = (target.x - u.x) - (target.y - u.y);
@@ -850,7 +865,7 @@ function attackUnit(game, u, def, target) {
 }
 
 /** Nearest hostile unit within `range` of (x, y). */
-function nearestHostile(list, x, y, range) {
+export function nearestHostile(list, x, y, range) {
   let best = null;
   let bestD = range;
   for (const e of list) {
@@ -941,7 +956,7 @@ function updateRoman(game, u, enemies) {
   const post = postOf(game, u, fort);
   const zone = fightZone(game, def, fort, post);
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && (target.side !== 'enemy' || !inZone(zone, u, target, true))) target = null;
+  if (target && (!hostileToRome(target) || !inZone(zone, u, target, true))) target = null;
   if ((game.time.totalTicks + u.id) % 6 === 0 || !target) {
     const pick = pickTarget(enemies, u, zone);
     if (pick !== target) {
@@ -1074,8 +1089,8 @@ function updateRaider(game, u, romans) {
     const ny = ty + dy;
     if (!map.inBounds(nx, ny)) continue;
     const j = map.idx(nx, ny);
-    if (map.building[j]) {
-      // Adjacent building: attack it right away.
+    if (map.building[j] && game.buildings.get(map.building[j])?.def.kind !== 'village') {
+      // Adjacent building: attack it right away (not a native village's: raiders pass those by).
       best = j;
       bestKind = 'building';
       break;
@@ -1157,14 +1172,19 @@ export function updateMilitary(game) {
   const enemies = [];
   const fleet = []; // liburnians
   const pirates = []; // raider ships
+  const villagers = []; // a native village's men (sim/natives.js)
   for (const u of game.units.values()) {
     u.px = u.x; // previous position: the renderer interpolates between ticks
     u.py = u.y;
     if (UNIT_TYPES[u.type].naval) (u.side === 'enemy' ? pirates : fleet).push(u);
+    else if (u.side === 'native') villagers.push(u);
     else (u.side === 'enemy' ? enemies : romans).push(u);
   }
+  // What Rome's soldiers and towers fight: raiders, Caesar's men, and
+  // villagers while they attack. Raiders and Caesar's men see only Rome's.
+  const foes = villagers.length ? [...enemies, ...villagers.filter(hostileToRome)] : enemies;
   // pressure = how many soldiers are on each raider (pickTarget spreads attacks)
-  for (const e of enemies) e.pressure = 0;
+  for (const e of foes) e.pressure = 0;
   for (const u of romans) {
     const t = u.target ? game.units.get(u.target) : null;
     if (t) t.pressure++;
@@ -1185,7 +1205,7 @@ export function updateMilitary(game) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
     if (u.away) marchOut(game, u);
-    else updateRoman(game, u, enemies);
+    else updateRoman(game, u, foes);
   }
   for (const u of enemies) {
     if (!game.units.has(u.id)) continue;
@@ -1193,8 +1213,13 @@ export function updateMilitary(game) {
     if (u.legion) updateLegionary(game, u, home);
     else updateRaider(game, u, home);
   }
+  for (const u of villagers) {
+    if (!game.units.has(u.id)) continue;
+    if (u.cooldown > 0) u.cooldown--;
+    updateVillager(game, u, home);
+  }
   if (fleet.length || pirates.length) updateNavy(game, fleet, pirates);
-  updateTowers(game, enemies.filter((e) => game.units.has(e.id)));
+  updateTowers(game, foes.filter((e) => game.units.has(e.id) && hostileToRome(e)));
   updateProjectiles(game);
 }
 

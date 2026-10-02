@@ -94,6 +94,16 @@ export const UNIT_TYPES = Object.freeze({
     trainedRam: 55, trainedSpeed: 0.135, trainedDefense: 3, strength: 4, trainedStrength: 6,
     desc: 'A light warship of the provincial fleet: two banks of oars, a bronze ram. Its marines shoot raider ships, and it rams those it reaches. Built at a Navalia from timber, iron and linen; berths at a Statio (Naval Station).',
   },
+  // --- Native villagers (sim/natives.js) -------------------------------------
+  // A village's men while it attacks (side 'native': Rome's soldiers, towers
+  // and prefects fight them only while `attacking`). The original's 40
+  // health and 6 attack, scaled to Colonia's units; they break buildings as
+  // raiders do (siege) but never Rome's walls.
+  villager: {
+    name: 'Villager', side: 'native', color: '#6f5a2e', hp: 30, attack: 8, defense: 1, range: 1.1, aggro: 3,
+    speed: 0.07, cooldown: 22, siege: 6,
+    desc: 'A man of a native village, angry at the city built on his people\'s land. He goes home when the attack is over, or a missionary calms his village.',
+  },
   raider_ship: {
     name: 'Raider Ship', side: 'enemy', color: '#3a2a1e', hp: 140, attack: 9, defense: 4, range: 5, aggro: 5,
     speed: 0.09, cooldown: 40, naval: true, ranged: true, crew: 8,

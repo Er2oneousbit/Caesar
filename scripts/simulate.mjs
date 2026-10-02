@@ -83,6 +83,10 @@ Options:
   --harbor [docks]  after 6 months, a Dock (or this many) and a warehouse by the water, every sea
                     route open; the warehouse gets 300 pottery, furniture and oil a month for
                     export (the demo city makes none). Reports ships' stays and trade a year
+  --natives         (sandbox) native villages on the map (sim/natives.js; Mutina and Luna always
+                    have them). Runs with villages report a Natives: line: attacks, villagers slain,
+                    buildings torn down, villages calmed and their trade (the demo city builds no
+                    mission post, so nothing calms them)
   --low-bridge      with --harbor, then a Pons Sublicius (Low Bridge) between the sea entry and the
                     docks, the first straight crossing that cuts one off: no ship gets past it
   --fishing <n>     also build a shipyard and n fishing wharves (and a granary by them); the
@@ -122,7 +126,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0, lowBridge: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0, lowBridge: false, natives: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -146,6 +150,7 @@ function parse(argv) {
     else if (a === '--villas') o.villas = Number(next());
     else if (a === '--wine') o.wine = true;
     else if (a === '--low-bridge') o.lowBridge = true;
+    else if (a === '--natives') o.natives = true;
     else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--sea-raids') o.seaRaids = next();
@@ -204,7 +209,7 @@ if (!DIFFICULTY[opts.difficulty]) { console.error(`Unknown difficulty ${opts.dif
 
 const scenario = opts.scenario
   ? withDifficulty(SCENARIOS.find((s) => s.id === opts.scenario), opts.difficulty)
-  : sandboxScenario({ size: opts.size, type: opts.type, seed: opts.seed, difficulty: opts.difficulty });
+  : { ...sandboxScenario({ size: opts.size, type: opts.type, seed: opts.seed, difficulty: opts.difficulty }), ...(opts.natives ? { natives: true } : {}) };
 if (!scenario) { console.error(`Unknown scenario ${opts.scenario}`); process.exit(2); }
 // (A city of several blocks gets as much again for each: --blocks, --villas.)
 const SIM_MONEY = 20000 * Math.max(1, opts.blocks + opts.villas);
@@ -444,6 +449,11 @@ if (opts.academy) {
   console.log(`Training: soldiers trained ${t.soldiersTrained} of ${t.soldiers} (${ms.soldiersTrained || 0} at the academy so far), crews trained ${t.shipsTrained} of ${t.ships} (${ms.crewsTrained || 0} at the Portus so far)`);
 }
 const cr = c.crime.total;
+const nat = c.natives; // (native villages: sim/natives.js)
+if (nat) {
+  const pieces = [...game.buildings.values()].filter((b) => b.def.kind === 'village');
+  console.log(`Natives: ${pieces.filter((b) => b.type === 'native_meeting').length} villages (${pieces.filter((b) => b.type === 'native_hut').length} huts); attacks ${nat.attacks}, villagers slain ${nat.slain}, buildings torn down ${nat.buildingsLost}; villages calmed ${nat.calmed}; trade ${nat.trades} visits, ${nat.earned} Dn`);
+}
 console.log(`Crime: protesters ${cr.protesters}, thieves ${cr.thieves} (${cr.caught} criminals caught), thefts ${cr.thefts}, stolen ${cr.stolen} Dn and ${cr.looted} goods, riots ${cr.riots}, burned by rioters ${cr.riotBurned}; lowest home mood ${lowestMood(game)}`);
 const hs = c.health.total;
 const health = { cityHealth: c.health.value, target: c.health.target, outbreaks: hs.outbreaks, spread: hs.spread, deaths: hs.deaths, cured: hs.cured, recovered: hs.recovered, sickHomes: sickHomes(game).length, peakRisk: peakRisk(game) };

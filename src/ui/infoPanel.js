@@ -41,6 +41,7 @@ import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
 import { ruinAt } from '../sim/ruins.js';
 import { rebuildPlan } from '../sim/construction.js';
 import { cutOffNote } from '../sim/bridges.js';
+import { villageStatus, villageRows, missionRows } from '../sim/natives.js';
 import { lacksRoad } from '../sim/roadAccess.js';
 import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
@@ -101,6 +102,7 @@ const RUIN_WORDS = {
   legionFire: 'burned by Caesar\'s legions',
   legion: 'torn down by Caesar\'s legions',
   legionWall: 'broken down by Caesar\'s legions',
+  natives: 'torn down by angry villagers',
 };
 
 /**
@@ -150,6 +152,7 @@ export function buildingStatus(game, b) {
   if (def.workers && b.laborAccess <= 0) return { level: 'bad', text: `Cannot find workers: no occupied housing within ${CONFIG.LABOR_RANGE} tiles along the roads.` };
   if (def.workers && b.efficiency <= 0) return { level: 'bad', text: 'No workers available. The city needs more people, or change labor priorities.' };
   if (def.needsPiped && !b.hasWater) return { level: 'bad', text: 'No piped water. It must sit inside a full reservoir\'s area.' };
+  if (def.kind === 'village') return villageStatus(game, b); // (no road, no staff: sim/natives.js)
   const cut = cutOffNote(game, b); // (a low bridge between it and the sea, or its fishing grounds)
   if (cut) return { level: def.kind === 'dock' || def.kind === 'wharf' ? 'bad' : 'warn', text: cut };
   switch (def.kind) {
@@ -266,9 +269,10 @@ export function soldierDoing(u, fort = null) {
     case 'fight': return 'Fighting';
     case 'drill': return 'On his way to train at the Campus';
     case 'away': return 'Away at a distant battle';
-    case 'advance': return 'Advancing on the city';
+    case 'advance': return u.side === 'native' ? 'Attacking a building on his village\'s land' : 'Advancing on the city';
     case 'camp': return 'Camped outside the city';
     case 'siege': return 'Attacking buildings';
+    case 'home': return 'Going home to his village';
     case 'halt': return 'Halted, waiting on the word from Rome';
     case 'flee': return 'Fleeing';
     default: return u.state ? u.state[0].toUpperCase() + u.state.slice(1) : 'Standing by';
@@ -581,6 +585,8 @@ export class InfoPanel {
         kv('Labor category', LABOR_CATEGORIES[def.labor] || 'Industry')));
     }
     const sec = (title, ...kids) => h('div', { class: 'panel-sec' }, h('h5', {}, title), kids);
+    if (def.kind === 'village') parts.push(sec('Native village', villageRows(g, b).map(([k, v]) => kv(k, v)), h('div', { class: 'muted' }, def.desc)));
+    if (b.type === 'mission_post') parts.push(sec('Native villages', missionRows(g).map(([k, v]) => kv(k, v)), h('div', { class: 'muted' }, def.desc)));
     switch (def.kind) {
       case 'farm':
         if (b.herd !== undefined) {
@@ -883,7 +889,7 @@ export class InfoPanel {
     const ours = u.side === 'rome';
     const fort = ours ? g.buildings.get(u.fort) : null;
     mount(this.el,
-      this.head(def.name, ours ? 'Your army' : u.type === 'imperial' ? 'Caesar\'s legion' : 'Enemy'),
+      this.head(def.name, ours ? 'Your army' : u.type === 'imperial' ? 'Caesar\'s legion' : u.side === 'native' ? (u.attacking ? 'Angry villager' : 'Villager') : 'Enemy'),
       h('div', { class: 'muted' }, def.desc),
       kv('Health', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
       kv('Doing', soldierDoing(u, fort)),

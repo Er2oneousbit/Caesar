@@ -36,6 +36,7 @@ export function cyclable(b) {
 /** Is building `b` idle (see the header)? */
 export function isIdle(game, b) {
   if (!cyclable(b)) return false;
+  if (b.def.kind === 'village') return false; // a native village is not the city's to run (sim/natives.js)
   const s = buildingStatus(game, b);
   return s.level === 'bad' || (s.level === 'warn' && !s.understaffed);
 }

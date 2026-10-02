@@ -28,6 +28,7 @@ import { drawTurned, drawTurnedOver, withOrigin, turnUV, unit, decal, TS } from 
 import { shipyardArt, wharfArt } from './waterArt.js';
 import { navaliaArt, stationArt, portusArt } from './navyArt.js';
 import { hippodromeArt, chariotMakerArt } from './hippodromeArt.js';
+import { nativeHutArt, nativeMeetingArt, nativeCropsArt, missionPostArt } from './nativeArt.js';
 
 const TH = CONFIG.TILE_H;
 
@@ -68,6 +69,7 @@ const HEIGHT = {
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
   shipyard: 36, wharf: 30, hippodrome: 46, hippodrome_part: 46, chariot_maker: 34, navalia: 42, naval_station: 58,
   portus: 40, military_academy: 48,
+  native_hut: 34, native_meeting: 34, native_crops: 18, mission_post: 44,
 };
 
 /**
@@ -82,6 +84,7 @@ const SHADOW = {
   warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
   prefecture: 0.45, shipyard: 0.3, wharf: 0.25, hippodrome: 0.35, hippodrome_part: 0.35, chariot_maker: 0.45,
   navalia: 0.4, naval_station: 0.55, portus: 0.3, military_academy: 0.5, governor_house: 0.55, governor_villa: 0.75, governor_palace: 1.0,
+  native_crops: 0.05, native_hut: 0.5, native_meeting: 0.4,
 };
 /** Shadow length per house level (tents are low, insulae tall, villas wide but low, palaces tall). */
 const HOUSE_SHADOW = [0, 0.18, 0.2, 0.22, 0.26, 0.3, 0.34, 0.45, 0.5, 0.5, 0.65, 0.95, 1.1, 0.5, 0.55, 0.55, 0.6, 0.65, 0.7, 0.85, 0.9];
@@ -109,7 +112,7 @@ function heightFor(key, size) {
  * symmetric): drawn as written whatever their turn, which spares them the
  * recorder and keeps arches drawn on their two front faces in front.
  */
-export const SAME_EVERY_WAY = new Set(['well', 'fountain', 'reservoir', 'amphitheater', 'colosseum', 'oracle', 'statue_small']);
+export const SAME_EVERY_WAY = new Set(['well', 'fountain', 'reservoir', 'amphitheater', 'colosseum', 'oracle', 'statue_small', 'native_hut']);
 
 /**
  * Sprite spec for a building.
@@ -2890,6 +2893,10 @@ const ART = {
   chariot_maker: chariotMakerArt,
   linen_ws: linenMakerArt,
   clothing_ws: clothingMakerArt,
+  native_hut: nativeHutArt,
+  native_meeting: nativeMeetingArt,
+  native_crops: nativeCropsArt,
+  mission_post: missionPostArt,
 };
 
 /**

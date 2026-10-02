@@ -43,7 +43,7 @@
 import { CONFIG } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { killWalker } from './entities.js';
-import { hurt, rollDamage, enemyPower, unitDefense, moveUnitToward, passable } from './military.js';
+import { hurt, rollDamage, enemyPower, unitDefense, moveUnitToward, passable, hostileToRome } from './military.js';
 
 /** Ticks an enemy who cannot get at a prefect, and that prefect, leave each other alone. */
 const IGNORE_TICKS = 200;
@@ -127,7 +127,7 @@ function endFight(p) {
  */
 export function updatePrefectFights(game) {
   const enemies = [];
-  for (const u of game.units.values()) if (u.side === 'enemy' && !UNIT_TYPES[u.type].naval) enemies.push(u);
+  for (const u of game.units.values()) if (hostileToRome(u) && !UNIT_TYPES[u.type].naval) enemies.push(u);
   for (const p of game.walkers.values()) {
     if (p.dead || p.type !== 'prefect') continue;
     if (!enemies.length || !onRounds(p)) { if (p.fight) endFight(p); continue; }

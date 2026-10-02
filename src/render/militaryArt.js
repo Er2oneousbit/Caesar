@@ -147,6 +147,7 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
   const phase = u.moving ? Math.sin(stride * (def.mounted ? HOOF_RAD : STEP_RAD) + u.id) : 0;
   const striking = tick - u.strikeTick < 8;
   const enemy = def.side === 'enemy';
+  const native = def.side === 'native'; // a native village's man (sim/natives.js): hair, no helmet, a spear
 
   if (highlight) {
     ctx.strokeStyle = 'rgba(255,230,120,0.9)';
@@ -155,8 +156,9 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
     ctx.ellipse(sx, sy, 7 * k, 3 * k, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
-  // shadow (tinted red under raiders so they read as hostile at a glance)
-  ctx.fillStyle = enemy ? 'rgba(120,0,0,0.35)' : 'rgba(0,0,0,0.25)';
+  // shadow (tinted red under raiders so they read as hostile at a glance;
+  // orange under a villager while his village attacks)
+  ctx.fillStyle = enemy ? 'rgba(120,0,0,0.35)' : native && u.attacking ? 'rgba(150,80,0,0.35)' : 'rgba(0,0,0,0.25)';
   ctx.beginPath();
   ctx.ellipse(sx, sy, 4.5 * k, 1.9 * k, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -216,7 +218,7 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
   ctx.beginPath();
   ctx.arc(sx, hy, 2.4 * k, 0, Math.PI * 2);
   ctx.fill();
-  if (enemy && !imperial) {
+  if ((enemy && !imperial) || native) {
     // wild hair and a beard
     ctx.fillStyle = BARB_HAIR[u.id % BARB_HAIR.length];
     ctx.beginPath();
@@ -309,6 +311,18 @@ function drawWeapon(ctx, u, def, sx, top, k, face, striking, t) {
         ctx.fillStyle = '#7a5a3a'; // round shield on the far side
         ctx.beginPath(); ctx.arc(sx - face * 2.8 * k, top + 3 * k, 2.6 * k, 0, Math.PI * 2); ctx.fill();
       }
+      break;
+    }
+    case 'villager': {
+      // a hunting spear, thrust when striking
+      ctx.strokeStyle = '#6b4a2a';
+      ctx.lineWidth = 0.9 * k;
+      ctx.beginPath();
+      if (striking) { ctx.moveTo(sx - face * 3 * k, hy + 1 * k); ctx.lineTo(sx + face * 9 * k, hy); } else { ctx.moveTo(hx, hy + 4 * k); ctx.lineTo(hx + face * 1.5 * k, hy - 10 * k); }
+      ctx.stroke();
+      ctx.fillStyle = '#9aa1aa';
+      if (striking) ctx.fillRect(sx + face * 9 * k - 1 * k, hy - 1 * k, 2 * k, 2 * k);
+      else ctx.fillRect(hx + face * 1.5 * k - 0.8 * k, hy - 12 * k, 1.6 * k, 2.4 * k);
       break;
     }
     case 'raider': {

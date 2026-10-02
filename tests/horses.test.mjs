@@ -34,12 +34,12 @@ import { addBuilding, spawnWalker } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { updateProducer } from '../src/sim/production.js';
 import { updateDemand } from '../src/sim/military.js';
-import { storageAccepts, receiveGoods, findDeliveryTarget, cityStock } from '../src/sim/storage.js';
-import { updateStorage, orderGoods } from '../src/sim/storageOrders.js';
-import { setTradeMode, shipArrive, updateDock, shipManifest, tradeAt, importBlockedText } from '../src/sim/trade.js';
-import { fulfillRequest } from '../src/sim/emperor.js';
+import { storageAccepts, receiveGoods, findDeliveryTarget, cityStock, storageSpaceFor } from '../src/sim/storage.js';
+import { updateStorage, orderGoods, collectArrive } from '../src/sim/storageOrders.js';
+import { setTradeMode, shipArrive, updateDock, shipManifest, tradeAt, importBlockedText, importWarnings, keptImportRoom } from '../src/sim/trade.js';
+import { fulfillRequest, updateEmperor, keptCap, describeRequest } from '../src/sim/emperor.js';
 import { productionReport } from '../src/ui/production.js';
-import { buildingStatus } from '../src/ui/infoPanel.js';
+import { buildingStatus, importsPilingText } from '../src/ui/infoPanel.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -281,7 +281,7 @@ test('save: a real version 16 save with horses in a warehouse moves them to the 
   assert.equal(wh.stock.horses, 300, 'what it had no room for stays at the warehouse');
   assert.deepEqual(ranch.incoming, { horses: 0 });
   assert.equal('horses' in wh.orders, false, 'no order for horses any more');
-  assert.equal('horses' in wh.incoming, false);
+  assert.equal(wh.incoming.horses, 0, 'its incoming keeps a horses entry for the old carts');
   assert.equal([...game.buildings.values()].reduce((n, b) => n + (b.stock?.horses || 0), 0), before, 'no horse lost');
   // Room at the ranch (horses gone to the cavalry): the warehouse sends the rest there.
   ranch.stock.horses = 0;
@@ -294,4 +294,116 @@ test('save: a real version 16 save with horses in a warehouse moves them to the 
   // And a save made now loads as it was (no upgrade again).
   const again = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
   assert.equal(again.buildings.get(ranch.id).stock.horses, ranch.stock.horses);
+});
+
+// ---------------------------------------------------------------------------
+// Found in review
+// ---------------------------------------------------------------------------
+
+test('review: a sea import in several lots all lands at a far, empty ranch (a dock worker on his way is not counted twice)', () => {
+  const { game, place, dock, moor, run } = harbor();
+  const ranch = place(30, 'horse_ranch');
+  setTradeMode(game, 'horses', 'import', 800);
+  const ship = moor();
+  assert.equal(ship.unload.horses, 600, "Cirta's year: 600");
+  // While a lot is on its way, the room it goes to is held at the ranch, not taken twice.
+  let seen = false;
+  for (let t = 0; t < 40 * TPD && ship.state === 'docked'; t++) {
+    game.time.advance();
+    updateWalkers(game);
+    if (game.time.tick === dock.phase && ship.state === 'docked') updateDock(game, dock);
+    if (ranch.incoming.horses > 0 && !seen) {
+      seen = true;
+      assert.equal(keptImportRoom(game, 'horses', 0, false), STABLE_CAPACITY - ranch.stock.horses - ranch.incoming.horses - dock.stock.horses);
+      assert.deepEqual(importWarnings(game), [], 'the advisor does not call an empty ranch full');
+    }
+  }
+  run(ship);
+  assert.ok(seen, 'a dock worker carried horses to the ranch');
+  assert.equal(ship.deal.bought.horses, 600, 'every lot landed');
+  assert.equal(ranch.stock.horses, 600, 'and reached the ranch');
+});
+
+test('review: an older save keeps its warehouse horse entries for carts still on the road', () => {
+  const raw = JSON.parse(readFileSync(path.join(ROOT, 'tests/fixtures/save-v16-horses-in-warehouse.json'), 'utf8'));
+  const rawWh = raw.buildings.find((b) => b.type === 'warehouse' && b.stock.horses > 0);
+  rawWh.stock.horses = 400; // all of it fits at the ranch: the warehouse is left with none
+  const game = deserializeGame(raw);
+  const wh = game.buildings.get(rawWh.id);
+  assert.equal(wh.stock.horses, 0, 'moved to the ranch');
+  // A cart of the old save coming home with horses puts them back, none lost.
+  assert.equal(receiveGoods(wh, 'horses', 100, true), 100);
+  assert.equal(wh.stock.horses, 100);
+  // A Get cart of the old save fetching horses from another warehouse shrinks no hold to NaN.
+  const src = addBuilding(game, 'warehouse', 2, 2);
+  src.stock.horses = 100;
+  const cart = spawnWalker(game, 'cart', wh.accessRoad, wh, { target: src.id, want: 'horses', state: 'collect', reserve: { id: wh.id, good: 'horses', amount: 100 } });
+  wh.incoming.horses += 100;
+  collectArrive(game, cart);
+  for (const [g, n] of Object.entries(wh.incoming)) assert.ok(Number.isFinite(n), `incoming ${g} is ${n}`);
+  wh.efficiency = 1;
+  assert.ok(storageSpaceFor(wh, 'wine') > 0, 'the warehouse still takes deliveries');
+});
+
+test('review: the Emperor asks for horses only while a ranch stands, in whole horses its stables can hold', () => {
+  const ask = (game, n = 400) => {
+    const asked = [];
+    game.city.population = 6000;
+    for (let i = 0; i < n; i++) {
+      game.city.request = null;
+      game.city.nextRequestMonth = 0;
+      updateEmperor(game);
+      if (game.city.request?.kind === 'goods') asked.push(game.city.request);
+    }
+    return asked.filter((r) => r.good === 'horses');
+  };
+  const { game, place } = strip();
+  game.difficulty = { ...game.difficulty, requestSize: 1.5 }; // Insane's larger requests
+  assert.equal(ask(game).length, 0, 'no ranch: never horses');
+  place(12, 'horse_ranch');
+  const horses = ask(game);
+  assert.ok(horses.length > 0, 'with a ranch, horses are asked for');
+  for (const r of horses) {
+    assert.equal(r.amount % 100, 0, `whole horses (${r.amount})`);
+    assert.ok(r.amount >= 100 && r.amount <= STABLE_CAPACITY, `no more than one ranch holds (${r.amount})`);
+  }
+  assert.equal(keptCap(game, 'horses', 350), 400, 'rounded to whole horses');
+  assert.equal(keptCap(game, 'horses', 2400), STABLE_CAPACITY, 'one ranch: 8 horses at most');
+  assert.equal(keptCap(game, 'wine', 350), 350, 'other goods unchanged');
+  assert.equal(describeRequest({ kind: 'goods', good: 'horses', amount: 400 }), '4 horses');
+});
+
+test('review: horses a groom brings home past the cap go on to another ranch with room, none lost', () => {
+  const { game, place } = strip();
+  const ranch = place(12, 'horse_ranch');
+  const other = place(30, 'horse_ranch');
+  ranch.stock.horses = STABLE_CAPACITY;
+  assert.equal(receiveGoods(ranch, 'horses', 300, true), 300, 'its own groom is always let in');
+  for (let d = 0; d < 30; d++) { updateDemand(game); updateProducer(game, ranch); walk(game, 1); }
+  walk(game, 10);
+  assert.equal(ranch.stock.horses, STABLE_CAPACITY, 'back to a full stable');
+  assert.equal(other.stock.horses, 300, 'the rest went to the other ranch');
+});
+
+test('review: the Trade advisor warns about horses only while they are on Import from an open route', () => {
+  const { game } = strip();
+  game.city.trade.routes.cirta.open = false;
+  setTradeMode(game, 'horses', 'none');
+  assert.deepEqual(importWarnings(game), []);
+  setTradeMode(game, 'horses', 'import', 800);
+  assert.deepEqual(importWarnings(game), [], 'no open route sells them');
+  game.city.trade.routes.cirta.open = true;
+  assert.equal(importWarnings(game).length, 1);
+  assert.match(importWarnings(game)[0], /cannot be imported/);
+  setTradeMode(game, 'horses', 'none');
+  assert.deepEqual(importWarnings(game), [], 'not on Import: nothing to say');
+});
+
+test('review: a Dock with horses stuck on its quay says where horses go', () => {
+  const { place } = strip();
+  const dock = place(0, 'dock');
+  dock.stock.wine = 400;
+  assert.doesNotMatch(importsPilingText(dock), /Equaria/);
+  dock.stock.horses = 200;
+  assert.match(importsPilingText(dock), /Equaria \(Horse Ranch\) with room or a Tirocinium/);
 });

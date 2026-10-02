@@ -197,8 +197,8 @@ export class DebugConsole {
           b.stock[good] += put;
           left -= put;
         }
-        const where = kept ? `${BUILDINGS[GOODS[good].keptAt].name} with room` : 'granary/warehouse';
-        return left > 0 ? `Stored ${n - left}; no room for ${left} (build a ${where}).` : `Stored ${n} ${good}.`;
+        const where = kept ? `an ${BUILDINGS[GOODS[good].keptAt].name} with room` : 'a granary/warehouse';
+        return left > 0 ? `Stored ${n - left}; no room for ${left} (build ${where}).` : `Stored ${n} ${good}.`;
       }
       case 'fire':
       case 'collapse': {

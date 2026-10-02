@@ -310,7 +310,8 @@ export function collectArrive(game, w) {
     got = want > 0 ? takeGoods(src, good, want) : 0;
   }
   if (got > 0) {
-    if (home && home.incoming) home.incoming[good] = Math.max(0, home.incoming[good] - (w.reserve.amount - got));
+    // (A good its home holds no room for, such as horses on a cart from an older save, has nothing to shrink.)
+    if (home && home.incoming && home.incoming[good] !== undefined) home.incoming[good] = Math.max(0, home.incoming[good] - (w.reserve.amount - got));
     w.reserve.amount = got;
     w.cargo = { good, amount: got };
   } else {

@@ -172,15 +172,26 @@ export function stablesFull(b) {
  * worth at most) straight to a Tirocinium with room, never anywhere else
  * (findDeliveryTarget: no warehouse, no other ranch). Two grooms out at most.
  * `noStorage`: the forts need horses but no barracks with room is reachable.
+ *
+ * A groom whose barracks would not take his horses brings them home, and
+ * home takes them all, even past STABLE_CAPACITY (the ranch foaled into the
+ * room they left meanwhile): no horse is ever lost. The excess then goes,
+ * a horse a day, to another staffed ranch with room; with none it stays
+ * here until a barracks needs it.
  */
 function shipHorses(game, b) {
   b.noStorage = false;
   const lot = CONFIG.CART_CAPACITY;
   if (b.stock.horses < lot || cartsOut(game, b) >= 2) return;
   const need = militaryNeed(game, 'horses');
-  if (need <= 0) return;
-  const amount = Math.min(CONFIG.FARM_CART_LOAD, Math.floor(b.stock.horses / lot) * lot, Math.ceil(need / lot) * lot);
-  dispatchCart(game, b, 'horses', amount, true);
+  if (need > 0) {
+    const amount = Math.min(CONFIG.FARM_CART_LOAD, Math.floor(b.stock.horses / lot) * lot, Math.ceil(need / lot) * lot);
+    if (dispatchCart(game, b, 'horses', amount, true)) return;
+  }
+  if (b.stock.horses - STABLE_CAPACITY < lot || b.accessRoad < 0) return;
+  const { buildings, pf } = game;
+  const found = pf.findNearest(b.accessRoad, (id) => stableTakes(buildings.get(id), 'horses', lot), 120, b.id);
+  if (found) sendSupplyCart(game, b, buildings.get(found.id), 'horses', found.path);
 }
 
 /** Horse Ranch: a staffed ranch gains a breeding mare every HERD_GROWTH_DAYS (of growing season). */
@@ -291,7 +302,7 @@ export function updateWarehouseSupply(game, b) {
   }
 }
 
-/** Load one cart (CART_CAPACITY units) from a warehouse and send it to `dest`. */
+/** Load one cart (CART_CAPACITY units) from a warehouse (or a ranch's excess horses) and send it to `dest`. */
 function sendSupplyCart(game, b, dest, good, path) {
   const amount = takeGoods(b, good, CONFIG.CART_CAPACITY);
   if (amount <= 0) return false;

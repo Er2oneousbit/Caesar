@@ -111,6 +111,15 @@ export function ruinText(rec) {
   return `Ruins of ${withArticle(rec.what)}, ${RUIN_WORDS[rec.cause] || 'fallen'} in ${MONTH_SHORT[rec.month]} ${formatYear(rec.year)}.`;
 }
 
+/**
+ * A Dock's quay filling with imports no cart can take. Horses never go to
+ * storage, so with horses on the quay it names where they do go.
+ */
+export function importsPilingText(dock) {
+  const horses = (dock.stock.horses || 0) > 0 ? ' Horses go only to an Equaria (Horse Ranch) with room or a Tirocinium that needs them.' : '';
+  return `Imports are piling up: no warehouse, granary or workshop with room is reachable by road.${horses}`;
+}
+
 /** Status line for any non-house building. */
 export function buildingStatus(game, b) {
   const def = b.def;
@@ -170,7 +179,7 @@ export function buildingStatus(game, b) {
     case 'dock':
       if (!game.map.seaEntry) return { level: 'bad', text: 'No river or sea here reaches the map edge: ships cannot come.' };
       if (dockBerth(game, b) < 0) return { level: 'bad', text: 'Not beside water that ships can sail.' };
-      if (b.noStorage && dockUsed(b) > 0) return { level: 'warn', text: 'Imports are piling up: no warehouse, granary or workshop with room is reachable by road.' };
+      if (b.noStorage && dockUsed(b) > 0) return { level: 'warn', text: importsPilingText(b) };
       if (dockHint(game, b)) return { level: 'warn', text: dockHint(game, b) };
       break;
     case 'fort': {

@@ -153,6 +153,8 @@ export function receiveGoods(b, good, amount, home = false) {
   }
   if (!home && isStable(b, good)) {
     // Horses delivered to a ranch (imports): as many as its stables hold.
+    // Its own groom coming home (`home`) is let in with them all, past the
+    // cap if need be, so none is lost; production.js shipHorses moves the excess on.
     const n = Math.min(Math.max(0, STABLE_CAPACITY - b.stock[good]), amount);
     b.stock[good] += n;
     return n;

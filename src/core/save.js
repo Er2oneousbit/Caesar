@@ -129,7 +129,9 @@
  *      caught on a trip to the academy comes straight home (updateRoman).
  *  20  horses live at the Horse Ranch, never in a warehouse (data/goods.js
  *      keptAt): a ranch has `incoming` (horses on their way to its stables),
- *      and a warehouse's stock, incoming and orders have no horses. An older
+ *      and a new warehouse's stock, incoming and orders have no horses (an
+ *      upgraded one keeps a horses entry in stock and incoming, for the old
+ *      save's carts still on the road, but no order). An older
  *      save's warehouse horses move to ranches with room, in id order (the
  *      roads are not built yet while a save loads); what no ranch has room for
  *      stays at its warehouse, which sends it to a barracks that needs it or
@@ -711,7 +713,8 @@ export function upgradeWarningsV14(game) {
  * ranch gets its `incoming` (nothing on the way), and the horses in
  * warehouses move to ranches with room, the lowest ids first. What no ranch
  * has room for stays at its warehouse as a last resort, with no order for it
- * (warehouses never take horses in again); that warehouse's supply cart takes
+ * (warehouses never take horses in again: storageAccepts, orderGoods; its
+ * stock and incoming keep a horses entry for the old save's carts); that warehouse's supply cart takes
  * it on to a barracks that needs horses or a ranch with room (sim/production.js
  * updateWarehouseSupply). A cart on its way to a warehouse with horses finds
  * it refusing them and goes on to a barracks or ranch, or home.
@@ -730,15 +733,19 @@ export function upgradeHorsesV19(game) {
   for (const wh of game.buildings.values()) {
     if (wh.def.kind !== 'warehouse') continue;
     if (wh.orders) delete wh.orders.horses;
-    if (wh.incoming) delete wh.incoming.horses;
+    // The stock and incoming keys stay (at 0 once empty): carts of the old
+    // save still on the road use them, a returning one to put its horses
+    // back (receiveGoods needs the key) and a Get cart to shrink its hold.
+    // Nothing new comes in: storageAccepts refuses horses everywhere.
+    wh.stock.horses ??= 0;
+    if (wh.incoming) wh.incoming.horses ??= 0;
     for (const r of ranches) {
-      const n = Math.min(wh.stock.horses || 0, stableRoom(r));
+      const n = Math.min(wh.stock.horses, stableRoom(r));
       if (n <= 0) continue;
       r.stock.horses += n;
       wh.stock.horses -= n;
       moved += n;
     }
-    if (!(wh.stock.horses > 0)) delete wh.stock.horses;
   }
   return moved;
 }

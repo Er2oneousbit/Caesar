@@ -448,8 +448,11 @@ export function importsComing(game, good, exceptShip = 0, ships = true) {
 /**
  * How much more of a good kept at its own building (horses) can come in by
  * sea: room in the staffed ranches' stables plus what the barracks still
- * need, less what already waits on a quay or is on its way in (other moored
- * ships' cargo too, unless `ships` is false). 0 with no ranch at all.
+ * need, less what already waits on a quay, a dock worker's load with no place
+ * held for it (one carrying it back to the quay), and other moored ships'
+ * cargo (unless `ships` is false). A dock worker delivering horses is not
+ * taken off again: the room he goes to is already held for him (the ranch's
+ * `incoming`, or the barracks' in militaryNeed). 0 with no ranch at all.
  */
 export function keptImportRoom(game, good, exceptShip = 0, ships = true) {
   const stables = stablesOf(game, good);
@@ -457,7 +460,27 @@ export function keptImportRoom(game, good, exceptShip = 0, ships = true) {
   let room = BUILDINGS.barracks.inputs.includes(good) ? militaryNeed(game, good) : 0;
   for (const b of stables) if (b.efficiency > 0) room += stableRoom(b);
   for (const b of game.buildings.values()) if (b.def.kind === 'dock') room -= b.stock[good] || 0;
-  return Math.max(0, room - importsComing(game, good, exceptShip, ships));
+  for (const w of game.walkers.values()) {
+    if (w.dead) continue;
+    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) room -= w.unload?.[good] || 0;
+    else if (w.type === 'cart' && !w.claim && !w.reserve && w.cargo?.good === good && game.buildings.get(w.origin)?.def.kind === 'dock') room -= w.cargo.amount;
+  }
+  return Math.max(0, room);
+}
+
+/**
+ * The Trade advisor's warnings: for each good set to Import that an open
+ * route sells but that cannot come in now (importBlockedText), its reason.
+ * Nothing for a good not on Import: a player who does not buy horses need
+ * not be told to build a ranch for them.
+ */
+export function importWarnings(game) {
+  const { routes, settings } = game.city.trade;
+  const open = Object.keys(routes).filter((id) => routes[id].open && TRADE_PARTNERS[id]);
+  return GOOD_KEYS
+    .filter((g) => settings[g]?.mode === 'import' && open.some((id) => TRADE_PARTNERS[id].sells[g]))
+    .map((g) => importBlockedText(game, g))
+    .filter(Boolean);
 }
 
 /**

@@ -8,12 +8,10 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Campaign branches and more tiers** (parity #13): a peaceful and a military province at each step (steps 3, 4 and 5 came in v0.15.0). Done, not yet released:
-   * Steps 6 and 7: Cosa (peaceful) beside Oasis Aurea and Copia (peaceful) beside Urbs Magna, which are now the military track.
-   * Three more tiers, each with two paths: Mutina and Luna (step 8, Praetor), Corduba and Carteia (step 9, Consul), Narbo Martius and Puteoli (step 10, Proconsul). One rank a step, and a win at step 10 makes the governor Caesar, the eleventh rank, and ends the career.
-   * Step 10 on maps of 256 and 224 tiles whose fields, woods and hills gather in regions far apart (the map generator's `regions` option), so a city of 10,000 or 12,000 grows several districts; new threatened cities Italica, Aquae Sextiae and Vercellae.
-   Each mission's population goal is 85 to 90% of what a sensibly built city of its buildings employs at 10% unemployment (`src/sim/capacity.js`, `npm run sim -- --capacity`), its map houses and feeds that many, and its `paceYears` comes from `npm run sim -- --pace`; `tests/campaign.test.mjs` holds every mission to it. Still open, after a playtest of the late steps: see "The late missions need more jobs" below.
+1. **Trade by partner**: per-partner switches for each good a partner buys or sells (on its route card), under the good's Import/Export setting and level, all on by default. Many goods have several buyers or sellers (pottery five buyers, wine five buyers and three sellers), and since prices vary by distance the player chooses whom to sell to and buy from.
 2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
+
+3. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
@@ -444,17 +442,16 @@ Fixes from a review of v0.6:
 
 ## Caesar III parity: what the original had that Colonia does not (yet)
 
-Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0), #24 staged raid warnings and the legions' reminders (v0.15.7).
+Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0), #24 staged raid warnings and the legions' reminders (v0.15.7), #13 campaign branches, a peaceful and a military province at every step from 3 to 10 (v0.15.0 and v0.17.0).
 
 * **#7** **Map rotation** (view the city from 4 angles).
 * **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
 * **#9** **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
-* **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
 * **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
-* **Strike the raiders' base** (Colonia's own; the Romans' punitive campaigns against the Ligurians and Gauls are the model): once a raiding people has been scouted or beaten off a time or two, its camp appears on the empire map, and forts with Empire service can be sent against it like a distant battle. Months on the march there and back leave the city short of defenders. It needs a large army (the camp grows with every raid it has sent: something like two to three times its last warband), trained men counting more; liburnians could strike a sea raiders' base. A win stops that people's raids for a few years, lifts peace and brings some plunder; a defeat loses the men and brings the next raid sooner and bigger. Details to settle before building.
 * **#21** **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
 * **#22** **Hall of Fame** for the best career scores.
+* **#25** **Two kinds of bridge**: the original had a low bridge that ships cannot pass and a high ship bridge; Colonia has one, which every ship passes under.
 * **#23** **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.
 
 ## Modernization: from the community engines
@@ -483,7 +480,8 @@ Seeing why:
 * **Walker traffic heat map**: where walkers actually go, which shows where roadblocks belong.
 * **Year in review** and a **city chronicle**: a yearly report card with charts, and an auto-written history of the city ("297 BC: the great fire of the east quarter took 14 homes").
 
-* **The late missions need more jobs** to ask for more people again. Missions 3 to 7 asked for 3,500 to 12,000 people, but `npm run sim -- --capacity` showed their buildings could employ only about 980 to 6,060 at 10% unemployment, so they could not be won (a Pons Aelius playtest met every goal but its 5,000 people); since v0.16.2 they ask for a little under it (950, 2,700, 4,600, 3,500, 5,800), as the branch missions do. Done since (not yet released): the capacity model counts a few villas where the Villa can be reached (5% of the people: what the demo city's villas held in play, `npm run sim -- --wine --blocks`), food by each kind the homes eat, docks by ship traffic and the hippodrome; trade has the original's quota tiers per mission (`demand`), scheduled demand changes (`demandChanges`), busy routes that send their traders more often, and three partners for the later steps (Gades, Rhodus, Delos). The ceilings of missions 4 to 7 rose to 3,460 to 7,900; a late province with every building and most of the twelve partners, or the original's demand tiers, reaches about 11,000 to 13,600, so steps 8 to 10 can ask for 10,000 people. The late provinces' goals now come from the model and `--pace` (steps 6 to 10, not yet released). Still to do, after their playtest: whether missions 3 to 7 ask for more again (inside their new ceilings), whether big cities need more settlers (a 10,000 goal takes 12.6 years at the fastest, 12,000 take 15.4), and, only if play shows idle hands the model does not, slower workshops (the original's pace).
+* **Strike the raiders' base** (Colonia's own; the Romans' punitive campaigns against the Ligurians and Gauls are the model): once a raiding people has been scouted or beaten off a time or two, its camp appears on the empire map, and forts with Empire service can be sent against it like a distant battle. Months on the march there and back leave the city short of defenders. It needs a large army (the camp grows with every raid it has sent: something like two to three times its last warband), trained men counting more; liburnians could strike a sea raiders' base. A win stops that people's raids for a few years, lifts peace and brings some plunder; a defeat loses the men and brings the next raid sooner and bigger. Details to settle before building.
+* **The late missions need more jobs**, what is left of it (the jobs groundwork came in v0.16.5, the late provinces in v0.17.0, every goal fitted to its jobs): after a playtest of the late steps, whether missions 3 to 7 ask for more people again (inside their new ceilings, 3,460 to 7,900), whether big cities need more settlers (a 10,000 goal takes 12.6 years at the fastest, 12,000 take 15.4), whether raids should grow past their cap of 40 raiders for the largest provinces, and, only if play shows idle hands the capacity model does not, slower workshops (the original's pace).
 
 From playtesting (still to decide which to take):
 
@@ -558,7 +556,7 @@ Ideas that would change the original's economy or rules; each would come as an o
 * **Crime, disease and events**: on at every difficulty, as they always were in the original, and gentler on Easy.
 * **Localization**: not planned.
 * **Caesar's anger** (items 1, #1): as in the original, favor at 0 no longer recalls the governor. At favor 10 or less Caesar warns and sends his legions after 12 months (shown marching on the empire map); recovering favor sends them home, and the mission is lost only if they overrun the city.
-* **Gifts and rank** (item 2, #6): the governor draws a salary by rank into personal savings, carried from mission to mission; gifts to Caesar come from those savings, as in the original. One rank per mission for now (Citizen in mission 1); the top ranks come with the longer campaign.
+* **Gifts and rank** (item 2, #6): the governor draws a salary by rank into personal savings, carried from mission to mission; gifts to Caesar come from those savings, as in the original. One rank a step, Citizen at step 1 to Proconsul at step 10; winning step 10 makes the governor Caesar (v0.17.0).
 * **Fishing boats take timber** (Colonia's own; the original's shipyard used nothing): 100 timber a boat, used at launch, carted in like a workshop's raw material, up to 200 in the yard. It puts the shipyard in the wood trade beside the carpenter, the fletcher and the Navalia, and gives a fleet lost to Neptune or raiders a price. Every mission with a shipyard has the timber yard and woods for it; Paestum and Portus Mercatorum have no partner selling timber, so there it is felled.
 * **The fleet in distant battles** (Colonia's own): when the threatened city lies on a sea route, Naval Station squadrons can be sent with the forts' soldiers and count toward the battle.
 * **Campaign branches** (#13): after a win the player chooses the next province, peaceful or military, both at the same rank, and may switch tracks at every split. First at steps 3, 4 and 5, each beside the existing mission: Firmum (military) beside Figlina, Paestum (peaceful) beside Pons Aelius, Beneventum (peaceful) beside Portus Mercatorum, all colonies of the 270s and 260s BC. Military provinces bring raids early, forts a step sooner and Caesar's requests for troops; peaceful ones no raids and higher culture and prosperity goals.
@@ -566,6 +564,6 @@ Ideas that would change the original's economy or rules; each would come as an o
 * **Names**: every building shows a Latin name, with its English name in the build menu and the inspect panel.
 * **Music**: about 10 tracks of a few minutes for day, night and the menu, picked at random; festivals and raids keep their own music, also a few minutes long. The settings do not name the tracks; the console does (`music`, `music tracks`).
 * **Saves**: until 1.0 a release may stop loading older saves (always with a readable message).
-* **Version numbers**: after 0.9 comes 0.10; 1.0 only when the game is ready for it.
+* **Version numbers**: after 0.9 comes 0.10; 1.0 only when the game is ready for it. Since v0.17.0 every change is a patch release (0.17.1, 0.17.2...) until the next minor version is called for.
 
 Made with ❤️ from your friendly hacker - er2oneousbit

@@ -2018,6 +2018,9 @@ try {
   //      campaign list then shows step 3's siblings side by side.
   {
     await page.evaluate(() => { const app = window.colonia; app.newScenario('c2'); app.onVictory(); });
+    // The Hall of Fame (sim/fame.js): the win's score and its place on the victory screen.
+    const fameWin = await page.evaluate(() => document.querySelector('.modal .fame-win')?.textContent || '');
+    check('the victory screen scores the win and gives its place in the Hall of Fame', /Score: [\d,]+ points, the 1st best win in the Hall of Fame/.test(fameWin) && /Ratings added/.test(fameWin), fameWin.slice(0, 200));
     await page.click('.modal button.choose-post');
     const cards = await page.$$eval('.modal .post-card', (els) => els.map((e) => {
       const r = e.getBoundingClientRect();
@@ -2056,6 +2059,19 @@ try {
     // Ten steps: one mission at steps 1 and 2, two side by side from step 3.
     const perStep = await page.$$eval('.scenario-step', (rows) => rows.map((r) => r.querySelectorAll('button.scenario').length));
     check('the campaign list has ten steps, two provinces at each from step 3', perStep.join() === '1,1,2,2,2,2,2,2,2,2', perStep.join());
+    await page.click('.modal button.hall-of-fame');
+    const hall = await page.evaluate(() => ({
+      title: document.querySelector('.modal .modal-head h2')?.textContent,
+      rows: [...document.querySelectorAll('.modal table.fame tr.fame-row')].map((r) => r.textContent),
+      stored: JSON.parse(localStorage.getItem('colonia.fame') || 'null'),
+    }));
+    check('the campaign screen opens the Hall of Fame: mission 2\'s win listed and stored beside the progress, not in a save',
+      hall.title === 'Hall of Fame' && hall.rows.length === 1 && /Aquae Clarae/.test(hall.rows[0]) && hall.stored?.wins?.[0]?.mission === 'c2', JSON.stringify(hall));
+    await page.click('.modal button:has-text("Back")'); // back to the campaign list
+    await page.click('.modal button:has-text("Back")');
+    await page.click('.menu-card button.hall-of-fame');
+    const hall2 = await page.evaluate(() => ({ title: document.querySelector('.modal .modal-head h2')?.textContent, career: document.querySelector('.modal .fame-career')?.textContent || '' }));
+    check('the main menu opens the Hall of Fame with the career\'s score', hall2.title === 'Hall of Fame' && /Your career: [\d,]+ points/.test(hall2.career), JSON.stringify(hall2));
     await page.click('.modal button:has-text("Back")');
   }
 

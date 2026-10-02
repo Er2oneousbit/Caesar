@@ -627,6 +627,17 @@ Mission 3 opens the Amphitheatrum (Amphitheater) and the Ludus Gladiatorius (Gla
 
 **How long a mission takes.** Settlers come about 60 a month at a good mood of 70 (more in a city's first year), peace grows a point a month from 20, culture and prosperity rise a few points a month. In the first two missions and the three provinces beside steps 3 to 5 peace sets the length, in the other missions from 3 on the population, so even a city that is always ready needs about 1.3 years for the first mission, 2.1 for the second, 2.5 (Figlina) or 2.3 (Firmum) at step 3, 2.9 (Pons Aelius) or 3.75 (Paestum) at step 4, 5.1 (Portus Mercatorum) or 4.2 (Beneventum) at step 5, 4.2 (Oasis Aurea) or 6.5 (Cosa) at step 6, 6.8 (Urbs Magna) or 7.1 (Copia) at step 7, 7.1 (Mutina) or 8.5 (Luna) at step 8, 9.9 (Corduba) or 12 (Carteia) at step 9, and 12.65 (Narbo Martius) or 15.4 (Puteoli) at the last step, which is longer than any before it (`npm run sim -- --pace` prints the table). A year is 8 minutes at 1x; with the city to build first, that makes roughly 45 minutes for the first missions and a few hours for the last at normal speed.
 
+## Hall of Fame
+
+Colonia's own (the original kept no list of best careers). Every campaign win is scored, and the **Hall of Fame** (main menu, or the campaign screen) lists the ten best and your career's score. The victory screen shows the win's score, its parts and its place ("the 3rd best win").
+
+* **A win's score**: the four ratings at the win, added (0 to 400); plus 100 x your people / the population goal (at most 200); plus 100 x the mission's planned years / the years you took (at most 150: 100 when as fast as the plan allows; the plan is the fewest years a city always ready needs, under **How long a mission takes** above); all times the difficulty (Easy x0.5, Normal x1, Hard x1.5, Insane x2), rounded; plus 50 for each distant battle won and 25 for each raid repelled in that mission. Each part is in whole points.
+* Example: Firmum on Normal with ratings 45 + 30 + 50 + 40 = 165, 1,800 people for a goal of 1,600 (112), won in 6 years where the plan says 4.5 (75), one distant battle won and two raids repelled: 352 + 50 + 50 = **452**.
+* **The ten best wins** list each province once, with its best: a replay that scores higher replaces it, one that scores lower changes nothing. Ties keep the older win ahead.
+* **The career**: the best win at each step of the campaign, added, plus 500 once you win a province of the last step and Rome hails you Caesar.
+* The sandbox is not scored: its goals are your own.
+* The hall is kept in the browser beside your campaign progress, never in a save, with the real date of each win.
+
 ## The world around the city (visual only)
 
 None of this changes the simulation: the same seed plays out the same way with every setting on or off, and saves do not store it.

@@ -41,6 +41,7 @@ import { deployFort, enemyCount } from './sim/military.js';
 import { deployStation } from './sim/navy.js';
 import { AUTO_PAUSE_DEFAULTS, autoPauseFor, autoPauseText } from './ui/autoPause.js';
 import { stepOfKind, nextIdleFrom, cyclable, kindPosition } from './ui/cycle.js';
+import { newFame, cleanFame, winOf, recordWin } from './sim/fame.js';
 
 /** Input events that count as a user activation (HTML spec) in some browser. */
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
@@ -89,6 +90,11 @@ export class App {
     // best = { missionId: hardest difficulty won }; savings = { missionId: the
     // governor's savings that mission starts with, stored when the one before it was won }
     this.progress = readJson(`${CONFIG.STORAGE_PREFIX}progress`, { completed: [], best: {}, savings: {} });
+    // The Hall of Fame (sim/fame.js): the best wins and the career's score,
+    // kept beside the progress and never in a save. lastWin: this game's
+    // win and its place, for the victory screen.
+    this.fame = cleanFame(readJson(`${CONFIG.STORAGE_PREFIX}fame`, newFame()));
+    this.lastWin = null;
     this.sfx = new Sfx();
     this.music = new Music();
     this.musicOverride = null; // mood after victory/defeat
@@ -352,9 +358,23 @@ export class App {
     // from the same savings, as the original's career did.
     storeCampaignSavings(savingsRecord(this.progress), id, this.game.city.governor.savings);
     writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
+    this.recordFame();
     this.sfx.play('victory');
     this.musicOverride = 'festival';
     this.ui.showModal(victoryMenu(this), { pause: true, kind: 'outcome' });
+  }
+
+  /**
+   * Score this campaign win and put it in the Hall of Fame (the sandbox is
+   * not scored). The date is the player's real one, for the list only.
+   */
+  recordFame() {
+    const win = winOf(this.game);
+    this.lastWin = null;
+    if (!win) return;
+    const date = new Date().toISOString().slice(0, 10);
+    this.lastWin = { win, ...recordWin(this.fame, win, date) };
+    writeJson(`${CONFIG.STORAGE_PREFIX}fame`, this.fame);
   }
 
   onDefeat(reason) {

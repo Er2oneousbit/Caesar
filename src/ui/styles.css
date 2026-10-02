@@ -479,6 +479,10 @@ input[type="range"] { width: 100%; accent-color: var(--bronze); }
 .post-threat { font-weight: 600; }
 .post-card .post-start { margin-top: auto; align-self: flex-start; }
 /* Under the campaign list once a province of the last step is won. */
+.fame-career { font-family: var(--font-title); font-weight: 700; color: var(--bronze); margin: 0 0 8px; }
+table.tbl.fame td.num, table.tbl.fame-parts td.num { white-space: nowrap; }
+.fame-win { margin: 8px 0; }
+.fame-win p { margin: 0 0 4px; }
 .caesar-line { margin: 10px 0 0; text-align: center; font-family: var(--font-title); font-weight: 700; color: var(--bronze); }
 @media (max-width: 760px) {
   .scenario-list { gap: 12px; } /* siblings stacked 6px apart: the steps a little farther */

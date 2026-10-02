@@ -23,6 +23,7 @@ import { SITES, SANDBOX_SITES, HOME_SITE } from '../data/sites.js';
 import { marketLine } from '../sim/prices.js';
 import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
 import { AUTO_PAUSE, autoPauseSwitches } from './autoPause.js';
+import { hallOfFameBody, fameVictoryLines } from './hallOfFame.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
 const SLOT_NAMES = { auto: 'Autosave', quick: 'Quicksave', slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3', slot4: 'Slot 4', slot5: 'Slot 5' };
@@ -58,6 +59,7 @@ export function mainMenu(app) {
       h('button', { class: `btn${hasAuto ? '' : ' primary'}`, onclick: () => app.ui.showModal(campaignMenu(app)) }, 'Campaign'),
       h('button', { class: 'btn', onclick: () => app.ui.showModal(sandboxMenu(app)) }, 'Sandbox'),
       h('button', { class: 'btn', onclick: () => app.ui.showModal(loadMenu(app)) }, 'Load game'),
+      h('button', { class: 'btn hall-of-fame', onclick: () => app.ui.showModal(hallOfFameMenu(app)) }, 'Hall of Fame'),
       h('button', { class: 'btn', onclick: () => app.ui.openHelp() }, 'How to play'),
       h('button', { class: 'btn', onclick: () => app.ui.showModal(settingsMenu(app)) }, 'Settings'),
       h('button', { class: 'btn', onclick: () => app.ui.showModal(creditsMenu(app)) }, 'Credits'),
@@ -120,7 +122,18 @@ export function campaignMenu(app) {
   const crowned = missionsAtStep(LAST_STEP).some((s) => done.includes(s.id));
   return modal('Campaign', [h('div', { class: 'scenario-list' }, rows),
     crowned ? h('p', { class: 'caesar-line' }, `You won a province of the last step: Rome hails you ${RANKS[TOP_RANK].name}.`) : null],
-    [h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back')], '', () => app.ui.closeModal());
+    [h('button', { class: 'btn hall-of-fame', onclick: () => app.ui.showModal(hallOfFameMenu(app, () => app.ui.showModal(campaignMenu(app)))) }, 'Hall of Fame'),
+      h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back')], '', () => app.ui.closeModal());
+}
+
+/**
+ * The Hall of Fame (ui/hallOfFame.js, sim/fame.js): the career's score and
+ * the ten best wins. `onBack`: where Back goes (the campaign screen, the
+ * victory screen), else it closes.
+ */
+export function hallOfFameMenu(app, onBack = null) {
+  const back = () => (onBack ? onBack() : app.ui.closeModal());
+  return modal('Hall of Fame', hallOfFameBody(app), [h('button', { class: 'btn primary', onclick: back }, 'Back')], 'hall', back);
 }
 
 /**
@@ -440,9 +453,11 @@ export function victoryMenu(app) {
     h('p', {}, `The Senate is delighted with ${g.city.name}. You have met every goal of this mission.`),
     h('table', { class: 'tbl' }, goalStatus(g).map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'r num ok' }, `${fmt(r.have)} / ${fmt(r.need)}`)))),
     victoryGovernorLine(g) ? h('p', { class: 'governor-line' }, victoryGovernorLine(g)) : null,
+    fameVictoryLines(app),
     h('p', { class: 'muted' }, `Founded ${fmt(g.time.totalMonths / 12)} years ago · ${fmt(g.city.stats.fires)} fires · ${fmt(g.city.stats.collapses)} collapses`),
   ], [
     h('button', { class: 'btn', onclick: () => app.keepBuilding() }, 'Keep building'),
+    app.lastWin ? h('button', { class: 'btn hall-of-fame', onclick: () => app.ui.showModal(hallOfFameMenu(app, () => app.ui.showModal(victoryMenu(app), { pause: true, kind: 'outcome' })), { pause: true, kind: 'outcome' }) }, 'Hall of Fame') : null,
     nextStepButton(app),
     h('button', { class: 'btn', onclick: () => app.toMainMenu() }, 'Main menu'),
   ], 'narrow');

@@ -8,7 +8,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **v0.18: rotation**: rotate buildings while placing them (R), every building's art turned as a whole (the hippodrome laid north-south too; gates, the arch and waterside buildings keep following their road or water), with a facing in the save; then rotating the view (parity #7), reusing the turned art, with the renderer, ground pieces, walker directions, picking, overlays and the minimap working from any of four sides.
+1. **v0.18: rotation**: ~~rotate buildings while placing them (R), every building's art turned as a whole (the hippodrome laid north-south too; gates, the arch and waterside buildings keep following their road or water), with a facing in the save~~ (part 1 done: `render/turn.js` draws any building at any of four turns, `b.turn` in saves v22); then rotating the view (parity #7), reusing the turned art (draw each building at `(b.turn + view turn) & 3`), with the renderer, ground pieces, walker directions, picking, overlays and the minimap working from any of four sides.
 2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 3. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
 

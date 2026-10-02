@@ -33,7 +33,7 @@ export const KEY_HELP = [
   ['M', 'Music on / off'],
   ['1 2 3 4', `Game speed ${CONFIG.SPEEDS.slice(1).map((v) => `${v}x`).join(', ')}`],
   ['H', 'Housing tool'],
-  ['R', 'Road tool'],
+  ['R', 'Turn the building being placed a quarter turn clockwise (with no building in hand: Road tool)'],
   ['X or Delete', 'Clear land tool'],
   ['Ctrl+Z or U', 'Undo last construction'],
   ['O / Shift+O', 'Next overlay / turn overlays off'],

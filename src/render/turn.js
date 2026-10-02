@@ -117,24 +117,50 @@ export function drawTurned(ctx, S, t, fn, opts = {}) {
  * crates, a granary's sacks), turned with it. `base(ctx)` draws again the
  * parts of the building that could stand in front of them (an office, the
  * granary itself) and `items(ctx)` the details; all are sorted together and
- * painted from the first detail on, so a part of the building in front of a
- * detail covers it again while the parts behind (already in the sprite) are
- * not drawn twice. At turn 0 the details are simply drawn.
+ * only the details are painted, each followed by the parts of the building
+ * that stand in front of it and overlap it on the screen, so those cover it
+ * again while the rest (already in the sprite, and partly translucent) are
+ * not painted twice. The base is recorded once per `baseKey` (its type,
+ * size, turn and snow) and kept. At turn 0 the details are simply drawn.
+ * @returns the units painted, for tests
  */
-export function drawTurnedOver(ctx, S, t, base, items) {
+export function drawTurnedOver(ctx, S, t, base, items, baseKey = null) {
   t &= 3;
-  if (!t) return drawTurned(ctx, S, 0, items);
+  if (!t) { drawTurned(ctx, S, 0, items); return null; }
+  const key = baseKey && `${baseKey}:${S}:${t}`;
+  let kept = key ? overBases.get(key) : null;
+  if (!kept) {
+    kept = record(ctx, S, t, base).filter((u) => u.ops.length);
+    kept = kept.map((u) => ({ ...u, box: screenBox(u) }));
+    if (key) {
+      if (overBases.size > 64) overBases.clear();
+      overBases.set(key, kept);
+    }
+  }
+  const mine = record(ctx, S, t, items).filter((u) => u.ops.length).map((u) => ({ ...u, box: screenBox(u), item: true }));
+  if (!mine.length) return [];
+  const all = [...kept, ...mine];
+  const order = sortUnits(all, all.map((u) => u.box));
+  const painted = [];
+  const seen = []; // details already painted
+  const meets = (a, b) => a && b && a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  for (const u of order) {
+    if (u.item) { painted.push(u); seen.push(u.box); } else if (seen.some((b) => meets(b, u.box))) painted.push(u);
+  }
+  paintUnits(ctx, painted);
+  return painted;
+}
+
+/** Base recordings kept by drawTurnedOver (a building's own art, per type, size, turn and snow). */
+const overBases = new Map();
+
+/** Record `fn` drawn turned `t` in an S x S footprint; its units. */
+function record(ctx, S, t, fn) {
   const rec = new TurnRecorder(ctx);
   const prev = { ...TS };
   TS.S = S; TS.t = t; TS.ou = 0; TS.ov = 0; TS.rec = rec;
-  try {
-    base(rec.proxy);
-    rec.baseUnits = rec.units.length;
-    items(rec.proxy);
-  } finally {
-    Object.assign(TS, prev);
-  }
-  return rec.replay(ctx, true);
+  try { fn(rec.proxy); } finally { Object.assign(TS, prev); }
+  return rec.units;
 }
 
 /**
@@ -427,41 +453,41 @@ export class TurnRecorder {
   }
 
   /** Paint the recording onto `ctx`, back to front. @returns stats for tests */
-  replay(ctx, overOnly = false) {
+  replay(ctx) {
     const units = this.units.filter((u) => u.ops.length);
     const boxes = units.map(screenBox);
-    let order = sortUnits(units, boxes);
-    if (overOnly) {
-      // drawTurnedOver: from the first detail on (see there).
-      const first = order.findIndex((u) => u.idx >= this.baseUnits);
-      order = first < 0 ? [] : order.slice(first);
-    }
-    ctx.save?.();
-    try {
-      const applied = {};
-      for (const u of order) {
-        for (const op of u.ops) {
-          for (const k of STATE_KEYS) {
-            const v = op.st[k];
-            if (applied[k] !== v) { ctx[k] = v; applied[k] = v; }
-          }
-          if (ctx.setLineDash && (op.dash.length || applied.dash)) { ctx.setLineDash(op.dash); applied.dash = op.dash.length > 0; }
-          if (op.path) {
-            ctx.beginPath();
-            for (const [m, ...a] of op.path) ctx[m](...a);
-          }
-          ctx[op.kind](...op.args);
-        }
-      }
-    } finally {
-      ctx.restore?.();
-    }
+    const order = sortUnits(units, boxes);
+    paintUnits(ctx, order);
     let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
     for (const b of boxes) {
       if (!b) continue;
       x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]);
     }
     return { units: this.units.length, paints: this.paints, bbox: [x0, y0, x1, y1], order: order.map((u) => u.idx) };
+  }
+}
+
+/** Paint recorded units onto `ctx` in the order given, each call with its own state and path. */
+function paintUnits(ctx, order) {
+  ctx.save?.();
+  try {
+    const applied = {};
+    for (const u of order) {
+      for (const op of u.ops) {
+        for (const k of STATE_KEYS) {
+          const v = op.st[k];
+          if (applied[k] !== v) { ctx[k] = v; applied[k] = v; }
+        }
+        if (ctx.setLineDash && (op.dash.length || applied.dash)) { ctx.setLineDash(op.dash); applied.dash = op.dash.length > 0; }
+        if (op.path) {
+          ctx.beginPath();
+          for (const [m, ...a] of op.path) ctx[m](...a);
+        }
+        ctx[op.kind](...op.args);
+      }
+    }
+  } finally {
+    ctx.restore?.();
   }
 }
 

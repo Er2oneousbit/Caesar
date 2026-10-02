@@ -185,6 +185,11 @@ export function turnKey(turn) {
   return turn ? `:t${turn & 3}` : '';
 }
 
+/** A plan's items in the order to draw their ghosts: back (small x + y) first, the plan's own order kept otherwise. */
+export function ghostOrder(items) {
+  return items.map((it, k) => [it, k]).sort((a, b) => a[0].x + a[0].y - (b[0].x + b[0].y) || a[1] - b[1]).map((e) => e[0]);
+}
+
 /**
  * Where a point of the hippodrome's track (U along its 15 tiles, v across,
  * as hippodromeArt.js draws it) is on the map, for a hippodrome whose main
@@ -1855,7 +1860,8 @@ export class Renderer {
         this.stats.roadEdges++;
       }
     }
-    for (const it of plan.items) {
+    // Back to front (a hippodrome turned 2 or 3 lists its front section first: its main).
+    for (const it of ghostOrder(plan.items)) {
       const color = !it.ok ? 'rgba(230,40,40,0.5)' : plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : it.noRoad ? NO_ROAD_FILL : 'rgba(80,220,90,0.38)';
       const wx = (it.x - it.y) * HALF_W;
       const wy = (it.x + it.y) * HALF_H;

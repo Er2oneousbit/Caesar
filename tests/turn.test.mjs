@@ -18,7 +18,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildingSpec, flagsFor } from '../src/render/buildingArt.js';
+import { buildingSpec, flagsFor, drawWarehouseStock, drawGranaryStock } from '../src/render/buildingArt.js';
+import { lightsOf } from '../src/render/lighting.js';
 import { recordingContext, box, door, P } from '../src/render/draw.js';
 import { turnUV, turnDir, drawTurned, turnCheck, sortUnits } from '../src/render/turn.js';
 import { BUILDINGS } from '../src/data/buildings.js';
@@ -203,4 +204,35 @@ test('turn: the sort keeps the drawing order where nothing says otherwise, and b
   // Apart on the screen: no reordering.
   assert.deepEqual(sortUnits(ab, [[0, 0, 10, 10], [20, 0, 30, 10]]).map((x) => x.idx), [0, 1]);
   void P;
+});
+
+test('turn: a turned warehouse\'s stock paints its crates and only the walls that cover them; the walls are recorded once', () => {
+  const stock = { pottery: 400, oil: 300, wine: 800, iron: 200, timber: 100 };
+  const { ctx } = recordingContext();
+  assert.equal(drawWarehouseStock(ctx, stock, 0), null, 'turn 0: just the crates');
+  for (const t of [1, 2, 3]) {
+    const painted = drawWarehouseStock(ctx, stock, t, 0);
+    const crates = painted.filter((u) => u.item);
+    const walls = painted.filter((u) => !u.item);
+    assert.ok(crates.length >= 10, `turn ${t}: the crates (${crates.length})`);
+    const meets = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    for (const w of walls) assert.ok(crates.some((c) => meets(c.box, w.box)), `turn ${t}: a wall painted again covers a crate`);
+    // Not the whole warehouse again (its translucent shades would darken twice).
+    const again = drawWarehouseStock(ctx, stock, t, 0);
+    const firstWall = walls[0];
+    if (firstWall) assert.ok(again.includes(firstWall), `turn ${t}: the same recorded wall, kept`);
+  }
+  // At turn 2 the office stands in front of the far bays: it is painted over them.
+  assert.ok(drawWarehouseStock(ctx, stock, 2, 0).some((u) => !u.item), 'turn 2: the office covers crates behind it');
+  const sacks = drawGranaryStock(ctx, 3, 1, 2, 0);
+  assert.ok(sacks.some((u) => u.item), 'a granary\'s sacks, turned');
+});
+
+test('turn: a round building\'s night torches stay put at every turn (its art does not turn)', () => {
+  const at0 = lightsOf('amphitheater:3:0:0', 'amphitheater', 3, 0, 0, 0).torches;
+  const at1 = lightsOf('amphitheater:3:0:0:t1', 'amphitheater', 3, 0, 0, 1).torches;
+  assert.deepEqual(at1, at0);
+  const s0 = lightsOf('school:2:0:0', 'school', 2, 0, 0, 0);
+  const s2 = lightsOf('school:2:0:0:t2', 'school', 2, 0, 0, 2);
+  assert.notDeepEqual(s2.windows, s0.windows, 'a school\'s windows do move');
 });

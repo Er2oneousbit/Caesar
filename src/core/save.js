@@ -483,6 +483,8 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 22) upgradeTurnsV21(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
+  // A hippodrome's sections lie the way its main section says (they were placed so).
+  for (const b of game.buildings.values()) if (b.main && game.buildings.has(b.main)) b.turn = game.buildings.get(b.main).turn;
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();

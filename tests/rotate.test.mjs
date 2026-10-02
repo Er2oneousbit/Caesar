@@ -121,6 +121,21 @@ test('rotate: R turns the ghost a quarter turn clockwise, kept for the next of t
   assert.equal(input.turns.road, undefined);
 });
 
+test('rotate: after R the build panel shows the new plan (it was emptied when the panel was redrawn after it)', () => {
+  const game = newGame({ seed: 'rotate-p' });
+  const { input, app, key } = inputOn(game);
+  const seen = [];
+  app.ui.onTurnChanged = () => seen.push('panel');
+  app.ui.onPlanChanged = (p) => seen.push(p ? `plan ${p.turn}` : 'no plan');
+  const at = findFree(game, 4, 4);
+  input.setTool('school');
+  input.hover = { x: at.x + 1, y: at.y + 1 };
+  input.refreshPlan();
+  seen.length = 0;
+  key('r'); // without moving the mouse
+  assert.deepEqual(seen, ['panel', 'plan 1'], 'the panel first, then the turned plan in it');
+});
+
 test('rotate: R on a waterside building does not turn it, and says why', () => {
   const game = newGame({ seed: 'rotate-w' });
   const { input, key, toasts } = inputOn(game);

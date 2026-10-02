@@ -119,7 +119,11 @@ export class Sidebar {
     if (!def) return;
     const facts = [];
     if (def.cost) facts.push(`${def.cost} Dn${TOOLS[key] && TOOLS[key].drag !== 'single' ? ' / tile' : ''}`);
-    if (def.size) facts.push(`${def.size * (def.span || 1)}×${def.size}`); // (the hippodrome: 15x5)
+    if (def.size) {
+      // (The hippodrome: 15x5, or 5x15 turned north-south.)
+      const ns = def.span > 1 && (this.app.input?.turnFor(key) ?? 0) % 2 === 1;
+      facts.push(ns ? `${def.size}×${def.size * def.span}` : `${def.size * (def.span || 1)}×${def.size}`);
+    }
     if (def.workers) facts.push(`${def.workers} workers (${LABOR_CATEGORIES[def.labor] || 'Industry'})`);
     this.planEl = h('div', {});
     mount(this.infoEl,

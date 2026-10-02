@@ -109,7 +109,7 @@ function heightFor(key, size) {
  * symmetric): drawn as written whatever their turn, which spares them the
  * recorder and keeps arches drawn on their two front faces in front.
  */
-const SAME_EVERY_WAY = new Set(['well', 'fountain', 'reservoir', 'amphitheater', 'colosseum', 'oracle', 'statue_small']);
+export const SAME_EVERY_WAY = new Set(['well', 'fountain', 'reservoir', 'amphitheater', 'colosseum', 'oracle', 'statue_small']);
 
 /**
  * Sprite spec for a building.
@@ -2464,7 +2464,7 @@ export const WAREHOUSE_BAYS = [
  * it stands in front of (turn.js drawTurnedOver).
  */
 export function drawWarehouseStock(ctx, stock, turn = 0, snow = 0) {
-  drawTurnedOver(ctx, 3, turn, (c) => overArt(c, snow, () => warehouseArt(c, 3)), (c) => warehouseCrates(c, stock));
+  return drawTurnedOver(ctx, 3, turn, (c) => overArt(c, snow, () => warehouseArt(c, 3)), (c) => warehouseCrates(c, stock), `warehouse:${snow}`);
 }
 
 /** The building's own art drawn again over live details: as in its sprite (snow, bare flag poles). */
@@ -2495,7 +2495,7 @@ function warehouseCrates(ctx, stock) {
 
 /** Granary fill indicator: grain sacks in front of the building. */
 export function drawGranaryStock(ctx, S, fill, turn = 0, snow = 0) {
-  drawTurnedOver(ctx, S, turn, (c) => overArt(c, snow, () => granaryArt(c, S)), (c) => granarySacks(c, S, fill));
+  return drawTurnedOver(ctx, S, turn, (c) => overArt(c, snow, () => granaryArt(c, S)), (c) => granarySacks(c, S, fill), `granary:${snow}`);
 }
 
 function granarySacks(ctx, S, fill) {

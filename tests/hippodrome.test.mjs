@@ -22,7 +22,7 @@ import { vendorSupply } from '../src/sim/market.js';
 import { Building, newHouseData } from '../src/sim/entities.js';
 import { newGame, build, findFree } from './helpers.mjs';
 import { Terrain } from '../src/world/map.js';
-import { raceSpot } from '../src/render/renderer.js';
+import { raceSpot, ghostOrder } from '../src/render/renderer.js';
 
 /** A hippodrome placed at a free 15x5 spot (with a 1-tile margin for roads), or fails the test. */
 function placeHippodrome(game) {
@@ -367,6 +367,22 @@ test('hippodrome: the races run along the track whichever way it is turned', () 
       assert.equal(sec.section || 0, Math.min(2, Math.floor(U / 5)), `turn ${t}: U ${U} in section ${Math.floor(U / 5)}`);
     }
   }
+});
+
+test('hippodrome: the ghost draws back to front at every turn; a save whose sections disagree lies the main\'s way', () => {
+  for (let t = 0; t < 4; t++) {
+    const game = newGame({ size: 96, seed: `hip-ghost-${t}` });
+    const plan = planAction(game, 'hippodrome', 40, 40, 40, 40, t); // (where it would fit or not: the order is the same)
+    const depth = ghostOrder(plan.items).map((it) => it.x + it.y);
+    assert.deepEqual(depth, [...depth].sort((a, b) => a - b), `turn ${t}: back to front`);
+    assert.equal(plan.items[0].part, undefined, `turn ${t}: the plan still lists the main section first`);
+  }
+  const game = newGame({ size: 96, seed: 'hip-ns-hand' });
+  placeTurnedHippodrome(game, 1);
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  for (const b of data.buildings) if (b.type === 'hippodrome_part') b.turn = 2; // a hand-edited file
+  const back = deserializeGame(data);
+  for (const b of back.buildings.values()) if (b.type.startsWith('hippodrome')) assert.equal(b.turn, 1, b.type);
 });
 
 test('hippodrome: north-south, a team on the road beside it books the races and the charioteer goes out', () => {

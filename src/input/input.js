@@ -137,9 +137,10 @@ export class Input {
       return false;
     }
     this.turns[tool] = (this.turnFor(tool) + 1) & 3;
+    // The build panel first (it starts a fresh plan box), then the plan it shows.
+    this.app.ui.onTurnChanged?.(tool, this.turns[tool]);
     this.planKey = '';
     this.refreshPlan();
-    this.app.ui.onTurnChanged?.(tool, this.turns[tool]);
     return true;
   }
 

@@ -24,7 +24,7 @@
 
 import { CONFIG, HALF_W, HALF_H } from '../config.js';
 import { recordingContext, hash01 } from './draw.js';
-import { buildingSpec, templeAltar } from './buildingArt.js';
+import { buildingSpec, templeAltar, SAME_EVERY_WAY } from './buildingArt.js';
 import { turnUV } from './turn.js';
 import { makeCanvas } from './sprites.js';
 
@@ -124,6 +124,7 @@ const lightCache = new Map(); // sprite key -> { windows, doors, torches, cx, cy
  * corner. Cached per sprite key (type, size, variant, art state).
  */
 export function lightsOf(key, type, S, variant, state, turn = 0) {
+  if (SAME_EVERY_WAY.has(type)) turn = 0; // (drawn as written at every turn: its torches stay put too)
   let info = lightCache.get(key);
   if (info) return info;
   const { ctx, lights } = recordingContext();

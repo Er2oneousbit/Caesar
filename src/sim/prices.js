@@ -7,7 +7,15 @@
  * game state, so nothing here is saved and a loaded game has the same prices.
  *
  *   price = base (data/goods.js buy or sell) x province market x year drift
- *           x distance factor, rounded to whole denarii (per 100 units)
+ *           x distance factor x scheduled changes, rounded to whole denarii
+ *           (per 100 units)
+ *
+ * Scheduled changes
+ *   A mission may schedule price changes (data/events.js priceChanges: the
+ *   original's scripted price events): from a month of a given year, drawn
+ *   from the seed, a good costs a share more or less with every partner,
+ *   both ways, for good. Pure like the rest; sim/events.js tells the player
+ *   in that month.
  *
  * Distance
  *   The province's partners are ranked by the length of their route from its
@@ -42,6 +50,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { siteIdOf } from '../data/sites.js';
 import { routePath } from '../data/empireRoutes.js';
 import { partnerBuys } from './tradeDemand.js';
+import { missionEvents, eventMonth } from '../data/events.js';
 
 /** The base price a side reads: 'buy' (the city imports and pays) or 'sell' (it exports and earns). */
 const BASE_FIELD = Object.freeze({ buy: 'buy', sell: 'sell' });
@@ -116,20 +125,41 @@ export function missionYear(game) {
 }
 
 /**
- * A good's price with a partner: base x market x drift x distance, whole Dn
- * per 100 units (at least 1). `side`: 'buy' (an import: what the city pays)
- * or 'sell' (an export: what it earns).
+ * A mission's scheduled price changes for a good in force by mission month
+ * `month` (data/events.js priceChanges: each from a month of its year drawn
+ * from the seed, for good), multiplied: 1.2 after "+20%". 1 where none is
+ * due (the sandbox has none).
  */
-export function priceWith(scenario, seed, year, partnerId, good, side) {
+export function scheduledFactor(scenario, seed, month, good) {
+  let f = 1;
+  missionEvents(scenario).priceChanges.forEach((c, k) => {
+    if (c.good === good && Number.isFinite(c.change) && eventMonth(seed, 'price', k, c.year) <= month) f *= Math.max(0.1, 1 + c.change);
+  });
+  return f;
+}
+
+/**
+ * A good's price with a partner: base x market x drift x distance x the
+ * mission's scheduled changes, whole Dn per 100 units (at least 1). `side`:
+ * 'buy' (an import: what the city pays) or 'sell' (an export: what it
+ * earns). `month` (game.time.totalMonths) says which scheduled changes are
+ * in force; by default those of the year's first month.
+ */
+export function priceWith(scenario, seed, year, partnerId, good, side, month = year * CONFIG.MONTHS_PER_YEAR) {
   const g = GOODS[good];
   if (!g) return 0;
   const base = g[BASE_FIELD[side] || 'buy'];
-  return Math.max(1, Math.round(base * marketFactor(scenario, good) * yearDrift(seed, good, year) * distanceFactor(scenario, partnerId)));
+  return Math.max(1, Math.round(base * marketFactor(scenario, good) * yearDrift(seed, good, year) * distanceFactor(scenario, partnerId) * scheduledFactor(scenario, seed, month, good)));
 }
 
-/** A good's price with a partner in this game now (priceWith). */
+/**
+ * A good's price with a partner in this game now (priceWith). With the
+ * `events=off` flag (no events of any kind, sim/events.js) no scheduled
+ * change is in force: month -1 comes before them all.
+ */
 export function tradePrice(game, partnerId, good, side) {
-  return priceWith(game.scenario, game.seed, missionYear(game), partnerId, good, side);
+  const month = game.flags?.events === 'off' ? -1 : game.time.totalMonths;
+  return priceWith(game.scenario, game.seed, missionYear(game), partnerId, good, side, month);
 }
 
 /**

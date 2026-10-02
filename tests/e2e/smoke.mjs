@@ -168,6 +168,8 @@ try {
   // The province's place on the empire map: six choices, the Etruscan coast first and picked.
   const sites = await page.$$eval('select.site-select option', (os) => os.map((o) => [o.value, o.selected]));
   check('sandbox menu offers six places for the province, the Etruscan coast by default', sites.length === 6 && sites[0][0] === 'etruria' && sites[0][1] && sites.filter((s) => s[1]).length === 1, JSON.stringify(sites));
+  // The Events switch (sim/events.js): on unless unticked.
+  check('sandbox menu has an Events switch, ticked', await page.isChecked('input.events-switch'));
   // Watch the first frames of the new game: its look (a winter month) must
   // replace the menu city's summer look at once, not piece by piece.
   await page.evaluate(() => {
@@ -184,6 +186,7 @@ try {
   await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   check('sandbox starts from the menu', true);
   check('the sandbox from the menu is on the Etruscan coast', await page.evaluate(() => window.colonia.game.scenario.site) === 'etruria');
+  check('the sandbox from the menu has its events on', await page.evaluate(() => window.colonia.game.scenario.events) === true);
   await page.waitForFunction(() => window.__look.length >= 3, null, { timeout: 5000 }).catch(() => {});
   const look = await page.evaluate(() => { window.__unhookRender(); return window.__look; });
   check('a new game shows its own season from the first frame (no old-look patchwork)', look.length > 0 && look.every((f) => f.prev === null && !f.pending), JSON.stringify(look));
@@ -1637,7 +1640,16 @@ try {
     const out = { hidden: bar.classList.contains('no-season'), over: bar.scrollWidth - bar.clientWidth };
     Object.assign(c, keep);
     app.ui.hud.update();
-    out.shownAfter = !bar.classList.contains('no-season') || bar.scrollWidth > bar.clientWidth;
+    // Back to the real values the season shows again whenever it fits. Not
+    // "it shows": a raid's chip (the smoke test's own `invade 4` is often
+    // still on the map here) can leave no room for it, and then hiding it
+    // is right. So measure the bar with the season shown.
+    const hiddenAfter = bar.classList.contains('no-season');
+    bar.classList.remove('no-season');
+    const fits = bar.scrollWidth <= bar.clientWidth;
+    if (hiddenAfter) bar.classList.add('no-season');
+    out.shownAfter = hiddenAfter ? !fits : true;
+    out.chips = bar.querySelector('.hud-btn.threat:not(.hidden)') ? 'raid chip shown' : 'no raid chip';
     return out;
   });
   // Unemployment sits beside the mood, amber once it costs mood.

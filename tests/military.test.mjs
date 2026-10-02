@@ -300,6 +300,10 @@ test('an archer at rest shoots from his post at what comes in range, and never w
   }
   assert.ok(shots >= 2, `in range: he shoots (${shots})`);
   assert.ok(Math.hypot(u.x - post.x, u.y - post.y) < 0.1, 'from his post');
+  // The raider steps just out of range: he is let go, not followed.
+  foe.hp = 1e6;
+  const far2 = pinned(game, u, foe, post.x, post.y + 7, 60, post);
+  assert.ok(far2 < 0.1, `no step after him (${far2.toFixed(2)})`);
 });
 
 test('a fort at rest fights as one: a raider at the front man is taken on by the men behind him too', () => {

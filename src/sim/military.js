@@ -54,9 +54,10 @@ import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICK
 const SLOT_OFFSETS = [[0, 0], [0.26, -0.26], [-0.26, 0.26], [0.26, 0.26], [-0.26, -0.26]];
 // A fort that is not deployed holds its ground, as the original's legions did
 // until sent out: a legionary or cavalryman takes on only an enemy within
-// HOLD_REACH tiles of his post (he steps out, strikes and steps back), an
-// archer only one his arrows reach from his post. A fight already begun is
-// let go once the enemy is HOLD_LEASH tiles beyond that. To fight in the
+// HOLD_REACH tiles of the fort's ranks (he steps out, strikes and steps
+// back), and lets go once the enemy is HOLD_LEASH tiles beyond that; an
+// archer only one his arrows reach from his post. Anyone answers an enemy
+// striking at him (see inZone). To fight in the
 // field, the player deploys the fort (a rally point): deployed troops guard
 // def.aggro * 1.5 around it and chase up to 4 tiles farther (fightZone).
 const HOLD_REACH = 2;
@@ -142,6 +143,8 @@ export class Unit {
     this.drill = 0; // Roman ship: id of the Portus it is on its way to, 0 = none (soldiers no longer go)
     this.drillDay = 0; // ...the day he set out
     this.drillDays = 0; // ...and how long the trip may take (sim/training.js startDrill)
+    this.trainLeft = 0; // ...and, moored at the Portus, the ticks of training left
+    this.trainWait = 0; // ...and the ticks it has waited there for a full staff
   }
 }
 
@@ -526,7 +529,7 @@ export function updateBarracks(game, b) {
     // A fully staffed Military Academy: he is trained there first (sim/training.js).
     const detour = recruitDetour(game, b, f);
     const w = spawnWalker(game, 'recruit', b.accessRoad, b, {
-      target: f.id, state: detour ? 'toAcademy' : 'toFort', academy: detour ? detour.academy.id : 0, trained: false,
+      target: f.id, state: detour ? 'toAcademy' : 'toFort', academy: detour ? detour.academy.id : 0, trained: false, trainLeft: 0, trainWait: 0,
       reserve: { id: f.id, recruit: 1 }, unitType: f.def.unit,
     });
     if (!w) { f.recruiting--; for (const [good, n] of Object.entries(cost)) b.stock[good] += n; return; }
@@ -788,7 +791,8 @@ function nearestHostile(list, x, y, range) {
  *   Holding the fort: a legionary or cavalryman, the fort's ranks (every
  *   spot of its formation: the men hold their ground together, or raiders
  *   cut down the front man while the rest look on), guard HOLD_REACH; an
- *   archer, his own post, guard his range. Leash HOLD_LEASH more.
+ *   archer, his own post, guard his range. Leash HOLD_LEASH more (an archer:
+ *   none).
  */
 function fightZone(game, def, fort, post) {
   if (fort.rally) {
@@ -797,7 +801,8 @@ function fightZone(game, def, fort, post) {
   }
   const guard = def.ranged ? def.range : HOLD_REACH;
   const spots = def.ranged ? [post] : formationSpots(game, fort);
-  return { spots, guard, leash: guard + HOLD_LEASH, near: -1, self: def.range, hold: true };
+  // (An archer lets go the moment a raider leaves his range: he shoots from his post, never steps out.)
+  return { spots, guard, leash: def.ranged ? guard : guard + HOLD_LEASH, near: -1, self: def.range, hold: true };
 }
 
 /** Distance from an enemy to the nearest spot of a zone. */
@@ -1253,7 +1258,7 @@ export function launchInvasion(game, origin, size, { sea = false } = {}) {
 export function militaryDaily(game) {
   const m = game.military;
   updateDemand(game);
-  updateDrill(game); // men and ships at rest take turns at the academy or Portus (sim/training.js)
+  updateDrill(game); // new ships on their way to the Portus, or training there: called home by a raid (sim/training.js)
   const inv = m.active;
   if (inv) {
     // Alive: raiders ashore, and those still aboard their ships (a raid by

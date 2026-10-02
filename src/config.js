@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.15.6',
-  SAVE_VERSION: 14, // v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v13 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 15, // v15: training takes time: a recruit training at the academy (walker state 'training', trainLeft) and a new ship moored at the Portus (unit trainLeft); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v14 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -326,9 +326,21 @@ export const CONFIG = {
   STATION_GUARD_DEPLOYED: 8, // ...deployed, this close to its rally point...
   STATION_CHASE: 4, // ...and chases one at most this much farther
 
-  // Training at the Portus (sim/training.js): a new ship's trip there that is
-  // not done in DRILL_MAX_DAYS (no way there, say) is given up, and the ship
-  // rows on to its berth untrained.
+  // Training at the Campus and the Portus (sim/training.js). Training takes
+  // time, so the academy is a stage of the recruit's way and not a gate he is
+  // waved through: a recruit stays ACADEMY_TRAIN_DAYS at the academy (a game
+  // month), a new liburnian PORTUS_TRAIN_DAYS moored at the Portus (a crew
+  // learns its strokes in half that), and the days count only while the
+  // school is fully staffed. A new ship's trip there that is not done in
+  // DRILL_MAX_DAYS (no way there, say; the days moored at the Portus aside)
+  // is given up, and the ship rows on to its berth untrained.
+  ACADEMY_TRAIN_DAYS: 16,
+  PORTUS_TRAIN_DAYS: 8,
+  // A school short of staff pauses its pupils, but a recruit (or ship) kept
+  // waiting more than this many days in all goes on untrained: his place in
+  // the fort is held while he waits, so a school that never gets its staff
+  // back would keep a fort short of a man for ever.
+  TRAIN_WAIT_MAX_DAYS: 32,
   DRILL_MAX_DAYS: 40,
 
   // --- Ratings ------------------------------------------------------------

@@ -8,8 +8,22 @@
  */
 
 import { BUILDINGS } from '../data/buildings.js';
-import { trainsNow, trainedOf, academyFor, portusFor } from '../sim/training.js';
+import { trainsNow, trainedOf, academyFor, portusFor, inTraining } from '../sim/training.js';
 import { waterOf } from '../sim/navy.js';
+
+/**
+ * Who is in training for a fort or station, or at an academy or Portus, and
+ * the days each has left: "2 (5 and 16 days left)", with "paused" while the
+ * school is short of staff. Null when nobody is.
+ */
+export function inTrainingText(game, b) {
+  const list = inTraining(game, b);
+  if (!list.length) return null;
+  const days = list.map((t) => t.days);
+  const said = days.length === 1 ? String(days[0]) : `${days.slice(0, -1).join(', ')} and ${days[days.length - 1]}`;
+  const paused = list.some((t) => t.paused) ? '; paused: the school is short of staff' : '';
+  return `${list.length} (${said} day${days.length === 1 && days[0] === 1 ? '' : 's'} left${paused})`;
+}
 
 /** "5 of 8 trained" for a fort or station (its men or ships now). */
 export function trainedText(game, post) {

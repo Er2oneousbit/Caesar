@@ -56,7 +56,7 @@ import { newGodState, newGodMood, updateReligion } from '../sim/religion.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
 import { updateShipyard, updateWharf } from '../sim/fishing.js';
-import { updateRatings, checkOutcome } from '../sim/ratings.js';
+import { updateRatings, checkOutcome, enemiesInProvince } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
 import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
@@ -330,6 +330,7 @@ export class Game {
     updateTrade(this);
     militaryDaily(this);
     caesarDaily(this); // Caesar's legions, and the loss of a city overrun (sim/legion.js)
+    if (enemiesInProvince(this)) this.city.raidMonth = true; // no peace gained this month (sim/ratings.js)
     this.events.emit('day', this.time);
   }
 
@@ -346,6 +347,7 @@ export class Game {
     updateReligion(this);
     updateRatings(this);
     this.city.crime.month = false; // the peace rating has read it
+    this.city.raidMonth = false; // (and this)
     updateCityHealth(this);
     updateEmperor(this);
     battleMonthly(this); // Caesar's calls for troops and the distant battles (sim/battle.js)

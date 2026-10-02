@@ -142,7 +142,7 @@ export class Input {
       // release a walker has moved on (half a tile in a click at 4x), and
       // picking it at the release point missed the one the player pressed on.
       const r = this.app.renderer;
-      const walker = this.tool ? null : { strict: r.pickWalker(p.x, p.y, false), loose: r.pickWalker(p.x, p.y, true) };
+      const walker = this.tool ? null : { strict: r.pickWalker(p.x, p.y, false), loose: r.pickWalker(p.x, p.y, true), unit: r.pickUnit(p.x, p.y) };
       this.press = { sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: false, id: e.pointerId, walker };
     }
   }

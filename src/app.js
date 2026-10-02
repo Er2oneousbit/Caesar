@@ -688,6 +688,10 @@ export class App {
     // beside docks and stations, and their masts rise over them).
     const ship = screen && !g.map.buildingAt(x, y) ? r.pickShip(screen.x, screen.y) : 0;
     if (ship && g.units.has(ship)) { this.ui.info.showUnit(ship); return; }
+    // A soldier, raider or imperial legionary under the click (picked when
+    // the button went down, as walkers are: they move on by the release).
+    const unit = (pressed?.unit && g.units.has(pressed.unit) ? pressed.unit : 0) || (screen ? r.pickUnit(screen.x, screen.y) : 0);
+    if (unit && g.units.has(unit)) { this.ui.info.showUnit(unit); return; }
     const strict = alive(pressed?.strict) || (screen ? r.pickWalker(screen.x, screen.y, false) : 0);
     const onSomething = g.map.buildingAt(x, y) || g.map.roadblock[g.map.idx(x, y)];
     const wid = strict || (onSomething ? 0 : alive(pressed?.loose) || (screen ? r.pickWalker(screen.x, screen.y, true) : 0));

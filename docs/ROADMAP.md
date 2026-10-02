@@ -16,6 +16,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.5)
+
+* **Soldiers, raiders and Caesar's legionaries are clickable**: only walkers and ships were. A click on one opens its panel: health, what it is doing, its arms, and for a soldier his fort (and whether it is deployed), his training and his pay
+* **No victory with enemies in the province**: a mission 3 playtest was won with raiders on the map. With raiders ashore or in their ships off the coast, or Caesar's legions, Rome now waits (a message says so once) and proclaims the victory at the first month's end after they are gone
+* **Peace falls while enemies are in the province**: the playtest's peace kept rising with a warband at the walls. In a month when enemies were in the province peace gains nothing and falls 2. Headless sim: every default run identical to v0.15.4; Insane with frequent raids and a garrison over 6 years ends at peace 26 instead of 56 (Caesar's legions spent months in that province)
+* 554 unit tests
+
 ## Done (v0.15.4)
 
 * **Ships waiting for a free Emporium are shown**: a ship stays 2 to 7 weeks, so a city with several sea partners keeps one Emporium busy, and a ship that found every staffed Emporium taken turned back and tried again 6 days later without a word. Now its route is marked waiting, and the Emporium's panel and the Trade advisor say which partners' ships are waiting offshore and that another Emporium would take them in

@@ -88,9 +88,12 @@ export function updateRatings(game) {
 
   // Peace: slowly builds while people are content, but not in a month when
   // a thief was about (sim/crime.js; protests cost nothing, a riot costs peace
-  // at once).
+  // at once), and it falls in a month when enemies were in the province:
+  // raiders, raider ships or Caesar's legions (a playtest's peace kept
+  // climbing with a warband at the walls).
   const crimeThisMonth = !!(c.crime && c.crime.month);
-  if (c.sentiment >= CONFIG.PEACE_MOOD && !crimeThisMonth) r.peace = Math.min(100, r.peace + CONFIG.PEACE_PER_MONTH);
+  if (c.raidMonth) r.peace = Math.max(0, r.peace - CONFIG.PEACE_RAID_MONTH);
+  else if (c.sentiment >= CONFIG.PEACE_MOOD && !crimeThisMonth) r.peace = Math.min(100, r.peace + CONFIG.PEACE_PER_MONTH);
   else if (c.sentiment < 30) r.peace = Math.max(0, r.peace - 2);
 
   // Favor: gently returns toward 50.
@@ -112,6 +115,15 @@ export function goalStatus(game) {
 }
 
 /**
+ * Are enemies in the province: raiders ashore or aboard their ships in its
+ * waters, or Caesar's legions (an army still on its way is not on the map)?
+ */
+export function enemiesInProvince(game) {
+  for (const u of game.units.values()) if (u.side === 'enemy' && u.hp > 0) return true;
+  return false;
+}
+
+/**
  * Monthly: the victory check. There is no defeat here: favor at 0 no longer
  * recalls the governor. A city out of favor gets Caesar's legions, and a
  * mission is lost only when its city is overrun (sim/legion.js).
@@ -121,6 +133,15 @@ export function checkOutcome(game) {
   if (c.defeat) return;
   const rows = goalStatus(game);
   if (rows.length > 0 && !c.victory && rows.every((r) => r.ok)) {
+    // Rome proclaims no victory while enemies are in the province (a
+    // playtest won mission 3 with raiders on the map): it waits, and says so
+    // once, until they are gone.
+    if (enemiesInProvince(game)) {
+      if (!c.victoryHeld) game.message('Every goal is met, but Rome will not proclaim your victory while enemies are in the province. Drive them out!', 'warn');
+      c.victoryHeld = true;
+      return;
+    }
+    delete c.victoryHeld;
     c.victory = true;
     salaryAtVictory(game); // before the app stores the savings for the next mission
     game.events.emit('victory', { scenario: game.scenario.id });

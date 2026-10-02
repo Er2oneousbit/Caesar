@@ -207,6 +207,28 @@ export function buildingStatus(game, b) {
  * and "needs a Forum nearby" once sent a player with a Forum next door
  * looking in the wrong place (its collector was walking other streets).
  */
+/**
+ * What a soldier, raider or imperial legionary is doing, in a few words,
+ * from his state (sim/military.js, sim/legion.js, sim/battle.js).
+ */
+export function soldierDoing(u, fort = null) {
+  const ours = u.side === 'rome';
+  switch (u.state) {
+    case 'idle': return ours ? (fort && fort.rally ? 'Holding the deployment point' : 'At his post by the fort') : 'Waiting';
+    case 'march': return ours ? (fort && fort.rally ? 'Marching to the deployment point' : 'Marching back to his post') : 'Marching';
+    case 'engage':
+    case 'fight': return 'Fighting';
+    case 'drill': return 'On his way to train at the Campus';
+    case 'away': return 'Away at a distant battle';
+    case 'advance': return 'Advancing on the city';
+    case 'camp': return 'Camped outside the city';
+    case 'siege': return 'Attacking buildings';
+    case 'halt': return 'Halted, waiting on the word from Rome';
+    case 'flee': return 'Fleeing';
+    default: return u.state ? u.state[0].toUpperCase() + u.state.slice(1) : 'Standing by';
+  }
+}
+
 export function taxLine(game, hs) {
   if (hs.tax > 0) {
     const days = Math.ceil(hs.tax);
@@ -753,6 +775,7 @@ export class InfoPanel {
     const u = g.units.get(this.target.id);
     if (!u) { this.close(); return; }
     const def = UNIT_TYPES[u.type];
+    if (!def.naval) { this.renderSoldier(g, u, def); return; }
     const ours = u.side === 'rome';
     const st = ours ? g.buildings.get(u.station) : null;
     mount(this.el,
@@ -768,6 +791,24 @@ export class InfoPanel {
       !ours ? kv('Fire pots left', `${fmt(u.pots || 0)} of ${CONFIG.RAID_SHIP_POTS}`) : null,
       h('div', { class: 'panel-sec row' },
         st ? h('button', { class: 'btn small', onclick: () => this.showBuilding(st.id) }, 'Its station') : null,
+        h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${u.id} at ${Math.floor(u.x)},${Math.floor(u.y)}`)));
+  }
+
+  /** A soldier, raider or imperial legionary: who, how hurt, doing what, and for a soldier his fort. */
+  renderSoldier(g, u, def) {
+    const ours = u.side === 'rome';
+    const fort = ours ? g.buildings.get(u.fort) : null;
+    mount(this.el,
+      this.head(def.name, ours ? 'Your army' : u.type === 'imperial' ? 'Caesar\'s legion' : 'Enemy'),
+      h('div', { class: 'muted' }, def.desc),
+      kv('Health', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
+      kv('Doing', soldierDoing(u, fort)),
+      ours ? kv('Fort', fort ? `${fort.def.name} at ${fort.x}, ${fort.y}${fort.rally ? ' (deployed)' : ''}` : 'None') : null,
+      ours ? kv('Training', u.trained ? 'Trained at the Campus' : 'Untrained') : null,
+      kv('Arms', `attack ${def.attack}, defense ${def.defense}${def.range > 2 ? `, range ${def.range} tiles` : ''}`),
+      ours ? kv('Pay', `${def.upkeep} Dn / month`) : null,
+      h('div', { class: 'panel-sec row' },
+        fort ? h('button', { class: 'btn small', onclick: () => this.showBuilding(fort.id) }, 'Its fort') : null,
         h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${u.id} at ${Math.floor(u.x)},${Math.floor(u.y)}`)));
   }
 

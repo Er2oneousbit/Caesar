@@ -351,3 +351,33 @@ test('a province with frequent raids runs for two years without errors', () => {
   assert.deepEqual(errors, [], 'no errors logged');
   assert.ok(game.military.stats.raids >= 1, `raids happened (${game.military.stats.raids})`);
 });
+
+test('raiders in the province: no victory until they are gone, and peace falls that month instead of growing', async () => {
+  // A playtest won mission 3 with raiders on the map, its peace still rising.
+  const { checkOutcome, updateRatings, enemiesInProvince } = await import('../src/sim/ratings.js');
+  const game = newGame({ size: 64, seed: 'raid-victory' });
+  game.scenario.goals = { population: 1 };
+  game.city.population = 10;
+  const spot = findFree(game, 4, 4);
+  const raider = spawnUnit(game, 'raider', spot.x + 1.5, spot.y + 1.5, { invasion: 0 });
+  assert.equal(enemiesInProvince(game), true);
+  checkOutcome(game);
+  assert.equal(game.city.victory, false, 'held while a raider is in the province');
+  assert.equal(game.messages.filter((m) => /Rome will not proclaim your victory/.test(m.text)).length, 1);
+  checkOutcome(game);
+  assert.equal(game.messages.filter((m) => /Rome will not proclaim your victory/.test(m.text)).length, 1, 'said once');
+  // Peace: a month with the raider about loses 2, even in a happy city.
+  game.city.sentiment = 80;
+  game.city.ratings.peace = 30;
+  game.runDays(1);
+  assert.equal(game.city.raidMonth, true, 'the day marks the month');
+  updateRatings(game);
+  assert.equal(game.city.ratings.peace, 30 - CONFIG.PEACE_RAID_MONTH);
+  // He is gone: the next month's check proclaims the victory.
+  game.units.delete(raider.id);
+  assert.equal(enemiesInProvince(game), false);
+  game.city.population = 10; // (the day's census counted no homes)
+  checkOutcome(game);
+  assert.equal(game.city.victory, true);
+  assert.equal(game.city.victoryHeld, undefined);
+});

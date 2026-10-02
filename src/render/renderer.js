@@ -352,6 +352,23 @@ export function walkerWorld(w, alpha) {
  * How far ahead of a carter (world px, at zoom 1) his cart reaches: a hand
  * cart's far end, or a farm wagon and its ox (walkerArt.js drawCart).
  */
+/**
+ * Is a figure whose feet are at world y `feetY` hidden behind a building at
+ * world point `p`? Buildings are prisms: height H over their footprint. The
+ * screen column through the point crosses a footprint between world y lo and
+ * hi; the building covers the point if the point is at most H above that
+ * span, and it is in front of a figure whose feet are above hi.
+ * @returns {(feetY:number) => boolean}
+ */
+function coveredAt(boxes, p) {
+  const hx = p.x / HALF_W;
+  return (feetY) => (boxes || []).some((o) => {
+    const lo = Math.max(HALF_H * (2 * o.x - hx), HALF_H * (2 * o.y + hx));
+    const hi = Math.min(HALF_H * (2 * (o.x + o.S) - hx), HALF_H * (2 * (o.y + o.S) + hx));
+    return lo <= hi && hi > feetY + 1 && p.y <= hi && p.y + o.H >= lo;
+  });
+}
+
 export function cartReach(originDef) {
   return isWagon(originDef) ? 30 : 15;
 }
@@ -373,6 +390,7 @@ export class Renderer {
     this.selectedWalker = 0; // walker shown in the info panel (ringed)
     this.selectedUnit = 0; // ship shown in the info panel (ringed)
     this.shipSpots = []; // where each warship and raider ship was drawn this frame, for clicks (pickShip)
+    this.unitSpots = []; // where each soldier, raider and imperial legionary was drawn this frame (pickUnit)
     this.follow = null; // { id } of a walker the view follows (until the map is moved)
     this.walkerSpots = []; // where each walker was drawn this frame, for clicks (pickWalker)
     this.buildingBoxes = []; // footprint and height of each building drawn this frame (pickWalker)
@@ -419,6 +437,7 @@ export class Renderer {
     this.game = game;
     this.walkerSpots = [];
     this.shipSpots = [];
+    this.unitSpots = [];
     this.selectedUnit = 0;
     this.camera.setMapBounds(game.map.w, game.map.h);
     this.stripCache = new WeakMap();
@@ -665,6 +684,7 @@ export class Renderer {
     const tick = game.time.totalTicks;
     const inView = (wx, wy) => wx >= x0w && wx <= x1w && wy >= y0w && wy <= vr.y + vr.h + 40;
     this.shipSpots = [];
+    this.unitSpots = [];
     for (const u of game.units.values()) {
       const fx = u.px + (u.x - u.px) * alpha;
       const fy = u.py + (u.y - u.py) * alpha;
@@ -677,6 +697,7 @@ export class Renderer {
       if (!inView(wx, wy) && !(naval && inView(wx, wy - 60))) continue;
       items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
       if (naval) this.shipSpots.push({ id: u.id, wx, wy });
+      else this.unitSpots.push({ id: u.id, wx, wy });
     }
     for (const p of game.projectiles) {
       const wx = (p.x - p.y) * HALF_W;
@@ -1609,12 +1630,7 @@ export class Renderer {
     // through the point crosses a footprint between world y lo and hi; the
     // building covers the point if the point is at most H above that span,
     // and it is in front of a walker whose feet are above hi.
-    const hx = p.x / HALF_W;
-    const covers = (feetY) => (this.buildingBoxes || []).some((o) => {
-      const lo = Math.max(HALF_H * (2 * o.x - hx), HALF_H * (2 * o.y + hx));
-      const hi = Math.min(HALF_H * (2 * (o.x + o.S) - hx), HALF_H * (2 * (o.y + o.S) + hx));
-      return lo <= hi && hi > feetY + 1 && p.y <= hi && p.y + o.H >= lo;
-    });
+    const covers = coveredAt(this.buildingBoxes, p);
     let best = 0;
     let bestD = Infinity;
     for (const s of this.walkerSpots) {
@@ -1629,6 +1645,32 @@ export class Renderer {
       if (dx < near - hw || dx > far + hw || dy < -top || dy > bottom) continue;
       const ex = dx < near ? dx - near : dx > far ? dx - far : 0;
       const d = Math.hypot(ex, dy + top / 2);
+      if (d < bestD && !covers(s.wy)) { bestD = d; best = s.id; }
+    }
+    return best;
+  }
+
+  /**
+   * The soldier, raider or imperial legionary drawn under a screen point, or
+   * 0: a box around the figure (a rider is taller), nearest the middle wins,
+   * and one hidden behind a building is not picked. Land units were never
+   * clickable, only walkers and ships (playtest).
+   */
+  pickUnit(sx, sy) {
+    const cam = this.camera;
+    const p = cam.screenToWorld(sx, sy);
+    const css = cam.dpr / cam.scale; // world px per CSS px
+    const covers = coveredAt(this.buildingBoxes, p);
+    const hw = Math.max(8, 9 * css);
+    const top = Math.max(28, 22 * css);
+    const bottom = Math.max(5, 5 * css);
+    let best = 0;
+    let bestD = Infinity;
+    for (const s of this.unitSpots) {
+      const dx = p.x - s.wx;
+      const dy = p.y - s.wy;
+      if (Math.abs(dx) > hw || dy < -top || dy > bottom) continue;
+      const d = Math.hypot(dx, dy + top / 2);
       if (d < bestD && !covers(s.wy)) { bestD = d; best = s.id; }
     }
     return best;

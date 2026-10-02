@@ -449,7 +449,7 @@ Venus's part of the city mood shows in the Overview's mood breakdown as "Venus's
 
 * **Culture:** religion, entertainment (full marks at an average score of 40), school, library, academy coverage (+ Curia). Moves at most 4 points a month.
 * **Prosperity:** average house level (full marks at an average of Insulae), patricians, last year's profit, unemployment, wages, Curia, and +2 while the Circus has races. Moves at most 2 points a month.
-* **Peace:** +1 a month while mood is 45+, -2 while it is under 30; +8 for each raid repelled, -1 for each building raiders destroy. Crime costs peace by difficulty:
+* **Peace:** +1 a month while mood is 45+, -2 while it is under 30; in a month when enemies were in the province (raiders ashore or in their ships off the coast, or Caesar's legions) it gains nothing and falls 2 instead; +8 for each raid repelled, -1 for each building raiders destroy. Crime costs peace by difficulty:
 
   | | Easy | Normal | Hard | Insane |
   |---|---|---|---|---|
@@ -458,7 +458,7 @@ Venus's part of the city mood shows in the Overview's mood breakdown as "Venus's
   | Protests | none | none | none | -1 for every fifth |
 * **Favor:** requests (+10 / -12), tribute, gifts, debt, the governor's salary at New Year, distant battles (+25 won, -10 too weak, -25 too late, -50 nobody sent), a raid repelled (+3), Caesar's legions destroyed (+10). Drifts toward 50. Favor 0 does not end the game: at 10 or less Caesar sends his legions (see *Caesar's legions*). The Emperor first asks in the city's fourth year (36-48 months in), once it has 500 people, then every 14-26 months for money or goods he can see you make, due in 12 months; Insane asks for half as much again, more often, due in 9.
 
-A mission is won when every goal is met at the same time (checked monthly). You can keep building afterwards. It is lost only when the city is **overrun** (checked daily, in a mission: the sandbox has no goals and is never lost): more invaders in the province (Caesar's legionaries, raiders ashore and raiders still aboard their ships) than your soldiers plus 2 (ships do not count), while the population is under a quarter of the most it has been in this mission. The original's rule; the message says so.
+A mission is won when every goal is met at the same time (checked monthly), and no enemies are in the province: with raiders or Caesar's legions on the map Rome waits (a message says so once) and proclaims the victory at the first month's end after they are gone. You can keep building afterwards. It is lost only when the city is **overrun** (checked daily, in a mission: the sandbox has no goals and is never lost): more invaders in the province (Caesar's legionaries, raiders ashore and raiders still aboard their ships) than your soldiers plus 2 (ships do not count), while the population is under a quarter of the most it has been in this mission. The original's rule; the message says so.
 
 ## The governor
 

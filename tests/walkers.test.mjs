@@ -362,3 +362,28 @@ test('a carter is picked by a click on his cart as well as on him', async () => 
   assert.equal(pick(cart.x, cart.y, false), 0, 'old behavior: the cart was not clickable');
   assert.ok(cartReach({ kind: 'farm' }) > cartReach(null), 'a wagon and its ox reach farther');
 });
+
+test('soldiers, raiders and imperial legionaries are picked by a click on their figure', async () => {
+  // Land units were never clickable, only walkers and ships (playtest).
+  const { soldierDoing } = await import('../src/ui/infoPanel.js');
+  const cam = new Camera();
+  cam.setMapBounds(64, 64);
+  cam.resize(800, 600, 1);
+  cam.centerOnTile(32, 32);
+  const at = { wx: (32 - 32) * 32, wy: (32 + 32) * 16 };
+  const r = { camera: cam, buildingBoxes: [], unitSpots: [{ id: 9, ...at }] };
+  const pick = (sx, sy) => Renderer.prototype.pickUnit.call(r, sx, sy);
+  const screenOf = (dx, up) => { const s = cam.toScreen(at.wx + dx, at.wy - up); return { x: s.x / cam.dpr, y: s.y / cam.dpr }; };
+  const body = screenOf(0, 12);
+  assert.equal(pick(body.x, body.y), 9, 'a click on his body');
+  const off = screenOf(40, 12);
+  assert.equal(pick(off.x, off.y), 0, 'not beside him');
+  // Behind a building he is the building's.
+  r.buildingBoxes = [{ x: 32, y: 33, S: 3, H: 200 }];
+  assert.equal(pick(body.x, body.y), 0, 'hidden behind a tall building in front of him');
+  // What his panel says he is doing.
+  assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: null }), 'At his post by the fort');
+  assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: { x: 1, y: 1 } }), 'Holding the deployment point');
+  assert.equal(soldierDoing({ side: 'enemy', state: 'siege' }), 'Attacking buildings');
+  assert.equal(soldierDoing({ side: 'enemy', state: 'advance' }), 'Advancing on the city');
+});

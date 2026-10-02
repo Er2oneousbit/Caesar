@@ -298,10 +298,11 @@ export function dockBerth(game, dock) {
   return dock.berth;
 }
 
-/** Water route between two navigable tiles (ships sail under bridges). */
-function shipPath(game, from, to) {
+/** Water route between two navigable tiles (ships sail under ship bridges, never past a low bridge: sim/bridges.js). */
+export function shipPath(game, from, to) {
   const nav = game.map.navigable;
-  return game.pf.astar(from, to, (i) => (nav[i] ? 1 : Infinity), { maxNodes: game.map.size * 4 });
+  const low = game.map.bridgeLow;
+  return game.pf.astar(from, to, (i) => (nav[i] && !low[i] ? 1 : Infinity), { maxNodes: game.map.size * 4 });
 }
 
 /**

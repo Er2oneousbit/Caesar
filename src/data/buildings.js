@@ -101,7 +101,12 @@ export const LABOR_CATEGORIES = Object.freeze({
 export const TOOLS = Object.freeze({
   road: { name: 'Via', en: 'Road', category: 'roads', cost: 4, drag: 'path', desc: 'Walkers only travel on roads. Most buildings need a road next to them.' },
   plaza: { name: 'Platea', en: 'Plaza', category: 'roads', cost: 15, drag: 'area', desc: 'Paves existing roads with decorative stone. Raises desirability nearby.' },
-  bridge: { name: 'Pons', en: 'Bridge', category: 'roads', cost: 40, drag: 'line', desc: 'A straight road across water. Start and end on the banks.' },
+  // Two bridges, as in the original (its prices): the stone ship bridge,
+  // high on arches, lets every boat pass under it; the timber low bridge is
+  // cheaper and shorter but closes the water to every boat (sim/bridges.js).
+  // The key 'bridge' stays the ship bridge, as every bridge before was one.
+  bridge: { name: 'Pons', en: 'Ship Bridge', category: 'roads', cost: 100, drag: 'line', minWater: 3, desc: 'A stone road across water, high on arches: ships and boats sail under it. Start and end on the banks; it spans 3 to 16 tiles of water.' },
+  low_bridge: { name: 'Pons Sublicius', en: 'Low Bridge', category: 'roads', cost: 40, drag: 'line', minWater: 1, unlockWith: 'bridge', desc: 'A timber road on piles across water: cheaper than the ship bridge, but no boat passes it. Merchant ships, fishing boats, liburnians and raider ships alike are kept to their own side. Start and end on the banks; it spans 1 to 16 tiles of water.' },
   roadblock: { name: 'Claustra', en: 'Roadblock', category: 'roads', cost: 12, drag: 'single', desc: 'Placed on a road: walkers roaming the streets turn back here, so a building serves only the homes you mean it to. Carts, market buyers, settlers and anyone else heading somewhere pass. Click it to let some kinds of walker through.' },
   aqueduct: { name: 'Aquaeductus', en: 'Aqueduct', category: 'water', cost: 8, drag: 'path', desc: 'Carries water between reservoirs. Crosses a road only straight over it, at right angles: a road passes under one arch.' },
   wall: { name: 'Murus', en: 'Wall', category: 'military', cost: 12, gateCost: 40, drag: 'path', desc: 'Stone walls that raiders must break through. Drag a wall across a road to build a gate that citizens (not raiders) can pass.' },

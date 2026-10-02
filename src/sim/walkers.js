@@ -25,6 +25,7 @@ import { recruitAtAcademy, recruitTraining } from './training.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
 import { physicianArrive, physicianAfterWait } from './disease.js';
 import { boatArrive, boatAfterWait } from './fishing.js';
+import { boatBlocked } from './bridges.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
 /** Advance every walker by one tick. */
@@ -112,6 +113,11 @@ function onArriveTile(game, w) {
     }
     if (w.kind !== 'ship' && !map.road[next]) {
       reroute(game, w);
+      return;
+    }
+    // A low bridge built across a boat's route since it set out (sim/bridges.js).
+    if (w.kind === 'ship' && map.bridgeLow[next]) {
+      boatBlocked(game, w);
       return;
     }
     setNextTile(game, w, next);

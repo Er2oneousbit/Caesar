@@ -34,7 +34,7 @@ import { RNG } from './rng.js';
 import { log } from './debug.js';
 import { generateMap, mapOptions } from '../world/mapgen.js';
 import { PathFinder } from '../world/pathfinding.js';
-import { BUILDINGS } from '../data/buildings.js';
+import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { GameTime } from '../sim/time.js';
 import { computeAccessRoad } from '../sim/entities.js';
 import { updateWalkers } from '../sim/walkers.js';
@@ -208,6 +208,9 @@ export class Game {
     // each distant battle won (sim/battle.js), whatever the scenario allows.
     if (BUILDINGS[key]?.kind === 'arch') return archesToBuild(this) > 0;
     if (this.flags.unlockall || this.scenario.unlocks === 'all') return true;
+    // A tool that comes with another (the low bridge with the ship bridge):
+    // the missions' lists name only the first.
+    if (TOOLS[key]?.unlockWith && this.unlockedSet.has(TOOLS[key].unlockWith)) return true;
     return this.unlockedSet.has(key);
   }
 

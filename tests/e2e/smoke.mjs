@@ -2293,6 +2293,74 @@ try {
     await sp.close();
   }
 
+  // 6e. A low bridge (sim/bridges.js) dragged across the river with the
+  //     mouse: its tiles are bridges no boat passes, its tile panel names
+  //     it, and the city draws without an error at every view turn.
+  {
+    const bp = await ctx.newPage();
+    const berrors = [];
+    bp.on('pageerror', (e) => berrors.push(`pageerror: ${e.message}`));
+    bp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) berrors.push(m.text()); });
+    await bp.goto(`${url}?skipmenu=1&maptype=river&map=small&seed=demo&mute=1&money=90000`);
+    await bp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const crossing = await bp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      app.renderer.camera.zoomIndex = 2;
+      const g = app.game;
+      const m = g.map;
+      // The first straight east-west crossing of 2 to 8 water tiles a low bridge may take.
+      for (let i = 0; i < m.size; i++) {
+        const x = m.xOf(i);
+        const y = m.yOf(i);
+        if (x < 6 || y < 6 || x > m.w - 16 || y > m.h - 6 || m.isWater(x, y) || !m.isWater(x + 1, y)) continue;
+        let n = 1;
+        while (n <= 9 && m.isWater(x + n, y)) n++;
+        if (n < 3 || n > 9) continue;
+        const end = m.idx(x + n, y);
+        if (m.terrain[i] === 3 || m.terrain[end] === 3 || m.building[i] || m.building[end] || m.wall[i] || m.wall[end]) continue; // (open land at both ends)
+        app.renderer.camera.centerOnTile(x + n / 2, y);
+        return { x, y, n };
+      }
+      return null;
+    });
+    check('a river crossing for the low bridge', !!crossing);
+    if (crossing) {
+      await bp.waitForTimeout(300);
+      const bScreen = (tx, ty) => bp.evaluate(([x, y]) => {
+        const cam = window.colonia.renderer.camera;
+        const wx = (x + 0.5 - (y + 0.5)) * 32;
+        const wy = (x + 0.5 + (y + 0.5)) * 16;
+        const r = window.colonia.canvas.getBoundingClientRect();
+        return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+      }, [tx, ty]);
+      await bp.evaluate(() => window.colonia.ui.selectTool('low_bridge'));
+      const a = await bScreen(crossing.x, crossing.y);
+      const b = await bScreen(crossing.x + crossing.n, crossing.y);
+      await bp.mouse.move(a.x, a.y);
+      await bp.mouse.down();
+      await bp.mouse.move(b.x, b.y, { steps: 8 });
+      await bp.mouse.up();
+      const built = await bp.evaluate(({ x, y, n }) => {
+        const app = window.colonia;
+        const m = app.game.map;
+        const low = [];
+        for (let k = 1; k < n; k++) low.push(m.bridgeLow[m.idx(x + k, y)] === 1 && m.road[m.idx(x + k, y)] === 3);
+        app.ui.selectTool(null);
+        app.ui.info.showTile(x + 1, y);
+        return { low, panel: document.querySelector('#info-panel')?.textContent || '' };
+      }, crossing);
+      check('the Low Bridge tool lays a low bridge across the river, and its tile panel names it',
+        built.low.length > 0 && built.low.every(Boolean) && /Pons Sublicius \(Low Bridge\)/.test(built.panel), JSON.stringify({ crossing, built: { low: built.low, panel: built.panel.slice(0, 160) } }));
+      for (let t = 0; t < 4; t++) {
+        await bp.keyboard.press('q');
+        await bp.waitForTimeout(150);
+      }
+      check('the low bridge draws at every view turn without an error', berrors.length === 0, berrors.join(' | '));
+    }
+    await bp.close();
+  }
+
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
   const phone =await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];

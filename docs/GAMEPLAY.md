@@ -53,7 +53,7 @@ Every building goes by its Latin name, as the colonists would have called it: me
 | Menu | Latin (English) |
 |---|---|
 | Housing | Area (Housing Plot) |
-| Roads | Via (Road), Platea (Plaza), Pons (Bridge), Claustra (Roadblock) |
+| Roads | Via (Road), Platea (Plaza), Pons (Ship Bridge), Pons Sublicius (Low Bridge), Claustra (Roadblock) |
 | Water | Aquaeductus (Aqueduct), Puteus (Well), Lacus (Fountain), Castellum Aquae (Reservoir) |
 | Health | Tonstrina (Barber), Medicus (Physician), Balneae (Baths), Valetudinarium (Hospital) |
 | Temples | Aedes Cereris, Neptuni, Mercurii, Martis, Veneris (Temple of Ceres, Neptune, Mercury, Mars, Venus); Templum Cereris, Neptuni, Mercurii, Martis, Veneris (Grand Temple of each); Oraculum (Oracle) |
@@ -152,6 +152,24 @@ A home's **entertainment score** is the points of every venue whose entertainer 
 
 Water is by area, not walkers: Puteus (Well) 2 tiles; Lacus (Fountain) 4 tiles (must be inside a full reservoir's 10-tile piped area); a Castellum Aquae (Reservoir) fills when it touches water or connects by aqueduct to a full reservoir. An Aquaeductus (Aqueduct) and a road cross only at right angles, each straight through the crossing tile: a road may not run along under an aqueduct, nor turn or branch under it, and an aqueduct may not turn over a road (roads already under aqueducts in an older city stay). While you place housing plots, a blue tint shows where homes would get water (pale for well water, a clear outlined blue for fountain water); while you place a fountain or baths, a faint teal shows the reservoirs' piped area, where they would run, and placing a fountain also shows the fountains' reach in outlined blue on top. Placing or clicking a well or fountain shows its own reach in dark blue, a reservoir its piped area in dark teal. Wells and reservoirs need no road. Wells, fountains and reservoirs never burn or collapse.
 
+## Bridges
+
+Two bridges carry a road over water, as in the original. Drag either in a straight line from open land on one bank across the water to open land on the other (a road tile is laid on each bank where there is none). Every walker, cart, caravan, soldier and raider on foot crosses both.
+
+| | Pons (Ship Bridge) | Pons Sublicius (Low Bridge) |
+|---|---|---|
+| Built of | stone, high on arches | timber, on piles just over the water |
+| Cost | 100 Dn a water tile | 40 Dn a water tile |
+| Spans | 3 to 16 tiles of water | 1 to 16 tiles of water |
+| Boats | every boat sails under it | **no boat passes it** |
+
+* **No boat passes a low bridge**: merchant ships, fishing boats, liburnians and raider ships alike stay on their own side. A low bridge between the sea and an Emporium (Trade Dock) cuts the dock off: no merchant ship comes to it again while the bridge stands, and its panel says why. A Statio (Naval Station), a Navalia or a Portus beyond one is cut off from the sea too, and its ships stay on their own side of it. A wharf whose every fishing ground lies beyond one has nowhere to fish.
+* **The warning**: while you place a low bridge, the build menu lists every Emporium, Statio, Navalia or Portus it would cut off from the sea and every wharf it would cut off from its fishing grounds (or, with none of those, that ships from the sea will not sail beyond it). It may still be built: the choice is yours.
+* **Raider ships cannot pass one either.** A low bridge below your city keeps raids by sea out of the upper river: they come ashore on the near side of it, or by land. (Colonia's own consequence of the original's rule.)
+* A boat already under way when a low bridge goes up across its route stops short of it and finds another way: a merchant ship turns back to sea, a fishing boat fishes at a ground on its side or goes home, a raider ship puts its warriors ashore near it. One that has no way left (a boat cut off from its wharf, a merchant ship moored upstream) is lost.
+* A low bridge may not be built over a boat (wait until it has passed) nor on the tile where ships come in from the sea, and the two kinds never share a tile: clear one to build the other.
+* The bridge laid across the river on river maps at the start is a ship bridge, free, as it always was. Clearing a bridge is free; the boats' water opens again at once.
+
 ## Workers
 
 * About **32%** of plebeian residents work.
@@ -231,7 +249,7 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 | Paid | at once | imports as each lot lands on the quay, exports as each lot goes aboard |
 | Stays | a moment | until both sides are done: about 18 days with storage 5 road tiles from the dock, 25 at 10, 38 at 15 (longer when the goods split into more wagons, or with fewer dock workers); 48 days at most |
 
-* An **Emporium** (Trade Dock: 3x3, 10 workers, 120 Dn) must touch navigable water: water connected to the map edge through a body of at least 80 tiles. Rivers and coasts always qualify, big lakes touching the edge sometimes do, desert and plains maps usually do not. Ships sail under bridges.
+* An **Emporium** (Trade Dock: 3x3, 10 workers, 120 Dn) must touch navigable water: water connected to the map edge through a body of at least 80 tiles. Rivers and coasts always qualify, big lakes touching the edge sometimes do, desert and plains maps usually do not. Ships sail under a ship bridge but never past a low bridge (see **Bridges**).
 * One ship ties up at a dock at a time, and waits there while it trades. When it ties up it settles what it will sell you (each import you set, up to its yearly quota and your import level, counting what other ships still have aboard and what dock workers are carting; the crane stops early if your stock reaches the level meanwhile) and what it wants to buy (each export, up to its quota and what you have above your export level in the warehouses its workers can reach in time); 2,400 units each way at most.
 * **Dock workers**: an Emporium sends out 3 at 75% staff or more (8 of its 10 workers), 2 at 50% or more, 1 with any staff. Each carries up to 400 units of one good a trip (less to a workshop or barracks with room for less, which still come first). A free worker first takes a lot from the quay to storage, and from there goes straight on to a warehouse to fetch an export for the ship; when the quay is empty it fetches an export from the dock. Workers claim what they set out for, so several of them (of any dock) never take a good below your export level. A worker does not set out on a trip it cannot finish before the ship's 48 days are up.
 * **The ship sails** when everything is unloaded (or nothing could land for a day: the quay is full, or the treasury empty) and everything it wants is aboard (or nothing more can be fetched), or after 48 days, or when its Emporium is demolished (at once) or loses its staff (at the Emporium's next daily check). A ship whose city bought its year's worth meanwhile (from another of its ships) wants no more. A ship with nothing to trade sails at once. Cargo still aboard is neither paid for nor counted; an export a worker brings back after the ship sailed stays on the quay as yours, and dock workers take it back to storage. A demolished Emporium's workers take their loads to storage. The trade log gets one entry a ship, when it sails.

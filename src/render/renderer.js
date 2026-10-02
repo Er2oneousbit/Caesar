@@ -65,7 +65,7 @@ import { farmDormant } from '../sim/production.js';
 import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
-import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, BRIDGE_DECK_Z, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
+import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, BRIDGE_DECK_Z, lowBridgeSpec, LOW_BRIDGE_DECK_Z, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor, templeAltar } from './buildingArt.js';
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
 import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
@@ -446,7 +446,8 @@ export function bridgeSpan(map, fx, fy, onWater, turn = 0) {
   if (!map.inBounds(tx, ty) || map.road[map.idx(tx, ty)] !== Road.BRIDGE) return { d: undefined, lift: 0 };
   const [vx, vy] = viewTileOf(tx, ty, turn, map.w, map.h);
   const deck = vx + vy + 1 + BRIDGE_DEPTH;
-  return onWater ? { d: deck - 0.004, lift: 0 } : { d: deck + 0.004, lift: BRIDGE_DECK_Z };
+  // (No boat is ever under a low bridge: sim/bridges.js.)
+  return onWater ? { d: deck - 0.004, lift: 0 } : { d: deck + 0.004, lift: map.bridgeLow[map.idx(tx, ty)] ? LOW_BRIDGE_DECK_Z : BRIDGE_DECK_Z };
 }
 
 export function cartReach(originDef) {
@@ -807,8 +808,10 @@ export class Renderer {
           // The deck is an object, not ground: drawn over a ship passing under
           // it and under the people crossing it (bridgeDepth). On the ground
           // it was drawn first, and ships sailed over the bridge (playtest).
+          // A low bridge (timber on piles) or a ship bridge (stone arches).
           const axis = viewAxis(map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v', vt);
-          items.push({ d: depth + BRIDGE_DEPTH, kind: K_STRIP, spr: this.sprites.get(`br${axis}`, () => bridgeSpec(axis)), wx, wy, full: true });
+          const spr = map.bridgeLow[i] ? this.sprites.get(`brl${axis}`, () => lowBridgeSpec(axis)) : this.sprites.get(`br${axis}`, () => bridgeSpec(axis));
+          items.push({ d: depth + BRIDGE_DEPTH, kind: K_STRIP, spr, wx, wy, full: true });
         }
         if (map.aqueduct[i]) {
           const mask = rotNibbles(this.aqueductMask(x, y), vt);

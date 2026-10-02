@@ -299,6 +299,39 @@ function sailHome(game, w, wharf) {
   followPath(game, w, path);
 }
 
+/**
+ * A low bridge went up across the boat's route (sim/bridges.js): it plans
+ * again from where it is. Out to fish: the nearest ground it can still
+ * reach, else home; home or to its new wharf: by another way, or it is
+ * lost, as a boat that cannot get home always was.
+ */
+export function fishingBoatBlocked(game, w) {
+  const wharf = game.buildings.get(w.origin);
+  if (!wharf || wharf.def.kind !== 'wharf') { killWalker(game, w); return; }
+  if (w.state === 'toGround') {
+    const here = game.map.idx(w.x, w.y);
+    let best = null;
+    for (const g of game.map.groundsOf(w.body)) {
+      const path = boatPath(game, here, fishingSpot(game, g, w), w.body);
+      if (path && (!best || path.length < best.path.length)) best = { g, path };
+    }
+    if (best) {
+      w.ground = { x: best.g.x, y: best.g.y };
+      followPath(game, w, best.path);
+      return;
+    }
+  }
+  const path = boatPath(game, game.map.idx(w.x, w.y), waterBeside(game, wharf), w.body);
+  if (path) {
+    if (w.state === 'toGround') w.state = 'toWharf'; // (back to its mooring, no catch)
+    followPath(game, w, path);
+    return;
+  }
+  blocked(game, wharf, w.state === 'homeWithCatch' ? 'could not find its way home and was lost with its catch' : 'was cut off from its wharf by a low bridge and was lost');
+  wharf.boatId = 0;
+  killWalker(game, w);
+}
+
 /** Tell the player a boat is stuck: kept on the wharf for its panel, a message at most once a month. */
 function blocked(game, wharf, what) {
   wharf.boatTrouble = { what, day: game.time.totalDays };

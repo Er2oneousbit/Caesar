@@ -58,6 +58,7 @@ import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
 import { goalStatus } from '../src/sim/ratings.js';
 import { setTradeMode } from '../src/sim/trade.js';
+import { Terrain } from '../src/world/map.js';
 import { spareBoat, hasBoatTimber } from '../src/sim/fishing.js';
 
 const HELP = `
@@ -82,6 +83,8 @@ Options:
   --harbor [docks]  after 6 months, a Dock (or this many) and a warehouse by the water, every sea
                     route open; the warehouse gets 300 pottery, furniture and oil a month for
                     export (the demo city makes none). Reports ships' stays and trade a year
+  --low-bridge      with --harbor, then a Pons Sublicius (Low Bridge) between the sea entry and the
+                    docks, the first straight crossing that cuts one off: no ship gets past it
   --fishing <n>     also build a shipyard and n fishing wharves (and a granary by them); the
                     shipyard starts with 400 timber (the demo city fells none)
   --venues          also build an amphitheater, a colosseum, a gladiator school and a menagerie
@@ -119,7 +122,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0 };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0, lowBridge: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -142,6 +145,7 @@ function parse(argv) {
     else if (a === '--blocks') o.blocks = Number(next());
     else if (a === '--villas') o.villas = Number(next());
     else if (a === '--wine') o.wine = true;
+    else if (a === '--low-bridge') o.lowBridge = true;
     else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--sea-raids') o.seaRaids = next();
@@ -286,11 +290,38 @@ function buildHarbor() {
     harbor.warehouse = harbor.warehouse || h.warehouse;
   }
   if (!harbor.docks) { console.log('Harbor: no Dock could be built (no sea access here?)'); return; }
+  if (opts.lowBridge) buildLowBridge();
   for (const g of HARBOR_EXPORTS) setTradeMode(game, g, 'export', 0);
   harbor.from = game.time.totalDays;
   const y = game.city.finance.thisYear;
   harbor.exports -= y.exports || 0; // count from now
   harbor.imports -= y.imports || 0;
+}
+/**
+ * --low-bridge: the first straight crossing (in tile order, east-west then
+ * north-south) whose low bridge would cut a dock off from the sea, built
+ * with the player's tool. Its warning is printed: the run then shows how
+ * many ships still come.
+ */
+function buildLowBridge() {
+  const { map } = game;
+  for (let i = 0; i < map.size; i++) {
+    const x = map.xOf(i);
+    const y = map.yOf(i);
+    if (map.terrain[i] === Terrain.WATER) continue;
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      if (!map.isWater(x + dx, y + dy)) continue;
+      let n = 1;
+      while (n <= 17 && map.isWater(x + dx * n, y + dy * n)) n++;
+      if (n > 17 || !map.inBounds(x + dx * n, y + dy * n)) continue;
+      const plan = planAction(game, 'low_bridge', x, y, x + dx * n, y + dy * n);
+      if (plan.reason || !plan.warnings.some((w) => /off from the sea/.test(w))) continue;
+      applyPlan(game, plan);
+      console.log(`Low bridge: ${n - 1} tiles of water from ${x}, ${y}. ${plan.warnings.join(' ')}`);
+      return;
+    }
+  }
+  console.log('Low bridge: no crossing here would cut a dock off');
 }
 /** Monthly: the harbor's warehouse gets goods to export, room allowing (a stand-in for workshops). */
 function harborMonth() {

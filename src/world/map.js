@@ -89,6 +89,7 @@ export class GameMap {
     this.fixedRoad = new Uint8Array(this.size); // 1 = imperial road tile that cannot be removed
     this.wall = new Uint8Array(this.size); // Wall.*
     this.roadblock = new Uint8Array(this.size); // 0 or ROADBLOCK.PRESENT | allowed group bits (only on roads)
+    this.bridgeLow = new Uint8Array(this.size); // 1 = a low bridge: a Road.BRIDGE tile no boat passes under
 
     // --- derived layers (recomputed, not saved) ---
     this.building = new Int32Array(this.size); // building id occupying the tile, 0 = none
@@ -97,8 +98,12 @@ export class GameMap {
     this.roadNet = new Int32Array(this.size); // road network component id (0 = no road)
     this.waterDist = new Uint8Array(this.size); // distance to nearest water tile (capped 255)
     this.navigable = new Uint8Array(this.size); // 1 = water that ships can sail (reaches the map edge)
-    this.navBody = new Int32Array(this.size); // which navigable water (1, 2, ...): ships never leave theirs (computeNavigation)
-    this.fishBody = new Int32Array(this.size); // water body with fish (1, 2, ...), 0 = land or a pond (computeFishing)
+    this.navBody = new Int32Array(this.size); // which navigable water (1, 2, ...): ships never leave theirs (computeNavigation, split at low bridges)
+    this.fishBody = new Int32Array(this.size); // water body with fish (1, 2, ...), 0 = land or a pond (computeFishing, split at low bridges)
+    // The same two before low bridges split them (splitAtLowBridges): the
+    // very same arrays while there is no low bridge.
+    this.navWhole = this.navBody;
+    this.fishWhole = this.fishBody;
 
     /** Edge water tile where merchant ships appear and leave, or null (no sea access). */
     this.seaEntry = null;
@@ -342,6 +347,82 @@ export class GameMap {
     return id ? this.fishingGrounds.filter((g) => g.body === id) : [];
   }
 
+  /** Is there a low bridge anywhere on the map? */
+  hasLowBridge() {
+    return this.bridgeLow.indexOf(1) >= 0;
+  }
+
+  /**
+   * Every water route for boats: the navigable water and the fishing water
+   * from the terrain (placement reads them as they are), then each split
+   * where a low bridge closes it. Runs at a load and whenever a low bridge
+   * is built or cleared (sim/bridges.js refreshWaterways). The terrain never
+   * changes, so the first two give the same answer every time.
+   */
+  computeWaterways() {
+    this.computeNavigation();
+    this.computeFishing();
+    this.splitAtLowBridges();
+  }
+
+  /**
+   * No boat passes a low bridge, so it cuts the water it spans in two: its
+   * tiles leave navBody and fishBody (0, like land), and water joined only
+   * through them gets a number of its own. In each body the part holding
+   * its first tile (in tile order) keeps the body's number: with no low
+   * bridge every number is what computeNavigation and computeFishing gave,
+   * so every map, save and sim run is as before. A ship's or boat's `body`
+   * then names the water it can really reach. Fishing grounds take the
+   * number of the part they lie in (0 under a low bridge: nobody fishes
+   * there). navWhole and fishWhole keep the bodies whole, to tell water
+   * cut off by a low bridge from other water.
+   */
+  splitAtLowBridges() {
+    if (!this.hasLowBridge()) {
+      this.navWhole = this.navBody;
+      this.fishWhole = this.fishBody;
+      return;
+    }
+    this.navWhole = this.navBody.slice();
+    this.fishWhole = this.fishBody.slice();
+    this.splitLabels(this.navBody);
+    this.splitLabels(this.fishBody);
+    for (const g of this.fishingGrounds) g.body = this.fishBody[this.idx(g.x, g.y)];
+  }
+
+  /** Split the bodies numbered in `label` at the low bridges (see splitAtLowBridges). */
+  splitLabels(label) {
+    const { w, h, size } = this;
+    const low = this.bridgeLow;
+    let next = 1;
+    for (let i = 0; i < size; i++) {
+      if (low[i]) label[i] = 0;
+      if (label[i] >= next) next = label[i] + 1;
+    }
+    const kept = new Set();
+    const done = new Uint8Array(size);
+    const queue = new Int32Array(size);
+    for (let start = 0; start < size; start++) {
+      const old = label[start];
+      if (!old || done[start]) continue;
+      const id = kept.has(old) ? next++ : old;
+      kept.add(old);
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = start;
+      done[start] = 1;
+      while (head < tail) {
+        const i = queue[head++];
+        label[i] = id;
+        const x = i % w;
+        const y = (i / w) | 0;
+        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) {
+          if (j >= 0 && !done[j] && label[j] === old) { done[j] = 1; queue[tail++] = j; }
+        }
+      }
+    }
+  }
+
   /**
    * First water tile with fish orthogonally beside a footprint (where a
    * wharf's boat moors, or a shipyard launches), or -1.
@@ -357,12 +438,13 @@ export class GameMap {
 
   /**
    * First navigable water tile orthogonally beside a footprint (a dock's
-   * berth), or -1 if the footprint is not on a navigable shore.
+   * berth), or -1 if the footprint is not on a navigable shore. Never under
+   * a low bridge: no ship gets there.
    */
   navigableBeside(x, y, S) {
     for (let d = 0; d < S; d++) {
       for (const [tx, ty] of [[x + d, y - 1], [x + S, y + d], [x + d, y + S], [x - 1, y + d]]) {
-        if (this.inBounds(tx, ty) && this.navigable[this.idx(tx, ty)]) return this.idx(tx, ty);
+        if (this.inBounds(tx, ty) && this.navigable[this.idx(tx, ty)] && !this.bridgeLow[this.idx(tx, ty)]) return this.idx(tx, ty);
       }
     }
     return -1;
@@ -461,15 +543,17 @@ export class GameMap {
       fixedRoad: encode(this.fixedRoad),
       wall: encode(this.wall),
       roadblock: encode(this.roadblock),
+      bridgeLow: encode(this.bridgeLow),
     };
   }
 
   /** Rebuild a map from serialized data. Derived layers are recomputed by the game. */
   static deserialize(data, decode) {
     const m = new GameMap(data.w, data.h);
-    const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad', 'wall', 'roadblock'];
+    const layers = ['terrain', 'variant', 'road', 'aqueduct', 'rubble', 'fixedRoad', 'wall', 'roadblock', 'bridgeLow'];
     for (const name of layers) {
-      if (data[name] === undefined && (name === 'wall' || name === 'roadblock')) continue; // older saves had no walls or roadblocks
+      // Older saves had no walls or roadblocks, and no low bridges (every bridge passed ships).
+      if (data[name] === undefined && (name === 'wall' || name === 'roadblock' || name === 'bridgeLow')) continue;
       const arr = decode(data[name], m.size);
       if (arr.length !== m.size) throw new Error(`Save file map layer "${name}" has wrong size`);
       m[name].set(arr);
@@ -481,8 +565,8 @@ export class GameMap {
     m.exitDir = dir(data.exitDir);
     m.computeWaterDistance();
     m.computeRoadNetworks();
-    m.computeNavigation();
-    m.computeFishing();
+    for (let i = 0; i < m.size; i++) if (m.bridgeLow[i] && m.road[i] !== Road.BRIDGE) m.bridgeLow[i] = 0; // (only ever on a bridge)
+    m.computeWaterways();
     return m;
   }
 }

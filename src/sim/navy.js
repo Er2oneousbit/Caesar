@@ -188,11 +188,17 @@ function stepToward(u, tx, ty, speed) {
   return false;
 }
 
-/** Follow u.path (tile indices). @returns {boolean} true when the route is done (or there is none) */
+/**
+ * Follow u.path (tile indices). @returns {boolean|string} true when the
+ * route is done (or there is none); 'blocked' when a low bridge has gone up
+ * across it since it was planned (sim/bridges.js): the route is dropped and
+ * the ship stops short of the bridge.
+ */
 function followWaterPath(game, u, speed) {
   if (!u.path || u.pathIndex >= u.path.length) { u.path = null; return true; }
   const map = game.map;
   const i = u.path[u.pathIndex];
+  if (map.bridgeLow[i]) { u.path = null; u.moving = false; return 'blocked'; }
   if (stepToward(u, map.xOf(i) + 0.5, map.yOf(i) + 0.5, speed)) u.pathIndex++;
   if (u.pathIndex >= u.path.length) { u.path = null; return true; }
   return false;
@@ -663,15 +669,16 @@ function shoreOk(game, x, y) {
  * on, the nearest open shore), each on open land within 2 tiles of it from
  * which raiders can walk to a home (never across a creek, cut off).
  */
-function landCrew(game, u, inv) {
+function landCrew(game, u, inv, stopped = false) {
   const map = game.map;
   const field = new Float32Array(map.size);
   fillField(game, field, (id) => !!game.buildings.get(id)?.house);
   const ok = (x, y) => shoreOk(game, x, y) && Number.isFinite(field[map.idx(x, y)]);
   let spot = { x: inv.landing.x, y: inv.landing.y };
-  if (!ok(spot.x, spot.y)) {
-    // Something was built there while they sailed: the nearest open shore
-    // within 4 tiles of the ship, or a new landing altogether.
+  if (stopped || !ok(spot.x, spot.y)) {
+    // Something was built there while they sailed, or a low bridge stopped
+    // the ship short of it: the nearest open shore within 4 tiles of the
+    // ship, or a new landing altogether.
     spot = null;
     const ux = Math.floor(u.x);
     const uy = Math.floor(u.y);
@@ -868,9 +875,12 @@ function updateRaiderShip(game, u, fleet) {
   if (!game.units.has(u.id)) return;
   if (u.cooldown <= 0) raiderShipShoot(game, u, def, fleet);
   if (u.state === 'sail') {
-    if (followWaterPath(game, u, def.speed)) landCrew(game, u, inv);
+    const done = followWaterPath(game, u, def.speed);
+    if (done) landCrew(game, u, inv, done === 'blocked');
   } else if (u.state === 'leave') {
-    if (followWaterPath(game, u, def.speed)) removeUnit(game, u, 'fled');
+    const done = followWaterPath(game, u, def.speed);
+    if (done === 'blocked') startLeaving(game, u); // another way out, or gone
+    else if (done) removeUnit(game, u, 'fled');
   } else {
     u.moving = false; // offshore, waiting for the raiders
   }

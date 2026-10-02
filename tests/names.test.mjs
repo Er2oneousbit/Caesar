@@ -74,7 +74,7 @@ test('names: no two buildings share a Latin name (a hippodrome\'s track sections
 
 test('names: the type keys did not change with the names (saves and sprite keys stand on them)', () => {
   assert.deepEqual([...BUILDING_KEYS], KEYS);
-  assert.deepEqual(Object.keys(TOOLS), ['road', 'plaza', 'bridge', 'roadblock', 'aqueduct', 'wall', 'clear']);
+  assert.deepEqual(Object.keys(TOOLS), ['road', 'plaza', 'bridge', 'low_bridge', 'roadblock', 'aqueduct', 'wall', 'clear']);
 });
 
 test('names: the panel title and tooltip show the Latin name with the English after it, once when they are the same word', () => {

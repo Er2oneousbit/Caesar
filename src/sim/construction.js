@@ -8,7 +8,7 @@
  *   applyPlan(game, plan)
  *
  * `tool` is a building key ('house', 'prefecture', ...) or a tile tool
- * ('road', 'aqueduct', 'plaza', 'bridge', 'wall', 'roadblock', 'clear').
+ * ('road', 'aqueduct', 'plaza', 'bridge', 'low_bridge', 'wall', 'roadblock', 'clear').
  *
  * Roadblocks: placed on a road tile (map.roadblock), they turn back roaming
  * walkers (see sim/movement.js). Clearing a roadblock leaves its road.
@@ -39,6 +39,7 @@ import { waterBeside } from './fishing.js';
 import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 import { residenceOf } from './governor.js';
 import { archesToBuild } from './battle.js';
+import { boatTiles, lowBridgeCuts, refreshWaterways } from './bridges.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -350,7 +351,7 @@ export function planAction(game, tool, x0, y0, x1, y1, turn = 0) {
   if (tool === 'road' || tool === 'aqueduct' || tool === 'wall') return planPath(game, tool, x0, y0, x1, y1);
   if (tool === 'plaza') return planPlaza(game, x0, y0, x1, y1);
   if (tool === 'clear') return planClear(game, x0, y0, x1, y1);
-  if (tool === 'bridge') return planBridge(game, x0, y0, x1, y1);
+  if (tool === 'bridge' || tool === 'low_bridge') return planBridge(game, x0, y0, x1, y1, tool);
   if (tool === 'roadblock') return planRoadblock(game, x1, y1);
   if (mode === 'area') return planBuildingArea(game, tool, x0, y0, x1, y1, placedTurn(tool, turn));
   // Single building
@@ -599,10 +600,19 @@ function planPlaza(game, x0, y0, x1, y1) {
   return { tool: 'plaza', kind: 'area', items, cost, count, warnings: [], reason: count === 0 ? 'Drag over existing roads to pave them' : null };
 }
 
-function planBridge(game, x0, y0, x1, y1) {
+/**
+ * A bridge, `tool` 'bridge' (the ship bridge) or 'low_bridge': a straight
+ * line from open land across water to open land. A low bridge closes the
+ * water to boats (sim/bridges.js): its plan warns of every dock, station
+ * or wharf it would cut off, and it may not stand where a boat is now or
+ * on the tile where ships come in from the sea.
+ */
+function planBridge(game, x0, y0, x1, y1, tool = 'bridge') {
   const { map } = game;
-  const fail = (reason, items = []) => ({ tool: 'bridge', kind: 'line', items, cost: 0, count: 0, warnings: [], reason });
-  if (!game.isUnlocked('bridge')) return fail('Not available in this scenario');
+  const def = TOOLS[tool];
+  const low = tool === 'low_bridge';
+  const fail = (reason, items = []) => ({ tool, kind: 'line', items, cost: 0, count: 0, warnings: [], reason });
+  if (!game.isUnlocked(tool)) return fail('Not available in this scenario');
   // Snap to the dominant axis.
   const horizontal = Math.abs(x1 - x0) >= Math.abs(y1 - y0);
   const ex = horizontal ? x1 : x0;
@@ -619,6 +629,8 @@ function planBridge(game, x0, y0, x1, y1) {
   let cost = 0;
   let count = 0;
   let waterRun = 0;
+  const entry = map.seaEntry ? map.idx(map.seaEntry.x, map.seaEntry.y) : -1;
+  const boats = low ? boatTiles(game) : null;
   for (let k = 0; k < tiles.length; k++) {
     const [tx, ty] = tiles[k];
     const it = items[k];
@@ -628,18 +640,24 @@ function planBridge(game, x0, y0, x1, y1) {
     const endpoint = k === 0 || k === tiles.length - 1;
     if (endpoint) {
       const land = t !== Terrain.WATER && t !== Terrain.ROCK && !map.building[i] && !map.wall[i];
-      if (!land) { it.ok = false; it.reason = 'A Pons (Bridge) must start and end on open land'; }
+      if (!land) { it.ok = false; it.reason = `A ${def.name} (${def.en}) must start and end on open land`; }
       else if (!map.road[i]) { it.cost = TOOLS.road.cost; cost += it.cost; count++; }
     } else {
       if (t !== Terrain.WATER || map.building[i]) { it.ok = false; it.reason = 'A bridge can only span open water'; }
+      else if (map.road[i] === Road.BRIDGE && !map.bridgeLow[i] !== !low) { it.ok = false; it.reason = `A ${low ? TOOLS.bridge.en : TOOLS.low_bridge.en} stands here: clear it first`; }
+      else if (low && i === entry) { it.ok = false; it.reason = 'Ships come in from the sea here: no low bridge on this tile'; }
+      else if (low && map.road[i] !== Road.BRIDGE && boats.has(i)) { it.ok = false; it.reason = 'A boat is in the way: wait until it has passed'; }
       else if (map.road[i] === Road.BRIDGE) { it.cost = 0; }
-      else { it.cost = TOOLS.bridge.cost; cost += it.cost; count++; waterRun++; }
+      else { it.cost = def.cost; cost += it.cost; count++; }
+      waterRun++;
     }
   }
   if (waterRun > MAX_BRIDGE) return fail(`Too long: bridges span at most ${MAX_BRIDGE} tiles of water`, items.map((i) => ({ ...i, ok: false })));
-  if (items.some((i) => !i.ok)) return { tool: 'bridge', kind: 'line', items, cost: 0, count: 0, warnings: [], reason: items.find((i) => !i.ok).reason };
+  if (waterRun < def.minWater) return fail(`Too short: a ${def.name} (${def.en}) spans at least ${def.minWater} tiles of water, so ships pass between its piers. Use a low bridge here.`, items.map((i) => ({ ...i, ok: false })));
+  if (items.some((i) => !i.ok)) return { tool, kind: 'line', items, cost: 0, count: 0, warnings: [], reason: items.find((i) => !i.ok).reason };
   if (!canAfford(game, cost)) return fail('Not enough money', items.map((i) => ({ ...i, ok: false })));
-  return { tool: 'bridge', kind: 'line', items, cost, count, warnings: [], reason: null };
+  const span = items.filter((it, k) => k > 0 && k < items.length - 1).map((it) => map.idx(it.x, it.y));
+  return { tool, kind: 'line', items, cost, count, warnings: low ? lowBridgeCuts(game, span) : [], reason: null };
 }
 
 function planClear(game, x0, y0, x1, y1) {
@@ -720,6 +738,7 @@ export function applyPlan(game, plan) {
     clearRuin(game, i);
   };
 
+  let lowChanged = false; // a low bridge built or cleared: the boats' water changes
   if (plan.tool === 'clear') {
     for (const it of plan.items) {
       if (!it.ok) continue;
@@ -728,6 +747,7 @@ export function applyPlan(game, plan) {
         if (b) { done += linkedGroup(game, b).length; removeBuilding(game, b, 'demolish'); } // a hippodrome: all its sections
       } else if (it.road) {
         const i = map.idx(it.x, it.y);
+        if (map.bridgeLow[i]) { map.bridgeLow[i] = 0; lowChanged = true; }
         map.road[i] = Road.NONE;
         map.aqueduct[i] = 0;
         map.roadblock[i] = 0;
@@ -752,6 +772,7 @@ export function applyPlan(game, plan) {
       }
     }
     if (spent > 0) transact(game, 'construction', -spent);
+    if (lowChanged) refreshWaterways(game); // boats may pass where a low bridge stood
     game.onMapEdited();
     game.lastUndo = null;
     game.events.emit('sound', { name: 'demolish' });
@@ -767,7 +788,15 @@ export function applyPlan(game, plan) {
       spent += it.cost;
       done++;
     }
-  } else if (plan.tool === 'road' || plan.tool === 'aqueduct' || plan.tool === 'plaza' || plan.tool === 'bridge' || plan.tool === 'wall') {
+  } else if (plan.tool === 'road' || plan.tool === 'aqueduct' || plan.tool === 'plaza' || plan.tool === 'bridge' || plan.tool === 'low_bridge' || plan.tool === 'wall') {
+    // A boat may have sailed under the line since the plan was made: no
+    // low bridge with a gap in it, and none over a boat.
+    if (plan.tool === 'low_bridge') {
+      const boats = boatTiles(game);
+      if (plan.items.some((it) => it.ok && map.inBounds(it.x, it.y) && map.road[map.idx(it.x, it.y)] !== Road.BRIDGE && boats.has(map.idx(it.x, it.y)))) {
+        return { ok: false, count: 0, cost: 0, reason: 'A boat is in the way: wait until it has passed' };
+      }
+    }
     for (const it of plan.items) {
       if (!it.ok || it.exists) continue;
       const i = map.idx(it.x, it.y);
@@ -794,11 +823,14 @@ export function applyPlan(game, plan) {
         if (map.road[i] !== Road.ROAD) continue;
         undo.ops.push({ op: 'plaza', i });
         map.road[i] = Road.PLAZA;
-      } else if (plan.tool === 'bridge') {
+      } else if (plan.tool === 'bridge' || plan.tool === 'low_bridge') {
         if (it.cost === 0) continue;
+        const water = map.terrain[i] === Terrain.WATER;
         undo.ops.push({ op: 'road', ...saveTile(i) });
-        if (map.terrain[i] === Terrain.WATER) map.road[i] = Road.BRIDGE;
-        else { clearTile(i); map.road[i] = Road.ROAD; }
+        if (water) {
+          map.road[i] = Road.BRIDGE;
+          if (plan.tool === 'low_bridge') { map.bridgeLow[i] = 1; lowChanged = true; }
+        } else { clearTile(i); map.road[i] = Road.ROAD; }
       }
       spent += it.cost;
       done++;
@@ -831,6 +863,7 @@ export function applyPlan(game, plan) {
     }
   }
   if (spent > 0) transact(game, 'construction', -spent);
+  if (lowChanged) refreshWaterways(game);
   undo.cost = spent;
   game.lastUndo = done > 0 ? undo : null;
   game.onMapEdited();
@@ -874,12 +907,14 @@ export function undoLast(game) {
   if (!canUndo(game)) return { ok: false, reason: 'Nothing to undo' };
   const u = game.lastUndo;
   const { map } = game;
+  let lowChanged = false;
   for (const op of [...u.ops].reverse()) {
     if (op.op === 'building') {
       const b = game.buildings.get(op.id);
       if (b) removeBuilding(game, b, 'undo');
       for (const t of op.tiles) { map.terrain[t.i] = t.terrain; map.rubble[t.i] = t.rubble; restoreRuin(game, t.i, t.ruin); }
     } else if (op.op === 'road') {
+      if (map.bridgeLow[op.i]) { map.bridgeLow[op.i] = 0; lowChanged = true; }
       map.road[op.i] = Road.NONE;
       map.terrain[op.i] = op.terrain;
       map.rubble[op.i] = op.rubble;
@@ -907,6 +942,7 @@ export function undoLast(game) {
     game.city.finance.thisYear.construction = Math.max(0, game.city.finance.thisYear.construction - u.cost);
   }
   game.lastUndo = null;
+  if (lowChanged) refreshWaterways(game);
   game.onMapEdited();
   return { ok: true, refund: u.cost };
 }

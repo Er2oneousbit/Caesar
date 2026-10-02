@@ -40,6 +40,7 @@ import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.j
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
 import { ruinAt } from '../sim/ruins.js';
 import { rebuildPlan } from '../sim/construction.js';
+import { cutOffNote } from '../sim/bridges.js';
 import { lacksRoad } from '../sim/roadAccess.js';
 import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
@@ -149,6 +150,8 @@ export function buildingStatus(game, b) {
   if (def.workers && b.laborAccess <= 0) return { level: 'bad', text: `Cannot find workers: no occupied housing within ${CONFIG.LABOR_RANGE} tiles along the roads.` };
   if (def.workers && b.efficiency <= 0) return { level: 'bad', text: 'No workers available. The city needs more people, or change labor priorities.' };
   if (def.needsPiped && !b.hasWater) return { level: 'bad', text: 'No piped water. It must sit inside a full reservoir\'s area.' };
+  const cut = cutOffNote(game, b); // (a low bridge between it and the sea, or its fishing grounds)
+  if (cut) return { level: def.kind === 'dock' || def.kind === 'wharf' ? 'bad' : 'warn', text: cut };
   switch (def.kind) {
     case 'residence':
       return { level: 'good', text: 'The governor lives here.' };
@@ -964,7 +967,7 @@ export class InfoPanel {
       this.head(TERRAIN_NAMES[t], `${x},${y}`),
       kv('Desirability', `${map.desirability[i]}`),
       kv('Water access', water.join(', ') || 'None'),
-      road ? kv('Road', fullName(road === Road.PLAZA ? TOOLS.plaza : road === Road.BRIDGE ? TOOLS.bridge : TOOLS.road)) : null,
+      road ? kv('Road', fullName(road === Road.PLAZA ? TOOLS.plaza : road === Road.BRIDGE ? (map.bridgeLow[i] ? TOOLS.low_bridge : TOOLS.bridge) : TOOLS.road)) : null,
       map.aqueduct[i] ? kv(fullName(TOOLS.aqueduct), map.aqueduct[i] === 2 ? 'Carrying water' : 'Dry') : null,
       wall ? kv(fullName(wall === Wall.GATE ? GATE : TOOLS.wall), `${Math.round(wallHpOf(g, i).hp)} / ${wallHpOf(g, i).max} hp`) : null,
       notes.length ? h('div', { class: 'panel-sec' }, notes.map((n) => h('div', {}, n))) : null,

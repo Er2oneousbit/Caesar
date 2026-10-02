@@ -595,6 +595,53 @@ export function bridgeSpec(axis) {
   };
 }
 
+/** Height of a low bridge's deck over the water (px at zoom 1): people on it are lifted this much. */
+export const LOW_BRIDGE_DECK_Z = 5;
+
+/**
+ * Timber low bridge on piles, just over the water: a bent of two piles with
+ * a cross brace under the middle of each tile, a plank deck laid across the
+ * way, and a light rail each side. Low and plain beside the stone ship
+ * bridge, so the player sees at a glance which one closes the river to
+ * boats. axis 'u' runs along x, 'v' along y, as bridgeSpec.
+ */
+export function lowBridgeSpec(axis) {
+  const z = LOW_BRIDGE_DECK_Z;
+  const wood = '#8d6b45';
+  const dark = shade(wood, -0.45);
+  const deck = '#a07c52';
+  const at = axis === 'u' ? (t, s, h) => P(t, s, h) : (t, s, h) => P(s, t, h);
+  const line = (ctx, a, b, color, lw) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  };
+  return {
+    w: TW + 4,
+    h: TH + 8 + z + 10,
+    ax: HALF_W + 2,
+    ay: z + 10,
+    draw(ctx) {
+      // The bent: back pile, brace, front pile (back to front).
+      const pile = (s0) => {
+        poly(ctx, [at(0.45, s0, -3), at(0.55, s0, -3), at(0.55, s0, z), at(0.45, s0, z)], shade(wood, -0.15), dark, 0.5);
+      };
+      pile(0.24);
+      line(ctx, at(0.5, 0.24, z - 1), at(0.5, 0.76, -1), shade(wood, -0.25), 1.2);
+      pile(0.76);
+      // The deck, its planks across the way, and its front beam.
+      poly(ctx, [at(-0.02, 0.2, z), at(1.02, 0.2, z), at(1.02, 0.8, z), at(-0.02, 0.8, z)], deck, dark, 0.6);
+      for (let k = 1; k < 8; k++) line(ctx, at(k / 8, 0.2, z), at(k / 8, 0.8, z), shade(deck, -0.22), 0.5);
+      poly(ctx, [at(-0.02, 0.8, z), at(1.02, 0.8, z), at(1.02, 0.8, z - 2), at(-0.02, 0.8, z - 2)], shade(wood, -0.1), dark, 0.5);
+      // Rails: posts and a top bar each side.
+      for (const s0 of [0.2, 0.8]) {
+        for (const t of [0.1, 0.5, 0.9]) line(ctx, at(t, s0, z), at(t, s0, z + 4), dark, 0.9);
+        line(ctx, at(0, s0, z + 4), at(1, s0, z + 4), shade(wood, s0 > 0.5 ? -0.1 : 0.08), 1.1);
+      }
+    },
+  };
+}
+
 /** Rubble decal: scattered stones and soot. */
 export function rubbleSpec(variant) {
   return {

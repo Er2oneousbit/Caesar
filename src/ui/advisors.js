@@ -42,6 +42,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
 import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
 import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } from '../sim/trade.js';
+import { partnerBuys } from '../sim/tradeDemand.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
@@ -95,7 +96,8 @@ const MOOD_LABELS = {
 /**
  * One trade partner's card: route kind, open or not (with the button to open
  * it), what it sells and buys with this year's amounts, and what the route
- * needs. Shared by the Trade advisor and the Empire map (ui/empire.js).
+ * needs. Shared by the Trade advisor and the Empire map (ui/empire.js). What
+ * it buys is this mission's demand in force (sim/tradeDemand.js).
  * `onChange` runs after the player opened the route.
  */
 export function tradeRouteCard(app, g, id, onChange) {
@@ -123,7 +125,7 @@ export function tradeRouteCard(app, g, id, onChange) {
       }, `Open route (${fmt(p.openCost)} Dn)`)),
     how,
     h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought)),
-    h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(p.buys, r.sold)));
+    h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold)));
 }
 
 export class Advisors {
@@ -410,11 +412,15 @@ export class Advisors {
     if (!partners.length) return h('div', { class: 'muted' }, 'No trade partners are available in this scenario.');
     const seaOk = !!g.map.seaEntry;
     const routeCards = partners.map(([id]) => tradeRouteCard(this.app, g, id, () => this.render()));
-    const tradeable = GOOD_KEYS.filter((k) => partners.some(([id]) => TRADE_PARTNERS[id].sells[k] || TRADE_PARTNERS[id].buys[k]));
+    const buys = Object.fromEntries(partners.map(([id]) => [id, partnerBuys(g, id)]));
+    const tradeable = GOOD_KEYS.filter((k) => t.settings[k]?.mode === 'export' || partners.some(([id]) => TRADE_PARTNERS[id].sells[k] || buys[id][k]));
     const rows = tradeable.map((k) => {
       const s = t.settings[k];
       const canImport = partners.some(([id]) => TRADE_PARTNERS[id].sells[k]);
-      const canExport = partners.some(([id]) => TRADE_PARTNERS[id].buys[k]);
+      // A good still set to Export keeps the option after its last buyer
+      // stopped buying it (a mission's demand change), so the list shows the
+      // setting as it is; the player can switch it off.
+      const canExport = partners.some(([id]) => buys[id][k]) || s.mode === 'export';
       return h('tr', {},
         h('td', {}, `${GOODS[k].icon} ${GOODS[k].name}`),
         h('td', { class: 'r num' }, fmt(cityStock(g, k))),

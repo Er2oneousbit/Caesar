@@ -125,7 +125,11 @@ test('the new missions fit their jobs and keep to their pace', () => {
     const s = findScenario(id);
     const ceiling = employmentCeiling(s, SENSIBLE);
     assert.ok(s.goals.population <= ceiling && employsEnough(s, s.goals.population, SENSIBLE), `${id}: ${s.goals.population} people, ceiling ${ceiling}`);
-    assert.ok(s.goals.population >= ceiling * 0.9, `${id}: a goal a little under the ceiling (${s.goals.population} of ${ceiling})`);
+    // A little under what a city of working homes alone employs (the goals
+    // were set so before the model counted a villa quarter, which lifts the
+    // ceilings of missions 4 on: those goals stay, with room to spare).
+    const working = employmentCeiling(s, { ...SENSIBLE, villas: 0 });
+    assert.ok(s.goals.population <= working && s.goals.population >= working * 0.9, `${id}: a goal a little under the ceiling of working homes (${s.goals.population} of ${working})`);
     // With the population in reach, peace sets the pace: a point a month from 20.
     const m = goalMonths(s.goals);
     assert.equal(m.fastest, m.peace, `${id}: peace sets the pace`);

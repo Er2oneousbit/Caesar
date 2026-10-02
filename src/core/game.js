@@ -54,7 +54,7 @@ import { monthlyEconomy, yearlyEconomy, newLedger } from '../sim/economy.js';
 import { repayLoan } from '../sim/loans.js';
 import { newGodState, newGodMood, updateReligion } from '../sim/religion.js';
 import { GOD_KEYS } from '../data/gods.js';
-import { newTradeState, updateTrade, resetTradeYear, updateDock } from '../sim/trade.js';
+import { newTradeState, updateTrade, resetTradeYear, updateDock, tradeMonthly } from '../sim/trade.js';
 import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome, enemiesInProvince } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
@@ -361,6 +361,7 @@ export class Game {
     updateCityHealth(this);
     updateEmperor(this);
     battleMonthly(this); // Caesar's calls for troops and the distant battles (sim/battle.js)
+    tradeMonthly(this); // news of a partner's demand changing this month (sim/tradeDemand.js)
     farmSeasonNotice(this); // Insane: the farms stop in winter
     const c = this.city;
     c.foodFlowLast = { ...c.foodFlow };

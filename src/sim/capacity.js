@@ -4,8 +4,7 @@
  * How many people a mission's buildings can employ: the yardstick for its
  * population goal. Beside sim/pace.js (how fast goals can be met), this says
  * how big a goal can be at all. A test holds the campaign's population goals
- * under it (missions 3 to 7 are known exceptions for now, see the ROADMAP),
- * and `npm run sim -- --capacity` prints the table.
+ * under it, and `npm run sim -- --capacity` prints the table.
  *
  * Why it matters: WORKFORCE_RATIO of the plebeian residents look for work, and
  * above UNEMPLOYMENT_MOOD_FREE unemployment the city's mood falls (up to 15
@@ -15,10 +14,11 @@
  * Huts has about 100 jobs, and stalled near 600 to 720 with half its workers
  * idle.
  *
- * The model is a yardstick, not a simulation. For a city of P people, all in
- * the best working homes the mission allows, it lists the buildings a player
- * puts up (planCity) and counts their workers; the employment ceiling is the
- * largest P whose jobs keep unemployment at or below UNEMPLOYMENT_MOOD_FREE.
+ * The model is a yardstick, not a simulation. For a city of P people, in the
+ * best working homes the mission allows and, where its homes can reach the
+ * Villa, a villa quarter, it lists the buildings a player puts up (planCity)
+ * and counts their workers; the employment ceiling is the largest P whose
+ * jobs keep the plebeians' unemployment at or below UNEMPLOYMENT_MOOD_FREE.
  * Two profiles say how generously the player builds:
  *
  *   LEAN       a building for each trip's worth of homes: a walker covers 4
@@ -43,17 +43,37 @@
  *
  * Both profiles share the rest:
  *
- *   homes      every home at the working level: the best level the unlocks
- *              allow whose residents work (patricians do not, so villas could
- *              only add people on top of the ceiling, never jobs-short ones)
+ *   homes      the working level: the best level the unlocks allow whose
+ *              residents work. Where the homes can reach the Villa, a villa
+ *              quarter too: PATRICIAN_SHARE of the people in Villas (the
+ *              cheapest patrician home, so the fewest jobs per person). The
+ *              villas' people need every service, food and five goods but add
+ *              no workers, as patricians in the original; the late missions'
+ *              prosperity goals all but require them (the rating counts
+ *              patricians up to 15% of the city). The share was checked in
+ *              play with the demo city's villa quarter (see PATRICIAN_SHARE)
+ *   quarters   walkers serve every home they pass, villa or not: each walker
+ *              service, fountain, hospital and show is planned over the tiles
+ *              of every home whose level needs it, both quarters together (a
+ *              Villa needs what an Insula does and a second god, whose priests
+ *              are added for the villas' tiles). Play showed villas growing
+ *              among the working homes, served by the same walkers, so the
+ *              villa quarter brings no services of its own (planning them per
+ *              quarter, with at least one of each, made the ceilings jump by
+ *              a whole set of services even for a few villas). Food, granaries,
+ *              industry, warehouses, exports, docks, the army, the Senate and
+ *              the hippodrome are planned once for the whole city; the villas
+ *              add their food and five goods, wine among them
  *   services   one building per stretch of homes its walker covers (above).
  *              Fountains and hospitals cover their radius, of which HOME_SHARE
  *              is homes. Upkeep (prefects, engineers) covers homes, plus one of
  *              each for the farms and one for any industry
- *   food       farms on full meadow at the fastest food farm's rate and the
- *              most productive difficulty, at least as many farms as the kinds
- *              of food the level eats, plus the profile's spareFarms;
- *              granaries hold GRANARY_MONTHS of food
+ *   food       farms on full meadow at the most productive difficulty: homes
+ *              eat their level's kinds of food in equal shares (sim/housing.js
+ *              consumeHouse), so the fastest kinds are each grown on their own
+ *              farms at their own rate, at least one farm a kind, plus the
+ *              profile's spareFarms on the fastest; granaries hold
+ *              GRANARY_MONTHS of food
  *   gods       every unlocked god gets temples for its share of the city
  *              (PEOPLE_PER_TEMPLE, sim/religion.js), at least one; the gods the
  *              level needs also send priests past every home
@@ -61,10 +81,16 @@
  *              keep them booked) that reaches the level's entertainment
  *   industry   only as far as there is a buyer: the homes' own use of the
  *              goods their level needs, plus each trade partner's yearly
- *              `buys` of what the city can make. Raw materials come from the
- *              city's own producers when the mission unlocks them (else they
- *              are bought, which employs nobody here). Warehouses hold
- *              WAREHOUSE_MONTHS of that flow; a dock when there is a sea partner
+ *              purchases of what the city can make, as in force when the
+ *              mission's goals can first be met (its paceYears: a rise the
+ *              mission schedules after that does not count; sim/tradeDemand.js).
+ *              Raw materials come from the city's own producers when the
+ *              mission unlocks them (else they are bought, which employs nobody
+ *              here). Warehouses hold WAREHOUSE_MONTHS of that flow
+ *   docks      enough Emporia for the sea partners' ships: each route's ships
+ *              a year (more on a busy route) staying SHIP_STAY_DAYS
+ *   hippodrome where it is unlocked with its chariot stable: one of each (a
+ *              city has one), as a late city builds for its palaces' shows
  *   army       a mission with raids: a barracks, one fort of each unlocked
  *              kind and two towers (their equipment is a one-off batch, so
  *              it adds no lasting workshop jobs)
@@ -88,6 +114,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { Terrain } from '../world/map.js';
 import { SHOW_DAYS, REFILL_BELOW } from './entertainment.js';
+import { buysInForce, routeVolume, visitsPerYear } from './tradeDemand.js';
 
 /** Home tiles within SERVICE_RADIUS of one street tile: street, house, house means two rows each side. */
 export const HOMES_PER_STREET_TILE = 4;
@@ -104,10 +131,28 @@ export const WAREHOUSE_MONTHS = 2;
 export const LAND_FOR_HOMES = 0.5;
 /** Share of the meadow a city can farm (fields come in patches a 3x3 farm does not fill). */
 export const MEADOW_FARMED = 2 / 3;
+/**
+ * Share of the people the model houses in villas where the homes can reach
+ * the Villa: what play showed, not the most a city could have. The demo city
+ * with wine for its markets (`npm run sim -- --level 3 --uptown --cloth
+ * --wine`, one to six blocks, or with a villa block: --villas) kept 0 to 13%
+ * of its people in villas on average over its last three years, 4% across
+ * eleven runs (villas move up and down the ladder: at most 19% in a month);
+ * docs/DEVELOPMENT.md has the runs. The prosperity rating rewards patricians
+ * up to 15%, and the ceilings are very sensitive to the share (each point
+ * of it is a point off the workforce of the whole city), so the careful
+ * figure.
+ */
+export const PATRICIAN_SHARE = 0.05;
+/** The villa quarter's homes: the cheapest patrician level (the Villa). */
+export const VILLA_LEVEL = HOUSE_TIERS.findIndex((t) => t.patrician);
+/** Days a merchant ship stays at an Emporium with storage about 10 road tiles away (docs/GAMEPLAY.md): the docks' count. */
+export const SHIP_STAY_DAYS = 25;
 
-// The three seat kinds. The hippodrome is left out of the model: one per
-// city, it cannot be multiplied to reach every home, and the levels the
-// model plans for need at most 30 entertainment.
+// The three seat kinds. The hippodrome is left out of the shows' plan: one
+// per city, it cannot be multiplied to reach every home, and the levels the
+// model plans for need at most 30 entertainment (it is planned once a city
+// where it is unlocked, for its jobs: planCity).
 const VENUE_KINDS = Object.keys(VENUE_SEATS);
 const PER_MONTH = CONFIG.DAYS_PER_MONTH;
 const PER_YEAR = CONFIG.DAYS_PER_MONTH * CONFIG.MONTHS_PER_YEAR;
@@ -140,11 +185,14 @@ function producerOf(keys, good) {
 
 /**
  * Goods the city can make (an unlocked producer whose inputs it makes or
- * buys) and goods it can buy (a partner sells them).
+ * buys) and goods it can buy (a partner sells them). `s.standIns` (not a
+ * mission field): goods that reach the homes with no workshop and no partner,
+ * as the demo city's uptown stocks its markets (simulate.mjs --blocks); they
+ * count as bought, employing nobody.
  */
 export function goodsAvailable(s) {
   const keys = unlockedBuildings(s);
-  const bought = new Set();
+  const bought = new Set(s.standIns || []);
   for (const id of s.partners) for (const g of Object.keys(TRADE_PARTNERS[id].sells)) bought.add(g);
   const made = new Set();
   // Raw goods first, then the workshops that use them (a workshop's input may
@@ -226,8 +274,8 @@ function offers(s) {
     health: (keys.has('clinic') ? 1 : 0) + (keys.has('hospital') ? 1 : 0),
     // A working winery, and each partner selling wine (data/housing.js `wine`).
     wine: (keys.has('wine_ws') && goods.made.has('wine') ? 1 : 0) + s.partners.filter((id) => TRADE_PARTNERS[id].sells.wine).length,
-    // The hippodrome counts only for which levels can be reached at all (its
-    // points and its seats): the model never plans one (see VENUE_KINDS).
+    // The hippodrome's points and seats count for which levels can be reached
+    // at all; the shows' plan never counts on it (see VENUE_KINDS).
     ent: bestEntertainment(keys) + (keys.has('hippodrome') && keys.has('chariot_maker') ? VENUE_POINTS.hippodrome + ENT_BASE_MAX - ENT_SEATS_MAX : 0),
   };
 }
@@ -288,80 +336,109 @@ export function lowProduction() {
   return Math.min(...Object.values(DIFFICULTY).map((d) => d.production * (1 - (3 / CONFIG.MONTHS_PER_YEAR) * (1 - (d.winterGrowth ?? 1)))));
 }
 
+/** The villa quarter's share for a mission and a plan's `villas` option: 0 where the homes cannot reach the Villa. */
+export function villaShare(s, villas = PATRICIAN_SHARE) {
+  return villas > 0 && topLevels(s).top >= VILLA_LEVEL ? villas : 0;
+}
+
 /**
- * The buildings a sensible city of `people` residents puts up, all in homes
- * of the mission's working level (see the header for every assumption).
- * @returns {{level:number, homeTiles:number, items:{key:string, count:number, why:string}[], jobs:number}}
+ * The buildings a sensible city of `people` residents puts up (see the header
+ * for every assumption): its working quarter at the mission's working level
+ * and, where the Villa can be reached, a villa quarter of `villas` of the
+ * people (false or 0: none, every home a working one).
+ * @returns {{level:number, villaLevel:number, homeTiles:number, villaTiles:number, plebs:number, villas:number,
+ *   items:{key:string, count:number, why:string}[], jobs:number}}
  */
-export function planCity(s, people, { production = topProduction(), homesPerStreetTile = LEAN.homesPerStreetTile, spareFarms = LEAN.spareFarms } = {}) {
+export function planCity(s, people, { production = topProduction(), homesPerStreetTile = LEAN.homesPerStreetTile, spareFarms = LEAN.spareFarms, villas = PATRICIAN_SHARE } = {}) {
   const reach = (key) => walkerReach(key, homesPerStreetTile);
   const ctx = offers(s);
   const { keys, goods } = ctx;
   const level = topLevels(s).working;
-  const need = HOUSE_TIERS[level];
-  const tiles = people / peoplePerTile(level);
+  const share = villaShare(s, villas);
+  const quarters = [{ level, people: people * (1 - share), why: '' }];
+  if (share > 0) quarters.push({ level: VILLA_LEVEL, people: people * share, why: ' (villas)' });
+  for (const q of quarters) {
+    q.need = HOUSE_TIERS[q.level];
+    q.tiles = q.people / peoplePerTile(q.level);
+  }
+  const [plebs, villa = { level: 0, people: 0, tiles: 0 }] = quarters;
   const items = [];
   const add = (key, count, why) => {
     if (!keys.has(key) || count <= 0) return;
     const have = items.find((it) => it.key === key);
     if (have) { have.count += count; have.why += `; ${why}`; } else items.push({ key, count, why });
   };
-  const cover = (key, why) => add(key, Math.max(1, Math.ceil(tiles / reach(key))), why);
-  if (people <= 0) return { level, homeTiles: 0, items, jobs: 0 };
+  // Walkers serve every home they pass, villa or not: a service is planned
+  // over the tiles of every home whose level needs it, both quarters together.
+  const tilesNeeding = (needs) => quarters.reduce((n, q) => n + (needs(q.need) ? q.tiles : 0), 0);
+  const cover = (key, needs, why) => {
+    const tiles = tilesNeeding(needs);
+    if (tiles > 0) add(key, Math.max(1, Math.ceil(tiles / reach(key))), why);
+  };
+  const everyone = () => true;
+  const result = (jobs) => ({ level, villaLevel: villa.level, homeTiles: plebs.tiles, villaTiles: villa.tiles, plebs: plebs.people, villas: villa.people, items, jobs });
+  if (people <= 0) return result(0);
 
   // Upkeep, markets and taxes: walkers past every home (a Senate's tax
   // collectors count with the forums').
-  cover('prefecture', 'fire watch');
-  cover('engineer_post', 'repairs');
-  cover('market', 'food and goods to the door');
+  cover('prefecture', everyone, 'fire watch');
+  cover('engineer_post', everyone, 'repairs');
+  cover('market', everyone, 'food and goods to the door');
   if (keys.has('senate')) add('senate', 1, 'culture and prosperity');
-  const taxReach = reach('forum');
-  add('forum', Math.max(keys.has('senate') ? 0 : 1, Math.ceil(tiles / taxReach) - (keys.has('senate') ? 1 : 0)), 'taxes');
+  const taxmen = Math.ceil(tilesNeeding(everyone) / reach('forum'));
+  add('forum', Math.max(keys.has('senate') ? 0 : 1, taxmen - (keys.has('senate') ? 1 : 0)), 'taxes');
 
   // Water: wells employ nobody; fountains cover their radius.
-  if (need.water >= 2) add('fountain', Math.ceil(tiles / radiusReach(CONFIG.FOUNTAIN_RADIUS)), 'fountain water');
+  const piped = tilesNeeding((n) => n.water >= 2);
+  if (piped > 0) add('fountain', Math.ceil(piped / radiusReach(CONFIG.FOUNTAIN_RADIUS)), 'fountain water');
 
-  // Food: what the people eat, at least one farm for each kind the level eats.
-  const farms = FOOD_TYPES.map((f) => producerOf(keys, f)).filter(Boolean);
-  if (need.food > 0 && farms.length) {
-    const fastest = farms.reduce((a, b) => (b.productionDays < a.productionDays ? b : a));
-    const monthly = people * CONFIG.FOOD_PER_PERSON_MONTH;
-    const perFarm = (CONFIG.CART_CAPACITY * PER_MONTH * production) / fastest.productionDays;
-    add(fastest.key, Math.max(need.food, Math.ceil(monthly / perFarm)) + spareFarms, 'food');
-    add('granary', Math.max(1, Math.ceil((monthly * GRANARY_MONTHS) / CONFIG.GRANARY_CAPACITY)), 'food store');
+  // Food for everyone: each kind the homes eat on its own farms, at its own rate.
+  const farms = foodPlan(keys, quarters, people, production, spareFarms);
+  for (const it of farms) add(it.key, it.count, it.why);
+  if (farms.length) {
+    add('granary', Math.max(1, Math.ceil((people * CONFIG.FOOD_PER_PERSON_MONTH * GRANARY_MONTHS) / CONFIG.GRANARY_CAPACITY)), 'food store');
     add('prefecture', 1, 'farms');
     add('engineer_post', 1, 'farms');
   }
 
-  // Gods: every unlocked god's share of the city, and priests past every home
-  // for the gods the level needs.
-  const gods = godsOf(keys);
-  gods.forEach((g, i) => {
-    const share = Math.max(1, Math.ceil(people / GOD_KEYS.length / CONFIG.PEOPLE_PER_TEMPLE));
-    const priests = i < need.religion ? Math.ceil(tiles / reach(`temple_${g}`)) : 0;
-    add(`temple_${g}`, Math.max(share, priests), `${g}`);
+  // Gods: every unlocked god's share of the whole city, and priests past every
+  // home whose level needs that god (the villas' second god: their tiles only).
+  godsOf(keys).forEach((g, i) => {
+    const temples = Math.max(1, Math.ceil(people / GOD_KEYS.length / CONFIG.PEOPLE_PER_TEMPLE));
+    const tiles = tilesNeeding((n) => i < n.religion);
+    add(`temple_${g}`, Math.max(temples, tiles > 0 ? Math.ceil(tiles / reach(`temple_${g}`)) : 0), `${g}`);
   });
 
-  // Health, grooming and schooling: walkers past every home.
-  if (need.barber) cover('barber', 'barber');
-  if (need.baths) cover('baths', 'baths');
-  if (need.health >= 1) cover('clinic', 'health care');
-  if (need.health >= 2) add('hospital', Math.ceil(tiles / radiusReach(CONFIG.HOSPITAL_RADIUS)), 'hospital');
-  if (need.edu >= 1) cover(keys.has('school') ? 'school' : 'library', 'schooling');
-  if (need.edu >= 2) cover('library', 'library');
-  if (need.edu >= 3) cover('academy', 'academy');
+  // Health, grooming, schooling and shows: walkers past every home that needs them.
+  cover('barber', (n) => n.barber, 'barber');
+  cover('baths', (n) => n.baths, 'baths');
+  cover('clinic', (n) => n.health >= 1, 'health care');
+  const sick = tilesNeeding((n) => n.health >= 2);
+  if (sick > 0) add('hospital', Math.ceil(sick / radiusReach(CONFIG.HOSPITAL_RADIUS)), 'hospital');
+  cover(keys.has('school') ? 'school' : 'library', (n) => n.edu >= 1, 'schooling');
+  cover('library', (n) => n.edu >= 2, 'library');
+  cover('academy', (n) => n.edu >= 3, 'academy');
+  const ent = Math.max(0, ...quarters.map((q) => q.need.ent));
+  if (ent > 0) {
+    const shows = quarters.filter((q) => q.need.ent > 0);
+    const tiles = shows.reduce((n, q) => n + q.tiles, 0);
+    const audience = shows.reduce((n, q) => n + q.people, 0);
+    for (const it of venuePlan(keys, ent, tiles, audience, reach)) add(it.key, it.count, it.why);
+  }
+  // The hippodrome: one a city, with its chariot stable, where it is unlocked.
+  if (keys.has('hippodrome') && keys.has('chariot_maker')) {
+    add('hippodrome', 1, 'races');
+    add('chariot_maker', 1, 'races');
+  }
 
-  // Shows: the cheapest set of venues that reaches the level's entertainment.
-  if (need.ent > 0) for (const it of venuePlan(keys, need.ent, tiles, people, reach)) add(it.key, it.count, it.why);
-
-  // Industry and trade: the homes' own goods, and what partners buy.
-  const flow = industryPlan(s, keys, goods, need, people, production);
+  // Industry and trade: each quarter's own goods, and what partners buy.
+  const flow = industryPlan(s, keys, goods, quarters, production);
   for (const it of flow.items) add(it.key, it.count, it.why);
   if (flow.units > 0) {
     add('warehouse', Math.max(1, Math.ceil((flow.units / CONFIG.MONTHS_PER_YEAR) * WAREHOUSE_MONTHS / CONFIG.WAREHOUSE_CAPACITY)), 'goods store');
     if (flow.made > 0) { add('prefecture', 1, 'industry'); add('engineer_post', 1, 'industry'); }
   }
-  if (s.partners.some((id) => TRADE_PARTNERS[id].route === 'sea')) add('dock', 1, 'sea trade');
+  add('dock', docksFor(s), 'sea trade');
 
   // The army, when the province is raided.
   if (s.military) {
@@ -370,8 +447,50 @@ export function planCity(s, people, { production = topProduction(), homesPerStre
     add('tower', 2, 'army');
   }
 
-  const jobs = items.reduce((n, it) => n + it.count * BUILDINGS[it.key].workers, 0);
-  return { level, homeTiles: tiles, items, jobs };
+  return result(items.reduce((n, it) => n + it.count * BUILDINGS[it.key].workers, 0));
+}
+
+/**
+ * Farms for a city's food. Homes eat as many kinds as their level needs, a
+ * share of the ration from each (sim/housing.js consumeHouse), so the city
+ * grows that many kinds, the fastest it can, each on its own farms at its own
+ * rate (a vegetable farm fills a load in 22 days, wheat in 20): at least one
+ * farm a kind, and the profile's spare farms on the fastest. A level that
+ * eats more kinds than the mission can grow is fed from the farms it has.
+ */
+function foodPlan(keys, quarters, people, production, spareFarms) {
+  const kinds = Math.max(0, ...quarters.map((q) => q.need.food));
+  const farms = FOOD_TYPES.map((f) => producerOf(keys, f)).filter(Boolean).sort((a, b) => a.productionDays - b.productionDays);
+  if (kinds <= 0 || !farms.length) return [];
+  const grown = farms.slice(0, kinds);
+  const monthly = (people * CONFIG.FOOD_PER_PERSON_MONTH) / grown.length;
+  const out = grown.map((f) => ({ key: f.key, count: Math.max(1, Math.ceil(monthly / ((CONFIG.CART_CAPACITY * PER_MONTH * production) / f.productionDays))), why: 'food' }));
+  out[0].count += spareFarms + (kinds - grown.length);
+  return out;
+}
+
+/**
+ * Emporia for a mission's sea partners: each route's ships a year (more on a
+ * busy route, sim/tradeDemand.js) staying SHIP_STAY_DAYS, as many docks as
+ * keep them all, at least one. None without a sea partner.
+ */
+export function docksFor(s, years = s.paceYears || 0) {
+  let dockDays = 0;
+  for (const id of s.partners) {
+    const p = TRADE_PARTNERS[id];
+    if (p.route !== 'sea') continue;
+    dockDays += visitsPerYear('sea', routeVolume(demandAt(s, id, years), p.sells)) * SHIP_STAY_DAYS;
+  }
+  return dockDays > 0 ? Math.max(1, Math.ceil(dockDays / PER_YEAR)) : 0;
+}
+
+/**
+ * What a partner buys a year in a mission `years` into it (sim/tradeDemand.js):
+ * its table, the mission's `demand`, and the changes the mission schedules
+ * before then (a rise after the goals can first be met does not count).
+ */
+export function demandAt(s, partnerId, years = s.paceYears || 0) {
+  return buysInForce(s, s.map?.seed, partnerId, Math.ceil(years * CONFIG.MONTHS_PER_YEAR) - 1);
 }
 
 /**
@@ -416,18 +535,25 @@ function venuePlan(keys, want, tiles, people, reach) {
 }
 
 /**
- * Producers for the homes' own goods and partners' purchases, with the raw
- * materials they use when the city makes those itself.
+ * Producers for each quarter's own goods (by its level) and partners'
+ * purchases (the demand in force by the mission's planned pace: demandAt),
+ * with the raw materials they use when the city makes those itself. The
+ * quarters' goods are added up first, so a workshop is never rounded up twice.
  * @returns {{items:object[], units:number, made:number}} units: yearly flow through warehouses
  */
-function industryPlan(s, keys, goods, need, people, production) {
+function industryPlan(s, keys, goods, quarters, production) {
   const demand = {}; // units a year
   const want = (g, units) => { demand[g] = (demand[g] || 0) + units; };
-  for (const g of need.goods) if (goods.made.has(g)) want(g, (people / CONFIG.GOODS_PER_HOUSE_PEOPLE) * CONFIG.MONTHS_PER_YEAR);
   let units = 0;
-  for (const g of need.goods) units += (people / CONFIG.GOODS_PER_HOUSE_PEOPLE) * CONFIG.MONTHS_PER_YEAR; // made or bought, it passes a warehouse
+  for (const q of quarters) {
+    const yearly = (q.people / CONFIG.GOODS_PER_HOUSE_PEOPLE) * CONFIG.MONTHS_PER_YEAR;
+    for (const g of q.need.goods) {
+      if (goods.made.has(g)) want(g, yearly);
+      units += yearly; // made or bought, it passes a warehouse
+    }
+  }
   for (const id of s.partners) {
-    for (const [g, n] of Object.entries(TRADE_PARTNERS[id].buys)) {
+    for (const [g, n] of Object.entries(demandAt(s, id))) {
       if (!goods.made.has(g)) continue;
       want(g, n);
       units += n; // exports leave from a warehouse, food too
@@ -462,10 +588,14 @@ export function jobsFor(s, people, opts) {
   return planCity(s, people, opts).jobs;
 }
 
-/** Can a city of `people` residents keep unemployment at or below the grace? */
+/**
+ * Can a city of `people` residents keep unemployment at or below the grace?
+ * Only the plebeians look for work: the villa quarter's people use services
+ * and goods (jobs) but add no workers.
+ */
 export function employsEnough(s, people, opts) {
-  const workforce = people * CONFIG.WORKFORCE_RATIO;
-  return jobsFor(s, people, opts) >= workforce * (1 - CONFIG.UNEMPLOYMENT_MOOD_FREE);
+  const plan = planCity(s, people, opts);
+  return plan.jobs >= plan.plebs * CONFIG.WORKFORCE_RATIO * (1 - CONFIG.UNEMPLOYMENT_MOOD_FREE);
 }
 
 /**
@@ -499,13 +629,15 @@ export function landOf(map) {
 
 /**
  * The land ceiling: the people the map has room to house (LAND_FOR_HOMES of
- * its buildable land, HOME_SHARE of that homes) and to feed (farms on
- * MEADOW_FARMED of its meadow, at the least productive difficulty).
- * land: landOf(map).
+ * its buildable land, HOME_SHARE of that homes: the working quarter and, as
+ * planCity has one, the villa quarter, whose Villas hold half as many a tile)
+ * and to feed (farms on MEADOW_FARMED of its meadow, at the least productive
+ * difficulty). land: landOf(map).
  */
-export function landCeiling(s, land, { production = lowProduction() } = {}) {
-  const level = topLevels(s).working;
-  const housed = land.buildable * LAND_FOR_HOMES * HOME_SHARE * peoplePerTile(level);
+export function landCeiling(s, land, { production = lowProduction(), villas = PATRICIAN_SHARE } = {}) {
+  const share = villaShare(s, villas);
+  const tilesPerPerson = (1 - share) / peoplePerTile(topLevels(s).working) + (share > 0 ? share / peoplePerTile(VILLA_LEVEL) : 0);
+  const housed = (land.buildable * LAND_FOR_HOMES * HOME_SHARE) / tilesPerPerson;
   const keys = unlockedBuildings(s);
   const farms = FOOD_TYPES.map((f) => producerOf(keys, f)).filter(Boolean);
   if (!farms.length) return Math.floor(housed);
@@ -517,14 +649,17 @@ export function landCeiling(s, land, { production = lowProduction() } = {}) {
 
 /**
  * One mission's capacity, for the table and the tests: the employment ceiling
- * at both profiles (`lean`, `sensible`, with the jobs at that size) and, with
- * land (landOf(map)), the land ceiling.
+ * at both profiles (`lean`, `sensible`, with the jobs and the villa quarter's
+ * people at that size), the sensible ceiling with every home a working one
+ * (`allWorking`: no villa quarter) and, with land (landOf(map)), the land
+ * ceiling.
  */
 export function missionCapacity(s, land = null) {
   const { top, working } = topLevels(s);
   const at = (profile) => {
     const people = employmentCeiling(s, profile);
-    return { people, jobs: planCity(s, people, profile).jobs };
+    const plan = planCity(s, people, profile);
+    return { people, jobs: plan.jobs, villas: Math.round(plan.villas) };
   };
   return {
     id: s.id,
@@ -533,6 +668,7 @@ export function missionCapacity(s, land = null) {
     perTile: peoplePerTile(working),
     lean: at(LEAN),
     sensible: at(SENSIBLE),
+    allWorking: at({ ...SENSIBLE, villas: 0 }),
     land: land ? landCeiling(s, land) : null,
   };
 }

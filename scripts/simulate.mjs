@@ -27,6 +27,8 @@
  *   npm run sim -- --level 3 --venues --hippodrome   (the big venues and the hippodrome: entertainment scores)
  *   npm run sim -- --size 96 --level 3 --uptown --cloth --years 5   (Insulae, with clothing from the cloth industry)
  *   npm run sim -- --size 96 --level 3 --uptown --cloth --cloth-off 36 --years 5   (and when it stops)
+ *   npm run sim -- --size 192 --level 3 --uptown --cloth --blocks 6 --villas 1 --raids off --years 12
+ *                              (a city of six blocks and a villa quarter: the capacity model against play)
  *   npm run sim -- --type coast --raids frequent --garrison --navy --years 8   (sea raids against a fleet)
  *   npm run sim -- --type coast --raids frequent --garrison --navy --academy --years 8   (and training)
  *
@@ -41,7 +43,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, buildDemoQuarters, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
 import { launchLegion, legionCount, soldierCount, isOverrun } from '../src/sim/legion.js';
 import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
@@ -50,7 +52,7 @@ import { goalMonths, monthsToMinutes, PACE_MOOD } from '../src/sim/pace.js';
 import { sickHomes } from '../src/sim/disease.js';
 import { planAction, applyPlan, anchorOffset } from '../src/sim/construction.js';
 import { BUILDINGS } from '../src/data/buildings.js';
-import { missionCapacity, landOf } from '../src/sim/capacity.js';
+import { missionCapacity, landOf, planCity, employmentCeiling, topLevels, SENSIBLE, PATRICIAN_SHARE } from '../src/sim/capacity.js';
 import { generateMap } from '../src/world/mapgen.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
@@ -88,6 +90,15 @@ Options:
                     (a stand-in for those industries). Everything an Insula needs but clothing
   --cloth           also build the cloth industry: a flax farm, a linen maker, a clothing maker
   --cloth-off <m>   demolish the cloth industry after month m (homes lose their clothing)
+  --blocks <n>      (level 3) a city of n blocks like the first, each with its own uptown and cloth
+                    when asked, and workshops for its goods (furniture, oil) beside the potter
+  --villas <n>      (level 3) also n villa blocks: services in the outer bands, homes in the inner
+                    ones, wine for their markets (a stand-in for a winery, which is built too)
+  --wine            (level 3, --uptown) wine for every market each month (a stand-in for a winery,
+                    which is built too, and imports): the best-served homes may become villas.
+                    With --blocks, --villas or --wine the run reports the share of people in
+                    villas and the capacity model's jobs and unemployment for that city
+                    (sim/capacity.js) beside the sim's
   --caretaker       rebuild whatever burns or collapses, as a player would (npm run sweep)
   --salary          the governor draws his rank's salary from the treasury (default: none, so the
                     money and favor reported are the city's own)
@@ -107,7 +118,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0 };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -127,6 +138,9 @@ function parse(argv) {
     else if (a === '--uptown') o.uptown = true;
     else if (a === '--cloth') o.cloth = true;
     else if (a === '--cloth-off') o.clothOff = Number(next());
+    else if (a === '--blocks') o.blocks = Number(next());
+    else if (a === '--villas') o.villas = Number(next());
+    else if (a === '--wine') o.wine = true;
     else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--sea-raids') o.seaRaids = next();
@@ -168,15 +182,16 @@ if (opts.pace) {
 // give and the room its map has (sim/capacity.js).
 if (opts.capacity) {
   const pad = (v, n) => String(v).padStart(n);
-  console.log(`Employment ceiling: the most people whose jobs keep unemployment at ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% or less, every home at the`);
-  console.log('best working level (sim/capacity.js), for a lean and a sensible builder. Land: room to house and feed them.');
-  console.log('A population goal must fit the sensible ceiling and the land (tests/campaign.test.mjs; missions 3 to 7 are known exceptions).');
-  console.log(' mission  top home            working home      /tile   lean (jobs)   sensible (jobs)     land    goal');
+  console.log(`Employment ceiling: the most people whose jobs keep unemployment at ${CONFIG.UNEMPLOYMENT_MOOD_FREE * 100}% or less, the working homes at the best`);
+  console.log(`working level and, where the Villa can be reached, ${PATRICIAN_SHARE * 100}% of the people in villas (sim/capacity.js), for a lean and a`);
+  console.log('sensible builder; "all working": sensible with no villas. Land: room to house and feed them. A population goal must');
+  console.log('fit the sensible ceiling and the land (tests/campaign.test.mjs).');
+  console.log(' mission  top home            working home      /tile   lean (jobs)   sensible (jobs) villas  all working     land    goal');
   for (const s of SCENARIOS) {
     const { map } = generateMap({ width: s.map.size, height: s.map.size, seed: s.map.seed, type: s.map.type });
     const m = missionCapacity(s, landOf(map));
     const over = s.goals.population > Math.min(m.sensible.people, m.land) ? '  over' : '';
-    console.log(` ${s.id.padEnd(7)}  ${HOUSE_TIERS[m.top].name.padEnd(18)}  ${HOUSE_TIERS[m.working].name.padEnd(16)} ${pad(m.perTile, 5)}  ${pad(m.lean.people, 6)} (${pad(m.lean.jobs, 4)})  ${pad(m.sensible.people, 8)} (${pad(m.sensible.jobs, 4)})  ${pad(m.land, 7)}  ${pad(s.goals.population, 6)}${over}`);
+    console.log(` ${s.id.padEnd(7)}  ${HOUSE_TIERS[m.top].name.padEnd(18)}  ${HOUSE_TIERS[m.working].name.padEnd(16)} ${pad(m.perTile, 5)}  ${pad(m.lean.people, 6)} (${pad(m.lean.jobs, 4)})  ${pad(m.sensible.people, 8)} (${pad(m.sensible.jobs, 4)}) ${pad(m.sensible.villas, 6)}  ${pad(m.allWorking.people, 11)}  ${pad(m.land, 7)}  ${pad(s.goals.population, 6)}${over}`);
   }
   process.exit(0);
 }
@@ -186,7 +201,8 @@ const scenario = opts.scenario
   ? withDifficulty(SCENARIOS.find((s) => s.id === opts.scenario), opts.difficulty)
   : sandboxScenario({ size: opts.size, type: opts.type, seed: opts.seed, difficulty: opts.difficulty });
 if (!scenario) { console.error(`Unknown scenario ${opts.scenario}`); process.exit(2); }
-const SIM_MONEY = 20000;
+// (A city of several blocks gets as much again for each: --blocks, --villas.)
+const SIM_MONEY = 20000 * Math.max(1, opts.blocks + opts.villas);
 if (opts.seaRaids !== null && !['on', 'off'].includes(opts.seaRaids)) { console.error(`--sea-raids takes on or off
 ${HELP}`); process.exit(2); }
 const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids } });
@@ -230,6 +246,12 @@ if (opts.hippodrome) {
 const uptown = opts.uptown ? buildDemoUptown(game, res) : null;
 if (uptown) console.log(`Uptown: ${Object.entries(uptown.built).map(([k, v]) => `${k} ${v === true ? 'yes' : v === false ? 'no' : v}`).join(', ')}; markets get ${UPTOWN_GOODS.join(', ')} every month`);
 const cloth = opts.cloth ? buildDemoCloth(game, res.center) : null;
+// --blocks and --villas: more blocks and a villa quarter (after everything else,
+// so a run without them is laid out exactly as before).
+const bigCity = opts.blocks > 1 || opts.villas > 0 || opts.wine;
+if (bigCity && opts.level < 3) { console.error('--blocks, --villas and --wine need --level 3'); process.exit(2); }
+const quarters = bigCity ? buildDemoQuarters(game, res, { blocks: opts.blocks, villas: opts.villas, uptown: opts.uptown, cloth: opts.cloth, wine: opts.wine }) : null;
+if (quarters) console.log(`Quarters: ${quarters.blocks.length} working blocks, ${quarters.villas.length} villa blocks; workshops ${Object.entries(quarters.workshops).map(([k, n]) => `${k} ${n}`).join(', ')}`);
 if (cloth) console.log(`Cloth: flax farm ${cloth.farm ? 'yes' : 'no'}, linen maker ${cloth.linen ? 'yes' : 'no'}, clothing maker ${cloth.clothing ? 'yes' : 'no'}, warehouse ${cloth.warehouse ? 'yes' : 'no'}${opts.clothOff ? `; demolished after month ${opts.clothOff}` : ''}`);
 console.log(`Map ${scenario.map.type} ${scenario.map.size} seed=${game.seed}  difficulty=${game.difficultyKey}  buildings=${game.buildings.size}  farms=${res.farms}  treasury=${Math.round(game.city.treasury)}`);
 
@@ -325,6 +347,7 @@ function advanceDays(n) {
 const runMonth = () => {
   if (harbor.docks) harborMonth();
   if (uptown) uptown.monthly();
+  if (quarters) quarters.monthly();
   if (!opts.caretaker) { runDays(16); return; }
   for (let k = 0; k < 4; k++) { runDays(4); caretake(); }
 };
@@ -332,6 +355,7 @@ const runMonth = () => {
 /** The Insula's level: homes need clothing from here up. */
 const INSULA = HOUSE_TIERS.findIndex((t) => t.goods.includes('clothing'));
 const clothing = { months: [], peak: 0, offAt: null, peakBefore: 0 };
+const villaShares = []; // --blocks, --villas, --wine: the share of people in villas, month by month
 const pad = (v, n) => String(v).padStart(n);
 console.log(' date        pop  work/jobs  unemp  mood  fed%  food(gran/mkt)  treas   tiers');
 const t0 = Date.now();
@@ -356,6 +380,7 @@ for (let m = 0; m < opts.years * 12; m++) {
   if (cloth && opts.clothOff && m === opts.clothOff) clothOff();
   runMonth();
   if (opts.uptown || opts.cloth) clothMonth(m + 1);
+  if (quarters) villaShares.push(game.city.population > 0 ? game.city.patricians / game.city.population : 0);
   const c = game.city;
   treasuryByMonth.push(c.treasury);
   const out = SIM_MONEY - c.treasury;
@@ -444,9 +469,10 @@ if (opts.uptown || opts.cloth) {
     console.log(`Cloth industry demolished after month ${opts.clothOff}: ${clothing.peakBefore} homes at the Insula or above at most before, ${after.length ? Math.min(...after.map((r) => r.top)) : '-'} at the fewest after (${after.map((r) => r.top).join(' ')})`);
   }
 }
+const capacityCheck = quarters ? checkCapacity() : null;
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
 const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
-if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(fishing ? { fishing } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
+if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(fishing ? { fishing } : {}), ...(capacityCheck ? { capacity: capacityCheck } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
 
 /**
  * --cloth-off: demolish the cloth industry (and the clothing in store), as a
@@ -482,6 +508,37 @@ function clothMonth(month) {
   }
   clothing.months.push({ month, top, wanting, dressed });
   clothing.peak = Math.max(clothing.peak, top);
+}
+
+/**
+ * --blocks / --villas: the capacity model (sim/capacity.js) for this city,
+ * beside what the sim shows. The model plans with the buildings the demo
+ * city built (its partners none: the demo opens no route; its army only with
+ * --garrison) for the sim's people at the sim's share in villas, so the two
+ * jobs counts and unemployment rates can be compared; and the employment
+ * ceiling at that share.
+ */
+function checkCapacity() {
+  const c = game.city;
+  // The share the villas held: on average over the last three years (homes
+  // move up and down the ladder month by month), as the model plans a share.
+  const recent = villaShares.slice(-36);
+  const share = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+  const types = new Set([...game.buildings.values()].map((b) => (b.house ? 'house' : b.type)));
+  // The uptown's stand-in goods (and the villa blocks' wine) reach the homes with no workshop: bought, for the model.
+  const standIns = [...UPTOWN_GOODS, ...(opts.villas > 0 || opts.wine ? ['wine'] : [])];
+  const model = { ...scenario, partners: [], military: opts.garrison ? scenario.military : null, unlocks: [...types], standIns };
+  const profile = { ...SENSIBLE, villas: share };
+  const plan = planCity(model, c.population, profile);
+  const workforce = plan.plebs * CONFIG.WORKFORCE_RATIO;
+  const out = {
+    population: c.population, patricians: c.patricians, villaShare: +share.toFixed(3), villaShareMax: +Math.max(0, ...recent).toFixed(3),
+    sim: { workforce: c.workforce, jobs: c.jobs, unemployment: +c.unemploymentRate.toFixed(3) },
+    model: { top: topLevels(model).top, jobs: plan.jobs, workforce: Math.round(workforce), unemployment: +Math.max(0, 1 - plan.jobs / Math.max(1, workforce)).toFixed(3), ceiling: employmentCeiling(model, profile) },
+  };
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  console.log(`Capacity check: ${c.population} people, ${c.patricians} in villas now, ${pct(share)} on average over the last 3 years (${pct(out.villaShareMax)} at most); sim: ${c.jobs} jobs for ${c.workforce} workers, ${pct(c.unemploymentRate)} out of work; model (sensible, this city's buildings, ${pct(share)} in villas, working level ${HOUSE_TIERS[topLevels(model).working].name}): ${plan.jobs} jobs for ${out.model.workforce} workers, ${pct(out.model.unemployment)} out of work, ceiling ${out.model.ceiling}`);
+  return out;
 }
 
 /** The highest disease risk of any occupied home (sim/disease.js). */

@@ -6,7 +6,8 @@
  *   - The player opens a route (one-time cost) in the Trade advisor.
  *   - Land routes: every 1-2 months a caravan walks in along the Imperial road
  *     to the nearest staffed warehouse, sells the city its imports, buys its
- *     exports, then leaves by the exit.
+ *     exports, then leaves by the exit. A route busier than its traders can
+ *     carry at that pace sends them more often (sim/tradeDemand.js).
  *   - Sea routes: a merchant ship sails in from the map edge (map.seaEntry)
  *     to a free, staffed Dock and moors there while goods move both ways:
  *       - on mooring it fixes its manifest: what it will sell (imports) and
@@ -24,7 +25,9 @@
  *   - Per good, the player chooses: none / import / export, plus a stock level:
  *       export: sell only while city stock is ABOVE the level
  *       import: buy only while city stock is BELOW the level
- *   - Each partner buys/sells at most a fixed amount per good per year.
+ *   - Each partner buys/sells at most a fixed amount per good per year. What
+ *     it buys may be set by the mission and change during it (demand in
+ *     force, sim/tradeDemand.js); tradeMonthly tells the player when.
  *   - Horses are kept at the Horse Ranch, never in a warehouse (data/goods.js
  *     keptAt), so for horses the ranches stand in for the warehouses: a
  *     caravan sells into and buys from the ranches on its warehouse's roads,
@@ -45,6 +48,7 @@ import { militaryNeed } from './military.js';
 import { dispatchCart, cartsOut } from './production.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
+import { partnerBuys, routeInterval, buysInForce, demandChangeAt } from './tradeDemand.js';
 
 /** 'land' or 'sea' */
 export function routeKind(partnerId) {
@@ -120,7 +124,8 @@ export function updateTrade(game) {
     if (holdDay && game.time.totalDays < r.nextVisit) r.nextVisit++;
     if (game.time.totalDays < r.nextVisit) continue;
     const sea = routeKind(id) === 'sea';
-    const [a, b] = sea ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
+    // The usual range, or shorter for a route busier than its traders carry (sim/tradeDemand.js).
+    const [a, b] = routeInterval(game, id);
     if (sea) {
       // A ship with nowhere to tie up tries again a few days later. One
       // turned away only because every staffed Emporium is taken waits
@@ -424,7 +429,7 @@ function exportQuotaLeft(game, partnerId, good, claims) {
   const p = TRADE_PARTNERS[partnerId];
   const route = game.city.trade.routes[partnerId];
   if (!p || !route) return 0;
-  return (p.buys[good] || 0) - (route.sold[good] || 0) - (claims.byPartner.get(partnerId)?.[good] || 0);
+  return (partnerBuys(game, partnerId)[good] || 0) - (route.sold[good] || 0) - (claims.byPartner.get(partnerId)?.[good] || 0);
 }
 
 /**
@@ -548,7 +553,7 @@ export function shipManifest(game, partnerId, dock, exceptShip = 0) {
   const far = CONFIG.SHIP_MAX_STAY_DAYS * CONFIG.TICKS_PER_DAY;
   const sources = [...exportSources(game, dock)].filter(([, d]) => tripTicks(2 * d) < far).map(([id]) => game.buildings.get(id));
   budget = CONFIG.SHIP_MAX_TRADE;
-  for (const [good, cap] of Object.entries(p.buys)) {
+  for (const [good, cap] of Object.entries(partnerBuys(game, partnerId))) {
     const s = settings[good];
     if (!s || s.mode !== 'export') continue;
     let held = dock.stock[good] || 0;
@@ -699,7 +704,7 @@ function handOver(game, w, good, n) {
   const p = TRADE_PARTNERS[w.partner];
   const route = game.city.trade.routes[w.partner];
   if (!s || s.mode !== 'export' || !p || !route) return 0;
-  const quota = (p.buys[good] || 0) - (route.sold[good] || 0);
+  const quota = (partnerBuys(game, w.partner)[good] || 0) - (route.sold[good] || 0);
   // The partner bought its year's worth meanwhile (another of its ships): it wants no more.
   if (quota < CONFIG.CART_CAPACITY) delete w.wants[good];
   const take = lots(Math.min(n, w.wants[good] || 0, quota));
@@ -951,10 +956,9 @@ export function updateDock(game, b) {
 
 /** The partner buys goods marked for export, taking them from `sources(good)` in order. */
 function sellExports(game, partnerId, sourcesFor, budget, out) {
-  const p = TRADE_PARTNERS[partnerId];
   const route = game.city.trade.routes[partnerId];
   const settings = game.city.trade.settings;
-  for (const [good, cap] of Object.entries(p.buys)) {
+  for (const [good, cap] of Object.entries(partnerBuys(game, partnerId))) {
     const s = settings[good];
     if (!s || s.mode !== 'export' || budget <= 0) continue;
     const quota = cap - (route.sold[good] || 0);
@@ -1031,6 +1035,30 @@ function storageCapacityLeft(wh) {
   for (const k in wh.stock) used += wh.stock[k];
   for (const k in wh.incoming) inc += wh.incoming[k];
   return CONFIG.WAREHOUSE_CAPACITY - used - inc;
+}
+
+/**
+ * Monthly: a demand change that takes effect this month (scenario
+ * `demandChanges`, sim/tradeDemand.js) is told, naming the city and the good,
+ * as the original's "trade increased" and "decreased" news did. Nothing is
+ * changed here: the amounts in force are worked out from the date.
+ */
+export function tradeMonthly(game) {
+  const changes = game.scenario.demandChanges;
+  if (!Array.isArray(changes)) return;
+  const now = game.time.totalMonths;
+  changes.forEach((c, k) => {
+    const p = TRADE_PARTNERS[c.partner];
+    if (!p || !game.city.trade.routes[c.partner] || demandChangeAt(game.seed, c, k) !== now) return;
+    // What it bought just before this change: every change that takes effect
+    // before it (another of the same month included), not last month's.
+    const was = buysInForce(game.scenario, game.seed, c.partner, now, k)[c.good] || 0;
+    const good = (GOODS[c.good]?.name || c.good).toLowerCase();
+    const units = (n) => Math.round(n).toLocaleString('en-US');
+    if (!(c.to > 0)) game.message(`Trade stopped: ${p.name} no longer buys ${good}.`, 'warn');
+    else if (c.to > was) game.message(`Trade increased: ${p.name} now buys ${units(c.to)} ${good} a year (was ${units(was)}).`, 'good');
+    else if (c.to < was) game.message(`Trade decreased: ${p.name} now buys only ${units(c.to)} ${good} a year (was ${units(was)}).`, 'warn');
+  });
 }
 
 /** Yearly: partners' quotas reset. */

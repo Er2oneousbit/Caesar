@@ -23,6 +23,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { PERFORMER_NAMES } from '../data/buildings.js';
 import { daysMoored } from '../sim/trade.js';
+import { partnerBuys } from '../sim/tradeDemand.js';
 import { trainsNow } from '../sim/training.js';
 import { prefectFoe, foeLabel } from '../sim/prefectFight.js';
 
@@ -319,7 +320,7 @@ export function tradeRows(game, w) {
   }
   const p = TRADE_PARTNERS[w.partner];
   const settings = game.city.trade.settings;
-  const buys = Object.keys(p.buys).filter((g) => settings[g]?.mode === 'export');
+  const buys = Object.keys(partnerBuys(game, w.partner)).filter((g) => settings[g]?.mode === 'export');
   const sells = Object.keys(p.sells).filter((g) => settings[g]?.mode === 'import');
   return [
     ['Comes to buy', buys.length ? list(buys) : 'Nothing you export'],

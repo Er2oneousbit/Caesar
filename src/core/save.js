@@ -133,6 +133,12 @@
  *      100 timber in a yard that has a boat started (progress above 0), so
  *      the boat on the slip finishes as it would have, and none in the
  *      others, see upgradeShipyardTimberV16().
+ *  19  recall from a distant battle (sim/battle.js): military.recalls, a
+ *      list of riders carrying a fort's or station's recall and of recalled
+ *      troops on their way home, each { post, city, march, rider,
+ *      riderTotal, homeIn, homeTotal, men, ships } (records like
+ *      battle.sent's). Older saves load with no rider out and nobody
+ *      recalled, see upgradeRecallsV18().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -450,6 +456,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 14) upgradeEmpireV13(game);
   if (data.version < 15) upgradeWarningsV14(game);
   if (data.version < 17) upgradeShipyardTimberV16(game);
+  if (data.version < 19) upgradeRecallsV18(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -716,6 +723,15 @@ export function upgradeShipyardTimberV16(game) {
     b.stock = { timber: (b.progress || 0) > 0 ? CONFIG.SHIPYARD_BOAT_TIMBER : 0 };
     b.incoming = { timber: 0 };
   }
+}
+
+/**
+ * A save before version 19 (before the recall from a distant battle): no
+ * rider is out and nobody is on the way home from a recall. Troops away at
+ * a battle stay with the army, and may be recalled from now on.
+ */
+export function upgradeRecallsV18(game) {
+  if (game.military) game.military.recalls = [];
 }
 
 /**

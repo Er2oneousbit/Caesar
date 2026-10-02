@@ -49,6 +49,29 @@
  *   and walk (or sail) back in to their fort or station; one whose fort or
  *   station is gone disbands. A lost city is in enemy hands for
  *   BATTLE_FOREIGN_MONTHS (after any troops are home), then retaken.
+ *
+ * Recall (Colonia's own; a fort's or station's panel, the Imperial advisor)
+ *   While the battle is pending, the men (and ships) of one fort or station
+ *   can be called back. Those still in the province on their way out turn
+ *   at once. Those already gone are reached by a rider, who rides at twice
+ *   the marching pace: he needs riderMonths(covered) = half the months they
+ *   have marched, rounded up, at least 1. They march on meanwhile (they do
+ *   not know yet); when he reaches them they turn back and come home after
+ *   as many months as they had marched out by then. Turned back, they no
+ *   longer count in the battle (their strength comes off the army's). A
+ *   rider who has not reached them when the battle is fought is too late:
+ *   they fight with the rest, and come home by the battle's rule. An army
+ *   everyone was called back from is "nobody sent" (-50 favor), so sending
+ *   and recalling never costs less than staying home. Riders and the men
+ *   coming home are military.recalls (they outlive the battle):
+ *     { post, city, march, rider, riderTotal, homeIn, homeTotal, men, ships }
+ *   rider > 0: the rider is out (his men are still in sent.men/ships);
+ *   rider 0: turned back, their records in men/ships, home in homeIn months.
+ *
+ * No new men while deployed (sim/military.js, sim/navy.js)
+ *   A fort or station with a rally point, or with men or ships away (on
+ *   their way out, at the battle, or coming home), takes no recruits and no
+ *   new liburnians: takesNewMen(). One already on his way still joins.
  * ----------------------------------------------------------------------------
  */
 
@@ -88,10 +111,13 @@ export function battleMonthly(game) {
   if (!m) return;
   const b = m.battle;
   const now = game.time.totalMonths;
+  recalledMonthly(game); // (first: a group the rider turns this month starts its way home next month)
   if (b) {
     if (b.phase === 'pending') {
+      if (now < b.due && b.sent) stepMarch(game, b);
+      // A rider reaching his men in the battle's own month turns them in time.
+      if (b.sent) ridersMonthly(game, b);
       if (now >= b.due) fightBattle(game);
-      else if (b.sent) stepMarch(game, b);
     } else if (b.phase === 'returning') {
       b.homeIn--;
       if (b.homeIn <= 0) troopsHome(game);
@@ -243,11 +269,32 @@ export function leaveForBattle(game, u) {
   removeUnit(game, u, 'away');
 }
 
-/** Records of the men and ships away (on the road, at the battle or coming home). */
+/** Records of the men and ships away (on the road, at the battle or coming home, recalled ones too). */
 function awayRecords(game) {
   const b = currentBattle(game);
-  if (!b || !b.sent) return [];
-  return [...b.sent.men, ...b.sent.ships];
+  const out = b && b.sent ? [...b.sent.men, ...b.sent.ships] : [];
+  for (const r of game.military?.recalls || []) out.push(...r.men, ...r.ships);
+  return out;
+}
+
+/**
+ * Fort and station ids with any man or ship away: on his way out of the
+ * province, gone to a distant battle, or coming home from it.
+ */
+export function postsAway(game) {
+  const out = new Set(awayCounts(game).keys());
+  for (const u of game.units.values()) if (u.away && (u.fort || u.station)) out.add(u.fort || u.station);
+  return out;
+}
+
+/**
+ * May this fort or station take a new recruit (or liburnian)? Not while it
+ * is deployed (a rally point) or any of its men are away: new men would
+ * only stand about the city with nobody to lead them. `away`: postsAway(),
+ * passed in by callers that check many posts.
+ */
+export function takesNewMen(game, post, away = postsAway(game)) {
+  return !post.rally && !away.has(post.id);
 }
 
 /** Men and ships away per fort or station id (their places are kept). */
@@ -274,12 +321,21 @@ export function awayOf(game, postId) {
  */
 export function dropAway(game, postId) {
   const b = currentBattle(game);
-  if (!b || !b.sent) return 0;
-  const before = b.sent.men.length + b.sent.ships.length;
-  const keep = (r) => (r.fort || r.station) !== postId;
-  b.sent.men = b.sent.men.filter(keep);
-  b.sent.ships = b.sent.ships.filter(keep);
-  return before - b.sent.men.length - b.sent.ships.length;
+  const m = game.military;
+  let n = 0;
+  if (b && b.sent) {
+    const before = b.sent.men.length + b.sent.ships.length;
+    const keep = (r) => (r.fort || r.station) !== postId;
+    b.sent.men = b.sent.men.filter(keep);
+    b.sent.ships = b.sent.ships.filter(keep);
+    n += before - b.sent.men.length - b.sent.ships.length;
+  }
+  // Recalled and on their way home, or a rider out to them: no post to come home to.
+  if (m && m.recalls) {
+    for (const r of m.recalls) if (r.post === postId) n += r.men.length + r.ships.length;
+    m.recalls = m.recalls.filter((r) => r.post !== postId);
+  }
+  return n;
 }
 
 /** What the men and ships away cost a month (they are paid as at home). */
@@ -335,6 +391,20 @@ export function advantageOf(rome, enemy) {
   return rome > 0 ? Math.trunc((100 * (rome - enemy)) / rome) : 0;
 }
 
+/**
+ * A man or ship on his way out of the province turns for home: his route to
+ * the exit is dropped too, or he would walk it to the end before turning.
+ */
+function turnHome(u) {
+  u.away = false;
+  u.state = UNIT_TYPES[u.type].naval ? 'sail' : 'march';
+  u.path = null;
+  u.pathIndex = 0;
+  u.target = 0;
+  u.stuck = 0;
+  u.noPath = 0;
+}
+
 /** Men and ships still on their way out of the province (sent, not yet gone). */
 function leaving(game) {
   const out = [];
@@ -351,15 +421,17 @@ export function fightBattle(game) {
   const r = game.city.ratings;
   const favor = (k) => { r.favor = Math.max(0, Math.min(100, r.favor + CONFIG.BATTLE_FAVOR[k])); return CONFIG.BATTLE_FAVOR[k]; };
   const late = leaving(game);
+  ridersTooLate(game);
   let outcome;
-  if (!s) {
+  if (!s || s.strength <= 0) {
+    // (Strength 0 with troops sent: every one of them was called back.)
     outcome = 'none';
     const f = favor('none');
-    game.message(`You sent no troops: ${c.name} has fallen to ${c.enemy}. Caesar will not forget it (${f} favor).`, 'bad');
+    game.message(`${s ? 'You called all your troops back' : 'You sent no troops'}: ${c.name} has fallen to ${c.enemy}. Caesar will not forget it (${f} favor).`, 'bad');
   } else if (s.toGo > CONFIG.BATTLE_IN_TIME) {
     outcome = 'late';
     const f = favor('late');
-    for (const u of late) { u.away = false; u.state = 'march'; } // those still leaving turn back
+    for (const u of late) turnHome(u); // those still leaving turn back
     game.message(`Your troops were still ${s.toGo} months from ${c.name} when ${c.enemy} took it: too late (${f} favor). They turn for home.`, 'bad');
   } else if (s.strength < b.enemy) {
     outcome = 'weak';
@@ -375,7 +447,7 @@ export function fightBattle(game) {
     outcome = 'won';
     const f = favor('won');
     game.city.archesEarned = (game.city.archesEarned || 0) + 1;
-    for (const u of late) { u.away = false; u.state = 'march'; }
+    for (const u of late) turnHome(u);
     const share = lossShare(advantageOf(s.strength, b.enemy));
     const dead = takeLosses(game, s, share);
     game.message(`Victory at ${c.name}! Your troops (strength ${s.strength}) have beaten ${c.enemy} (${b.enemy})${dead ? `, losing ${dead}` : ''}. Caesar grants you a triumphal arch to build (${f > 0 ? '+' : ''}${f} favor).`, 'good');
@@ -429,6 +501,27 @@ export function troopsHome(game) {
   const b = m.battle;
   const s = b.sent;
   const map = game.map;
+  const { back, disbanded } = bringBack(game, s.men, s.ships);
+  s.men = [];
+  s.ships = [];
+  const c = THREATENED_CITIES[b.city];
+  const what = b.outcome === 'won' ? `Your victorious troops are home from ${c.name}` : `Your troops are back from ${c.name}`;
+  game.message(`${what}: ${back} return${back === 1 ? 's' : ''} to ${back === 1 ? 'his post' : 'their posts'}${disbanded ? `, and ${disbanded} with no fort or station left to go to disband` : ''}.`, b.outcome === 'won' ? 'good' : 'info', map.exit.x, map.exit.y);
+  if (b.outcome === 'won') endBattle(game);
+  else {
+    b.phase = 'foreign';
+    b.foreignLeft = CONFIG.BATTLE_FOREIGN_MONTHS;
+  }
+}
+
+/**
+ * Put men and ships back on the map from their records: each man walks in
+ * by the map exit, each ship sails in from the sea entry (or appears at its
+ * berth on other water). Those whose fort or station is gone disband.
+ * @returns {{back:number, disbanded:number}}
+ */
+function bringBack(game, men, ships) {
+  const map = game.map;
   let back = 0;
   let disbanded = 0;
   const free = (post, list) => {
@@ -437,7 +530,7 @@ export function troopsHome(game) {
     while (used.has(k)) k++;
     return k;
   };
-  for (const rec of s.men) {
+  for (const rec of men) {
     const fort = game.buildings.get(rec.fort);
     if (!fort || fort.def.kind !== 'fort') { disbanded++; continue; }
     const mates = [...game.units.values()].filter((u) => u.fort === fort.id);
@@ -449,7 +542,7 @@ export function troopsHome(game) {
   // station's water is not the sea entry's (they went out their own way).
   const sea = map.seaEntry;
   const seaBody = sea ? map.navBody[map.idx(sea.x, sea.y)] : 0;
-  for (const rec of s.ships) {
+  for (const rec of ships) {
     const st = game.buildings.get(rec.station);
     const body = st && st.def.kind === 'station' ? waterOf(game, st) : 0;
     if (!body) { disbanded++; continue; }
@@ -460,16 +553,7 @@ export function troopsHome(game) {
     restoreUnit(game, rec, at.x, at.y, { slot, state: 'sail', body });
     back++;
   }
-  s.men = [];
-  s.ships = [];
-  const c = THREATENED_CITIES[b.city];
-  const what = b.outcome === 'won' ? `Your victorious troops are home from ${c.name}` : `Your troops are back from ${c.name}`;
-  game.message(`${what}: ${back} return${back === 1 ? 's' : ''} to ${back === 1 ? 'his post' : 'their posts'}${disbanded ? `, and ${disbanded} with no fort or station left to go to disband` : ''}.`, b.outcome === 'won' ? 'good' : 'info', map.exit.x, map.exit.y);
-  if (b.outcome === 'won') endBattle(game);
-  else {
-    b.phase = 'foreign';
-    b.foreignLeft = CONFIG.BATTLE_FOREIGN_MONTHS;
-  }
+  return { back, disbanded };
 }
 
 /** Put a man or ship back on the map from its record. */
@@ -489,6 +573,139 @@ function endBattle(game) {
 }
 
 // ---------------------------------------------------------------------------
+// Recall (see the header)
+// ---------------------------------------------------------------------------
+
+/**
+ * Months a rider needs to reach troops who have marched `covered` months:
+ * he rides at twice their pace, so half of it, rounded up, and at least the
+ * month the order takes to go out (the battle's clock counts in months).
+ */
+export function riderMonths(covered) {
+  return Math.max(1, Math.ceil(Math.max(0, covered) / 2));
+}
+
+/**
+ * The recall entry of a fort or station, or null: its rider out, else its
+ * men coming home (a post can have both only across two battles).
+ */
+export function recallOf(game, postId) {
+  const mine = (game.military?.recalls || []).filter((r) => r.post === postId);
+  return mine.find((r) => r.rider > 0) || mine[0] || null;
+}
+
+/** The records of a post's men and ships still with the army (not turned back). */
+function withArmy(s, postId) {
+  const mine = (r) => (r.fort || r.station) === postId;
+  return { men: s.men.filter(mine), ships: s.ships.filter(mine) };
+}
+
+/** Why a fort's or station's troops cannot be recalled now, or '' when they can. */
+export function recallBlocked(game, postId) {
+  const b = currentBattle(game);
+  if (!b || b.phase !== 'pending' || !b.sent) return 'None of its men are on their way to a battle.';
+  if ((game.military.recalls || []).some((r) => r.post === postId && r.rider > 0)) return 'A rider is already carrying the order.';
+  const out = withArmy(b.sent, postId);
+  const leavingHere = leaving(game).some((u) => (u.fort || u.station) === postId);
+  if (!out.men.length && !out.ships.length && !leavingHere) return 'None of its men are on their way to the battle.';
+  return '';
+}
+
+/**
+ * Call a fort's or station's men (or ships) back from the battle. Those
+ * still in the province turn at once; a rider goes after the rest.
+ * @returns {{ok:boolean, reason?:string, turned?:number, rider?:number}}
+ *   turned: how many turned at once; rider: months until he reaches the rest (0: none needed)
+ */
+export function recallFromBattle(game, postId) {
+  const why = recallBlocked(game, postId);
+  if (why) return { ok: false, reason: why };
+  const b = currentBattle(game);
+  const s = b.sent;
+  const post = game.buildings.get(postId);
+  const name = post ? post.def.name : 'post';
+  let turned = 0;
+  for (const u of leaving(game)) {
+    if ((u.fort || u.station) !== postId) continue;
+    turnHome(u);
+    s.strength = Math.max(0, s.strength - battleStrength(u));
+    turned++;
+  }
+  const out = withArmy(s, postId);
+  let rider = 0;
+  if (out.men.length || out.ships.length) {
+    rider = riderMonths(s.march - s.toGo);
+    if (!game.military.recalls) game.military.recalls = [];
+    game.military.recalls.push({ post: postId, city: b.city, march: s.march, rider, riderTotal: rider, homeIn: 0, homeTotal: 0, men: [], ships: [] });
+  }
+  const c = THREATENED_CITIES[b.city];
+  const parts = [];
+  if (turned) parts.push(`${turned} still in the province turn back at once`);
+  if (rider) {
+    const left = b.due - game.time.totalMonths;
+    const when = rider > left ? ', after the battle: too late to keep them out of it' : rider === left ? ', just before the battle' : '';
+    parts.push(`a rider sets out after the ${out.men.length + out.ships.length} on the road to ${c.name} and will reach them in ${rider} month${rider === 1 ? '' : 's'}${when}`);
+  }
+  game.message(`You recall the troops of the ${name}: ${parts.join(', and ')}.`, 'imperial', post?.x, post?.y);
+  game.events.emit('sound', { name: 'horn' });
+  return { ok: true, turned, rider };
+}
+
+/** Monthly, while the battle is pending: each rider out rides on, and turns his men when he reaches them. */
+function ridersMonthly(game, b) {
+  for (const r of game.military.recalls || []) {
+    if (r.rider <= 0) continue;
+    r.rider--;
+    if (r.rider <= 0) turnBack(game, b, r);
+  }
+  if (game.military.recalls) game.military.recalls = game.military.recalls.filter((r) => r.rider > 0 || r.men.length + r.ships.length > 0);
+}
+
+/** The rider has reached his men: they leave the army and turn for home, as far off as they had marched. */
+function turnBack(game, b, r) {
+  const s = b.sent;
+  const out = withArmy(s, r.post);
+  const gone = new Set([...out.men, ...out.ships]);
+  if (!gone.size) return; // (their post is gone and they were released: dropAway)
+  s.men = s.men.filter((x) => !gone.has(x));
+  s.ships = s.ships.filter((x) => !gone.has(x));
+  s.strength = Math.max(0, s.strength - strengthOf(gone));
+  r.men = out.men;
+  r.ships = out.ships;
+  r.homeIn = r.homeTotal = Math.max(1, s.march - s.toGo);
+  const post = game.buildings.get(r.post);
+  const n = gone.size;
+  game.message(`The rider has reached the troops of the ${post ? post.def.name : 'post'} on the road to ${THREATENED_CITIES[b.city].name}: ${n === 1 ? 'he turns' : `all ${n} turn`} for home, ${r.homeIn} month${r.homeIn === 1 ? '' : 's'} away.`, 'imperial');
+}
+
+/** The battle is fought with riders still out: their men fought with the rest; the orders are void. */
+function ridersTooLate(game) {
+  const m = game.military;
+  const late = (m.recalls || []).filter((r) => r.rider > 0);
+  if (!late.length) return;
+  m.recalls = m.recalls.filter((r) => r.rider <= 0);
+  const names = late.map((r) => game.buildings.get(r.post)?.def.name).filter(Boolean);
+  game.message(`The rider${late.length === 1 ? '' : 's'} did not reach the troops${names.length ? ` of the ${names.join(' and the ')}` : ''} before the battle: they fought with the rest.`, 'imperial');
+}
+
+/** Monthly: recalled troops on their way home come one month nearer, and walk (or sail) back in when they arrive. */
+function recalledMonthly(game) {
+  const m = game.military;
+  if (!m.recalls || !m.recalls.length) return;
+  const keep = [];
+  for (const r of m.recalls) {
+    if (r.rider > 0) { keep.push(r); continue; }
+    r.homeIn--;
+    if (r.homeIn > 0) { keep.push(r); continue; }
+    const { back, disbanded } = bringBack(game, r.men, r.ships);
+    const post = game.buildings.get(r.post);
+    const map = game.map;
+    game.message(`Your recalled troops are home from the road to ${THREATENED_CITIES[r.city]?.name || 'the battle'}: ${back} return${back === 1 ? 's' : ''} to the ${post ? post.def.name : 'post'}${disbanded ? `, and ${disbanded} with no post left to go to disband` : ''}.`, 'info', map.exit.x, map.exit.y);
+  }
+  m.recalls = keep;
+}
+
+// ---------------------------------------------------------------------------
 // For the advisors, the info panels and the empire map
 // ---------------------------------------------------------------------------
 
@@ -496,7 +713,8 @@ function endBattle(game) {
  * Everything the screens show about the battle, or null:
  * { city, name, enemyName, enemy, words, sea, phase, monthsLeft, enemyToGo,
  *   enemyMonths, march, sent: {toGo, strength, men, ships, month}|null,
- *   outcome, homeIn, foreignLeft, ready: {men, ships, strength} }
+ *   outcome, homeIn, foreignLeft, ready: {men, ships, strength},
+ *   recalls: recallSummary() }
  */
 export function battleSummary(game) {
   const b = currentBattle(game);
@@ -525,7 +743,24 @@ export function battleSummary(game) {
     homeIn: b.homeIn,
     foreignLeft: b.foreignLeft,
     ready: { men: ready.filter((u) => !UNIT_TYPES[u.type].naval).length, ships: ready.filter((u) => UNIT_TYPES[u.type].naval).length, strength: strengthOf(ready) },
+    recalls: recallSummary(game),
   };
+}
+
+/**
+ * Riders out and recalled troops coming home, for the screens:
+ * [{ post, name, city, cityName, march, rider, riderTotal, homeIn, homeTotal, men, ships }]
+ * (`men`/`ships`: those coming home; while the rider is out, those he rides after).
+ */
+export function recallSummary(game) {
+  const b = currentBattle(game);
+  return (game.military?.recalls || []).map((r) => {
+    const out = r.rider > 0 && b && b.sent ? withArmy(b.sent, r.post) : r;
+    return {
+      post: r.post, name: game.buildings.get(r.post)?.def.name || 'Post', city: r.city, cityName: THREATENED_CITIES[r.city]?.name || '',
+      march: r.march, rider: r.rider, riderTotal: r.riderTotal, homeIn: r.homeIn, homeTotal: r.homeTotal, men: out.men.length, ships: out.ships.length,
+    };
+  });
 }
 
 /** Triumphal arches the city may still build: one per battle won, less those standing. */

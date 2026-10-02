@@ -40,7 +40,7 @@ import {
 import { routeKind, FIRST_VISIT_DAYS } from '../sim/trade.js';
 import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS } from '../sim/military.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
-import { battleSummary } from '../sim/battle.js';
+import { battleSummary, recallSummary } from '../sim/battle.js';
 import { THREATENED_CITIES, marchLine, enemyLine } from '../data/battles.js';
 
 export { MAP_W, MAP_H };
@@ -298,7 +298,10 @@ function legionRoad() {
  *   { kind: 'enemy', city, name, enemyName, months, pos }   the enemy closing on
  *       a threatened city (`months` until the battle)
  *   { kind: 'troops', city, name, strength, months, home, pos }   the
- *       province's troops on their way there (or `home`, coming back)
+ *       province's troops on their way there (or `home`, coming back;
+ *       `post`: the fort or station of recalled troops turned back early)
+ *   { kind: 'rider', city, name, post, months, pos }   a rider carrying a
+ *       recall to them, riding from the province toward the troops
  */
 export function empireArmies(game) {
   const out = [];
@@ -311,8 +314,15 @@ export function empireArmies(game) {
     out.push({ kind: 'legion', here: true, state: ls.state, size: ls.men, pos: [HOME_POS[0] - 2.6, HOME_POS[1] + 3.6] }); // (below and left of the province: its name is above it, raiders to its right)
   }
   const bs = battleSummary(game);
-  if (!bs) return out;
   const part = nowMonths(game) - game.time.totalMonths; // how far into this month
+  // Recalled troops turned back on the road, coming home from where the
+  // rider reached them (they outlive the battle: sim/battle.js recalls).
+  for (const r of recallSummary(game)) {
+    if (r.rider > 0 || !THREATENED_CITIES[r.city]) continue;
+    const frac = clamp01(r.homeTotal / Math.max(1, r.march)) * clamp01((r.homeIn - part) / Math.max(1, r.homeTotal));
+    out.push({ kind: 'troops', city: r.city, name: r.cityName, home: true, post: r.name, months: r.homeIn, pos: linePoint(smoothLine(marchLine(r.city)), frac) });
+  }
+  if (!bs) return out;
   if (bs.phase === 'pending') {
     const left = Math.max(0, bs.monthsLeft - part);
     const toGo = Math.max(0, Math.min(bs.enemyMonths, left - 1));
@@ -323,7 +333,14 @@ export function empireArmies(game) {
       const nextEnemy = Math.max(0, Math.min(bs.enemyMonths, bs.monthsLeft - 2));
       const step = s.toGo <= 1 ? 0 : s.toGo - 1 > nextEnemy ? 2 : 1;
       const toGoF = Math.max(1, s.toGo - part * step);
-      out.push({ kind: 'troops', city: bs.city, name: bs.name, strength: s.strength, months: s.toGo, pos: linePoint(smoothLine(marchLine(bs.city)), 1 - toGoF / s.march) });
+      const at = 1 - toGoF / s.march;
+      if (s.men + s.ships > 0) out.push({ kind: 'troops', city: bs.city, name: bs.name, strength: s.strength, months: s.toGo, pos: linePoint(smoothLine(marchLine(bs.city)), at) });
+      // A rider rides out after them, reaching them as they get there.
+      for (const r of bs.recalls) {
+        if (r.rider <= 0) continue;
+        const ridden = clamp01((r.riderTotal - r.rider + part) / Math.max(1, r.riderTotal));
+        out.push({ kind: 'rider', city: bs.city, name: bs.name, post: r.name, months: r.rider, pos: linePoint(smoothLine(marchLine(bs.city)), at * ridden) });
+      }
     }
   } else if (bs.phase === 'returning') {
     const total = game.military.battle.homeTotal || bs.homeIn || 1;
@@ -350,6 +367,8 @@ export function travelerLabel(t) {
     return `Caesar's legions in the province: ${t.size} left${t.state === 'halted' ? ', halted' : t.state === 'leaving' ? ', marching home' : ''}`;
   }
   if (t.kind === 'enemy') return `The army of ${t.enemyName} marching on ${t.name}: the battle ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'this month'}`;
+  if (t.kind === 'rider') return `A rider carrying your recall to the troops of the ${t.post}: he reaches them in ${plural(Math.max(1, t.months), 'month')}`;
+  if (t.kind === 'troops' && t.post) return `Recalled troops of the ${t.post} coming home: ${plural(Math.max(1, t.months), 'month')}`;
   if (t.kind === 'troops') return t.home ? `Your troops coming home from ${t.name}: ${plural(Math.max(1, t.months), 'month')}` : `Your troops (strength ${t.strength}) on the way to ${t.name}: ${t.months <= 1 ? 'there' : `${plural(t.months, 'month')} away`}`;
   const what = `${t.name} ${t.kind}`;
   const when = t.days > 0 ? plural(t.days, 'day') : 'arriving';
@@ -364,6 +383,7 @@ export function figureCenter(t, k = 1) {
   const [x, y] = t.pos;
   if (t.kind === 'warband' || t.kind === 'raid' || t.kind === 'legion' || t.kind === 'enemy' || t.kind === 'troops') return [x + 0.15 * k, y - 2.1 * k];
   if (t.kind === 'ship') return [x, y - 0.8 * k];
+  if (t.kind === 'rider') return [x, y - 1.1 * k];
   return [x, y - 0.4 * k];
 }
 
@@ -481,11 +501,33 @@ export function drawEmpire(ctx, game, opts = {}) {
     else if (t.kind === 'enemy') drawBanner(ctx, x, y, null, k, false);
     else if (t.kind === 'legion') drawStandard(ctx, x, y, t.size, k, LEGION_COLOR, !!t.here);
     else if (t.kind === 'troops') drawStandard(ctx, x, y, t.home ? null : t.strength, k, '#a8322b', false);
+    else if (t.kind === 'rider') drawRider(ctx, x, y, k);
   }
   if (hover) {
     const pos = hover.kind === 'traveler' ? figureCenter(hover.t, k) : hover.kind === 'city' ? TRADE_PARTNERS[hover.id].pos : hover.kind === 'battle' ? THREATENED_CITIES[hover.id].pos : hover.kind === 'rome' ? ROME_POS : HOME_POS;
     ring(ctx, pos, 2.6 * k, 'rgba(42,36,28,0.55)', true);
   }
+}
+
+/**
+ * A rider carrying a recall: a small horseman (a dark horse, a red cloak),
+ * standing on (x, y). `k` = figure scale.
+ */
+export function drawRider(ctx, x, y, k = 1) {
+  const s = 0.75 * k;
+  ctx.fillStyle = '#3b2a1c';
+  // the horse: a body, a neck and head, four legs
+  ctx.fillRect(x - 1.1 * s, y - 1.4 * s, 2.0 * s, 0.75 * s);
+  ctx.fillRect(x + 0.7 * s, y - 2.1 * s, 0.45 * s, 0.9 * s);
+  ctx.fillRect(x + 0.7 * s, y - 2.2 * s, 0.8 * s, 0.35 * s);
+  for (const dx of [-1.0, -0.6, 0.35, 0.7]) ctx.fillRect(x + dx * s, y - 0.7 * s, 0.22 * s, 0.7 * s);
+  // the rider: a red cloak and a head
+  ctx.fillStyle = '#a8322b';
+  ctx.fillRect(x - 0.45 * s, y - 2.5 * s, 0.6 * s, 1.15 * s);
+  ctx.fillStyle = '#e2c49a';
+  ctx.beginPath();
+  ctx.arc(x - 0.15 * s, y - 2.8 * s, 0.28 * s, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 /** Caesar's color on the map: the purple of Rome's marker. */

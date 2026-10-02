@@ -49,7 +49,7 @@ import { logGoods } from './goodsLedger.js';
 import { seaRaidPlan, seaLandingNow, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
 import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training.js';
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
-import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICKS } from './battle.js';
+import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, postsAway, takesNewMen, AWAY_MAX_TICKS } from './battle.js';
 import { fightPrefect } from './prefectFight.js';
 
 // When a fort has fewer open tiles around its post than soldiers, extra men
@@ -119,6 +119,7 @@ export function newMilitaryState(scenario, time, flags = {}) {
     caesar: newCaesarState(), // Caesar's legions (sim/legion.js)
     battle: null, // a distant battle Caesar asked troops for (sim/battle.js)
     battles: { won: 0, lost: 0, lastEndMonth: -999 },
+    recalls: [], // riders out and recalled troops coming home from a distant battle (sim/battle.js)
   };
 }
 
@@ -521,8 +522,9 @@ export function updateDemand(game) {
   const demand = { weapons: 0, arrows: 0, horses: 0 };
   const counts = garrisonCounts(game);
   const away = awayCounts(game); // men at a distant battle keep their places (sim/battle.js)
+  const out = postsAway(game);
   for (const f of game.buildings.values()) {
-    if (f.def.kind !== 'fort') continue;
+    if (f.def.kind !== 'fort' || !takesNewMen(game, f, out)) continue; // (deployed or men away: no recruits)
     const room = FORT_CAPACITY - (counts.get(f.id) || 0) - (away.get(f.id) || 0) - (f.recruiting || 0);
     if (room <= 0) continue;
     for (const [good, n] of Object.entries(RECRUIT_COST[f.def.unit] || {})) demand[good] = (demand[good] || 0) + n * room;
@@ -563,16 +565,22 @@ export function updateBarracks(game, b) {
   if (b.trainProgress < 100) { b.blocked = ''; return; }
 
   // Forts that still have room, emptiest first. A fort whose men are away at
-  // a distant battle keeps their places for them (sim/battle.js).
+  // a distant battle keeps their places for them (sim/battle.js), and one
+  // deployed or with men away takes no recruits until it is recalled and
+  // its men are home: new men would only stand about the city.
   const counts = garrisonCounts(game);
   const away = awayCounts(game);
+  const out = postsAway(game);
   const forts = [];
+  let held = 0;
   for (const f of game.buildings.values()) {
     if (f.def.kind !== 'fort' || f.efficiency <= 0 || f.accessRoad < 0) continue;
     const have = (counts.get(f.id) || 0) + (away.get(f.id) || 0) + (f.recruiting || 0);
-    if (have < FORT_CAPACITY) forts.push({ f, fill: have / FORT_CAPACITY });
+    if (have >= FORT_CAPACITY) continue;
+    if (takesNewMen(game, f, out)) forts.push({ f, fill: have / FORT_CAPACITY });
+    else held++;
   }
-  if (!forts.length) { b.blocked = 'All staffed forts are fully manned.'; return; }
+  if (!forts.length) { b.blocked = held ? 'No recruits while deployed: the forts with room are deployed or have men away.' : 'All staffed forts are fully manned.'; return; }
   forts.sort((a, c) => a.fill - c.fill);
   const missing = new Set();
   for (const { f } of forts) {

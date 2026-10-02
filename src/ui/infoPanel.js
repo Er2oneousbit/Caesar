@@ -33,7 +33,7 @@ import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat, hasBoatTi
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
 import { trainedText, trainingNote, schoolStatus, inTrainingText } from './trainingInfo.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
-import { removeBuilding } from '../sim/entities.js';
+import { removeBuilding, footprintRect } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
 import { farmDormant, daysToNextMare, stablesFull } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
@@ -569,7 +569,8 @@ export class InfoPanel {
   renderBuilding(g, b) {
     const def = b.def;
     const st = buildingStatus(g, b);
-    const parts = [this.head(def.name, `${b.size * (def.span || 1)}×${b.size}`, def.en), h('div', { class: `status ${st.level}` }, st.text), this.cycleRow(b)];
+    const r = footprintRect(b); // (a hippodrome turned north-south: 5x15)
+    const parts = [this.head(def.name, `${r.w}×${r.h}`, def.en), h('div', { class: `status ${st.level}` }, st.text), this.cycleRow(b)];
     if (def.workers) {
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Employment'),

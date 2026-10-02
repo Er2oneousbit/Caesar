@@ -306,7 +306,7 @@ test('the Goods table counts the partners switched on: "to 1 of 2 buyers"', () =
 
 test('save: the switches are kept, and a version 20 save loads with every switch on', () => {
   const game = newGame({ type: 'coast', seed: 'beach' });
-  assert.equal(CONFIG.SAVE_VERSION, 21);
+  assert.ok(CONFIG.SAVE_VERSION >= 21); // (the switches came in version 21)
   setPartnerGood(game, 'capua', 'pottery', false);
   setPartnerGood(game, 'massilia', 'wine', false);
   const data = JSON.parse(JSON.stringify(serializeGame(game)));

@@ -20,7 +20,8 @@
  */
 
 import { CONFIG } from '../config.js';
-import { dragMode, planAction } from '../sim/construction.js';
+import { dragMode, planAction, turnRule } from '../sim/construction.js';
+import { BUILDINGS } from '../data/buildings.js';
 
 export const KEY_HELP = [
   ['W A S D / Arrow keys', 'Scroll the map'],
@@ -32,7 +33,7 @@ export const KEY_HELP = [
   ['M', 'Music on / off'],
   ['1 2 3 4', `Game speed ${CONFIG.SPEEDS.slice(1).map((v) => `${v}x`).join(', ')}`],
   ['H', 'Housing tool'],
-  ['R', 'Road tool'],
+  ['R', 'Turn the building being placed a quarter turn clockwise (with no building in hand: Road tool)'],
   ['X or Delete', 'Clear land tool'],
   ['Ctrl+Z or U', 'Undo last construction'],
   ['O / Shift+O', 'Next overlay / turn overlays off'],
@@ -71,6 +72,9 @@ export class Input {
     this.mouse = { x: -1, y: -1, over: false, game: null };
     this.hover = null;
     this.planKey = '';
+    // The turn the player gave each kind of building (R), kept for the next
+    // one of that kind for the rest of the session.
+    this.turns = {};
     this.wheelAcc = 0; // wheel delta not yet turned into a zoom step
     this.flick = { vx: 0, vy: 0, t: 0 }; // drag velocity (CSS px/s) for the fling on release
     this.bind();
@@ -103,6 +107,41 @@ export class Input {
     this.refreshPlan();
     this.canvas.style.cursor = this.tool ? 'cell' : 'crosshair';
     this.app.ui.onToolChanged(this.tool);
+  }
+
+  /** The turn the next building of this kind is placed with (0..3). */
+  turnFor(tool) {
+    return this.turns[tool] ?? 0;
+  }
+
+  /**
+   * R: a quarter turn clockwise for the building in hand; with no building
+   * in hand R is still the Road tool.
+   */
+  onTurnKey() {
+    if (!this.tool || !BUILDINGS[this.tool]?.size) { this.app.ui.selectTool('road'); return; }
+    this.turnTool();
+  }
+
+  /**
+   * Turn the building in hand (R, or the build panel's Turn button). One
+   * that turns itself (by its water or its road) stays as it is and the
+   * player is told why. @returns true if it turned
+   */
+  turnTool() {
+    const tool = this.tool;
+    if (!tool) return false;
+    const why = turnRule(tool);
+    if (why) {
+      this.app.ui.toastError?.(why);
+      return false;
+    }
+    this.turns[tool] = (this.turnFor(tool) + 1) & 3;
+    // The build panel first (it starts a fresh plan box), then the plan it shows.
+    this.app.ui.onTurnChanged?.(tool, this.turns[tool]);
+    this.planKey = '';
+    this.refreshPlan();
+    return true;
   }
 
   localPos(e) {
@@ -297,11 +336,12 @@ export class Input {
     if (this.drag) ({ x0, y0, x1, y1 } = this.drag);
     else if (this.hover && this.mouse.over) { x0 = x1 = this.hover.x; y0 = y1 = this.hover.y; }
     else { r.plan = null; this.app.ui.onPlanChanged(null); return; }
-    const key = `${this.tool}:${x0},${y0},${x1},${y1}:${this.game.map.revision}:${Math.floor(this.game.city.treasury)}`;
+    const turn = this.turnFor(this.tool);
+    const key = `${this.tool}:${x0},${y0},${x1},${y1}:${this.game.map.revision}:${Math.floor(this.game.city.treasury)}:${turn}`;
     if (key === this.planKey) return;
     this.planKey = key;
     try {
-      r.plan = planAction(this.game, this.tool, x0, y0, x1, y1);
+      r.plan = planAction(this.game, this.tool, x0, y0, x1, y1, turn);
     } catch (err) {
       this.app.log.error('Planning failed:', err);
       r.plan = null;
@@ -338,7 +378,7 @@ export class Input {
       case '3': a.setSpeed(3); break;
       case '4': a.setSpeed(4); break;
       case 'h': case 'H': a.ui.selectTool('house'); break;
-      case 'r': case 'R': a.ui.selectTool('road'); break;
+      case 'r': case 'R': this.onTurnKey(); break; // turn the building in hand, else the Road tool
       case 'x': case 'X': case 'Delete': a.ui.selectTool('clear'); break;
       case 'u': case 'U': a.undo(); break;
       case 'm': case 'M': a.toggleMusic(); break;

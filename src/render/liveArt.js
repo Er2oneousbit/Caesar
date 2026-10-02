@@ -22,6 +22,8 @@
 
 import { HALF_W, HALF_H } from '../config.js';
 import { hash01, shade, SNOW } from './draw.js';
+import { turnUV, turnedRect } from './turn.js';
+import { THEATER_BOWL, THEATER_ROW_R } from './buildingArt.js';
 
 /** Tunic colors for crowds and shoppers. */
 const CLOTHES = ['#b8573a', '#5d7fa3', '#d9a13a', '#7a9c5a', '#e8dcc0', '#8a5a8a', '#c9c2b0', '#a8322b'];
@@ -125,24 +127,26 @@ function inside(poly, x, y) {
  * Seats for spectators in local px (matching theaterArt / arenaArt), sorted
  * back to front. Cached per venue type and size.
  */
-function crowdSeats(type, S) {
-  const key = `${type}:${S}`;
+function crowdSeats(type, S, turn = 0) {
+  const key = `${type}:${S}:${type === 'theater' ? turn & 3 : 0}`;
   let seats = crowdCache.get(key);
   if (seats) return seats;
   seats = [];
   if (type === 'theater') {
-    const cx = (S * 0.45 - S * 0.45) * HALF_W;
-    const cy = (S * 0.45 + S * 0.45) * HALF_H;
-    // The stage building (theaterArt: box u 0.35..S-0.35, v S-0.55..S-0.25,
-    // 14 px tall) stands in front of part of the seating: skip seats behind it.
-    const stage = boxOutline(0.35, S - 0.55, S - 0.7, 0.3, 14);
+    // The bowl as theaterArt draws it (its centre and rows), turned with the
+    // theater. The stage building (box u 0.35..S-0.35, v S-0.55..S-0.25,
+    // 14 px tall) stands in front of part of the seating at some turns: skip
+    // seats behind it.
+    const [cu, cv] = THEATER_BOWL(S);
+    const [su, sv, sdu, sdv] = turnedRect(0.35, S - 0.55, S - 0.7, 0.3, S, turn);
+    const stage = boxOutline(su, sv, sdu, sdv, 14);
     for (let row = 0; row < 5; row++) {
-      const rx = (28 - row * 4) * 0.88;
-      const ry = (14 - row * 2) * 0.88;
+      const r = THEATER_ROW_R(row) * 0.88;
       const n = 12 - row * 2;
       for (let j = 0; j < n; j++) {
-        const a = Math.PI * (1.1 + (0.8 * (j + 0.5)) / n);
-        const seat = [cx + Math.cos(a) * rx, cy + 4 - row * 2.5 + Math.sin(a) * ry - 0.5];
+        const a = Math.PI * (0.8 + (0.9 * (j + 0.5)) / n); // (the back of the bowl)
+        const [u, v] = turnUV(cu + Math.cos(a) * r, cv + Math.sin(a) * r, S, turn);
+        const seat = lp(u, v, 2.5 * row + 0.5);
         if (!inside(stage, seat[0], seat[1] - 3)) seats.push(seat);
       }
     }
@@ -178,8 +182,8 @@ function crowdSeats(type, S) {
  * Spectators filling a venue during a show; some jump up and cheer.
  * `excitement` 0..1 (gladiator fights get the crowd going more).
  */
-export function drawCrowd(ctx, ox, oy, k, type, S, t, seed, excitement = 0.4) {
-  const seats = crowdSeats(type, S);
+export function drawCrowd(ctx, ox, oy, k, type, S, t, seed, excitement = 0.4, turn = 0) {
+  const seats = crowdSeats(type, S, turn);
   for (let i = 0; i < seats.length; i++) {
     if (hash01(seed, i, 3) < 0.12) continue; // a few empty seats
     const [lx, ly] = seats[i];

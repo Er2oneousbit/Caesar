@@ -341,6 +341,27 @@ try {
       return ![...app.game.buildings.values()].some((v) => v.type === 'prefecture' && v.x === x && v.y === y);
     }, lone);
     check('the lone prefecture is undone again', gone);
+    // R turns the building in hand: the ghost turns, the build panel says
+    // so, and it is placed turned (then undone again).
+    await page.evaluate(() => window.colonia.ui.selectTool('prefecture'));
+    await page.mouse.move(lp.x - 6, lp.y);
+    await page.mouse.move(lp.x, lp.y);
+    await page.waitForTimeout(150);
+    const before = await page.evaluate(() => window.colonia.renderer.stats.ghostTurn);
+    await page.keyboard.press('r');
+    await page.waitForTimeout(200);
+    const turned = await page.evaluate(() => ({ ghost: window.colonia.renderer.stats.ghostTurn, button: document.querySelector('#tool-info .turn-btn')?.dataset.turn, tool: window.colonia.input.tool }));
+    await page.mouse.click(lp.x, lp.y);
+    const placedTurned = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      const b = [...app.game.buildings.values()].find((v) => v.type === 'prefecture' && v.x === x && v.y === y);
+      const turn = b ? b.turn : null;
+      app.undo();
+      delete app.input.turns.prefecture; // (later steps place prefectures as they always did)
+      return turn;
+    }, lone);
+    await page.keyboard.press('Escape');
+    check('R turns the building in hand: the ghost and the Turn button show it, and it is placed turned', before === 0 && turned.ghost === 1 && turned.button === '1' && turned.tool === 'prefecture' && placedTurned === 1, JSON.stringify({ before, turned, placedTurned }));
   }
 
   // 4. Menus and advisors via keyboard
@@ -730,6 +751,61 @@ try {
     return out;
   });
   check('a hippodrome can be placed; any section opens its panel with the races', !!water.main && water.target === water.main && /Races/.test(water.hipPanel || '') && errors.length === 0, JSON.stringify({ hip: water.hip, target: water.target, main: water.main }));
+
+  // 5a2c2. Turned with R, the hippodrome lies north-south: the old one is
+  //        cleared, the Circus picked, R pressed, and the ghost (the player's
+  //        own plan) is put down where all of it fits, its sections along y.
+  const hipBefore = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const main = [...g.buildings.values()].find((b) => b.type === 'hippodrome');
+    if (main) {
+      app.ui.selectTool('clear');
+      app.input.hover = { x: main.x, y: main.y };
+      app.input.mouse.over = true;
+      app.input.refreshPlan();
+      app.applyPlan(app.renderer.plan);
+    }
+    app.ui.selectTool('hippodrome');
+    return { cleared: ![...g.buildings.values()].some((b) => b.type.startsWith('hippodrome')) };
+  });
+  await page.keyboard.press('r');
+  const hipNS = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const free = g.cheats.freeBuild;
+    g.cheats.freeBuild = true;
+    const out = { turn: app.input.turnFor('hippodrome') };
+    const c = app.renderer.camera.screenToTile(app.renderer.camera.viewW / 2, app.renderer.camera.viewH / 2);
+    app.input.mouse.over = true;
+    search: for (let r = 0; r < 60; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        app.input.hover = { x: Math.round(c.x) + dx, y: Math.round(c.y) + dy };
+        app.input.refreshPlan();
+        const p = app.renderer.plan;
+        if (p && p.items.length === 3 && p.items.every((it) => it.ok)) { out.ghostTurn = p.turn; app.applyPlan(p); break search; }
+      }
+    }
+    g.cheats.freeBuild = free;
+    const main = [...g.buildings.values()].find((b) => b.type === 'hippodrome');
+    if (main) {
+      const group = [main, ...main.parts.map((id) => g.buildings.get(id))];
+      out.sections = group.map((b) => [b.x - main.x, b.y - main.y, b.turn]);
+      out.at = [main.x, main.y];
+    }
+    out.view = [Math.round(c.x), Math.round(c.y)];
+    app.ui.selectTool(null);
+    delete app.input.turns.hippodrome;
+    return out;
+  });
+  if (shots && hipNS.at) {
+    await page.evaluate(([x, y]) => window.colonia.renderer.camera.centerOnTile(x + 2, y + 7), hipNS.at);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(shots, 'smoke-hippodrome-ns.png') });
+  }
+  await page.evaluate(([x, y]) => window.colonia.renderer.camera.centerOnTile(x, y), hipNS.view); // (back to the city for the next steps)
+  check('turned with R, the hippodrome is placed north-south, its three sections along y', hipBefore.cleared && hipNS.turn === 1 && hipNS.ghostTurn === 1 && JSON.stringify(hipNS.sections) === JSON.stringify([[0, 0, 1], [0, 5, 1], [0, 10, 1]]), JSON.stringify({ hipBefore, hipNS }));
 
   // 5a2d. The victory screen's festival music ends with the screen: "Keep
   //       building" used to leave it on for the rest of the game.

@@ -23,6 +23,8 @@
   water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
   cloth=1 (the cloth industry only: the flax farm as it grows and rests, the two workshops, the carts)
   navy=1 (the fleet only: the navalia and naval station on each side, liburnians and raider ships)
+  turns=1 (turned art only: every building and home level at turns 0, 1, 2 and 3; turns=farm,temple
+           for the kinds whose key contains one of the words; snow=1 under snow)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
@@ -35,6 +37,7 @@
   import { LED_GOODS } from '../../src/render/cargoArt.js';
   import { GOOD_KEYS } from '../../src/data/goods.js';
   import { BUILDINGS } from '../../src/data/buildings.js';
+  import { spanLayout } from '../../src/sim/entities.js';
 
   const q = new URLSearchParams(location.search);
   const scale = Number(q.get('scale') || 2);
@@ -43,7 +46,8 @@
   const cloth = !!q.get('cloth');
   const navy = !!q.get('navy');
   const governor = !!q.get('governor');
-  const only = q.get('carts') || water || cloth || navy || governor ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const turns = q.get('turns');
+  const only = q.get('carts') || water || cloth || navy || governor || turns ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -81,6 +85,48 @@
     const cells = [];
     for (let v = 0; v < 8; v++) cells.push([`look ${v}`, buildingSpec('house', S, v, tier)]);
     section(`Level ${tier}: ${HOUSE_TIERS[tier].name} (${S}x${S})`, cells);
+  }
+  if (turns) {
+    // Turned art (render/turn.js): every building and home level at the four
+    // turns, each turn a quarter turn clockwise (what R does while placing).
+    // A footprint diamond under each shows where the ground is.
+    const words = turns === '1' ? null : turns.split(',');
+    const snow = Number(q.get('snow') || 0);
+    const plate = (spec, S) => ({ ...spec, draw(ctx) {
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.beginPath();
+      for (const [u, v] of [[0, 0], [S, 0], [S, S], [0, S]]) ctx.lineTo((u - v) * 32, (u + v) * 16);
+      ctx.fill();
+      spec.draw(ctx);
+    } });
+    const row = (label, key, S, variant, state) => section(label, [0, 1, 2, 3].map((t) => [`turn ${t}`, plate(buildingSpec(key, S, variant, state, false, snow, false, t), S)]));
+    if (!words || words.includes('house')) {
+      for (let tier = 1; tier < HOUSE_TIERS.length; tier++) {
+        const S = HOUSE_TIERS[tier].size;
+        row(`Level ${tier}: ${HOUSE_TIERS[tier].name}`, 'house', S, tier % 8, tier);
+        if (S === 1 && tier % 3 === 1) row(`Level ${tier}: a 2x2 block`, 'house', 2, tier, tier);
+      }
+    }
+    if (!words || words.some((w) => 'hippodrome'.includes(w))) {
+      // The whole hippodrome, its three sections where each turn lays them
+      // (sim/entities.js spanLayout: along y at turns 1 and 3).
+      section('hippodrome, all three sections, at each turn', [0, 1, 2, 3].map((t) => {
+        const lay = spanLayout(BUILDINGS.hippodrome, 0, 0, t);
+        const specs = lay.sections.map((p, k) => [p, buildingSpec(k ? 'hippodrome_part' : 'hippodrome', 5, 0, k, false, snow, false, t)]);
+        const s0 = specs[0][1];
+        // Back to front by where each section stands (u + v), as the game draws them.
+        const order = [...specs].sort((a, b) => a[0].x + a[0].y - (b[0].x + b[0].y));
+        return [`turn ${t}`, { w: s0.w + 2 * 160, h: s0.h + 2 * 80, ax: s0.ax + (t % 2 ? 2 * 160 : 0), ay: s0.ay, draw(ctx) {
+          for (const [p, spec] of order) { ctx.save(); ctx.translate((p.x - p.y) * 32, (p.x + p.y) * 16); spec.draw(ctx); ctx.restore(); }
+        } }];
+      }));
+    }
+    for (const [key, def] of Object.entries(BUILDINGS)) {
+      if (!def.size || key === 'house') continue;
+      if (words && !words.some((w) => key.includes(w))) continue;
+      const states = key === 'hippodrome_part' ? [1, 2] : def.kind === 'farm' ? [2, 4] : [def.kind === 'reservoir' || def.kind === 'fountain' || def.needsPiped ? 1 : 0];
+      for (const st of states) row(`${key} (${def.size}x${def.size})${states.length > 1 ? ` state ${st}` : ''}`, key, def.size, 0, st);
+    }
   }
   if (!only || q.get('extras')) {
     // Four single-tile homes of one level that joined into a 2x2 block.

@@ -68,6 +68,8 @@ import { Ambient } from './ambient.js';
 import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.js';
 import { Weather, seasonPalette } from './weather.js';
 import { hash01 } from './draw.js';
+import { turnUV } from './turn.js';
+import { spanOrigin } from '../sim/entities.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
 /** A fort's or naval station's color: its rally standard and the ghost one while deploying. */
@@ -143,8 +145,8 @@ export function mapGateOffset(map, end, dir = null) {
  * piece stands since each god got its look, so it burned over a herm or a
  * rose bush.)
  */
-export function altarFlameOffset(S) {
-  const [u, v] = templeAltar(S);
+export function altarFlameOffset(S, turn = 0) {
+  const [u, v] = templeAltar(S, turn);
   return [(u - v) * HALF_W, (u + v) * HALF_H - 5];
 }
 
@@ -167,13 +169,44 @@ export function lookStep(cur, prev, next, hard = false) {
 
 /**
  * A building sprite's cache key (before the snow suffix, `~n{level}`, which
- * must stay last so a look change can drop sprites by suffix). A sick home
+ * must stay last so a look change can drop sprites by suffix). A turned
+ * building (render/turn.js) adds `:t{turn}` after the art state (turn 0
+ * adds nothing, so its keys are as they always were). A sick home
  * (sim/disease.js) is drawn with a sign of its own, so it has a key of its
- * own: `:sick`, after the art state.
+ * own: `:sick`, after those.
  */
 export function buildingKey(b, variant, state) {
   const sick = b.house && b.house.pop > 0 && b.house.sick > 0;
-  return `b:${b.type}:${b.size}:${variant}:${state}${sick ? ':sick' : ''}`;
+  return `b:${b.type}:${b.size}:${variant}:${state}${turnKey(b.turn)}${sick ? ':sick' : ''}`;
+}
+
+/** The sprite key part for a turn: `:t1`..`:t3`, nothing for turn 0. */
+export function turnKey(turn) {
+  return turn ? `:t${turn & 3}` : '';
+}
+
+/** A plan's items in the order to draw their ghosts: back (small x + y) first, the plan's own order kept otherwise. */
+export function ghostOrder(items) {
+  return items.map((it, k) => [it, k]).sort((a, b) => a[0].x + a[0].y - (b[0].x + b[0].y) || a[1] - b[1]).map((e) => e[0]);
+}
+
+/**
+ * Where a point of the hippodrome's track (U along its 15 tiles, v across,
+ * as hippodromeArt.js draws it) is on the map, for a hippodrome whose main
+ * section is `b`, turned as its sections are (render/turn.js turnUV for
+ * each 5 x 5 section, laid out by sim/entities.js spanLayout). Also which
+ * way +U looks on the screen (1 right, -1 left), so a chariot faces the way
+ * it runs. @returns [x, y, dir]
+ */
+export function raceSpot(b, U, v) {
+  const t = (b.turn || 0) & 3;
+  const o = spanOrigin(b.def, b.x, b.y, t);
+  const L = b.size * (b.def.span || 1);
+  const S = b.size;
+  if (t === 1) return [o.x + S - v, o.y + U, -1];
+  if (t === 2) return [o.x + L - U, o.y + S - v, -1];
+  if (t === 3) return [o.x + v, o.y + L - U, 1];
+  return [o.x + U, o.y + v, 1];
 }
 
 /**
@@ -985,7 +1018,7 @@ export class Renderer {
         if (!isLit(b, lamps)) continue;
         const variant = this.artVariant(b);
         const state = artState(b, farmDormant(game, b));
-        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}`, b.type, b.size, variant, state);
+        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}${turnKey(b.turn)}`, b.type, b.size, variant, state, b.turn || 0);
         const ox = ((b.x - b.y) * HALF_W - cam.x) * k;
         const oy = ((b.x + b.y) * HALF_H - cam.y) * k;
         // Each building fades in over a little while after its turn comes.
@@ -1143,7 +1176,7 @@ export class Renderer {
     const sick = key.endsWith(':sick');
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
     const snow = this.pal.snow;
-    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick), this.snowPrev === null ? null : key + this.snowPrev);
+    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick, b.turn || 0), this.snowPrev === null ? null : key + this.snowPrev);
     if (spr && spr.s) this.buildingBoxes.push({ x: b.x, y: b.y, S: b.size, H: spr.ay / spr.s });
     if (lacksRoad(b)) this.noRoadMarks.push({ b, H: spr && spr.s ? spr.ay / spr.s : 0 });
     const n = depths.length;
@@ -1170,7 +1203,8 @@ export class Renderer {
       items.push({ d: front + 0.0005, kind: K_EXTRA, b, wx, wy, stock: true });
     }
     if ((b.type === 'pottery_ws' || b.type === 'weapons_ws') && b.efficiency > 0 && b.progress > 0 && Math.random() < 0.03) {
-      this.effects.smoke(wx + (0.99 - 0.34) * HALF_W, wy + (0.99 + 0.34) * HALF_H - 32);
+      const [u, v] = turnUV(0.99, 0.34, b.size, b.turn || 0); // the kiln's chimney (workshopArt), turned with it
+      this.effects.smoke(wx + (u - v) * HALF_W, wy + (u + v) * HALF_H - 32);
     }
     // Hearth smoke from lived-in homes (only when zoomed in enough to see it).
     if (b.house && b.house.pop > 0 && b.house.tier >= 4 && b.house.tier <= 12 && this.camera.zoom >= 1 && Math.random() < 0.0015) {
@@ -1180,7 +1214,7 @@ export class Renderer {
       items.push({ d: front + 0.0006, kind: K_EXTRA, b, wx, wy, spray: true });
     }
     // Live details. Flag cloth always (the sprite only has the poles).
-    const flags = flagsFor(b.type, b.size);
+    const flags = flagsFor(b.type, b.size, b.turn || 0);
     if (flags.length) items.push({ d: front + 0.0007, kind: K_EXTRA, b, wx, wy: wy + rise, flags });
     if (this.camera.zoom < 0.75 || rise) return; // the rest is too small to see when zoomed out
     if (kind === 'market' && b.efficiency > 0 && hasStock(b)) {
@@ -1193,8 +1227,8 @@ export class Renderer {
       items.push({ d: front + 0.0004, kind: K_EXTRA, b, wx, wy, live: 'altar' });
     } else if (b.type === 'weapons_ws' && b.efficiency > 0 && b.progress > 0 && this.motionOn && Math.random() < 0.035) {
       // The smith hammers: sparks fly out of the forge door (workshopArt door, left face).
-      const [dx, dy] = [(0.6 - 1.07) * HALF_W, (0.6 + 1.07) * HALF_H - 4];
-      this.effects.sparks(wx + dx, wy + dy, 4 + Math.floor(Math.random() * 4));
+      const [u, v] = turnUV(0.6, 1.07, b.size, b.turn || 0);
+      this.effects.sparks(wx + (u - v) * HALF_W, wy + (u + v) * HALF_H - 4, 4 + Math.floor(Math.random() * 4));
     }
   }
 
@@ -1547,7 +1581,8 @@ export class Renderer {
    * Each is drawn just after the strip of its section's sprite that holds
    * it (a strip is a screen column, drawn at its front tile's depth), so the
    * track does not paint over it.
-   * Track coordinates as in hippodromeArt.js (U along the 15 tiles, v across).
+   * Track coordinates as in hippodromeArt.js (U along the 15 tiles, v across),
+   * laid on the map the way the hippodrome is turned (raceSpot).
    */
   raceItems(b, items) {
     const A = 2.9;
@@ -1569,8 +1604,8 @@ export class Renderer {
         const a = -Math.PI / 2 + (s - straight) / R;
         U = B + Math.cos(a) * R * 1.2; v = 2.5 + Math.sin(a) * R; face = Math.sin(a) < 0 ? 1 : -1;
       }
-      const x = b.x + U;
-      const y = b.y + v;
+      const [x, y, dir] = raceSpot(b, U, v);
+      face *= dir;
       const sec = this.game.buildings.get(this.game.map.buildingAt(Math.floor(x), Math.floor(y))) || b;
       const depths = this.stripsFor(sec);
       const j = Math.floor(x) - Math.floor(y) - (sec.x - sec.y - sec.size);
@@ -1615,9 +1650,9 @@ export class Renderer {
       const ox = (it.wx - cam.x) * k;
       const oy = (it.wy - cam.y) * k;
       if (it.live === 'market') drawShoppers(ctx, ox, oy, k, b.size, t, b.id);
-      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5);
+      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5, b.turn || 0);
       else if (it.live === 'altar') {
-        const [fx, fy] = altarFlameOffset(b.size);
+        const [fx, fy] = altarFlameOffset(b.size, b.turn || 0);
         drawAltarFlame(ctx, ox + fx * k, oy + fy * k, k, t, b.id);
       }
       return;
@@ -1634,11 +1669,12 @@ export class Renderer {
     if (it.stock) {
       ctx.save();
       ctx.setTransform(k, 0, 0, k, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k));
-      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock);
+      // (Turned with the building: its own walls drawn again over what they hide.)
+      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock, b.turn || 0, this.pal.snow);
       else {
         let used = 0;
         for (const key in b.stock) used += b.stock[key];
-        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY);
+        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY, b.turn || 0, this.pal.snow);
       }
       ctx.restore();
     }
@@ -1771,6 +1807,7 @@ export class Renderer {
   drawToolPreview() {
     const { game, plan } = this;
     this.stats.ghostNoRoad = false; // exposed for the browser smoke test
+    this.stats.ghostTurn = null; // (the building ghost's turn, for the smoke test)
     this.stats.roadEdges = 0;
     const map = game.map;
     const def = plan ? BUILDINGS[plan.tool] : null;
@@ -1815,15 +1852,16 @@ export class Renderer {
     this.stats.ghostNoRoad = plan.items.some((it) => it.ok && it.noRoad);
     if (plan.kind === 'building' && plan.items[0] && !plan.items.some((x) => !x.part && x !== plan.items[0]) && plan.items[0].ok && plan.items[0].noRoad) {
       const it = plan.items[0];
-      const span = plan.items.length; // a hippodrome: its sections in a row
-      for (const e of accessEdgeTiles(game, it.x, it.y, it.size * span, it.size)) {
+      const o = it.origin || { x: it.x, y: it.y, w: it.size, h: it.size }; // a hippodrome: its row of sections, along x or y
+      for (const e of accessEdgeTiles(game, o.x, o.y, o.w, o.h)) {
         if (!e.open) continue;
         this.fillDiamond((e.x - e.y) * HALF_W, (e.x + e.y) * HALF_H, ROAD_EDGE_FILL);
         this.outlineFootprint(e.x, e.y, 1, ROAD_EDGE_LINE, 1.4);
         this.stats.roadEdges++;
       }
     }
-    for (const it of plan.items) {
+    // Back to front (a hippodrome turned 2 or 3 lists its front section first: its main).
+    for (const it of ghostOrder(plan.items)) {
       const color = !it.ok ? 'rgba(230,40,40,0.5)' : plan.tool === 'clear' ? 'rgba(230,80,40,0.45)' : it.noRoad ? NO_ROAD_FILL : 'rgba(80,220,90,0.38)';
       const wx = (it.x - it.y) * HALF_W;
       const wy = (it.x + it.y) * HALF_H;
@@ -1839,11 +1877,15 @@ export class Renderer {
         // (its own key, before the snow suffix that must stay last).
         // `type`, `state`: a hippodrome's other sections, a waterside building's turn.
         const snow = this.pal.snow;
+        // `turn`: as the player turned it (R), the same key as once built.
         const type = it.type || plan.tool;
         const st = it.state || 0;
+        const turn = it.turn || 0;
+        const tk = turnKey(turn);
         const spr = it.noRoad
-          ? this.sprites.get(`b:${type}:${it.size}:0:${st}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow), NO_ROAD_TINT))
-          : this.sprites.get(`b:${type}:${it.size}:0:${st}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow));
+          ? this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow, false, turn), NO_ROAD_TINT))
+          : this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow, false, turn));
+        this.stats.ghostTurn = turn;
         this.fillDiamond(wx, wy, color, it.size);
         this.ctx.globalAlpha = 0.72;
         this.blit(spr, wx, wy);

@@ -21,6 +21,8 @@ import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { vendorSupply } from '../src/sim/market.js';
 import { Building, newHouseData } from '../src/sim/entities.js';
 import { newGame, build, findFree } from './helpers.mjs';
+import { Terrain } from '../src/world/map.js';
+import { raceSpot, ghostOrder } from '../src/render/renderer.js';
 
 /** A hippodrome placed at a free 15x5 spot (with a 1-tile margin for roads), or fails the test. */
 function placeHippodrome(game) {
@@ -258,4 +260,152 @@ test('fish reaches homes: a vendor hands fish to a home that wants a kind the ma
   market.stock.fish = 300;
   vendorSupply(game, market, home);
   assert.ok(home.house.food.wheat > 0 && home.house.food.fish > 0, 'wheat and fish');
+});
+
+// ---------------------------------------------------------------------------
+// Turned: north-south (sim/entities.js spanLayout)
+// ---------------------------------------------------------------------------
+
+/** A hippodrome turned `turn` at a free spot (its whole row with a margin), held by its middle tile. */
+function placeTurnedHippodrome(game, turn) {
+  const ns = turn % 2 === 1;
+  const spot = findFree(game, ns ? 7 : 17, ns ? 17 : 7);
+  assert.ok(spot, 'room for a hippodrome');
+  const x = spot.x + 1;
+  const y = spot.y + 1;
+  const cx = x + (ns ? 2 : 7);
+  const cy = y + (ns ? 7 : 2);
+  const plan = planAction(game, 'hippodrome', cx, cy, cx, cy, turn);
+  assert.ok(plan.items.every((it) => it.ok), plan.reason);
+  assert.ok(applyPlan(game, plan).ok, 'placed');
+  const main = [...game.buildings.values()].find((b) => b.type === 'hippodrome');
+  return { main, x, y, plan };
+}
+
+test('hippodrome: turned, it lies north-south, its sections along y (end, middle, gates the way the turn takes them)', () => {
+  for (const [turn, ns, order] of [[1, true, [0, 1, 2]], [3, true, [2, 1, 0]], [2, false, [2, 1, 0]], [0, false, [0, 1, 2]]]) {
+    const game = newGame({ size: 96, seed: `hip-ns-${turn}` });
+    const { main, x, y, plan } = placeTurnedHippodrome(game, turn);
+    const group = linkedGroup(game, main);
+    assert.deepEqual(group.map((b) => b.turn), [turn, turn, turn], 'every section turned');
+    assert.deepEqual(group.map((b) => b.section || 0), [0, 1, 2]);
+    const spotOf = (k) => (ns ? [x, y + 5 * k] : [x + 5 * k, y]);
+    group.forEach((b, k) => assert.deepEqual([b.x, b.y], spotOf(order[k]), `turn ${turn}: section ${k} in its place`));
+    for (let dy = 0; dy < (ns ? 15 : 5); dy++) for (let dx = 0; dx < (ns ? 5 : 15); dx++) assert.ok(game.map.building[game.map.idx(x + dx, y + dy)], `turn ${turn}: all 75 tiles taken`);
+    // The preview drew the same: the main and both sections where they went.
+    assert.deepEqual(plan.items.map((it) => [it.x, it.y]), group.map((b) => [b.x, b.y]));
+    assert.deepEqual(plan.items[0].origin, { x, y, w: ns ? 5 : 15, h: ns ? 15 : 5 });
+  }
+});
+
+test('hippodrome: north-south, a road beside any section gives it access; a spot too narrow is refused', () => {
+  const game = newGame({ size: 96, seed: 'hip-ns-road' });
+  const { main, x, y } = placeTurnedHippodrome(game, 1);
+  assert.equal(main.accessRoad, -1);
+  build(game, 'road', x + 5, y + 13); // beside the far section only, on its east side
+  computeAccessRoad(game, main);
+  assert.equal(main.accessRoad, game.map.idx(x + 5, y + 13));
+  // Water just past a row along x but under a north-south one.
+  let g2 = null;
+  let s = null;
+  for (const seed of ['hip-ns-fit', 'plains-a', 'plains-b', 'plains-c']) {
+    g2 = newGame({ size: 128, seed, type: 'plains' });
+    s = findFree(g2, 17, 17);
+    if (s) break;
+  }
+  assert.ok(s, 'a free square of land');
+  const cx = s.x + 8;
+  const cy = s.y + 8;
+  g2.map.terrain[g2.map.idx(cx, cy + 4)] = Terrain.WATER;
+  assert.equal(checkBuilding(g2, 'hippodrome', cx - 7, cy - 2, 0).ok, true, 'along x it fits');
+  const chk = checkBuilding(g2, 'hippodrome', cx - 2, cy - 7, 1);
+  assert.equal(chk.ok, false, 'north-south it does not');
+  assert.match(chk.reason, /water/);
+});
+
+test('hippodrome: north-south, demolish and undo take the whole; fire and Rebuild put it back north-south; saves keep it', () => {
+  const game = newGame({ size: 96, seed: 'hip-ns-life' });
+  const { x, y } = placeTurnedHippodrome(game, 3);
+  const money = game.city.treasury;
+  assert.ok(undoLast(game).ok);
+  assert.equal(game.city.treasury, money + BUILDINGS.hippodrome.cost);
+  for (let dy = 0; dy < 15; dy++) assert.equal(game.map.building[game.map.idx(x + 2, y + dy)], 0, 'undone, every tile');
+  const again = placeTurnedHippodrome(game, 3);
+  const part = linkedGroup(game, again.main)[1];
+  applyPlan(game, planAction(game, 'clear', part.x, part.y, part.x, part.y));
+  assert.equal([...game.buildings.values()].filter((b) => b.type.startsWith('hippodrome')).length, 0, 'demolished, all three');
+  // Fire, then Rebuild from any section's rubble.
+  const h = placeTurnedHippodrome(game, 3);
+  igniteBuilding(game, linkedGroup(game, h.main)[2]);
+  for (let dy = 0; dy < 15; dy++) assert.equal(game.map.rubble[game.map.idx(h.x + 2, h.y + dy)], 1, 'rubble over the whole track');
+  game.fires.clear();
+  const plan = rebuildPlan(game, game.map.idx(h.x + 1, h.y + 1));
+  assert.ok(plan && plan.count === 1, 'the rubble offers it back');
+  assert.equal(plan.turn, 3);
+  assert.ok(applyPlan(game, plan).ok);
+  const back = [...game.buildings.values()].find((b) => b.type === 'hippodrome');
+  assert.equal(back.turn, 3);
+  assert.deepEqual(linkedGroup(game, back).map((b) => [b.x, b.y]), [[h.x, h.y + 10], [h.x, h.y + 5], [h.x, h.y]], 'the same row, the same way round');
+  // A save keeps it north-south.
+  const loaded = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  const lm = [...loaded.buildings.values()].find((b) => b.type === 'hippodrome');
+  assert.equal(lm.turn, 3);
+  assert.deepEqual(linkedGroup(loaded, lm).map((b) => [b.x, b.y, b.turn]), [[h.x, h.y + 10, 3], [h.x, h.y + 5, 3], [h.x, h.y, 3]]);
+});
+
+test('hippodrome: the races run along the track whichever way it is turned', () => {
+  for (let t = 0; t < 4; t++) {
+    const game = newGame({ size: 96, seed: `hip-race-${t}` });
+    const { main, x, y } = placeTurnedHippodrome(game, t);
+    const ns = t % 2 === 1;
+    // The spina's ends and middle, as hippodromeArt.js draws them, on the map: inside the row, along its length.
+    for (const [U, v] of [[2.9, 2.5], [7.5, 2.5], [12.1, 2.5], [0.2, 0.2], [14.8, 4.8]]) {
+      const [px, py] = raceSpot(main, U, v);
+      assert.ok(px >= x && px <= x + (ns ? 5 : 15) && py >= y && py <= y + (ns ? 15 : 5), `turn ${t}: (${U}, ${v}) on the track (${px}, ${py})`);
+      // The track point lies on the section that draws it.
+      const sec = game.buildings.get(game.map.buildingAt(Math.floor(Math.min(px, x + (ns ? 4.99 : 14.99))), Math.floor(Math.min(py, y + (ns ? 14.99 : 4.99)))));
+      assert.equal(sec.section || 0, Math.min(2, Math.floor(U / 5)), `turn ${t}: U ${U} in section ${Math.floor(U / 5)}`);
+    }
+  }
+});
+
+test('hippodrome: the ghost draws back to front at every turn; a save whose sections disagree lies the main\'s way', () => {
+  for (let t = 0; t < 4; t++) {
+    const game = newGame({ size: 96, seed: `hip-ghost-${t}` });
+    const plan = planAction(game, 'hippodrome', 40, 40, 40, 40, t); // (where it would fit or not: the order is the same)
+    const depth = ghostOrder(plan.items).map((it) => it.x + it.y);
+    assert.deepEqual(depth, [...depth].sort((a, b) => a - b), `turn ${t}: back to front`);
+    assert.equal(plan.items[0].part, undefined, `turn ${t}: the plan still lists the main section first`);
+  }
+  const game = newGame({ size: 96, seed: 'hip-ns-hand' });
+  placeTurnedHippodrome(game, 1);
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  for (const b of data.buildings) if (b.type === 'hippodrome_part') b.turn = 2; // a hand-edited file
+  const back = deserializeGame(data);
+  for (const b of back.buildings.values()) if (b.type.startsWith('hippodrome')) assert.equal(b.turn, 1, b.type);
+});
+
+test('hippodrome: north-south, a team on the road beside it books the races and the charioteer goes out', () => {
+  const game = newGame({ size: 96, seed: 'hip-ns-race' });
+  const { main, x, y } = placeTurnedHippodrome(game, 1);
+  build(game, 'road', x + 5, y - 1, x + 5, y + 16); // along its east side
+  // A Factio on the road's other side, wherever there is room for it.
+  let at = null;
+  for (let k = 0; k < 14 && !at; k++) if (build(game, 'chariot_maker', x + 7, y + 1 + k).ok) at = { x: x + 7, y: y + 1 + k };
+  assert.ok(at, 'a Factio beside the road');
+  game.processRoadChanges();
+  const cm = game.buildings.get(game.map.building[game.map.idx(at.x, at.y)]);
+  main.efficiency = 1;
+  cm.efficiency = 1;
+  assert.ok(main.accessRoad >= 0 && cm.accessRoad >= 0, 'both on the road');
+  cm.spawnTimer = 0;
+  updateTraining(game, cm);
+  const team = game.walkers.get(cm.walkers[0]);
+  assert.ok(team && team.venue === 'hippodrome', 'a team is on its way');
+  for (let t = 0; t < 400 && game.walkers.has(team.id); t++) updateWalkers(game);
+  assert.equal(main.shows.hippodrome, SHOW_DAYS, 'races booked');
+  assert.ok(racesRunning(game));
+  main.spawnTimer = 0;
+  updateServiceSpawns(game, main);
+  assert.ok(main.walkers.map((id) => game.walkers.get(id)).some((w) => w && w.type === 'charioteer'), 'the charioteer goes out');
 });

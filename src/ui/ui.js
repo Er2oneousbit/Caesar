@@ -269,6 +269,9 @@ export class UI {
 
   onPlanChanged(plan) { this.sidebar.showPlan(plan); }
 
+  /** The building in hand was turned (R): the build panel shows its new turn. */
+  onTurnChanged(tool) { this.sidebar.showToolInfo(tool); this.app.sfx?.play?.('click'); }
+
   /** Error/feedback toast that is not recorded in the game's message log. */
   toastError(text) {
     this.messages.push({ text, level: 'warn', date: '' });

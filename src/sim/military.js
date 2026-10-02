@@ -217,7 +217,7 @@ export function removeUnit(game, u, cause = 'died') {
         if (cs && cs.army && cs.army.id === u.legion) cs.army.killed++;
         if (cs) cs.stats.slain++;
       } else if (mine) inv.killed++;
-    } else {
+    } else if (u.side === 'rome') {
       st.soldiersLost++;
     }
     game.events.emit('unitDied', { x: u.x, y: u.y, side: u.side, type: u.type });
@@ -228,6 +228,25 @@ export function unitsOfFort(game, fortId) {
   const out = [];
   for (const u of game.units.values()) if (u.fort === fortId) out.push(u);
   return out;
+}
+
+/**
+ * Is this unit hostile to Rome, so that soldiers, watchtowers and prefects
+ * fight it? One rule for all three, so a new kind of foe needs no change to
+ * any of them:
+ *   side 'enemy'   raiders, Caesar's legionaries: always
+ *   side 'wild'    wild animals that hunt the city's people (wolves): always
+ *   side 'native'  a villager of a native village: only while his village is
+ *                  attacking the city (`u.attacking` set); in peace he walks
+ *                  his own paths and is left alone
+ * Rome's own units never are. Ships of either side are left to the fleet
+ * (land units never see them), whatever this says.
+ * Hostile is not the same as "an enemy in the province": only side 'enemy'
+ * holds up a victory or the peace rating (sim/ratings.js enemiesInProvince).
+ */
+export function hostileToRome(u) {
+  if (u.side === 'enemy' || u.side === 'wild') return true;
+  return u.side === 'native' && !!u.attacking;
 }
 
 /** Raiders in the province: on land, and still aboard their ships. */
@@ -929,6 +948,7 @@ function pickTarget(enemies, u, zone) {
   return best;
 }
 
+/** One soldier's tick. `enemies`: every land unit hostile to Rome (hostileToRome). */
 function updateRoman(game, u, enemies) {
   const def = UNIT_TYPES[u.type];
   const fort = game.buildings.get(u.fort);
@@ -941,7 +961,7 @@ function updateRoman(game, u, enemies) {
   const post = postOf(game, u, fort);
   const zone = fightZone(game, def, fort, post);
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && (target.side !== 'enemy' || !inZone(zone, u, target, true))) target = null;
+  if (target && (!hostileToRome(target) || !inZone(zone, u, target, true))) target = null;
   if ((game.time.totalTicks + u.id) % 6 === 0 || !target) {
     const pick = pickTarget(enemies, u, zone);
     if (pick !== target) {
@@ -1154,17 +1174,22 @@ function updateTowers(game, enemies) {
 export function updateMilitary(game) {
   if (game.units.size === 0 && game.projectiles.length === 0) return;
   const romans = [];
-  const enemies = [];
+  const enemies = []; // side 'enemy' on land: raiders and Caesar's men
+  const hostiles = []; // everything on land soldiers and towers fight (hostileToRome)
   const fleet = []; // liburnians
   const pirates = []; // raider ships
   for (const u of game.units.values()) {
     u.px = u.x; // previous position: the renderer interpolates between ticks
     u.py = u.y;
     if (UNIT_TYPES[u.type].naval) (u.side === 'enemy' ? pirates : fleet).push(u);
-    else (u.side === 'enemy' ? enemies : romans).push(u);
+    else if (u.side === 'rome') romans.push(u);
+    else {
+      if (u.side === 'enemy') enemies.push(u);
+      if (hostileToRome(u)) hostiles.push(u);
+    }
   }
-  // pressure = how many soldiers are on each raider (pickTarget spreads attacks)
-  for (const e of enemies) e.pressure = 0;
+  // pressure = how many soldiers are on each foe (pickTarget spreads attacks)
+  for (const e of hostiles) e.pressure = 0;
   for (const u of romans) {
     const t = u.target ? game.units.get(u.target) : null;
     if (t) t.pressure++;
@@ -1185,7 +1210,7 @@ export function updateMilitary(game) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
     if (u.away) marchOut(game, u);
-    else updateRoman(game, u, enemies);
+    else updateRoman(game, u, hostiles);
   }
   for (const u of enemies) {
     if (!game.units.has(u.id)) continue;
@@ -1194,7 +1219,7 @@ export function updateMilitary(game) {
     else updateRaider(game, u, home);
   }
   if (fleet.length || pirates.length) updateNavy(game, fleet, pirates);
-  updateTowers(game, enemies.filter((e) => game.units.has(e.id)));
+  updateTowers(game, hostiles.filter((e) => game.units.has(e.id)));
   updateProjectiles(game);
 }
 
@@ -1493,8 +1518,11 @@ function endInvasion(game, inv) {
     m.nextRaidMonth = game.time.totalMonths + game.rng.range(Math.max(4, Math.round(a * k)), Math.max(5, Math.round(b * k)));
   }
   // The raid's missiles are done with; those at Caesar's men (sim/legion.js),
-  // still fighting, fly on.
-  game.projectiles = game.projectiles.filter((p) => !p.pot && game.units.get(p.target)?.legion);
+  // still fighting, and at foes that are no part of a raid (a wolf), fly on.
+  game.projectiles = game.projectiles.filter((p) => {
+    const t = p.pot ? null : game.units.get(p.target);
+    return !!t && (!!t.legion || (t.side !== 'enemy' && hostileToRome(t)));
+  });
 }
 
 /** Summary for the advisor and HUD. */

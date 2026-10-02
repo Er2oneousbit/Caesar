@@ -13,6 +13,7 @@ import { OVERLAYS } from '../render/overlays.js';
 import { threatSummary } from '../sim/military.js';
 import { SEASON_NAMES } from '../sim/time.js';
 import { WEATHER } from '../render/weather.js';
+import { viewDir } from '../render/view.js';
 
 const SEASON_ICONS = { winter: '❄️', spring: '🌱', summer: '☀️', autumn: '🍂' };
 
@@ -56,6 +57,14 @@ export class Hud {
     this.speedBtns = SPEED_LABELS.map((lbl, i) => h('button', { class: 'hud-btn', title: SPEED_TITLES[i], onclick: () => (i === 0 ? app.togglePause() : app.setSpeed(i)) }, lbl));
     this.overlaySel = h('select', { class: 'hud-select', title: 'Information overlay (O)', onchange: (e) => app.setOverlay(e.target.value) },
       OVERLAYS.map((o) => h('option', { value: o.key }, o.key === 'none' ? '🗺 Overlays' : o.name)));
+    // Turning the view (render/view.js): the city a quarter turn either way,
+    // and a needle pointing north (a click turns back to the start, north up).
+    this.northNeedle = h('span', { class: 'needle' }, '↑');
+    this.viewBtns = h('div', { class: 'view-group' },
+      h('button', { class: 'hud-btn', id: 'hud-turn-left', title: 'Turn the view: the city a quarter turn anticlockwise (Shift+Q or [)', 'aria-label': 'Turn the view anticlockwise', onclick: () => app.turnView(-1) }, '⟲'),
+      h('button', { class: 'hud-btn north', id: 'hud-north', title: 'Where north lies. Click to turn the view back to the start', 'aria-label': 'North', onclick: () => app.turnView(-app.renderer.viewTurn) }, this.northNeedle),
+      h('button', { class: 'hud-btn', id: 'hud-turn-right', title: 'Turn the view: the city a quarter turn clockwise (Q or ])', 'aria-label': 'Turn the view clockwise', onclick: () => app.turnView(1) }, '⟳'));
+    this.shownTurn = -1;
     this.el.append(
       this.menuBtn,
       this.title,
@@ -68,6 +77,7 @@ export class Hud {
       h('div', { class: 'speed-group' }, this.speedBtns),
       h('span', { class: 'hud-spacer' }),
       this.overlaySel,
+      this.viewBtns,
       h('button', { class: 'hud-btn', id: 'hud-empire', title: 'Empire map (E)', 'aria-label': 'Empire map', onclick: () => app.ui.openEmpire() }, '🧭'),
       h('button', { class: 'hud-btn', title: 'Advisors (F2)', onclick: () => app.ui.openAdvisors() }, '📜 Advisors'),
       h('button', { class: 'hud-btn', title: 'Messages', onclick: () => app.ui.openAdvisors('messages') }, '✉'),
@@ -134,5 +144,23 @@ export class Hud {
     const active = app.paused ? 0 : app.speedIndex;
     this.speedBtns.forEach((b, i) => b.classList.toggle('active', i === active));
     if (this.overlaySel.value !== app.renderer.overlay.key) this.overlaySel.value = app.renderer.overlay.key;
+    this.showViewTurn(app.renderer.viewTurn);
+  }
+
+  /**
+   * Point the needle at north as the view shows it. The game's compass
+   * (the scouts' "from the north", sim/military.js screenDirection) is the
+   * unturned screen's, so north is straight up at turn 0: the map's (0, 0)
+   * corner, a step of (-1, -1). Each quarter turn of the city turns it with
+   * it (right at turn 1).
+   */
+  showViewTurn(turn) {
+    if (turn === this.shownTurn) return;
+    this.shownTurn = turn;
+    const [dx, dy] = viewDir(-1, -1, turn);
+    // On the screen a step (dx, dy) moves (dx - dy) * 32 px across and (dx + dy) * 16 px down.
+    const deg = (Math.atan2((dx + dy) * 16, (dx - dy) * 32) * 180) / Math.PI + 90; // the arrow points up at 0
+    this.northNeedle.style.transform = `rotate(${Math.round(deg)}deg)`;
+    this.northNeedle.parentElement.dataset.turn = String(turn); // (for the browser smoke test)
   }
 }

@@ -165,6 +165,10 @@ button, input, select { font: inherit; color: inherit; }
 .hud-title { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; color: var(--gold); white-space: nowrap; }
 .hud-spacer { flex: 1; min-width: 4px; }
 .speed-group { display: flex; gap: 2px; }
+.view-group { display: flex; gap: 2px; } /* turning the view: anticlockwise, the north needle, clockwise */
+.hud-btn.north { min-width: 26px; padding-left: 4px; padding-right: 4px; }
+.hud-btn.north .needle { display: inline-block; font-weight: 700; color: var(--gold); transition: transform 0.2s ease; }
+@media (prefers-reduced-motion: reduce) { .hud-btn.north .needle { transition: none; } }
 .hud-select {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--bronze);

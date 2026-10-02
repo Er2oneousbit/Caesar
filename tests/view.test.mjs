@@ -387,3 +387,46 @@ test('view: turning the view changes nothing in the sim', () => {
   for (const t of [1, 2, 3, 0]) r.setViewTurn(t);
   assert.equal(state(), before);
 });
+
+test('view: the minimap turns with the view (a burning tile shows where the view puts it) and a click on it finds the spot', async () => {
+  const { Minimap } = await import('../src/render/minimap.js');
+  // A 2D context that keeps only the picture the minimap puts into it.
+  const ctx = () => new Proxy({ drawn: null }, {
+    get: (o, k) => (k in o ? o[k] : k === 'createImageData' ? (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }) : k === 'putImageData' ? (img) => { o.drawn = img; } : () => {}),
+    set: (o, k, v) => { o[k] = v; return true; },
+  });
+  const had = globalThis.document;
+  globalThis.document = { createElement: () => { const c = { width: 0, height: 0, ctx: ctx() }; c.getContext = () => c.ctx; return c; } };
+  try {
+    const game = newGame({ seed: 'view-minimap' });
+    const map = game.map;
+    // Two tiles side by side: a minimap pixel row holds two rows of tiles
+    // and the one drawn last shows, so of each pair of neighbours only the
+    // one at an odd x + y of the view is seen (at every turn one of these).
+    game.fires.set(map.idx(20, 9), 1);
+    game.fires.set(map.idx(21, 9), 1);
+    const canvas = { width: 440, height: 224, getContext: () => ctx() };
+    const mm = new Minimap(canvas);
+    for (const t of TURNS) {
+      const cam = cameraAt(map.w, map.h, t);
+      mm.draw(game, cam, 1e6 * (t + 1));
+      const img = mm.base.ctx.drawn;
+      const [mx, my] = [[20, 9], [21, 9]].find(([x, y]) => viewTileOf(x, y, t, map.w, map.h).reduce((a, b) => a + b) % 2 === 1);
+      const [vx, vy] = viewTileOf(mx, my, t, map.w, map.h);
+      const px = vx - vy + map.h - 1;
+      const py = (vx + vy) >> 1;
+      const o = (py * img.width + px) * 4;
+      assert.deepEqual([...img.data.slice(o, o + 3)], [255, 80, 20], `turn ${t}: the fire's pixel`);
+      // A click on the minimap where that tile shows takes the view to it.
+      const { scale, ox, oy } = mm.layout;
+      const w = mm.toWorld(ox + (px + 1) * scale, oy + (py + 0.5) * scale);
+      const m = cam.worldToMap(w.x, w.y);
+      assert.ok(Math.abs(m.x - mx - 0.5) <= 1 && Math.abs(m.y - my - 0.5) <= 1, `turn ${t}: ${JSON.stringify(m)} for (${mx}, ${my})`);
+      // North (the map's (0, 0) corner) is up at turn 0 and goes round with the view: right at turn 1.
+      if (t === 0) assert.ok(mm.north.y < 20, JSON.stringify(mm.north));
+      if (t === 1) assert.ok(mm.north.x > canvas.width - 40, JSON.stringify(mm.north));
+    }
+  } finally {
+    globalThis.document = had;
+  }
+});

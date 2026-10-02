@@ -66,6 +66,7 @@ export const CONSOLE_HELP = [
   ['win', 'Trigger victory'],
   ['stats', 'Print city statistics'],
   ['goto <x> <y>', 'Center the view on a tile'],
+  ['view [0-3]', 'Turn the view: the city 0 to 3 quarter turns clockwise (as Q does one at a time)'],
   ['weather <kind>', 'Change the weather now: clear | cloudy | rain | storm | snow'],
   ['snow <0-3>', 'Set the snow lying on the ground (0 none .. 3 deep); it melts again by itself'],
   ['sky <0-1>|off', 'Freeze the time of day (0.3 noon, 0.67 sunset, 0.8 night) or let it run'],
@@ -417,6 +418,15 @@ export class DebugConsole {
         if (!g.map.inBounds(x, y)) throw new Error('usage: goto <x> <y> (inside the map)');
         app.renderer.camera.centerOnTile(x, y);
         return `Centered on ${x},${y}`;
+      }
+      case 'view': {
+        need();
+        const r = app.renderer;
+        if (args[0] === undefined) return `View turn ${r.viewTurn} (0 unturned; Q turns the city clockwise)`;
+        const t = Number(args[0]);
+        if (!(t >= 0 && t <= 3 && Number.isInteger(t))) throw new Error('usage: view <0-3>');
+        app.turnView(t - r.viewTurn);
+        return `View turn ${r.viewTurn}`;
       }
       case 'weather': {
         const kind = (args[0] || '').toLowerCase();

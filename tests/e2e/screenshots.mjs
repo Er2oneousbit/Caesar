@@ -56,6 +56,7 @@ const shots = pick ? pick.split(/,(?=[\w-]+:)/).map((s) => [s.slice(0, s.indexOf
   ['spring-rain', 'scenario=c1&months=8&zoom=2&month=4&weather=rain'],
   ['busy-market', 'scenario=c1&months=8&zoom=4&w=1000&h=700&look=market&busy=1'],
   ['theater-show', 'scenario=c1&months=8&zoom=4&w=1000&h=700&look=theater&busy=1'],
+  ['turned', 'scenario=c1&months=8&zoom=2&view=1'], // the city seen from another side (the view turned a quarter)
 ];
 
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs'), '--port', String(port)], { stdio: 'pipe' });

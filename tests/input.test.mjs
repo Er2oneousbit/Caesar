@@ -87,3 +87,29 @@ test('input: moves behind the menu keep the position but hold no old game', () =
   assert.equal(input.mouse.game, null, 'the finished game is not kept alive');
   assert.deepEqual([input.mouse.x, input.mouse.y], [310, 320]);
 });
+
+test('input: Q and ] turn the view clockwise, Shift+Q and [ back; the hover follows the map under a still cursor', () => {
+  const { app, canvas, pans } = fakeApp();
+  const turns = [];
+  app.turnView = (dir) => turns.push(dir);
+  const input = new Input(app);
+  app.game = fakeGame();
+  const key = (k) => input.onKeyDown({ key: k, code: k.length === 1 ? `Key${k.toUpperCase()}` : k, target: {}, preventDefault() {} });
+  for (const k of ['q', ']', 'Q', '[']) key(k);
+  assert.deepEqual(turns, [1, 1, -1, -1]);
+  // The view turned under a still cursor: the tile under it is another, and so is a drag's far end.
+  let under = { x: 4, y: 5 };
+  app.renderer.camera.screenToTile = () => under;
+  canvas.dispatchEvent(ev('pointerenter', 500, 400));
+  window.dispatchEvent(ev('pointermove', 500, 400));
+  assert.deepEqual(app.renderer.hoverTile, { x: 4, y: 5 });
+  input.drag = { x0: 1, y0: 1, x1: 4, y1: 5, id: 1 };
+  under = { x: 9, y: 2 };
+  input.rehover();
+  assert.deepEqual(app.renderer.hoverTile, { x: 9, y: 2 });
+  assert.deepEqual([input.drag.x1, input.drag.y1], [9, 2]);
+  // Scrolling stays the screen's: the left arrow pans right on the screen, whatever the turn.
+  input.keys.add('ArrowLeft');
+  input.update(1 / 60);
+  assert.ok(pans.length === 1 && pans[0][0] > 0 && pans[0][1] === 0);
+});

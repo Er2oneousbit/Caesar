@@ -389,6 +389,122 @@ try {
   check('city grows', saved.pop > 50, `pop ${saved.pop}`);
   await page.evaluate(() => window.colonia.togglePause());
 
+  // 5. (cont.) Turning the view (render/view.js): Q turns the city a quarter
+  //    turn clockwise, keeping the middle of the screen where it is; at every
+  //    turn a click on a known building opens it; a road dragged at turn 1
+  //    is built where it was dragged; the minimap turns with the view and a
+  //    click on it still goes to the spot; the top bar's needle follows.
+  {
+    const pickTarget = () => page.evaluate(() => {
+      const app = window.colonia;
+      const b = [...app.game.buildings.values()].filter((v) => !v.house && v.size >= 2 && v.def.kind !== 'farm').sort((p, q) => q.size - p.size || p.id - q.id)[0];
+      return b ? { id: b.id, x: b.x, y: b.y, S: b.size, type: b.type } : null;
+    });
+    const target = await pickTarget();
+    check('the demo city has a building to click from every side', !!target);
+    // Where a map point is on the page, through the view turn.
+    const onPage = (fx, fy) => page.evaluate(([x, y]) => {
+      const app = window.colonia;
+      const cam = app.renderer.camera;
+      const w = cam.mapToWorld(x, y);
+      const r = app.canvas.getBoundingClientRect();
+      return { x: r.left + ((w.x - cam.x) * cam.scale) / cam.dpr, y: r.top + ((w.y - cam.y) * cam.scale) / cam.dpr };
+    }, [fx, fy]);
+    const middleTile = () => page.evaluate(() => {
+      const app = window.colonia;
+      const cam = app.renderer.camera;
+      return cam.screenToTile(cam.viewW / cam.dpr / 2, cam.viewH / cam.dpr / 2);
+    });
+    if (target) {
+      await page.evaluate((t) => { const app = window.colonia; app.ui.info.close(); app.renderer.camera.centerOnTile(t.x + 1, t.y + 1); }, target);
+      const mid0 = await middleTile();
+      await page.mouse.move(300, 12); // (over the top bar: off the map, and no edge scrolling)
+      await page.keyboard.press('q');
+      await page.waitForTimeout(150);
+      const after = await page.evaluate(() => ({ turn: window.colonia.renderer.camera.turn, needle: document.getElementById('hud-north')?.dataset.turn, north: window.colonia.ui.sidebar.minimap.north }));
+      const mid1 = await middleTile();
+      check('Q turns the view a quarter turn, the middle of the screen stays, the needle follows', after.turn === 1 && after.needle === '1' && mid1.x === mid0.x && mid1.y === mid0.y, JSON.stringify({ after, mid0, mid1 }));
+      await page.keyboard.press('Shift+Q');
+      await page.waitForTimeout(100);
+      check('Shift+Q turns it back', await page.evaluate(() => window.colonia.renderer.camera.turn) === 0);
+      const opened = [];
+      const norths = [];
+      for (let t = 0; t < 4; t++) {
+        await page.evaluate((v) => { const app = window.colonia; app.ui.info.close(); app.renderer.camera.centerOnTile(v.x + 1, v.y + 1); }, target);
+        await page.waitForTimeout(120);
+        const p = await onPage(target.x + target.S / 2, target.y + target.S / 2);
+        await page.mouse.click(p.x, p.y);
+        await page.waitForTimeout(120);
+        opened.push(await page.evaluate(() => ({ turn: window.colonia.renderer.camera.turn, target: window.colonia.ui.info.target })));
+        norths.push(await page.evaluate(() => window.colonia.ui.sidebar.minimap.north));
+        if (shots) await page.screenshot({ path: path.join(shots, `smoke-view-${t}.png`) });
+        await page.evaluate(() => window.colonia.ui.info.close());
+        await page.click('#hud-turn-right');
+      }
+      check('at every turn a click on a building opens its panel', opened.every((o, t) => o.turn === t && o.target?.kind === 'building' && o.target.id === target.id), JSON.stringify(opened));
+      check('the turn button turns the view, four times round again', await page.evaluate(() => window.colonia.renderer.camera.turn) === 0);
+      check('the minimap turns with the view: its north mark goes round', new Set(norths.map((n) => n && `${Math.round(n.x)},${Math.round(n.y)}`)).size === 4, JSON.stringify(norths));
+      // The minimap at turn 1: a click on the spot where the building shows takes the view there.
+      await page.keyboard.press('q');
+      await page.evaluate(() => { const app = window.colonia; const m = app.game.map; app.renderer.camera.centerOnTile(m.w >> 1, m.h >> 1); });
+      const mm = await page.evaluate((v) => {
+        const app = window.colonia;
+        const mmap = app.ui.sidebar.minimap;
+        const cv = mmap.canvas;
+        const { scale, ox, oy, h } = mmap.layout;
+        const w = app.renderer.camera.mapToWorld(v.x + v.S / 2, v.y + v.S / 2);
+        const px = ox + (w.x / 32 + h - 1) * scale;
+        const py = oy + (w.y / 32) * scale;
+        const r = cv.getBoundingClientRect();
+        return { x: r.left + (px / cv.width) * r.width, y: r.top + (py / cv.height) * r.height, shown: r.width > 0 };
+      }, target);
+      if (mm.shown) {
+        await page.mouse.click(mm.x, mm.y);
+        await page.waitForTimeout(1200);
+        const at = await middleTile();
+        check('at turn 1 a click on the minimap goes to that spot', Math.abs(at.x - target.x - 1) <= 2 && Math.abs(at.y - target.y - 1) <= 2, JSON.stringify({ at, target }));
+      }
+      // A road dragged at turn 1 goes where it was dragged.
+      const free = await page.evaluate(() => {
+        const app = window.colonia;
+        const m = app.game.map;
+        const c = app.renderer.camera.screenToTile(app.canvas.width / app.renderer.camera.dpr / 2, app.canvas.height / app.renderer.camera.dpr / 2);
+        for (let r = 0; r < 40; r++) {
+          for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+            const x = c.x + dx; const y = c.y + dy;
+            let ok = true;
+            for (let k = -1; k < 7 && ok; k++) for (let j = -1; j <= 1; j++) if (!m.isFree(x + k, y + j)) { ok = false; break; }
+            if (ok) { app.renderer.camera.centerOnTile(x + 3, y); return { x, y }; }
+          }
+        }
+        return null;
+      });
+      check('found free land for a road at turn 1', !!free);
+      if (free) {
+        await page.waitForTimeout(100);
+        await page.keyboard.press('r'); // the Road tool
+        const a = await onPage(free.x + 0.5, free.y + 0.5);
+        const b = await onPage(free.x + 5.5, free.y + 0.5);
+        await page.mouse.move(a.x, a.y);
+        await page.mouse.down();
+        await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 5 });
+        await page.mouse.move(b.x, b.y, { steps: 5 });
+        await page.mouse.up();
+        const road = await page.evaluate((f) => {
+          const app = window.colonia;
+          const m = app.game.map;
+          const laid = [0, 1, 2, 3, 4, 5].map((k) => m.road[m.idx(f.x + k, f.y)] > 0);
+          const turn = app.renderer.camera.turn;
+          app.undo();
+          app.ui.selectTool(null);
+          return { laid, turn };
+        }, free);
+        check('at turn 1 a road dragged along the map is built where it was dragged', road.turn === 1 && road.laid.every(Boolean), JSON.stringify(road));
+      }
+      await page.evaluate(() => window.colonia.turnView(-window.colonia.renderer.viewTurn));
+    }
+  }
+
   // 5. (cont.) The housing ladder: a home shown at every level (1-20) gets its info
   //     panel with the level's name, and the Population advisor lists them all.
   const ladder = await page.evaluate(() => {
@@ -1813,6 +1929,8 @@ try {
   const mc = await page.evaluate(() => window.colonia.musicSelfCheck(4));
   const mcOk = Object.values(mc).every((m) => !m.bad && m.peak > 0.02 && m.peak < 0.99 && m.rmsDb > -45);
   check('every music mood renders: audible, not clipping', mcOk, Object.entries(mc).map(([k, v]) => `${k} ${v.rmsDb}dB/${v.peak}`).join(', '));
+  // (Seen from another side: the view turn goes with the save's camera.)
+  await page.evaluate(() => window.colonia.turnView(2));
   const savedNow = await page.evaluate(() => ({ b: window.colonia.game.buildings.size }));
   await page.keyboard.press('F5');
   // Leaving the page writes the autosave slot (localStorage).
@@ -1827,6 +1945,9 @@ try {
   await page.waitForFunction(() => window.colonia.game, null, { timeout: 15000 });
   const loaded = await page.evaluate(() => window.colonia.game.buildings.size);
   check('quick save survives a reload', loaded === savedNow.b, `${savedNow.b} vs ${loaded}`);
+  const turnLoaded = await page.evaluate(() => ({ turn: window.colonia.renderer.camera.turn, needle: document.getElementById('hud-north')?.dataset.turn }));
+  check('the view turn is kept with the save', turnLoaded.turn === 2, JSON.stringify(turnLoaded));
+  await page.evaluate(() => window.colonia.turnView(-window.colonia.renderer.viewTurn));
   const units = await page.evaluate(() => window.colonia.game.units.size);
   check('soldiers and raiders survive save + load', units > 0, `${units} units`);
   await page.keyboard.press('Escape');

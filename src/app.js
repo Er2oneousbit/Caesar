@@ -841,6 +841,19 @@ export class App {
     else this.renderer.camera.centerOnTile(cx, cy);
   }
 
+  /**
+   * Turn the view a quarter turn (Q, ] / Shift+Q, [ and the top bar's
+   * buttons): dir 1 turns the city clockwise on the screen, -1 back. A view
+   * setting only (render/view.js), kept with the camera in saves.
+   */
+  turnView(dir) {
+    if (!this.game) return;
+    const r = this.renderer;
+    r.setViewTurn((r.viewTurn + dir) & 3);
+    this.input.rehover();
+    this.ui.onViewTurned?.(r.viewTurn);
+  }
+
   toggleDebugHud() { this.debugHud = !this.debugHud; }
   toggleConsole() { this.ui.console.toggle(); }
 

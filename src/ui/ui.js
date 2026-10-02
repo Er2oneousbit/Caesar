@@ -271,6 +271,8 @@ export class UI {
 
   /** The building in hand was turned (R): the build panel shows its new turn. */
   onTurnChanged(tool) { this.sidebar.showToolInfo(tool); this.app.sfx?.play?.('click'); }
+  /** The view turned (App.turnView): the top bar's north needle follows at once. */
+  onViewTurned(turn) { this.hud.showViewTurn(turn); }
 
   /** Error/feedback toast that is not recorded in the game's message log. */
   toastError(text) {

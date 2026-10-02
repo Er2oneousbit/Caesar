@@ -34,6 +34,7 @@ export const KEY_HELP = [
   ['1 2 3 4', `Game speed ${CONFIG.SPEEDS.slice(1).map((v) => `${v}x`).join(', ')}`],
   ['H', 'Housing tool'],
   ['R', 'Turn the building being placed a quarter turn clockwise (with no building in hand: Road tool)'],
+  ['Q / Shift+Q, ] / [', 'Turn the view: the city a quarter turn clockwise / anticlockwise'],
   ['X or Delete', 'Clear land tool'],
   ['Ctrl+Z or U', 'Undo last construction'],
   ['O / Shift+O', 'Next overlay / turn overlays off'],
@@ -150,6 +151,19 @@ export class Input {
   }
 
   tileAt(p) { return this.app.renderer.camera.screenToTile(p.x, p.y); }
+
+  /**
+   * The map moved under a still pointer (the view turned): the tile under it
+   * is another, so the hover, a drag's far end and the plan follow it.
+   */
+  rehover() {
+    if (!this.game || !this.mouse.over || this.mouse.game !== this.game) return;
+    const t = this.tileAt(this.mouse);
+    this.hover = t;
+    this.app.renderer.hoverTile = this.game.map.inBounds(t.x, t.y) ? t : null;
+    if (this.drag) { this.drag.x1 = t.x; this.drag.y1 = t.y; }
+    this.refreshPlan();
+  }
 
   // ---------------------------------------------------------------- pointers
   onDown(e) {
@@ -379,6 +393,8 @@ export class Input {
       case '4': a.setSpeed(4); break;
       case 'h': case 'H': a.ui.selectTool('house'); break;
       case 'r': case 'R': this.onTurnKey(); break; // turn the building in hand, else the Road tool
+      case 'q': case ']': a.turnView(1); break; // the view: the city a quarter turn clockwise
+      case 'Q': case '[': a.turnView(-1); break;
       case 'x': case 'X': case 'Delete': a.ui.selectTool('clear'); break;
       case 'u': case 'U': a.undo(); break;
       case 'm': case 'M': a.toggleMusic(); break;

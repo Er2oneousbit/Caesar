@@ -161,6 +161,7 @@ export class DebugConsole {
       case 'freebuild':
         need();
         g.cheats.freeBuild = args[0] !== 'off';
+        if (g.cheats.freeBuild) g.city.flags.freeBuilt = true; // (the Hall of Fame scores no city built for free)
         return `Free build ${g.cheats.freeBuild ? 'ON' : 'OFF'}`;
       case 'speed': {
         const n = Number(args[0]);
@@ -397,6 +398,7 @@ export class DebugConsole {
       }
       case 'win':
         need();
+        g.city.flags.consoleWin = true; // not won by play: the Hall of Fame leaves it out (sim/fame.js)
         g.city.victory = true;
         g.events.emit('victory', { scenario: g.scenario.id });
         return 'Victory triggered.';

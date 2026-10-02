@@ -52,7 +52,7 @@ export const RIOT_TARGETS = Object.freeze([
  * army's forts, the fleet's stone quays (naval stations) and the warehouses
  * (the original spared forts and warehouses too).
  */
-export const RIOT_SPARED_KINDS = Object.freeze(['warehouse', 'fort', 'tower', 'well', 'fountain', 'reservoir', 'decor', 'station']);
+export const RIOT_SPARED_KINDS = Object.freeze(['warehouse', 'fort', 'tower', 'well', 'fountain', 'reservoir', 'decor', 'station', 'village']); // (village: a native village's, not the city's: sim/natives.js)
 
 /** Homes up to this level (tents to stone cottages) are too poor for a mob to bother with. */
 export const RIOT_SPARED_TIER = 6;

@@ -388,6 +388,34 @@ export function recallStation(game, stationId) {
 }
 
 /**
+ * Liburnians that can no longer reach their station (a low bridge between,
+ * sim/bridges.js): each goes to another station on its own water with an
+ * empty berth, or is laid up. `why` begins the message.
+ */
+export function rehomeShips(game, ships, why) {
+  let moved = 0;
+  let lost = 0;
+  for (const u of ships) {
+    const [dest] = stationsWithRoom(game, u.body, { staffed: false, except: u.station });
+    if (dest) {
+      u.slot = freeSlot(game, dest.st);
+      u.station = dest.st.id;
+      u.path = null;
+      u.target = 0;
+      u.state = 'sail';
+      moved++;
+    } else {
+      removeUnit(game, u, 'disbanded');
+      lost++;
+    }
+  }
+  const parts = [];
+  if (moved) parts.push(`${moved} sail${moved === 1 ? 's' : ''} to a station on their side`);
+  if (lost) parts.push(`${lost} ${lost === 1 ? 'is' : 'are'} laid up for want of a berth`);
+  game.message(`${why} ${ships.length} liburnian${ships.length === 1 ? '' : 's'} off from ${ships.length === 1 ? 'its' : 'their'} station: ${parts.join(' and ')}.`, 'warn');
+}
+
+/**
  * A station was lost (demolished, or wrecked by raiders): each of its ships
  * goes to another station on the same water with an empty berth (staffed or
  * not); the rest are laid up and gone. Hooked to 'buildingRemoved' in Game.
@@ -921,10 +949,11 @@ function nearestBoat(game, u, range) {
 }
 
 /** The nearest building with a tile within `range`, and the point of it nearest the ship. */
-function nearestBuilding(game, u, range) {
+export function nearestBuilding(game, u, range) {
   let best = null;
   let bestD = range;
   for (const b of game.buildings.values()) {
+    if (b.def.kind === 'village') continue; // (raiders pass native villages by: sim/natives.js)
     const S = b.size;
     const px = Math.max(b.x, Math.min(b.x + S, u.x));
     const py = Math.max(b.y, Math.min(b.y + S, u.y));

@@ -77,6 +77,7 @@ function avoids(game, u, p) {
  * picking a fight there would only be cut down, and the next after him).
  */
 function fightable(game, u) {
+  if (u.side === 'native') return !!u.attacking; // a villager, only while his village attacks (sim/natives.js)
   if (u.legion) {
     const a = game.military.caesar?.army;
     return !!a && a.id === u.legion && !a.retreating && !a.halted && !(u.waitTicks > 0);
@@ -113,6 +114,7 @@ export function prefectFoe(game, w) {
 
 /** "a raider" / "one of Caesar's legionaries", for the prefect's panel and talk. */
 export function foeLabel(u) {
+  if (u && u.side === 'native') return 'a villager';
   return u && (u.legion || u.type === 'imperial') ? 'one of Caesar\'s legionaries' : 'a raider';
 }
 

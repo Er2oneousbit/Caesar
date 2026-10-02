@@ -347,9 +347,13 @@ export class GameMap {
     return id ? this.fishingGrounds.filter((g) => g.body === id) : [];
   }
 
-  /** Is there a low bridge anywhere on the map? */
+  /**
+   * Is there a low bridge on the map (as the boats' water was last worked
+   * out)? Cheap: the water was split exactly when there is one
+   * (splitAtLowBridges), so no scan of the layer.
+   */
   hasLowBridge() {
-    return this.bridgeLow.indexOf(1) >= 0;
+    return this.navWhole !== this.navBody;
   }
 
   /**
@@ -378,7 +382,7 @@ export class GameMap {
    * cut off by a low bridge from other water.
    */
   splitAtLowBridges() {
-    if (!this.hasLowBridge()) {
+    if (this.bridgeLow.indexOf(1) < 0) {
       this.navWhole = this.navBody;
       this.fishWhole = this.fishBody;
       return;

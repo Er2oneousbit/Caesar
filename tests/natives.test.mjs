@@ -163,7 +163,10 @@ test('natives: a missionary calms every hut and meeting place within 4 tiles; th
   assert.equal(v.m.anger, N.ANGER_MAX);
   game.runDays(1);
   assert.equal(game.city.natives.attacks, 1, 'angry again: it looks, and attacks');
-  // A missionary passing during the attack ends it at once.
+  // A missionary passing during the attack ends it at once, once no piece
+  // still angry has the garden on its land (the huts beyond his reach have
+  // been calmed on an earlier round).
+  for (const h of v.huts) if (gap(h, { x: v.m.x, y: v.m.y, size: 1 }) > N.CALM_REACH) h.anger = 0;
   missionaryVisit(game, { x: v.m.x, y: v.m.y });
   assert.equal(v.m.attackDays, 0);
   assert.ok([...game.units.values()].filter((u) => u.side === 'native').every((u) => !u.attacking));
@@ -361,4 +364,112 @@ test('natives: a save keeps the villages\' ids apart: the next building of the c
   const back = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
   assert.equal(back.nextBuildingId, next);
   assert.ok(villagesOf(back).length >= 1);
+});
+
+test('natives: a prefect on his rounds fights a villager who attacks, and calls him a villager', async () => {
+  const { updatePrefectFights, foeLabel } = await import('../src/sim/prefectFight.js');
+  const game = villageGame();
+  const v = firstVillage(game);
+  const h = v.huts[0];
+  v.m.attackDays = 2;
+  let pt = null;
+  for (let d = 2; d < 6 && !pt; d++) for (let dx = -d; dx <= d && !pt; dx++) if (game.map.isFree(h.x + dx, h.y + d)) pt = { x: h.x + dx, y: h.y + d };
+  const u = spawnUnit(game, 'villager', pt.x + 0.5, pt.y + 0.5, { village: v.m.id, hut: h.id, attacking: true, state: 'advance' });
+  const p = spawnWalker(game, 'prefect', game.map.idx(pt.x, pt.y), null, { state: 'roam' });
+  let fought = false;
+  for (let t = 0; t < 50 && !fought; t++) { updatePrefectFights(game); fought = p.fight === u.id || !game.units.has(u.id); }
+  assert.equal(fought, true, 'he takes him on (no raid needed)');
+  assert.equal(foeLabel(u), 'a villager');
+});
+
+test('natives: a missionary passing the meeting place while a far hut stays angry does not end and restart the attack every day', () => {
+  const game = villageGame();
+  const v = firstVillage(game);
+  const mis = { x: v.m.x, y: v.m.y };
+  const far = v.huts.find((h) => gap(h, { x: mis.x, y: mis.y, size: 1 }) > N.CALM_REACH);
+  assert.ok(far, 'a hut beyond his reach');
+  let spot = null;
+  for (let y = far.y - 3; y <= far.y + 3 && !spot; y++) {
+    for (let x = far.x - 3; x <= far.x + 3 && !spot; x++) {
+      if (!game.map.isFree(x, y) || game.map.terrain[game.map.idx(x, y)] === Terrain.TREES) continue;
+      if (gap({ x, y, size: 1 }, { x: mis.x, y: mis.y, size: 1 }) <= N.CALM_REACH) continue;
+      if ([...game.buildings.values()].some((b) => b.def.kind === 'village' && gap(b, { x, y, size: 1 }) < 1)) continue;
+      spot = { x, y };
+    }
+  }
+  addBuilding(game, 'garden', spot.x, spot.y);
+  missionaryVisit(game, mis);
+  for (let d = 0; d < 12; d++) {
+    game.runDays(1);
+    missionaryVisit(game, mis);
+  }
+  assert.equal(game.city.natives.attacks, 1, 'one attack, still going: the far hut is still angry');
+  assert.equal(game.messages.filter((m) => /is attacking/.test(m.text)).length, 1);
+});
+
+test('natives: a villager who walks home is not "fallen": his hut can send him out again at once', () => {
+  const game = villageGame();
+  const v = firstVillage(game);
+  const near = spotNear(game, v.m, 3, 1);
+  addBuilding(game, 'garden', near.x, near.y);
+  game.runDays(1);
+  const hut = v.huts.find((h) => h.villager && game.units.has(h.villager));
+  assert.ok(hut);
+  const u = game.units.get(hut.villager);
+  u.attacking = false; // sent home
+  u.x = hut.x + 0.5;
+  u.y = hut.y + 0.6;
+  updateMilitary(game);
+  assert.equal(game.units.has(u.id), false, 'home');
+  assert.equal(hut.villager, 0, 'free to go out again, no 5-day wait');
+});
+
+test('natives: rioters, Caesar\'s men and raider ships leave a village be', async () => {
+  const { pickRiotTarget, riotRank } = await import('../src/sim/crime.js');
+  const { legionTargets } = await import('../src/sim/legion.js');
+  const { nearestBuilding } = await import('../src/sim/navy.js');
+  const game = villageGame();
+  const v = firstVillage(game);
+  for (const b of [v.m, ...v.huts]) assert.ok(riotRank(b) < 0, `${b.type}: no rioter's target`);
+  assert.equal(pickRiotTarget(game, v.m.x, v.m.y), null, 'nothing else in the city: no target at all');
+  const t = legionTargets(game);
+  assert.equal(t.what, 'anything');
+  assert.equal(t.isTarget(v.m.id), false);
+  assert.equal(nearestBuilding(game, { x: v.m.x + 1, y: v.m.y + 1 }, 6), null, 'a raider ship\'s fire pot finds nothing to throw at');
+});
+
+test('natives: a building walled in on native land sets off no attack: the villagers could never reach it', async () => {
+  const { Wall } = await import('../src/world/map.js');
+  const game = villageGame();
+  const v = firstVillage(game);
+  const { map } = game;
+  let spot = null;
+  const pieces = [...game.buildings.values()].filter((b) => b.def.kind === 'village');
+  for (let y = v.m.y - N.MEETING_LAND; y <= v.m.y + 1 + N.MEETING_LAND && !spot; y++) {
+    for (let x = v.m.x - N.MEETING_LAND; x <= v.m.x + 1 + N.MEETING_LAND && !spot; x++) {
+      let ok = !pieces.some((p) => gap(p, { x, y, size: 1 }) < 2);
+      for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++) ok = ok && map.isFree(x + dx, y + dy) && map.terrain[map.idx(x + dx, y + dy)] !== Terrain.TREES;
+      if (ok) spot = { x, y };
+    }
+  }
+  assert.ok(spot, 'room for a walled well');
+  addBuilding(game, 'well', spot.x, spot.y);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) map.wall[map.idx(spot.x + dx, spot.y + dy)] = Wall.WALL;
+  game.onMapEdited();
+  game.runDays(3);
+  assert.equal(game.city.natives.attacks, 0, 'no attack: the wall keeps them out');
+  assert.equal(v.m.attackDays, 0);
+  assert.ok(!game.city.raidMonth, 'peace is gained as usual');
+});
+
+test('natives: Caesar\'s men and villagers never route through a village piece (they could not break it)', async () => {
+  const { fillField } = await import('../src/sim/military.js');
+  const game = villageGame();
+  const v = firstVillage(game);
+  const near = spotNear(game, v.m, 3, 1);
+  const g = addBuilding(game, 'garden', near.x, near.y);
+  const field = new Float32Array(game.map.size);
+  fillField(game, field, (id) => id === g.id, 12);
+  assert.equal(field[game.map.idx(v.m.x, v.m.y)], Infinity, 'the meeting place is no way through');
+  for (const h of v.huts) assert.equal(field[game.map.idx(h.x, h.y)], Infinity);
 });

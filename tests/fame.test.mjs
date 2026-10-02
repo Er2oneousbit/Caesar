@@ -116,3 +116,18 @@ test('fame: a campaign game\'s win is scored from its ratings, people, years, ba
 test('fame: ordinals', () => {
   assert.deepEqual([1, 2, 3, 4, 10, 11, 12, 13, 21, 22, 23].map(ordinal), ['1st', '2nd', '3rd', '4th', '10th', '11th', '12th', '13th', '21st', '22nd', '23rd']);
 });
+
+test('fame: a win by the console, or in a city built for free, is not scored; Caesar hails a governor once a province', () => {
+  const game = new Game({ scenario: withDifficulty(findScenario('c3m'), 'normal') });
+  assert.ok(winOf(game), 'won by play: scored');
+  game.city.flags.consoleWin = true;
+  assert.equal(winOf(game), null);
+  const g2 = new Game({ scenario: withDifficulty(findScenario('c3m'), 'normal') });
+  g2.city.flags.freeBuilt = true;
+  assert.equal(winOf(g2), null);
+  const fame = newFame();
+  const last = missionsAtStep(LAST_STEP)[0].id;
+  recordWin(fame, win(last, 100, LAST_STEP));
+  recordWin(fame, win(last, 200, LAST_STEP)); // (the same province again, from a save)
+  assert.equal(fame.careers, 1);
+});

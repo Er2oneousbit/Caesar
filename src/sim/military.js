@@ -746,7 +746,7 @@ export function computeField(game) {
  * Other buildings block the way, unless `breakCost` is given: then they can
  * be broken through for that much more (Caesar's legions, sim/legion.js).
  */
-export function fillField(game, field, isSource, breakCost = 0) {
+export function fillField(game, field, isSource, breakCost = 0, wallsBlock = false) {
   const map = game.map;
   const n = map.size;
   field.fill(Infinity);
@@ -765,12 +765,18 @@ export function fillField(game, field, isSource, breakCost = 0) {
       const ny = y + (k === 0 ? -1 : k === 2 ? 1 : 0);
       if (nx < 0 || ny < 0 || nx >= w || ny >= map.h) continue;
       const j = ny * w + nx;
-      if (map.building[j] && !breakCost) continue;
+      // (A native village's pieces are never broken through, by Caesar's men
+      // or the villagers themselves: damageBuilding spares them, so a route
+      // through one left a legionary bashing at a hut for good.)
+      if (map.building[j] && (!breakCost || game.buildings.get(map.building[j])?.def.kind === 'village')) continue;
       const t = map.terrain[j];
       if (t === Terrain.ROCK) continue;
       if (t === Terrain.WATER && map.road[j] !== Road.BRIDGE) continue;
       let c = t === Terrain.TREES ? 1.6 : 1;
-      if (map.wall[j]) c += FIELD_WALL_COST;
+      if (map.wall[j]) {
+        if (wallsBlock) continue; // (villagers never break walls or gates: sim/natives.js)
+        c += FIELD_WALL_COST;
+      }
       if (map.building[j]) c += breakCost;
       // Rounded as the field stores it (32-bit floats): compared unrounded,
       // a cost the field cannot hold exactly (a forest's 1.6) kept "beating"

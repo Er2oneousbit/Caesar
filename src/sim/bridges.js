@@ -30,7 +30,8 @@ import { UNIT_TYPES } from '../data/units.js';
 import { killWalker } from './entities.js';
 import { followPath } from './movement.js';
 import { dockBerth, shipLeave, shipPath } from './trade.js';
-import { fishingBoatBlocked, waterBeside } from './fishing.js';
+import { fishingBoatBlocked } from './fishing.js';
+import { waterOf, rehomeShips } from './navy.js';
 
 /** Tile index under a continuous position. */
 function tileOf(map, x, y) {
@@ -68,11 +69,31 @@ export function refreshWaterways(game) {
     const body = map.navBody[tileOf(map, u.x, u.y)];
     if (body) u.body = body;
   }
+  // A liburnian the bridge cut off from its station could never reach its
+  // berth again: it goes to a station on its own side with room, or is laid
+  // up, as when a station is lost (sim/navy.js).
+  const cut = [];
+  for (const u of [...game.units.values()]) {
+    if (u.type !== 'liburnian' || !u.station || u.away) continue;
+    const st = game.buildings.get(u.station);
+    if (st && waterOf(game, st) && waterOf(game, st) !== u.body) cut.push(u);
+  }
+  if (cut.length) rehomeShips(game, cut, 'A low bridge has cut');
   for (const w of game.walkers.values()) {
     if (w.type !== 'fishing_boat') continue;
     const body = map.fishBody[map.idx(w.x, w.y)];
     if (body) w.body = body;
   }
+}
+
+/** A waterside building's berth as it stands, or where it would be found (read only). */
+function berthNow(map, b) {
+  return b.berth >= 0 && map.navigable[b.berth] && !map.bridgeLow[b.berth] ? b.berth : map.navigableBeside(b.x, b.y, b.size);
+}
+
+/** A wharf's mooring as it stands, or where it would be found (read only). */
+function mooringNow(map, b) {
+  return b.mooring >= 0 && map.fishBody[b.mooring] ? b.mooring : map.fishWaterBeside(b.x, b.y, b.size);
 }
 
 /** Tiles reachable from `start` stepping side to side over tiles `ok` passes. */
@@ -132,7 +153,7 @@ export function lowBridgeCuts(game, span) {
   const lost = [];
   for (const b of game.buildings.values()) {
     if (b.def.kind !== 'wharf') continue;
-    const m = waterBeside(game, b);
+    const m = mooringNow(map, b);
     if (m < 0) continue;
     const body = map.fishBody[m];
     const grounds = map.groundsOf(body);
@@ -141,6 +162,19 @@ export function lowBridgeCuts(game, span) {
     if (!grounds.some((g) => then[map.idx(g.x, g.y)])) lost.push(named(b));
   }
   if (lost.length) out.push(`It cuts ${listOf(lost)} off from ${lost.length === 1 ? 'its' : 'their'} fishing grounds.`);
+  // Liburnians on the far side of it from their station.
+  const stranded = new Map();
+  for (const u of game.units.values()) {
+    if (u.type !== 'liburnian' || !u.station || u.away) continue;
+    const st = game.buildings.get(u.station);
+    const berth = st ? berthNow(map, st) : -1;
+    if (berth < 0) continue;
+    const body = map.navBody[berth];
+    const side = reach(map, berth, (i) => map.navBody[i] === body && !planned.has(i));
+    const at = tileOf(map, u.x, u.y);
+    if (map.navBody[at] === body && !side[at]) stranded.set(st, (stranded.get(st) || 0) + 1);
+  }
+  for (const [st, n] of stranded) out.push(`${n} liburnian${n === 1 ? '' : 's'} of ${named(st)} would be cut off from ${n === 1 ? 'it' : 'them'}: sent to a station on ${n === 1 ? 'its' : 'their'} side with room, or laid up.`);
   return out;
 }
 
@@ -150,16 +184,16 @@ export function lowBridgeCuts(game, span) {
  */
 export function cutOffNote(game, b) {
   const map = game.map;
-  if (!map.hasLowBridge()) return null;
+  if ((b.def.placement !== 'shore' && b.def.kind !== 'wharf') || !map.hasLowBridge()) return null; // (cheap first: every panel and the Problems overlay ask)
   if (b.def.placement === 'shore' && map.seaEntry) {
-    const berth = dockBerth(game, b);
+    const berth = berthNow(map, b); // (read only: a panel must not move a berth or turn the art)
     const entry = map.idx(map.seaEntry.x, map.seaEntry.y);
     if (berth >= 0 && map.navWhole[berth] === map.navWhole[entry] && map.navBody[berth] !== map.navBody[entry]) {
-      return 'A low bridge blocks the way to the sea: no ship can reach it, and its own ships stay on this side.';
+      return 'A low bridge blocks the way to the sea: no ship from the sea can reach it.';
     }
   }
   if (b.def.kind === 'wharf') {
-    const m = waterBeside(game, b);
+    const m = mooringNow(map, b);
     const whole = m >= 0 ? map.fishWhole[m] : 0;
     if (whole && !map.groundsOf(map.fishBody[m]).length && map.fishingGrounds.some((g) => map.fishWhole[map.idx(g.x, g.y)] === whole)) {
       return 'A low bridge cuts it off from its fishing grounds: its boat cannot reach them.';

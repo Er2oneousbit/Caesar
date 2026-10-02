@@ -350,7 +350,7 @@ export function legionTargets(game) {
   if (tier >= 0) {
     return { key: `h${tier}`, isTarget: (id) => { const b = game.buildings.get(id); return !!(b && b.house && b.house.pop > 0 && b.house.tier === tier); }, what: 'homes' };
   }
-  return { key: 'any', isTarget: () => true, what: 'anything' };
+  return { key: 'any', isTarget: (id) => game.buildings.get(id)?.def.kind !== 'village', what: 'anything' }; // (not a native village: sim/natives.js)
 }
 
 /** The army's flow field toward its targets, other buildings breakable at LEGION_BREAK_COST. */

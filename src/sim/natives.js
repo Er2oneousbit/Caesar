@@ -27,7 +27,8 @@
  *   through buildings in his way as raiders do. Rome's soldiers, towers and
  *   prefects fight villagers only while they attack (hostileToRome in
  *   sim/military.js); villagers never start a fight with a walker. When the
- *   attack ends, or the meeting place is calmed, they walk home. A villager
+ *   attack ends (a missionary may end it, once no piece still angry has a
+ *   city building on its land), they walk home. A villager
  *   is no enemy in the province (the victory waits for none), but a month
  *   with an attack gains no peace.
  *
@@ -205,25 +206,16 @@ export function nativesDaily(game) {
   }
 }
 
-/** The city's building in a village's land nearest its meeting place (ties: the lower id). */
-function nearestOffender(m, list) {
-  const cx = m.x + m.size / 2;
-  const cy = m.y + m.size / 2;
-  let best = null;
-  let bestD = Infinity;
-  for (const o of list) {
-    const d = Math.hypot(o.x + o.size / 2 - cx, o.y + o.size / 2 - cy);
-    if (d < bestD || (d === bestD && o.id < best.id)) { bestD = d; best = o; }
-  }
-  return best;
-}
-
 /** A building of the city stands on angry land: the village attacks (or keeps attacking) for ATTACK_DAYS. */
 function startAttack(game, v, found) {
   const m = v.m;
   const was = m.attackDays > 0;
+  if (!game.buildings.has(m.target) || !targetReachable(game, v)) pickTarget(game, v, found);
+  if (!m.target) {
+    if (was) endAttack(game, v); // (walled off since: the men go home)
+    return;
+  }
   m.attackDays = N.ATTACK_DAYS;
-  if (!game.buildings.has(m.target)) m.target = nearestOffender(m, found).id;
   if (was) return;
   const st = game.city.natives;
   st.attacks++;
@@ -268,6 +260,8 @@ export function missionaryVisit(game, w) {
   if (!st) return;
   const r = N.CALM_REACH;
   const seen = new Set();
+  const villages = new Set(); // meeting place ids of the villages he calmed something of
+  const calmedMeetings = new Set(); // meeting places that were angry
   for (let y = Math.max(0, w.y - r); y <= Math.min(map.h - 1, w.y + r); y++) {
     for (let x = Math.max(0, w.x - r); x <= Math.min(map.w - 1, w.x + r); x++) {
       const id = map.building[map.idx(x, y)];
@@ -275,17 +269,24 @@ export function missionaryVisit(game, w) {
       seen.add(id);
       const b = buildings.get(id);
       if (!hasLand(b)) continue;
-      const angry = b.anger >= N.ANGER_MAX;
+      if (b.def.village === 'meeting' && b.anger >= N.ANGER_MAX) calmedMeetings.add(b.id);
       b.anger = 0;
-      if (b.def.village !== 'meeting') continue;
-      if (angry) {
-        st.calmed++;
-        const who = peopleOf(game);
-        const was = b.attackDays > 0;
-        game.message(`A missionary has calmed ${who.village} near ${b.x}, ${b.y}${was ? ': its men go home' : ''}. It keeps the peace for ${N.ANGER_MAX} days unless a missionary passes again.`, 'good', b.x, b.y);
-      }
-      if (b.attackDays > 0) endAttack(game, { m: b });
+      villages.add(b.village);
     }
+  }
+  // Then each village he touched: its attack ends only when no piece still
+  // angry has a building of the city on its land. (Ending it whenever the
+  // meeting place was calmed, with a far hut still angry, let the hut begin
+  // it again the next day: a new attack, message and horn every day.)
+  for (const mid of villages) {
+    const m = buildings.get(mid);
+    if (!m) continue;
+    const ends = m.attackDays > 0 && !offendersInVillage(game, m).length;
+    if (calmedMeetings.has(mid)) {
+      st.calmed++;
+      game.message(`A missionary has calmed ${peopleOf(game).village} near ${m.x}, ${m.y}${ends ? ': its men go home' : ''}. It keeps the peace for ${N.ANGER_MAX} days unless a missionary passes again.`, 'good', m.x, m.y);
+    }
+    if (ends) endAttack(game, { m });
   }
 }
 
@@ -300,18 +301,53 @@ function fieldFor(game, m) {
   const fresh = hit && hit.target === m.target && (hit.rev === game.map.revision || game.time.totalTicks - hit.tick < 20);
   if (fresh) return hit.field;
   const field = hit && hit.field.length === game.map.size ? hit.field : new Float32Array(game.map.size);
-  fillField(game, field, (id) => id === m.target, BREAK_COST);
+  fillField(game, field, (id) => id === m.target, BREAK_COST, true);
   game.nativeFields.set(m.id, { target: m.target, rev: game.map.revision, tick: game.time.totalTicks, field });
   return field;
 }
 
-/** A villager going home: to his hut, where he is gone. */
+/** Can a villager from any of the village's huts walk to its target now (walls block him)? */
+function targetReachable(game, v) {
+  const map = game.map;
+  const field = fieldFor(game, v.m);
+  for (const h of v.huts) {
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      if (map.inBounds(h.x + dx, h.y + dy) && Number.isFinite(field[map.idx(h.x + dx, h.y + dy)])) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The village's target: the city's building on its land nearest the
+ * meeting place that its men can reach (walls block them; the four nearest
+ * are tried), or 0. A building none can reach sets off no attack: one that
+ * did kept the village "attacking" for good, its men pushing at the wall,
+ * and no peace was gained while it lasted.
+ */
+function pickTarget(game, v, list) {
+  const m = v.m;
+  const cx = m.x + m.size / 2;
+  const cy = m.y + m.size / 2;
+  const order = list.slice().sort((a, b) => Math.hypot(a.x + a.size / 2 - cx, a.y + a.size / 2 - cy) - Math.hypot(b.x + b.size / 2 - cx, b.y + b.size / 2 - cy) || a.id - b.id);
+  for (const o of order.slice(0, 4)) {
+    m.target = o.id;
+    if (targetReachable(game, v)) return o.id;
+  }
+  m.target = 0;
+  return 0;
+}
+
+/** A villager going home: to his hut, where he is gone (and not fallen: the hut may send him out again at once). */
 function goHome(game, u, def) {
   u.state = 'home';
   const hut = game.buildings.get(u.hut);
   if (!hut) { removeUnit(game, u, 'fled'); return; }
   moveToward(game, u, hut.x + 0.5, hut.y + 0.5, def.speed);
-  if (Math.hypot(hut.x + 0.5 - u.x, hut.y + 0.5 - u.y) < 0.9 || u.stuck > 80) removeUnit(game, u, 'home');
+  if (Math.hypot(hut.x + 0.5 - u.x, hut.y + 0.5 - u.y) < 0.9 || u.stuck > 80) {
+    if (hut.villager === u.id) hut.villager = 0;
+    removeUnit(game, u, 'home');
+  }
 }
 
 /**
@@ -337,9 +373,8 @@ export function updateVillager(game, u, romans) {
   }
   if (fightPrefect(game, u, def)) return;
   if (!game.buildings.has(m.target)) {
-    const left = offendersInVillage(game, m);
-    if (!left.length) { endAttack(game, { m }); goHome(game, u, def); return; }
-    m.target = nearestOffender(m, left).id;
+    const v = villagesOf(game).find((x) => x.m.id === m.id) || { m, huts: [] };
+    if (!pickTarget(game, v, offendersInVillage(game, m))) { endAttack(game, v); goHome(game, u, def); return; }
   }
   const field = fieldFor(game, m);
   const tx = Math.floor(u.x);

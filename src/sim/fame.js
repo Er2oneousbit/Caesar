@@ -83,11 +83,17 @@ export function winScore(w) {
   return { ratings: R, population: P, pace: S, mult, base, battles, raids, score: base + battles + raids };
 }
 
-/** A campaign win's record from the game at its victory, or null for the sandbox. */
+/**
+ * A campaign win's record from the game at its victory, or null for the
+ * sandbox and for a win not reached by play (the console's `win`, or a
+ * city built with the console's free building at any time).
+ */
 export function winOf(game) {
   const s = game.scenario;
   const step = stepOf(s.id);
   if (!step) return null;
+  const f = game.city.flags || {};
+  if (f.consoleWin || f.freeBuilt || game.cheats?.freeBuild) return null;
   const c = game.city;
   const ratings = {
     culture: Math.round(c.ratings.culture),
@@ -141,7 +147,9 @@ export function careerScore(fame) {
 export function recordWin(fame, win, date = null) {
   const prev = fame.best[win.mission]?.score || 0;
   const better = !fame.best[win.mission] || win.score > prev;
-  if (win.step === LAST_STEP) fame.careers = (fame.careers || 0) + 1;
+  // Hailed Caesar: once for each province of the last step (a win replayed
+  // from a save, or the mission played again, is not another career).
+  if (win.step === LAST_STEP && !fame.best[win.mission]) fame.careers = (fame.careers || 0) + 1;
   if (better) {
     fame.best[win.mission] = { score: win.score, step: win.step };
     // One line a mission, with its best; ties keep the older win ahead.

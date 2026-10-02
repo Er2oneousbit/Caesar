@@ -282,3 +282,51 @@ test('bridges: the low bridge is drawn on either axis, and walkers on it stand o
     assert.equal(bridgeSpan(map, 20.5, 31.5, false, turn).lift, BRIDGE_DECK_Z, `turn ${turn}`);
   }
 });
+
+test('bridges: a building\'s panel asks about low bridges only for waterside buildings, and asking costs no scan of the map', () => {
+  const game = riverGame();
+  const { map } = game;
+  const house = addBuilding(game, 'house', 20, 10);
+  let asked = 0;
+  const real = map.hasLowBridge.bind(map);
+  map.hasLowBridge = () => { asked++; return real(); };
+  assert.equal(cutOffNote(game, house), null);
+  assert.equal(asked, 0, 'a home is never cut off: not asked');
+  map.hasLowBridge = real;
+  assert.equal(map.hasLowBridge(), false);
+  assert.ok(applyPlan(game, bridgeAt(game, 'low_bridge', 30)).ok);
+  assert.equal(map.hasLowBridge(), true);
+  map.bridgeLow.fill(0); // (the answer is the water as last worked out, not a scan of the layer)
+  assert.equal(map.hasLowBridge(), true);
+});
+
+test('bridges: a liburnian a new low bridge cuts off from its station goes to one on its side, or is laid up; the plan warns of it', () => {
+  for (const other of [false, true]) {
+    const game = riverGame();
+    const { map } = game;
+    const st = addBuilding(game, 'naval_station', 10, 25);
+    const there = other ? addBuilding(game, 'naval_station', 52, 25) : null;
+    const u = spawnUnit(game, 'liburnian', 50.5, 31.5, { station: st.id, slot: 0, state: 'sail', body: map.navBody[map.idx(50, 31)] });
+    const plan = bridgeAt(game, 'low_bridge', 30);
+    assert.ok(plan.warnings.some((w) => /1 liburnian of the Statio at 10, 25 would be cut off from it/.test(w)), plan.warnings.join(' | '));
+    assert.ok(applyPlan(game, plan).ok);
+    if (other) {
+      assert.equal(u.station, there.id, 'it joins the station on its own side');
+      assert.ok(game.units.has(u.id));
+    } else {
+      assert.equal(game.units.has(u.id), false, 'laid up: it could never reach its berth');
+      assert.ok(game.messages.some((m) => /A low bridge has cut 1 liburnian off from its station: 1 is laid up/.test(m.text)));
+    }
+  }
+});
+
+test('bridges: reading a waterside building\'s panel changes nothing (no berth found or turned while reading)', () => {
+  const game = riverGame();
+  assert.ok(applyPlan(game, bridgeAt(game, 'low_bridge', 30)).ok);
+  const nav = addBuilding(game, 'navalia', 40, 25);
+  nav.berth = undefined;
+  nav.waterSide = undefined;
+  cutOffNote(game, nav);
+  assert.equal(nav.berth, undefined);
+  assert.equal(nav.waterSide, undefined);
+});

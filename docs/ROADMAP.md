@@ -8,14 +8,20 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Campaign branches and more tiers** (parity #13): a peaceful and a military province at each step, in this order:
-   * Steps 3, 4 and 5 (done, for the next release): Firmum beside Figlina, Paestum beside Pons Aelius, Beneventum beside Portus Mercatorum.
+1. **Campaign branches and more tiers** (parity #13): a peaceful and a military province at each step (steps 3, 4 and 5 came in v0.15.0), in this order:
    * Steps 6 and 7: a sibling for Oasis Aurea and one for Urbs Magna, each of the other kind.
    * Three more tiers, steps 8, 9 and 10, each with two paths, so the career reaches the top ranks (Colonia's 11 ranks: one per step, and the last rank for winning the last step, or as the ranks are mapped then).
    The last tiers reach populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). Each new mission gets its `paceYears` from `npm run sim -- --pace`. **The rule: a mission's goals must fit its jobs.** Its population goal is at most what a sensibly built city of its buildings employs at 10% unemployment (`src/sim/capacity.js`, `npm run sim -- --capacity`), and its map must house and feed that many; `tests/campaign.test.mjs` holds every mission to it (missions 3 to 7 are listed exceptions until the late missions get their jobs). So the later tiers need the economy's jobs first: see "The late missions need more jobs" below.
 2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
+
+## Done (v0.15.0)
+
+* **Campaign branches** (parity #13, the first three): after a win you choose your next province, a peaceful or a military one, both at the same rank, and may switch tracks at every choice; a city that is overrun is offered the same step's choice again. Three new provinces, all Roman colonies of the 270s and 260s BC: **Firmum** (military, step 3, beside Figlina), a frontier hill town against the Picenes with a legion fort and the Campus a step early, raids from its second year and a call for troops for Ariminum; **Paestum** (peaceful, step 4, beside Pons Aelius), an old Greek city of temples trading by sea; **Beneventum** (peaceful, step 5, beside Portus Mercatorum), a market town on the Via Appia. Their population goals fit their jobs (`npm run sim -- --capacity`): 1,100, 2,700 and 3,000 people; peace sets their pace (2.3, 3.75 and 4.2 years). Savings go to both provinces of the next step
+* The campaign's pace rule is per step: a mission is no shorter than the shortest of the step before
+* Headless sim: Easy, Normal, Hard and Insane identical to v0.14.0
+* 548 unit tests, 127 browser checks
 
 ## Done (v0.14.0)
 

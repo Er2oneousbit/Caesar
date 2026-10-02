@@ -563,6 +563,22 @@ export function findLanding(game) {
 }
 
 /**
+ * Where raider ships setting out now would come ashore, or null when the raid
+ * would go by land after all (the Sea raids switch turned off, no landing,
+ * or no water route to it): launchSeaInvasion's own tests, with no random
+ * draws, for the warning a month before a raid by sea (sim/military.js).
+ * @returns {{x, y, water}|null}
+ */
+export function seaLandingNow(game) {
+  const map = game.map;
+  const e = map.seaEntry;
+  if (!game.military.seaRaids || !e) return null;
+  const landing = findLanding(game);
+  if (!landing || !waterPath(game, map.idx(e.x, e.y), landing.water)) return null;
+  return landing;
+}
+
+/**
  * Launch a raid by sea now: its ships set out from the sea entry for the
  * landing, one every 30 ticks. Returns the invasion record, or null if no
  * landing (or no water route to it) can be found: the raid comes by land.
@@ -586,6 +602,7 @@ export function launchSeaInvasion(game, size) {
   };
   m.active = inv;
   m.warned = null;
+  m.warnStage = 0;
   m.stats.raids++;
   m.stats.seaRaids = (m.stats.seaRaids || 0) + 1;
   // The same warriors as a warband by land, one roll each, shared out among the ships.

@@ -116,7 +116,7 @@ export function cityTrouble(game) {
   const c = game.city;
   const mil = game.military;
   if (mil && mil.caesar && (mil.caesar.army || mil.caesar.countdown > 0)) return 'legion'; // (sim/legion.js)
-  if (mil && (mil.active || mil.warned)) return 'raid';
+  if (mil && (mil.active || mil.warned || mil.warnStage > 0)) return 'raid'; // (the traders' word of a warband too)
   if (c.population > 60 && c.fedShare < 0.85) return 'hunger';
   if (game.fires && game.fires.size > 0) return 'fire';
   if (anySick(game)) return 'sick';

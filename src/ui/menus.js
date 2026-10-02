@@ -239,7 +239,7 @@ export function sandboxMenu(app) {
         h('select', { onchange: (e) => { state.invasions = e.target.value; } },
           [['none', 'Peaceful (no raids)'], ['occasional', 'Occasional raids'], ['frequent', 'Frequent raids']].map(([k, n]) => h('option', { value: k, selected: k === state.invasions }, n))),
         // From the game's own numbers (this said 120 people long after the minimum became 300).
-        h('div', { class: 'muted', style: { fontSize: '12px' } }, `The first raid comes after about ${INVASION_PRESETS.occasional.first / 12} years (occasional) or ${INVASION_PRESETS.frequent.first / 12} (frequent), never before the city has ${RAID_MIN_POP} people, and scouts warn you about 3 months ahead.`)),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, `The first raid comes after about ${INVASION_PRESETS.occasional.first / 12} years (occasional) or ${INVASION_PRESETS.frequent.first / 12} (frequent), never before the city has ${RAID_MIN_POP} people; word of one comes about 6 months ahead, and scouts report its size and side about 3 months ahead.`)),
       h('div', { class: 'field' }, h('label', {}, 'Your rank'),
         h('select', { class: 'rank-select', onchange: (e) => { state.rank = Number(e.target.value); } },
           RANKS.map((r, i) => h('option', { value: i, selected: i === state.rank }, `${r.name} (salary ${r.salary} Dn a month)`))),

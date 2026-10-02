@@ -5,12 +5,15 @@
  * the empire map at full size with everyone on the way to the city.
  *
  *   map     your province, Rome, every partner and its route (ui/empireMap.js),
- *           caravans and ships moving along their routes, a scouted warband
- *           closing in from the side it will enter by
- *   hover   (tap on phones) a readout: "Massilia ship: 6 days"
+ *           caravans and ships moving along their routes, a warband closing
+ *           in (at the frontier while only rumoured, from the side it will
+ *           enter by once scouted)
+ *   hover   (tap on phones) a readout: "Massilia ship: 6 days"; a message
+ *           about a warband or the legions opens the map with it picked out
+ *           as if hovered (focus)
  *   click   a city or a traveler: that partner's card, with the button to
- *           open its route; a warband: close the map and look at the map
- *           edge it will enter by; raiders in the province: look at them
+ *           open its route; a scouted warband: close the map and look at the
+ *           map edge it will enter by; raiders in the province: look at them
  *   side    a legend, the list of travelers with their days, the threats
  *
  * The game keeps running behind it (like the Advisors), so travelers move;
@@ -26,6 +29,7 @@ import { battleSummary } from '../sim/battle.js';
 import {
   MAP_W, MAP_H, drawEmpire, empireTravelers, empireHitAt, travelerLabel, isDrawn, figureCenter, figureScale,
   drawCaravan, drawShip, drawBanner, drawCity, drawRome, drawRoute, drawStandard, drawBattleCity,
+  SCOUT_MONTHS, RUMOUR_MONTHS,
 } from './empireMap.js';
 
 /** How far (CSS px) from a city or traveler a pointer still counts as on it. */
@@ -179,9 +183,19 @@ export class EmpireView {
     if (!hit) return;
     if (hit.kind === 'city') this.select(hit.id);
     else if (hit.kind === 'traveler' && hit.t.id) this.select(hit.t.id);
-    else if (hit.kind === 'traveler' && hit.t.kind === 'warband') this.goToEdge(hit.t);
+    else if (hit.kind === 'traveler' && hit.t.kind === 'warband' && !hit.t.rumour && !hit.t.noShore) this.goToEdge(hit.t);
     else if (hit.kind === 'traveler' && (hit.t.kind === 'raid' || (hit.t.kind === 'legion' && hit.t.here))) { this.app.ui.closeModal(); this.app.focusThreat(); }
     else if (hit.kind === 'battle' || (hit.kind === 'traveler' && ['legion', 'enemy', 'troops'].includes(hit.t.kind))) this.app.ui.openAdvisors('imperial');
+  }
+
+  /**
+   * Pick out the traveler of this kind ('warband', 'legion' on its way) as if
+   * the pointer were on it: ringed, read out under the map. For a message or
+   * a button about it (ui.openEmpire). Moving the pointer over the map moves on.
+   */
+  focus(kind) {
+    const t = this.travelers.find((o) => o.kind === kind && !o.here && isDrawn(o));
+    if (t) this.hover = { kind: 'traveler', t };
   }
 
   select(id) {
@@ -217,7 +231,9 @@ export class EmpireView {
     if (hit && hit.kind === 'traveler') {
       text = travelerLabel(hit.t);
       const verb = this.pointerType && this.pointerType !== 'mouse' ? 'Tap again' : 'Click';
-      if (hit.t.kind === 'warband') text += `. ${verb} to see the map edge it will enter by.`;
+      if (hit.t.kind === 'warband' && hit.t.rumour) text += `. Scouts will learn its strength and its road about ${SCOUT_MONTHS} months before it strikes.`;
+      else if (hit.t.kind === 'warband' && hit.t.noShore) text += '. Expect them overland, from a side the scouts cannot yet tell.';
+      else if (hit.t.kind === 'warband') text += `. ${verb} to see ${hit.t.sea ? 'the shore where it will land' : 'the map edge it will enter by'}.`;
       else if (hit.t.kind === 'raid' || (hit.t.kind === 'legion' && hit.t.here)) text += `. ${verb} to look at them.`;
       else if (hit.t.kind === 'legion' || hit.t.kind === 'enemy' || hit.t.kind === 'troops') text += `. ${verb} for the Imperial advisor.`;
     } else if (hit && hit.kind === 'city') {
@@ -241,18 +257,20 @@ export class EmpireView {
     const imperial = () => this.app.ui.openAdvisors('imperial');
     const figure = (t) => glyph((ctx) => (t.kind === 'legion' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#6d2a6b') : t.kind === 'troops' ? drawStandard(ctx, 2.5, 4.4, null, 1, '#a8322b') : drawBanner(ctx, 3.1, 3.8, null, 1, t.kind === 'raid', !!t.sea)), 5, 4.4);
     const button = (t) => {
+      if (t.kind === 'warband' && t.rumour) return h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Road not yet known');
+      if (t.kind === 'warband' && t.noShore) return h('span', { class: 'muted', style: { fontSize: '12px' } }, 'Coming overland');
       if (t.kind === 'warband') return h('button', { class: 'btn small', title: t.sea ? 'Close the map and look at the shore where it will land' : 'Close the map and look at the map edge it will enter by', onclick: () => this.goToEdge(t) }, t.sea ? 'Show the landing' : 'Show the edge');
       if (t.kind === 'raid' || (t.kind === 'legion' && t.here)) return h('button', { class: 'btn small primary', onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show them');
       return h('button', { class: 'btn small', title: 'Caesar\'s anger and his calls for troops', onclick: imperial }, 'Imperial advisor');
     };
-    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea, t.state, t.home]), !!g.military.settings]), () => [
+    this.section('threats', this.threatsEl, JSON.stringify([threats.map((t) => [t.kind, t.size, t.dir, t.months, !!t.sea, t.state, t.home, !!t.rumour, !!t.noShore]), !!g.military.settings]), () => [
       h('h4', {}, 'Threats'),
       threats.length
         ? threats.map((t) => h('div', { class: 'empire-row' },
           h('span', { class: 'empire-glyph' }, figure(t)),
           h('span', { style: { flex: 1 } }, travelerLabel(t)),
           button(t)))
-        : h('div', { class: 'muted' }, g.military.settings ? 'Scouts see no warband near the province. They warn about 3 months ahead.' : 'No raids in this province.'),
+        : h('div', { class: 'muted' }, g.military.settings ? `No warband is known to be gathering. Word of one comes about ${RUMOUR_MONTHS} months ahead, the scouts' report of its size and road about ${SCOUT_MONTHS} months ahead.` : 'No raids in this province.'),
     ]);
     this.section('trade', this.tradeEl, JSON.stringify([trade.map((t) => [t.id, t.days, t.onWay]), anyOpen, this.selected]), () => {
       const onWay = trade.filter((t) => t.onWay);

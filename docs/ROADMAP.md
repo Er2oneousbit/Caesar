@@ -16,6 +16,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.7)
+
+* **Raid warnings as the enemy closes in** (parity #24): the original warned three times as an army drew near; Colonia's raids now get three warnings too. About 6 months out traders speak of a warband (only the months; not under 300 people); at 3 months the scouts report its size, side and whether it comes by land or sea, as before; a month out a last warning names the side again (and, by sea, the landing, looked for again: with no landing the warning says they come overland). Caesar's legions remind you halfway through their 12-month march and a month out, each time saying what today's favor would make them do. The first warnings open the empire map with the warband or the legions picked out; the last glides to the place. A raid dated late skips the stages already past; a save from before loads with the stages whose moment has passed counted as given
+* **Waterside buildings face their water**: an Emporium, a Naval Station or a Portus could stand turned the wrong way (and the placement preview of the ship buildings always showed one edge), since their side was worked out only when a ship first came. Every waterside building is now turned to its water in the preview, as it is placed, and as an older save loads
+* Headless sim: Easy, Normal, Hard, Insane and the raid and legion runs identical to v0.15.6 apart from the new warning messages
+* 573 unit tests, 129 browser checks
+
 ## Done (v0.15.6)
 
 * **The victory music ends with the victory screen**: a won mission plays festival music to celebrate, and "Keep building" left it on for the rest of the game, so a festival held afterwards changed nothing (mission 3 playtest). Closing the screen now gives the music back to the city
@@ -368,7 +375,7 @@ Fixes from a review of v0.6:
 
 ## Caesar III parity: what the original had that Colonia does not (yet)
 
-Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0).
+Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0), #24 staged raid warnings and the legions' reminders (v0.15.7).
 
 * **#7** **Map rotation** (view the city from 4 angles).
 * **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
@@ -376,7 +383,6 @@ Open items only; each keeps its number (#n) for good, so the release notes and t
 * **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
 * **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
-* **#24** **Raid warnings as the enemy closes in**: today the scouts warn once, about 3 months ahead (size, direction, land or sea), the empire map shows the warband coming, and the next message is the landing. The original warned several times as an army drew near; match its stages (when the first sighting comes and how many reminders follow, from the reference), each saying how far off it is, how big, and from where, with a click to the empire map; the same for Caesar's legions on their 12-month march.
 * **Strike the raiders' base** (Colonia's own; the Romans' punitive campaigns against the Ligurians and Gauls are the model): once a raiding people has been scouted or beaten off a time or two, its camp appears on the empire map, and forts with Empire service can be sent against it like a distant battle. Months on the march there and back leave the city short of defenders. It needs a large army (the camp grows with every raid it has sent: something like two to three times its last warband), trained men counting more; liburnians could strike a sea raiders' base. A win stops that people's raids for a few years, lifts peace and brings some plunder; a defeat loses the men and brings the next raid sooner and bigger. Details to settle before building.
 * **#21** **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
 * **#22** **Hall of Fame** for the best career scores.

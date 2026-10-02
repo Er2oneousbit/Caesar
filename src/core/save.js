@@ -112,6 +112,13 @@
  *      every switch off; the population peak the overrun rule reads
  *      (city.stats.peakPopulation) starts again at today's population. See
  *      upgradeEmpireV13().
+ *  15  staged warnings: military.warnStage (the warnings given for the coming
+ *      raid: rumour, scouts' report, a month away; sim/military.js),
+ *      warned.noShore (raider ships that found no landing a month out), and
+ *      military.caesar.noticeStage (the legions' reminders, sim/legion.js).
+ *      Messages may carry `empire` (a click opens the empire map). Older
+ *      saves load with every stage whose moment has passed counted as given,
+ *      so nothing is told late or twice, see upgradeWarningsV14().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -131,7 +138,7 @@ import { RNG } from './rng.js';
 import { GameMap } from '../world/map.js';
 import { GameTime } from '../sim/time.js';
 import { Building, Walker, footprintTiles, faceWater } from '../sim/entities.js';
-import { Unit } from '../sim/military.js';
+import { Unit, RUMOUR_MONTHS, DOOR_MONTHS, RAID_MIN_POP } from '../sim/military.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
@@ -140,7 +147,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
-import { newCaesarState } from '../sim/legion.js';
+import { newCaesarState, noticeStageFor } from '../sim/legion.js';
 import { log } from './debug.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
@@ -427,6 +434,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 12) upgradeTrainingV11(game);
   if (data.version < 13) upgradeGovernorV12(game);
   if (data.version < 14) upgradeEmpireV13(game);
+  if (data.version < 15) upgradeWarningsV14(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -658,6 +666,26 @@ export function upgradeEmpireV13(game) {
     u.away = false;
     u.awayTick = 0;
   }
+}
+
+/**
+ * A save before version 15 (before the staged warnings): each stage whose
+ * moment has passed counts as given, read from the timers the save has, so
+ * nothing is posted on load and nothing comes late; the next stage comes on
+ * time. The month's tick has run for the month the save was made in, so:
+ *   a raid the scouts reported: stage 2, or 3 with a month or less to go;
+ *   one not yet reported, 6 months or less away, in a city worth raiding:
+ *     stage 1 (the rumour is not told late; the scouts report on time);
+ *   Caesar's legions on the road: by the days left (noticeStageFor).
+ */
+export function upgradeWarningsV14(game) {
+  const m = game.military;
+  if (!m) return;
+  const left = m.nextRaidMonth === null || m.nextRaidMonth === undefined ? null : m.nextRaidMonth - game.time.totalMonths;
+  if (m.warned) m.warnStage = left !== null && left <= DOOR_MONTHS ? 3 : 2;
+  else if (m.settings && !m.active && left !== null && left <= RUMOUR_MONTHS && game.city.population >= RAID_MIN_POP) m.warnStage = 1;
+  else m.warnStage = 0;
+  if (m.caesar) m.caesar.noticeStage = noticeStageFor(m.caesar.countdown);
 }
 
 /**

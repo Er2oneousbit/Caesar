@@ -1186,6 +1186,15 @@ try {
   await page.waitForTimeout(100);
   const closed = await page.evaluate(() => ({ kind: window.colonia.ui.modalKind, canvas: !!document.querySelector('canvas.empire-full') }));
   check('the top-bar compass opens the empire map and Escape closes it', viaButton === 'empire' && closed.kind === null && !closed.canvas, JSON.stringify({ viaButton, closed }));
+  // News of a warband on its way (the staged warnings, sim/military.js):
+  // clicking the toast opens the empire map with the warband picked out.
+  await page.evaluate(() => window.colonia.game.message('Smoke: word of a warband.', 'warn', undefined, undefined, { empire: 'warband' }));
+  await page.click('.toast:has-text("Smoke: word of a warband.")').catch(() => {});
+  await page.waitForTimeout(150);
+  const viaToast = await page.evaluate(() => { const ui = window.colonia.ui; return { kind: ui.modalKind, picked: ui.empire.hover?.t?.kind || null }; });
+  check('a warning about a warband opens the empire map on it', viaToast.kind === 'empire' && viaToast.picked === 'warband', JSON.stringify(viaToast));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(100);
   await page.evaluate(() => {
     const g = window.colonia.game;
     const was = window.__empireSaved; // put the raid schedule and the route back as they were

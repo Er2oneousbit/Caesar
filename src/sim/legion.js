@@ -11,6 +11,9 @@
  *     original announced only the first), and LEGION_MARCH_DAYS (12 months)
  *     later the army appears at the map entrance. The march cannot be called
  *     off: favor won back meanwhile only changes what the army does on arrival.
+ *     Two reminders on the way (marchNotice), halfway (6 months) and a month
+ *     away, say what the favor then would make it do (the original said
+ *     nothing more after its first warning).
  *   - the army's size: CONFIG.LEGION_SIZES by the number of Caesar's attacks
  *     in this city so far (16, 32, 48, then 72), x the difficulty's raidSize,
  *     at most LEGION_MAX. Every man is an imperial legionary (data/units.js).
@@ -56,6 +59,7 @@ export function newCaesarState() {
     countdown: 0, // days until the legions arrive (0: none on the road)
     size: 0, // men on the road (fixed when they set out)
     marchDays: 0, // their whole march, for the empire map
+    noticeStage: 0, // what was said of the march: 0 no march, 1 set out, 2 halfway, 3 a month away (marchNotice)
     army: null, // on the map: { id, size, killed, day, halted, retreating, campDays, buildingsLost }
     nextId: 1,
     stats: { attacks: 0, beaten: 0, withdrew: 0, slain: 0, buildingsLost: 0 },
@@ -99,8 +103,54 @@ export function caesarDaily(game) {
   else if (cs.countdown > 0) {
     cs.countdown--;
     if (cs.countdown <= 0) launchLegion(game);
+    else marchNotice(game, cs);
   } else if (game.city.ratings.favor <= CONFIG.LEGION_FAVOR) startMarch(game);
   checkOverrun(game);
+}
+
+/** Days before the legions arrive when the reminders come: halfway (6 months), and a month away. */
+export const LEGION_HALFWAY_DAYS = CONFIG.LEGION_MARCH_DAYS / 2;
+export const LEGION_DOOR_DAYS = CONFIG.DAYS_PER_MONTH;
+
+/**
+ * The march's stage from the days left: 1 set out, 2 halfway told, 3 a month
+ * away told (0: no march). Also what a save from before the reminders loads
+ * with (core/save.js), so a stage whose day has passed is not told late.
+ */
+export function noticeStageFor(countdown) {
+  if (!(countdown > 0)) return 0;
+  if (countdown <= LEGION_DOOR_DAYS) return 3;
+  if (countdown <= LEGION_HALFWAY_DAYS) return 2;
+  return 1;
+}
+
+/**
+ * The reminders on the march (daily, after the day's step): halfway, and a
+ * month away, each saying what the favor now would make the army do (the
+ * march itself cannot be called off). Only the latest due is told, once: a
+ * march found already near (a debug command) skips the halfway one.
+ * Level `warn`, so the arrival stays the only `bad` news of the march.
+ */
+function marchNotice(game, cs) {
+  const due = noticeStageFor(cs.countdown);
+  if (due <= (cs.noticeStage || 0) || due < 2) return;
+  cs.noticeStage = due;
+  const favor = Math.floor(game.city.ratings.favor);
+  const d = game.difficulty;
+  const order = siegeOrder(d, game.city.ratings.favor, 1);
+  const men = `Caesar's legions (${cs.size} men)`;
+  if (due === 2) {
+    const months = Math.ceil(cs.countdown / CONFIG.DAYS_PER_MONTH);
+    const would = order === 'home' ? 'they would turn for home.'
+      : order === 'halt' ? `they would halt where they stand; from ${d.legionHome} they would turn for home.`
+        : `they would attack; from ${d.legionHalt} they would halt, from ${d.legionHome} turn for home.`;
+    game.message(`${men} are halfway from Rome, ${months} months away. At your favor now (${favor}) ${would}`, 'warn', undefined, undefined, { empire: 'legion' });
+    return;
+  }
+  const e = game.map.entry;
+  const aim = { residence: 'make for your residence first', homes: 'make for the finest homes first', anything: 'attack whatever stands in the province' }[legionTargets(game).what];
+  const will = order === 'home' ? 'turn for home' : order === 'halt' ? 'halt where they stand' : aim;
+  game.message(`${men} are a month away and will march in by the entrance in the ${screenDirection(game.map, e.x, e.y)}. At your favor now (${favor}) they will ${will}.`, 'warn', e.x, e.y);
 }
 
 /** Favor has fallen to LEGION_FAVOR or below: the legions set out (always announced). */
@@ -109,6 +159,7 @@ export function startMarch(game) {
   cs.size = legionSize(game, cs.attacks);
   cs.countdown = CONFIG.LEGION_MARCH_DAYS;
   cs.marchDays = CONFIG.LEGION_MARCH_DAYS;
+  cs.noticeStage = 1;
   const months = Math.round(CONFIG.LEGION_MARCH_DAYS / CONFIG.DAYS_PER_MONTH);
   const again = cs.attacks > 0 ? ' again' : '';
   game.message(`Caesar has lost patience with your governorship (favor ${Math.floor(game.city.ratings.favor)}). ${cs.size} of his legionaries are marching${again} from Rome and will reach the province in ${months} months. Win back his favor before they come and they will turn for home; if not, they will make for your residence and the finest homes. Ready your army!`, 'bad');
@@ -190,6 +241,7 @@ export function launchLegion(game, size = 0) {
   if (!tiles.length && breachEntry(game)) tiles = entryTiles(game, Math.min(n, 24));
   cs.countdown = 0;
   cs.size = 0;
+  cs.noticeStage = 0; // (arrived or turned back at the entrance: a new march starts its reminders again)
   if (!tiles.length) {
     game.message('Caesar\'s legions found no way into the province and turned back. They will come again while his anger lasts.', 'warn');
     return null;

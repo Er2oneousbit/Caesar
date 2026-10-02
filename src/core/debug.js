@@ -20,6 +20,7 @@
  *   unlockall=1    every building available in every scenario
  *   raids=MODE     off | occasional | frequent  (override invasions for new games)
  *   searaids=off   every raid comes by land (new games; sim/navy.js)
+ *   events=off     no events, random or scheduled, in any game (sim/events.js)
  *   nofog=1        reserved for future use
  *   mute=1         start with sound off
  *
@@ -45,6 +46,7 @@ export function parseFlags(source) {
     unlockall: false,
     raids: null,
     searaids: null,
+    events: null,
     mute: false,
   };
   let params;
@@ -75,6 +77,7 @@ export function parseFlags(source) {
   flags.unlockall = truthy(get('unlockall'));
   if (['off', 'occasional', 'frequent'].includes(get('raids'))) flags.raids = get('raids');
   if (['off', 'on'].includes(get('searaids'))) flags.searaids = get('searaids');
+  if (get('events') === 'off') flags.events = 'off';
   flags.mute = truthy(get('mute'));
   return flags;
 }

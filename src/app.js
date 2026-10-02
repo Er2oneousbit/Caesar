@@ -248,6 +248,9 @@ export class App {
       rank: opts.rank,
       site: opts.site,
     });
+    // The setup's Events switch (on unless unticked), kept in the scenario,
+    // which a sandbox save holds in full (data/events.js missionEvents).
+    scenario.events = opts.events !== false;
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
     farmSeasonNotice(this.game, true); // Insane: the city is founded in winter, when nothing grows

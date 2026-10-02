@@ -154,6 +154,14 @@
  *      that partner. Older saves load with every switch on (an empty `off`
  *      on every route), so they trade as before, see
  *      upgradeTradeSwitchesV20().
+ *  23  (SAVE_VERSION moves to 23 at the release that brings events)
+ *      events (sim/events.js): city.romeWage (what Rome pays, which random
+ *      events move) and city.events (each event's cooldown, the day land and
+ *      sea trade may start again, the earthquake in progress with its cracks'
+ *      ends, the counts). The cracks themselves are rock in the map. Older
+ *      saves load with Rome at the base wage, nothing cooling down, trade
+ *      open and no quake, see upgradeEventsV22() (the Game constructor
+ *      fills the same defaults, so a save without them loads either way).
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -185,6 +193,7 @@ import { isStable, stableRoom } from '../sim/storage.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
+import { eventStateOf } from '../sim/events.js';
 import { log } from './debug.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
@@ -811,6 +820,18 @@ export function upgradeHorsesV19(game) {
  */
 export function upgradeTurnsV21(game) {
   for (const b of game.buildings.values()) b.turn = 0;
+}
+
+/**
+ * A save before version 23 (before events): Rome pays the base wage, no
+ * event is cooling down, no trade is stopped and nothing shakes. Wired as
+ * `if (data.version < 23)` by the release that bumps SAVE_VERSION. It only
+ * fills what is missing (sim/events.js eventStateOf, which the Game
+ * constructor runs too): a save made by this code before the bump is still
+ * tagged 22 and keeps its Rome's wage, cooldowns and a quake under way.
+ */
+export function upgradeEventsV22(game) {
+  eventStateOf(game.city);
 }
 
 /**

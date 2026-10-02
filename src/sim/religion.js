@@ -21,7 +21,8 @@
  *   Ceres    blessing: every farm ripens.  wrath: farm progress lost.
  *   Neptune  blessing: money.  wrath: buildings near water weakened, and
  *            every fishing boat sinks (the original's curse; the shipyards
- *            build new ones).
+ *            build new ones); where the city trades by sea, merchant ships
+ *            under sail sink too and none sails for 80 days (sim/events.js).
  *   Mercury  blessing: the emptiest working granary gets MERCURY_BLESS_FOOD of
  *            each land food (no fish).  wrath: the fullest granary or warehouse loses
  *            MERCURY_WRATH_LOSS units; again before he calms, it burns.
@@ -45,6 +46,7 @@ import { liftAllMoods } from './mood.js';
 import { diseaseActive, houseHealth } from './disease.js';
 import { logGoods } from './goodsLedger.js';
 import { sinkFishingBoats } from './fishing.js';
+import { neptuneStorms } from './events.js';
 
 /** One god's fresh state. angered: it struck and has not calmed since (see the header). */
 export function newGodMood() {
@@ -298,7 +300,13 @@ function wrath(game, god, s) {
       // as a Tent may move up to a level that can collapse.
       for (const b of all) if ((b.house || b.def.damage > 0) && game.map.isNearTerrain(b.x, b.y, b.size, 4, 3)) b.damageRisk += 60;
       const sunk = sinkFishingBoats(game);
-      if (sunk > 0) note = { text: `${GODS[god].wrath} His storms sink ${sunk === 1 ? 'a fishing boat' : `all ${sunk} fishing boats`}: the shipyards must build new ones.` };
+      // And trade by sea (the original's rule): ships under sail sink and
+      // none sails for 5 months, where the city trades by sea (sim/events.js).
+      const sea = neptuneStorms(game);
+      const parts = [];
+      if (sunk > 0) parts.push(`His storms sink ${sunk === 1 ? 'a fishing boat' : `all ${sunk} fishing boats`}: the shipyards must build new ones.`);
+      if (sea.halted) parts.push(`${sea.sunk > 0 ? `${sea.sunk === 1 ? 'A merchant ship goes' : `${sea.sunk} merchant ships go`} down with ${sea.sunk === 1 ? 'its' : 'their'} cargo, and n` : 'N'}o ship will sail for your city for 5 months.`);
+      if (parts.length) note = { text: `${GODS[god].wrath} ${parts.join(' ')}` };
       break;
     }
     case 'mercury':

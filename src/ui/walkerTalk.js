@@ -27,6 +27,7 @@ import { partnerBuys } from '../sim/tradeDemand.js';
 import { partnerOn } from '../sim/tradeSwitches.js';
 import { dealPricesText } from '../sim/prices.js';
 import { trainsNow } from '../sim/training.js';
+import { romeWage } from '../sim/economy.js';
 import { prefectFoe, foeLabel } from '../sim/prefectFight.js';
 
 /** Days a walker keeps saying the same thing. */
@@ -132,7 +133,7 @@ export function cityTrouble(game) {
   if (mil && mil.battle && mil.battle.sent && mil.battle.phase !== 'foreign') return 'troops'; // troops away at a distant battle
   if (c.unemploymentRate > 0.12) return 'work';
   if (c.taxRate > CONFIG.DEFAULT_TAX_RATE + 2) return 'taxes';
-  if (c.wage < CONFIG.BASE_WAGE) return 'wages';
+  if (c.wage < romeWage(game)) return 'wages'; // below what Rome pays now
   if (c.treasury < 0) return 'debt';
   let angry = null;
   for (const g of GOD_KEYS) if (c.gods[g] && c.gods[g].mood < 30 && (!angry || c.gods[g].mood < c.gods[angry].mood)) angry = g;

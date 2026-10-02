@@ -22,6 +22,8 @@ import { requestTroops, fightBattle, archesToBuild } from '../sim/battle.js';
 import { THREATENED_CITIES } from '../data/battles.js';
 import { commitCrime, crimeChance, criminalsAbout, unhappiestHomes, crimeEnabled } from '../sim/crime.js';
 import { outbreak, sickHomes, riskiestHomes, diseaseEnabled } from '../sim/disease.js';
+import { applyEvent, eventCondition, startQuake, newEmperor, quakeSummary, tradeHaltText } from '../sim/events.js';
+import { QUAKE_SIZES } from '../data/events.js';
 import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
 import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
@@ -47,6 +49,8 @@ export const CONSOLE_HELP = [
   ['unrest <n>', 'Set the mood of every home (0-100); they drift back toward their targets'],
   ['health', 'Health report: city health, outbreaks this year, sick homes, the homes closest to an outbreak'],
   ['sick [id | x y]', 'The home under the cursor (or #id, or at x,y; else the one at most risk) falls sick now'],
+  ['event', 'Events report: Rome\'s wage, trade stopped, an earthquake shaking, the events so far'],
+  ['event <kind>', 'An event now: wageup | wagedown | land | sea | water | mine | clay | quake [small|medium|large] | emperor'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['fishing', 'Build a shipyard (stocked with timber), two fishing wharves and a granary on the nearest water with fish'],
@@ -245,6 +249,23 @@ export class DebugConsole {
       case 'health':
         need();
         return healthReport(g);
+      case 'event': {
+        need();
+        const kind = (args[0] || '').toLowerCase();
+        if (!kind) return eventReport(g);
+        if (kind === 'quake') {
+          const size = args[1] || 'small';
+          if (!QUAKE_SIZES[size]) throw new Error(`usage: event quake [${Object.keys(QUAKE_SIZES).join('|')}]`);
+          const q = startQuake(g, size);
+          return q ? `${quakeSummary(g)}.` : 'No earthquake: one is already shaking, or there is no city to strike.';
+        }
+        if (kind === 'emperor') { newEmperor(g); return 'A new Caesar rules: favor is 50.'; }
+        const key = { wageup: 'wageUp', wagedown: 'wageDown', land: 'land', sea: 'sea', water: 'water', mine: 'mine', clay: 'clay' }[kind];
+        if (!key) throw new Error(`usage: event [${EVENT_KINDS}]`);
+        if (!eventCondition(g, key)) return `It cannot happen now (${EVENT_NEEDS[key]}).`;
+        applyEvent(g, key, g.rng.range(1, 4)); // (a wage event's step, as the month's draw gives)
+        return `${key}: done.`;
+      }
       case 'sick': {
         need();
         const b = pickHome(app, g, args);
@@ -548,6 +569,28 @@ function pickHome(app, g, args) {
     if (!best || (b.house.diseaseRisk || 0) > (best.house.diseaseRisk || 0)) best = b;
   }
   return best;
+}
+
+/** The `event` command's kinds, and what each needs to happen. */
+const EVENT_KINDS = 'wageup|wagedown|land|sea|water|mine|clay|quake [size]|emperor';
+const EVENT_NEEDS = {
+  wageUp: 'Rome already pays the most it will', wageDown: 'Rome already pays the least it will',
+  land: 'no open land route', sea: 'no open sea route with a staffed Emporium', water: 'fewer than 200 people, or no disease here',
+  mine: 'no iron mine', clay: 'no clay pit',
+};
+
+/** The `event` command's report: Rome's wage, trade stopped, a quake, what came so far. */
+function eventReport(g) {
+  const ev = g.city.events;
+  const counts = Object.entries(ev.counts).map(([k, n]) => `${k} ${n}`).join(', ');
+  return [
+    `Rome pays ${g.city.romeWage} Dn (you pay ${g.city.wage}).`,
+    tradeHaltText(g, 'land') || 'Caravans travel freely.',
+    tradeHaltText(g, 'sea') || 'Ships sail freely.',
+    quakeSummary(g) || 'No earthquake.',
+    `So far: ${counts || 'nothing'}.`,
+    `Usage: event [${EVENT_KINDS}]`,
+  ].join('\n');
 }
 
 /** The `health` command's report. */

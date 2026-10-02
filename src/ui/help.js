@@ -25,6 +25,7 @@ import { DIFFICULTY } from '../data/difficulty.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { RANKS, TOP_RANK } from '../data/ranks.js';
 import { GIFT_SIZES } from '../sim/emperor.js';
+import { ROME_WAGE_MIN, ROME_WAGE_MAX, TRADE_HALT_DAYS, BAD_WATER_MIN_POP } from '../data/events.js';
 
 /** The campaign's steps with two provinces (the manual names them from the data). */
 function branchSteps() {
@@ -75,6 +76,7 @@ export const URL_FLAGS = [
   ['unlockall=1', 'Every building and every campaign mission available.'],
   ['raids=off|occasional|frequent', 'Override raids for new games (testing).'],
   ['searaids=off|on', 'Sea raids switch for new games (off: every raid comes by land).'],
+  ['events=off', 'No events, random or scheduled, in this session\'s games (testing).'],
   ['mute=1', 'Start with sound off.'],
 ];
 
@@ -198,6 +200,8 @@ function content(tab) {
         h('p', {}, `Every home has a health score out of 100: its level (up to ${CONFIG.HEALTH_LEVEL_MAX}), health care (a medicus ${CONFIG.HEALTH_CARE_MEDICUS}, a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles ${CONFIG.HEALTH_CARE_HOSPITAL}, both ${CONFIG.HEALTH_CARE_BOTH}), baths ${CONFIG.HEALTH_BATHS}, a barber ${CONFIG.HEALTH_BARBER}, fountain water ${CONFIG.HEALTH_FOUNTAIN} (not a well) and ${CONFIG.HEALTH_PER_FOOD} for each kind of food; a home whose people eat and that has no food at all scores at most ${CONFIG.HEALTH_HUNGRY_MAX} (tents forage). Click a home to see it (Health).`),
         h('p', {}, `Once the city has ${CONFIG.DISEASE_MIN_POP} people, crowded homes with a poor score build up disease risk, as buildings build up fire risk, and a physician passing by clears it. A home that falls sick loses about a fifth of its people (a tenth near a hospital), cannot move up or take in settlers for ${CONFIG.SICK_DAYS} days, and may pass the sickness to the homes touching it. A staffed Medicus (Physician) sends a physician to cure it, as an Excubitorium (Prefecture) sends prefects to a fire. The Disease overlay shows which homes are at risk and which are sick. The first two campaign missions have no disease.`),
         h('p', {}, `The Health, Education and Entertainment advisors (F2) show, for each kind of building, how many there are and how many have workers, the people its walkers reached (a hospital: the homes within ${CONFIG.HOSPITAL_RADIUS} tiles), and how many of the people whose homes need it to keep or reach their level have it, in words from None to Full. A building serves every home its walker passes, however many; venues are the exception, with seats that set the entertainment every home gets. Each advisor gives one line of advice on what holds homes back most; click a building's name to go to one. The Health advisor also shows city health, which moves ${CONFIG.HEALTH_STEP} points a month toward the homes' average score, and the year's outbreaks; the Overview has city health and crime at a glance.`),
+        h('h4', {}, 'Events'),
+        h('p', {}, `Now and then fortune strikes the province, as in the original. Each month there is a chance of a random event, if the mission allows it (the sandbox: all, unless its setup's Events switch is off): Rome raising or cutting wages (between ${ROME_WAGE_MIN} and ${ROME_WAGE_MAX} Dn: citizens measure your wage against Rome's, so match a rise in the Labor advisor or the mood suffers), landslides or sandstorms stopping every caravan for ${TRADE_HALT_DAYS} days (storms: every ship), bad water lowering city health (from ${BAD_WATER_MIN_POP} people), or the oldest iron mine or clay pit caving in. They come half as often on Easy and half again as often on Insane, and the same one not again within ${DIFFICULTY.normal.eventCooldown} months (${DIFFICULTY.easy.eventCooldown} on Easy, ${DIFFICULTY.insane.eventCooldown} on Insane). Some missions also schedule a change of emperor (favor starts afresh at 50), a price change, or an earthquake: cracks spread from near the middle of the city for days, and every tile they cross loses what stood there and becomes rock for good, so build round them. The first two missions have no events.`),
         h('h4', {}, 'Ratings'),
         h('p', {}, `Culture comes from religion, education and entertainment coverage. Prosperity from housing quality, profit and employment. Peace grows while citizens are content, and falls in any month enemies are in the province; Rome proclaims no victory until they are gone. Favor is the Emperor's opinion: pay tribute, answer his requests and his calls for troops, avoid debt. Favor 0 does not end the game, but at ${CONFIG.LEGION_FAVOR} or less Caesar sends his legions against you (see Military). In debt nothing can be built; Rome lends money (Finance advisor), repaid monthly with interest.`),
         h('h4', {}, 'The governor: rank, salary, savings'),

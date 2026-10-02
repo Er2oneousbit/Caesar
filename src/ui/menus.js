@@ -216,6 +216,9 @@ export function briefing(app, s, onBegin = null, onBack = null) {
 /** What the Sea raids switch does (sandbox setup and Settings). */
 const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids come by ship and land near the city; raider ships throw fire pots at boats and buildings by the shore. A Navalia and Stationes (naval stations) build and berth a fleet of liburnians to fight them. Off: every raid comes by land.`;
 
+/** What the sandbox's Events switch does. */
+const EVENTS_HELP = 'Now and then Rome raises or cuts wages, landslides or storms stop caravans or ships for 3 months, bad water lowers city health, or a mine or clay pit caves in (less often on Easy, more on Hard and Insane). Off: none of these.';
+
 export function sandboxMenu(app) {
   const state = {
     size: app.flags.map || 'medium',
@@ -225,6 +228,7 @@ export function sandboxMenu(app) {
     funds: 8000,
     invasions: 'occasional',
     seaRaids: app.settings.seaRaids !== false,
+    events: true,
     rank: SANDBOX_RANK,
     site: HOME_SITE,
   };
@@ -259,7 +263,10 @@ export function sandboxMenu(app) {
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Where your city stands on the empire map: the way each partner\'s traders come, how long a far one takes (it comes less often) and how far your army marches to a distant battle. The landscape above is the map you build on.')),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', checked: state.seaRaids, onchange: (e) => { state.seaRaids = e.target.checked; } }),
-        h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP)))),
+        h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP))),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', class: 'events-switch', checked: state.events, onchange: (e) => { state.events = e.target.checked; } }),
+        h('span', {}, 'Events', h('div', { class: 'muted', style: { fontSize: '12px' } }, EVENTS_HELP)))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),

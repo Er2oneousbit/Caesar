@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.16.4)
+
+* **Service walkers head for the homes that need them**: priests, teachers, librarians, scholars, barbers, physicians, bath attendants, entertainers, market vendors and tax collectors chose junctions by chance, and homes on a building's far street waited months (a mission 2 playtest: Stone Cottages on a school's far street). At a junction each is now drawn to the way whose neediest home most needs his visit (its access running out; for a vendor, a pantry low in what his market stocks), looking past the next junction up to 8 road steps and only at homes within 13 tiles of his building. Tax collectors, priests, barbers, physicians and bath attendants also set out on the next round as the last turns home. Measured over 6 seeds and 720 days: the mission 2 playtest city went from 85,494 home-days without a service it needed (the longest wait 505 days) to none; the demo city from 212,326 (560 days) to 6,267 (208). Headless sim over 32 map seeds: population flat to +8, homes moving down 10 to 17 fewer, culture about +1.5, prosperity +5 to 6. On Insane the demo city's 28 to 36% unemployment keeps its mood under 45, so its peace stays low (26 to 25); sized to its jobs, Insane peace rises (44 to 47)
+* 636 unit tests
+
 ## Done (v0.16.3)
 
 * **A deployed fort takes no recruits**: a fort or Naval Station with a rally point, or with men or ships away at a distant battle, takes no new soldiers (and the Navalia builds it no liburnians) until it is recalled and home; one already on his way still joins. Before, new recruits joined a deployed fort and stood about the city

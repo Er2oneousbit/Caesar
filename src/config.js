@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.15.8',
+  VERSION: '0.15.9',
   SAVE_VERSION: 15, // v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v14 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
@@ -294,10 +294,15 @@ export const CONFIG = {
   WHARF_FULL: 200, // the boat waits while its wharf holds this much fish (two catches) or more
   // Fishing grounds, derived from the terrain (world/map.js computeFishing):
   FISH_BODY_MIN: 80, // tiles: smaller water is a pond, with no fish worth a boat
-  FISH_TILES_PER_GROUND: 250, // one ground per this much water, 1 to FISH_GROUNDS_PER_BODY a body
-  FISH_GROUNDS_PER_BODY: 4,
-  FISH_GROUNDS_MAX: 8, // on the whole map (the original's limit), bigger bodies first
-  FISH_GROUND_SPACING: 12, // tiles (Chebyshev) between two grounds on the same water
+  // More than the original's 8 a map: at one per 250 tiles, 4 a body and 8 a
+  // map, a whole coastline had 4 grounds and most rivers 1 or 2 (playtest:
+  // "pretty light"). Now one per 150 tiles of water, up to 10 a body, and the
+  // map's limit grows with its area (8 on a 96x96 map, at most 24).
+  FISH_TILES_PER_GROUND: 150, // one ground per this much water, 1 to FISH_GROUNDS_PER_BODY a body
+  FISH_GROUNDS_PER_BODY: 10,
+  FISH_GROUNDS_MAX: 8, // on a 96x96 map, bigger bodies first; scaled by the map's area (fishingGroundsMax)
+  FISH_GROUNDS_MAX_CAP: 24, // on the biggest maps
+  FISH_GROUND_SPACING: 10, // tiles (Chebyshev) between two grounds on the same water
 
   // --- Sea raids and the fleet (sim/navy.js; ships' fighting numbers: data/units.js) ---
   // Not in the original, which had no war at sea. On a map whose navigable

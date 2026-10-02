@@ -98,13 +98,16 @@ test('fishing grounds: derived from the terrain only, the same every time, no ra
   assert.deepEqual(a.map.fishingGrounds, b.map.fishingGrounds, 'recomputing changes nothing');
 });
 
-test('fishing grounds: bodies of 80+ tiles, at most 4 a body and 8 a map, 12 apart, on fishing water', () => {
+/** The map's limit on grounds: 8 on a 96x96 map, more on a bigger one, at most 24. */
+const groundsMax = (size) => Math.max(CONFIG.FISH_GROUNDS_MAX, Math.min(CONFIG.FISH_GROUNDS_MAX_CAP, Math.round(CONFIG.FISH_GROUNDS_MAX * size * size / (96 * 96))));
+
+test('fishing grounds: bodies of 80+ tiles, at most 10 a body and the map limit, 10 apart, on fishing water', () => {
   for (const type of ['river', 'coast', 'lakes', 'desert', 'plains']) {
     for (const size of [64, 128]) {
       const g = new Game({ scenario: sandboxScenario({ type, size, seed: 'grounds' }) });
       const { map } = g;
       const grounds = map.fishingGrounds;
-      assert.ok(grounds.length <= CONFIG.FISH_GROUNDS_MAX, `${type} ${size}: at most 8`);
+      assert.ok(grounds.length <= groundsMax(size), `${type} ${size}: at most ${groundsMax(size)}`);
       const sizes = new Map();
       for (let i = 0; i < map.size; i++) if (map.fishBody[i]) sizes.set(map.fishBody[i], (sizes.get(map.fishBody[i]) || 0) + 1);
       for (const n of sizes.values()) assert.ok(n >= CONFIG.FISH_BODY_MIN, 'no pond counts as fishing water');
@@ -114,10 +117,16 @@ test('fishing grounds: bodies of 80+ tiles, at most 4 a body and 8 a map, 12 apa
         assert.equal(map.terrain[map.idx(gr.x, gr.y)], Terrain.WATER);
         const mine = grounds.filter((o) => o.body === gr.body);
         assert.ok(mine.length <= CONFIG.FISH_GROUNDS_PER_BODY);
-        for (const o of mine) if (o !== gr) assert.ok(Math.max(Math.abs(o.x - gr.x), Math.abs(o.y - gr.y)) >= CONFIG.FISH_GROUND_SPACING, 'grounds on one water are 12 apart');
+        for (const o of mine) if (o !== gr) assert.ok(Math.max(Math.abs(o.x - gr.x), Math.abs(o.y - gr.y)) >= CONFIG.FISH_GROUND_SPACING, 'grounds on one water are 10 apart');
       }
     }
   }
+  // Playtest: "pretty light". A coast had 4 grounds and a river 1 or 2.
+  const count = (type) => new Game({ scenario: sandboxScenario({ type, size: 128, seed: 'grounds' }) }).map.fishingGrounds.length;
+  assert.ok(count('coast') >= 8, `a 128 coast: ${count('coast')}`);
+  assert.ok(count('river') >= 3, `a 128 river: ${count('river')}`);
+  assert.equal(groundsMax(96), 8);
+  assert.equal(groundsMax(256), 24);
 });
 
 test('fishing grounds: a tiny lake is a pond (no fish); a big one has a ground in open water', () => {
@@ -135,11 +144,11 @@ test('fishing grounds: a tiny lake is a pond (no fish); a big one has a ground i
   assert.equal(map.fishWaterBeside(8, 3, 2), -1, 'the pond\'s bank does not');
 });
 
-test('fishing grounds: water left without a ground (the map\'s 8 taken) takes no shipyard', () => {
-  // Mission 7's lakes: more big lakes than the map's 8 grounds.
-  const game = new Game({ scenario: SCENARIOS.find((s) => s.id === 'c7'), flags: { unlockall: true, money: 1e6 } });
+test('fishing grounds: water left without a ground (the map limit taken) takes no shipyard', () => {
+  // A 256 lakes map: more big lakes than the map's 24 grounds.
+  const game = new Game({ scenario: sandboxScenario({ type: 'lakes', size: 256, seed: 'sandbox' }), flags: { unlockall: true, money: 1e6 } });
   const { map } = game;
-  assert.equal(map.fishingGrounds.length, CONFIG.FISH_GROUNDS_MAX);
+  assert.equal(map.fishingGrounds.length, groundsMax(256));
   let refused = 0;
   for (let y = 1; y < map.h - 3; y++) {
     for (let x = 1; x < map.w - 3; x++) {

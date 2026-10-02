@@ -314,12 +314,13 @@ export class GameMap {
     // 3. Bigger bodies first (ties: the first in tile order).
     const fishing = bodies.filter((b) => b.tiles.length >= cfg.FISH_BODY_MIN).sort((a, b) => b.tiles.length - a.tiles.length || a.id - b.id);
     let n = 0;
+    const max = Math.max(cfg.FISH_GROUNDS_MAX, Math.min(cfg.FISH_GROUNDS_MAX_CAP ?? cfg.FISH_GROUNDS_MAX, Math.round(cfg.FISH_GROUNDS_MAX * size / (96 * 96))));
     for (const b of fishing) {
       const want = Math.max(1, Math.min(cfg.FISH_GROUNDS_PER_BODY, Math.floor(b.tiles.length / cfg.FISH_TILES_PER_GROUND)));
       const cand = b.tiles.slice().sort((p, q) => score(p) - score(q) || this.variant[p] - this.variant[q] || p - q);
       const mine = [];
       for (const i of cand) {
-        if (mine.length >= want || n >= cfg.FISH_GROUNDS_MAX) break;
+        if (mine.length >= want || n >= max) break;
         const x = i % w;
         const y = (i / w) | 0;
         if (mine.some((g) => Math.max(Math.abs(g.x - x), Math.abs(g.y - y)) < cfg.FISH_GROUND_SPACING)) continue;

@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.9)
+
+* **More fishing grounds**: at one ground per 250 tiles of water, at most 4 on one water and the original's 8 on a map, a whole coastline had 4 grounds and most rivers 1 or 2. Now one per 150 tiles, up to 10 on one water and 10 tiles apart, and the map's limit grows with its area (8 on a 96x96 map, up to 24). A 128 coast has about 10, a 128 river 4, Firmum's lakes 6 (from 4). Grounds come from the terrain, so older cities get them as they load. Headless sim: every default run identical; with two wharves the coast town lands about 1,800 fish a year (from 1,500) and the river town about 1,170 (from 670), its boats sailing shorter
+* 574 unit tests
+
 ## Done (v0.15.8)
 
 * **Roads and aqueducts cross at right angles**: a road could run along under an aqueduct. Now a road passes under an aqueduct only straight across it, through one arch, and neither turns, branches nor runs along on the crossing tile; an aqueduct may not run along or turn over a road either. Refused tiles show red with the reason; roads already under aqueducts in an older city stay. Headless sim identical on every level and on the campaign maps that lay aqueducts

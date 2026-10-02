@@ -24,6 +24,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { PERFORMER_NAMES } from '../data/buildings.js';
 import { daysMoored } from '../sim/trade.js';
 import { partnerBuys } from '../sim/tradeDemand.js';
+import { partnerOn } from '../sim/tradeSwitches.js';
 import { dealPricesText } from '../sim/prices.js';
 import { trainsNow } from '../sim/training.js';
 import { prefectFoe, foeLabel } from '../sim/prefectFight.js';
@@ -331,8 +332,8 @@ export function tradeRows(game, w) {
   }
   const p = TRADE_PARTNERS[w.partner];
   const settings = game.city.trade.settings;
-  const buys = Object.keys(partnerBuys(game, w.partner)).filter((g) => settings[g]?.mode === 'export');
-  const sells = Object.keys(p.sells).filter((g) => settings[g]?.mode === 'import');
+  const buys = Object.keys(partnerBuys(game, w.partner)).filter((g) => settings[g]?.mode === 'export' && partnerOn(game, w.partner, g));
+  const sells = Object.keys(p.sells).filter((g) => settings[g]?.mode === 'import' && partnerOn(game, w.partner, g));
   return [
     ['Comes to buy', buys.length ? list(buys) : 'Nothing you export'],
     ['Comes to sell', sells.length ? list(sells) : 'Nothing you import'],

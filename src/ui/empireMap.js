@@ -40,7 +40,8 @@ import {
 import { SITES, homeSiteId } from '../data/sites.js';
 import { smoothLine, routePath, tripDays, legionWay, lineLength, ROME_LL } from '../data/empireRoutes.js';
 import { routeKind, firstVisitDays } from '../sim/trade.js';
-import { routeInterval } from '../sim/tradeDemand.js';
+import { routeInterval, partnerBuys } from '../sim/tradeDemand.js';
+import { partnerIdle } from '../sim/tradeSwitches.js';
 import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS } from '../sim/military.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
 import { battleSummary, recallSummary } from '../sim/battle.js';
@@ -206,7 +207,8 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  * Everyone on the way to the city, from the sim's own timers:
  *
  *   { kind: 'caravan' | 'ship', id, name, color, days, trip, onWay, frac, pos }
- *       one per open route that ships can reach. `days` = whole days until it
+ *       one per open route that ships can reach, unless every good it deals
+ *       in is switched off (sim/tradeSwitches.js: nobody comes). `days` = whole days until it
  *       arrives; `onWay` = it has set out (the last `trip` days before its
  *       visit); `frac` = share of the trip done (0 while it has not set out).
  *       `trip` = shownTripDays: the first trader of a route sets out from its
@@ -236,6 +238,7 @@ export function empireTravelers(game) {
     if (!p || !r.open) continue;
     const sea = routeKind(id) === 'sea';
     if (sea && !seaOk) continue; // no ship ever comes (cannot be opened there anyway)
+    if (partnerIdle(game, id, partnerBuys(game, id))) continue; // every good switched off: nobody sets out
     const left = Math.max(0, r.nextVisit - now);
     // (No trader has reached the city yet: the one on the way set out when the route opened.)
     const trip = shownTripDays(game, id, !r.visits);

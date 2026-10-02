@@ -8,9 +8,8 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **Trade by partner**: per-partner switches for each good a partner buys or sells (on its route card), under the good's Import/Export setting and level, all on by default. Many goods have several buyers or sellers (pottery five buyers, wine five buyers and three sellers), and since prices vary by distance the player chooses whom to sell to and buy from.
-2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
-3. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
+1. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
+2. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 

@@ -149,6 +149,11 @@
  *      stays at its warehouse, which sends it to a barracks that needs it or
  *      a ranch with room, a horse a day (sim/production.js). The warehouse's
  *      horse order is dropped. See upgradeHorsesV19().
+ *  21  trade by partner (sim/tradeSwitches.js): each trade route holds
+ *      `off`, { good: true } for the goods the player switched off with
+ *      that partner. Older saves load with every switch on (an empty `off`
+ *      on every route), so they trade as before, see
+ *      upgradeTradeSwitchesV20().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -474,6 +479,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 17) upgradeShipyardTimberV16(game);
   if (data.version < 19) upgradeRecallsV18(game);
   if (data.version < 20) upgradeHorsesV19(game);
+  if (data.version < 21) upgradeTradeSwitchesV20(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -791,6 +797,15 @@ export function upgradeHorsesV19(game) {
     }
   }
   return moved;
+}
+
+/**
+ * A save before version 21 (before trade by partner): every route gets an
+ * empty `off`, every switch on, so each good trades with every partner its
+ * setting allows, as it did. Whatever an old save held there is dropped.
+ */
+export function upgradeTradeSwitchesV20(game) {
+  for (const r of Object.values(game.city.trade?.routes || {})) r.off = {};
 }
 
 /**

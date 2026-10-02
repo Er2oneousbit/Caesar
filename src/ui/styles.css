@@ -282,6 +282,12 @@ button, input, select { font: inherit; color: inherit; }
 .bar.risk > i { background: linear-gradient(90deg, #6aa84f, #e0a84a 60%, #d9534f); }
 
 .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--panel-3); font-size: 12px; margin: 1px; }
+/* A route card's good: the switch for trading it with that partner, then its amounts and price. */
+label.chip.trade-good { cursor: pointer; }
+.trade-switch { margin: 0 4px 0 0; vertical-align: -2px; accent-color: var(--bronze); cursor: pointer; }
+.chip.trade-good.off { opacity: 0.6; text-decoration: line-through; }
+@media (pointer: coarse) { label.chip.trade-good { min-height: 32px; display: inline-flex; align-items: center; } .trade-switch { width: 18px; height: 18px; } }
+.trade-partners { display: block; margin-top: 2px; }
 .ok { color: var(--good); }
 .no { color: var(--bad); }
 .muted { color: var(--ink-soft); }

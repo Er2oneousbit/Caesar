@@ -4,6 +4,8 @@
  * What each trade partner buys in a mission, and how often its traders come.
  * Pure: it reads the scenario and the date, never game state, so nothing here
  * is saved (a save made before a demand change loads and gets it on time).
+ * The one exception is a route's pace (routeInterval), which counts only the
+ * goods the player trades with that partner (sim/tradeSwitches.js).
  *
  * Demand in force (the original's quota tiers, in Colonia's units)
  *   A partner's yearly purchase of a good starts from its own table
@@ -22,7 +24,8 @@
  *   A caravan carries CARAVAN_MAX_TRADE each way and comes every 32 to 56
  *   days, about 3,500 units a year; a ship carries SHIP_MAX_TRADE every 64
  *   to 96 days, about 5,800. A route whose larger direction (what it buys, or
- *   what it sells) is more than that comes proportionally more often: its
+ *   what it sells, counting only the goods switched on with it) is more than
+ *   that comes proportionally more often: its
  *   interval is scaled by carry / volume, so on average its traders can carry
  *   its whole year. The line sits at the full carry, not below it, so every
  *   route of the first seven missions keeps its pace (the busiest, Aquileia's
@@ -50,6 +53,7 @@ import { RNG } from '../core/rng.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { homeSiteId } from '../data/sites.js';
 import { tripDays } from '../data/empireRoutes.js';
+import { onlyOn } from './tradeSwitches.js';
 
 /** The original's yearly quota tiers (15, 25 and 40 loads of 100), and 0 for none. */
 export const DEMAND_TIERS = Object.freeze([0, 1500, 2500, 4000]);
@@ -155,11 +159,17 @@ export function visitInterval(kind, volume, trip = 0) {
   return [Math.max(1, Math.round(range[0] * f)), Math.max(1, Math.round(range[1] * f))];
 }
 
-/** A route's interval in this game now: its demand in force, its sales and its trip from the province's site. */
+/**
+ * A route's interval in this game now: its demand in force, its sales and its
+ * trip from the province's site. Goods the player switched off with this
+ * partner do not count (sim/tradeSwitches.js): a busy route the city trades
+ * only a little of comes at the usual pace.
+ */
 export function routeInterval(game, partnerId) {
   const p = TRADE_PARTNERS[partnerId];
   const kind = p?.route === 'sea' ? 'sea' : 'land';
-  return visitInterval(kind, p ? routeVolume(partnerBuys(game, partnerId), p.sells) : 0, p ? tripDays(homeSiteId(game), partnerId) : 0);
+  const volume = p ? routeVolume(onlyOn(game, partnerId, partnerBuys(game, partnerId)), onlyOn(game, partnerId, p.sells)) : 0;
+  return visitInterval(kind, volume, p ? tripDays(homeSiteId(game), partnerId) : 0);
 }
 
 /**

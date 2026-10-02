@@ -10,7 +10,8 @@
  *   Production goods made and used last month, idle buildings and why,
  *              the bottlenecks (ui/production.js)
  *   Finance    tax rate and the yearly ledger
- *   Trade      trade routes and import/export settings per good
+ *   Trade      trade routes (each with a switch per good: whom you trade
+ *              it with), import/export settings per good
  *   Military   threats, forts and their orders, supplies, battle record
  *   Health     city health, disease this year and last, the health
  *              buildings' reach and the needs they meet, advice
@@ -43,6 +44,7 @@ import { goalStatus } from '../sim/ratings.js';
 import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
 import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } from '../sim/trade.js';
 import { partnerBuys, routeInterval } from '../sim/tradeDemand.js';
+import { partnerOn, setPartnerGood, partnerIdle, partnersFor } from '../sim/tradeSwitches.js';
 import { homeSiteId } from '../data/sites.js';
 import { tripDays } from '../data/empireRoutes.js';
 import { tradePrice, priceRange, rangeText, distanceNote, marketLine } from '../sim/prices.js';
@@ -101,8 +103,10 @@ const MOOD_LABELS = {
  * it), what it sells and buys with this year's amounts, and what the route
  * needs. Shared by the Trade advisor and the Empire map (ui/empire.js). What
  * it buys is this mission's demand in force (sim/tradeDemand.js); each good
- * shows this partner's price this year (sim/prices.js), per 100 units.
- * `onChange` runs after the player opened the route.
+ * shows this partner's price this year (sim/prices.js), per 100 units, beside
+ * its switch: untick it and the city stops trading that good with this
+ * partner (sim/tradeSwitches.js). `onChange` runs after the player opened
+ * the route or flipped a switch.
  */
 export function tradeRouteCard(app, g, id, onChange) {
   const p = TRADE_PARTNERS[id];
@@ -114,8 +118,23 @@ export function tradeRouteCard(app, g, id, onChange) {
   // side: 'buy' for what it sells you (you pay), 'sell' for what it buys (you earn).
   const list = (obj, used, side) => Object.entries(obj).map(([good, cap]) => {
     const price = tradePrice(g, id, good, side);
-    return h('span', { class: 'chip trade-good', title: `${fmt(used[good] || 0)} of ${fmt(cap)} this year, at ${price} Dn per 100 units` }, `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)} · ${price} Dn`);
+    const on = partnerOn(g, id, good);
+    const name = GOODS[good].name.toLowerCase();
+    const deal = side === 'buy' ? `Buy ${name} from ${p.name}` : `Sell ${name} to ${p.name}`;
+    const state = on ? 'on: untick to stop' : `off: ${p.name} ${side === 'buy' ? 'sells you' : 'buys'} none until you tick it`;
+    return h('label', { class: `chip trade-good${on ? '' : ' off'}`, title: `${deal} (${state}). ${fmt(used[good] || 0)} of ${fmt(cap)} this year, at ${price} Dn per 100 units.` },
+      h('input', {
+        type: 'checkbox', class: 'trade-switch', checked: on, 'aria-label': deal, dataset: { switch: `${id}:${good}` },
+        onchange: (e) => {
+          setPartnerGood(g, id, good, e.target.checked);
+          onChange();
+          // The card is drawn afresh: keep the keyboard on the same switch.
+          document.querySelector(`input.trade-switch[data-switch="${id}:${good}"]`)?.focus();
+        },
+      }),
+      `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)} · ${price} Dn`);
   });
+  const idle = partnerIdle(g, id, partnerBuys(g, id));
   let how;
   if (!sea) how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Caravans come along the Imperial road to a staffed warehouse.');
   else if (!seaOk) how = h('div', { class: 'status bad', style: { fontSize: '12px' } }, 'Unreachable: no river or coast connects this province to the sea.');
@@ -138,8 +157,23 @@ export function tradeRouteCard(app, g, id, onChange) {
     how,
     pace,
     h('div', { class: 'muted route-prices', style: { fontSize: '12px' } }, distanceNote(g.scenario, id)),
+    idle ? h('div', { class: 'status warn route-idle', style: { fontSize: '12px' } }, `Every good is switched off: ${sea ? 'no ships' : 'no caravans'} will come until you tick one.`) : null,
     h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought, 'buy')),
     h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold, 'sell')));
+}
+
+/**
+ * One visit in the trade log, with what changed hands, so the player sees
+ * whom each good went to and came from: "Mar 12 🐪 Capua: sold pottery 200;
+ * bought wine 100: +320 / −215 Dn" (sold and bought: by the city).
+ */
+export function tradeLogLine(e) {
+  const goods = (o) => Object.entries(o || {}).filter(([k, n]) => n > 0 && GOODS[k]).map(([k, n]) => `${GOODS[k].name.toLowerCase()} ${fmt(n)}`).join(', ');
+  const parts = [];
+  if (goods(e.sold)) parts.push(`sold ${goods(e.sold)}`);
+  if (goods(e.bought)) parts.push(`bought ${goods(e.bought)}`);
+  const what = parts.length ? `${parts.join('; ')}: ` : '';
+  return `${e.date} ${e.kind === 'sea' ? '⛵' : '🐪'} ${e.partner}: ${what}+${fmt(e.earned)} / −${fmt(e.spent)} Dn`;
 }
 
 export class Advisors {
@@ -427,6 +461,7 @@ export class Advisors {
     const seaOk = !!g.map.seaEntry;
     const routeCards = partners.map(([id]) => tradeRouteCard(this.app, g, id, () => this.render()));
     const buys = Object.fromEntries(partners.map(([id]) => [id, partnerBuys(g, id)]));
+    const ids = partners.map(([id]) => id);
     const tradeable = GOOD_KEYS.filter((k) => t.settings[k]?.mode === 'export' || partners.some(([id]) => TRADE_PARTNERS[id].sells[k] || buys[id][k]));
     const rows = tradeable.map((k) => {
       const s = t.settings[k];
@@ -442,7 +477,9 @@ export class Advisors {
           onchange: (e) => { setTradeMode(g, k, e.target.value); this.render(); },
         }, h('option', { value: 'none', selected: s.mode === 'none' }, 'No trade'),
         canImport ? h('option', { value: 'import', selected: s.mode === 'import' }, priceRange(g, k, 'buy') ? `Import (buy ${rangeText(priceRange(g, k, 'buy'))})` : 'Import') : null,
-        canExport ? h('option', { value: 'export', selected: s.mode === 'export' }, priceRange(g, k, 'sell') ? `Export (sell ${rangeText(priceRange(g, k, 'sell'))})` : 'Export') : null)),
+        canExport ? h('option', { value: 'export', selected: s.mode === 'export' }, priceRange(g, k, 'sell') ? `Export (sell ${rangeText(priceRange(g, k, 'sell'))})` : 'Export') : null),
+        // Under the choice, not in a column of its own: the table is already wide on a phone.
+        this.partnersCell(g, k, s.mode, ids, buys)),
         h('td', {}, s.mode === 'none' ? '' : h('input', {
           type: 'number', min: 0, max: 3200, step: 100, value: s.level, style: { width: '80px' },
           title: s.mode === 'export' ? 'Keep at least this much in storage' : 'Buy until storage holds this much',
@@ -452,7 +489,7 @@ export class Advisors {
     });
     // Goods on Import from an open route that cannot come in now (horses with no Horse Ranch).
     const blocked = importWarnings(g);
-    const log = t.log.slice(0, 6).map((e) => h('div', { class: 'muted', style: { fontSize: '12px' } }, `${e.date} ${e.kind === 'sea' ? '⛵' : '🐪'} ${e.partner}: +${fmt(e.earned)} / −${fmt(e.spent)} Dn`));
+    const log = t.log.slice(0, 6).map((e) => h('div', { class: 'muted trade-log', style: { fontSize: '12px' } }, tradeLogLine(e)));
     return [
       h('div', { class: 'card empire-card' },
         empireMapCanvas(g),
@@ -468,6 +505,21 @@ export class Advisors {
       blocked.map((text) => h('div', { class: 'status warn', style: { marginTop: '6px' } }, text)),
       log.length ? h('h4', {}, 'Recent caravans and ships') : null, log,
     ];
+  }
+
+  /**
+   * A Goods row's partners: with how many of the partners that deal in the
+   * good this way its switch is on (sim/tradeSwitches.js), "to 3 of 5
+   * buyers", warned when none is. Empty on No trade.
+   */
+  partnersCell(g, good, mode, ids, buys) {
+    if (mode !== 'import' && mode !== 'export') return '';
+    const { on, all } = partnersFor(g, ids, good, mode, (id) => buys[id]);
+    if (!all) return '';
+    const who = mode === 'export' ? (all === 1 ? 'buyer' : 'buyers') : (all === 1 ? 'seller' : 'sellers');
+    const title = 'Partners you trade it with, of those that deal in it (open routes or not). Switch each on or off on its route card.';
+    if (!on) return h('span', { class: 'status warn trade-partners', style: { fontSize: '12px' }, title }, `${all === 1 ? 'its only' : 'every'} ${who.replace(/s$/, '')} switched off`);
+    return h('span', { class: 'muted trade-partners', style: { fontSize: '12px' }, title }, `${mode === 'export' ? 'to' : 'from'} ${on} of ${all} ${who}`);
   }
 
   tab_military(g) {

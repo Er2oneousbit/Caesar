@@ -292,7 +292,7 @@ export class EmpireView {
     // The card's note on docks changes as Docks are built and staffed, its prices each New Year.
     const docks = [...g.buildings.values()].filter((b) => b.def.kind === 'dock');
     const dockState = [docks.length, docks.some((b) => b.efficiency > 0)];
-    this.section('card', this.cardEl, JSON.stringify([sel, r && [r.open, r.sold, r.bought], !!g.map.seaEntry, dockState, missionYear(g)]), () => (sel
+    this.section('card', this.cardEl, JSON.stringify([sel, r && [r.open, r.sold, r.bought, r.off], !!g.map.seaEntry, dockState, missionYear(g)]), () => (sel
       ? [h('h4', {}, 'Trade partner'), tradeRouteCard(this.app, g, sel, () => { this.sigs.card = null; this.renderPanel(this.app.game); })]
       : [h('h4', {}, 'Trade partner'), h('div', { class: 'muted' }, Object.keys(g.city.trade.routes).length ? 'Click a city on the map for what it buys and sells, and to open a route to it.' : 'No trade partners are available in this scenario.')]));
   }

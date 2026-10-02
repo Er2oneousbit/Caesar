@@ -48,6 +48,7 @@ import { addBuilding, computeAccessRoad, killWalker, removeBuilding, sendHomeles
 import { walkTo } from './movement.js';
 import { logGoods } from './goodsLedger.js';
 import { clearRuin } from './ruins.js';
+import { partnerOn } from './tradeSwitches.js';
 
 // ---------------------------------------------------------------------------
 // Measuring a home
@@ -678,7 +679,8 @@ function makeVacant(game, b) {
 /**
  * Daily: wine sources the city has, for the top levels' "two kinds of wine":
  * one for a working (staffed) winery, plus one for each open trade route whose
- * partner sells wine, while wine is set to import.
+ * partner sells wine, while wine is set to import and switched on with that
+ * partner (sim/tradeSwitches.js).
  */
 export function updateWineSources(game) {
   const c = game.city;
@@ -690,7 +692,7 @@ export function updateWineSources(game) {
   if (trade && trade.settings.wine && trade.settings.wine.mode === 'import') {
     for (const [id, route] of Object.entries(trade.routes)) {
       const p = TRADE_PARTNERS[id];
-      if (route.open && p && p.sells && p.sells.wine) n++;
+      if (route.open && p && p.sells && p.sells.wine && partnerOn(game, id, 'wine')) n++;
     }
   }
   c.wineSources = n;

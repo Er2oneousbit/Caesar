@@ -1891,6 +1891,31 @@ try {
         && prices.capuaChips.includes('🍷 Wine 0/600 · 215 Dn') && prices.gadesChips.includes('🫒 Olives 0/1,500 · 58 Dn')
         && prices.options.some((t) => /^Import \(buy \d+ to \d+\)$/.test(t)) && prices.options.some((t) => /^Export \(sell \d+ to \d+\)$/.test(t)),
       JSON.stringify(prices));
+    // Trade by partner (sim/tradeSwitches.js): wine on Import, then Capua's
+    // wine switch unticked on its card. The game's switch goes off, the card
+    // redraws with it unticked and greyed, and the Goods row counts the
+    // sellers left on (Capua, Massilia and Rhodus sell wine).
+    await sp.selectOption('.modal tr:has(td:text-is("🍷 Wine")) select', 'import');
+    const wineSwitch = '.modal .card:has(h4:has-text("Capua")) label.trade-good:has-text("Wine") input.trade-switch';
+    await sp.click(wineSwitch);
+    const switched = await sp.evaluate(() => {
+      const g = window.colonia.game;
+      const card = [...document.querySelectorAll('.modal .card')].find((c) => c.querySelector('h4')?.textContent.includes('Capua') && c.querySelector('.route-prices'));
+      const box = [...(card?.querySelectorAll('label.trade-good') || [])].find((l) => l.textContent.includes('Wine'))?.querySelector('input.trade-switch');
+      return {
+        off: g.city.trade.routes.capua.off,
+        checked: box?.checked,
+        grey: box?.closest('label').classList.contains('off'),
+        row: document.querySelector('.modal tr:has(.trade-partners)')?.querySelector('.trade-partners')?.textContent,
+        mode: g.city.trade.settings.wine.mode,
+      };
+    });
+    check('trade by partner: unticking Capua\'s wine switches it off in the game and the Goods row says "from 2 of 3 sellers"',
+      switched.off?.wine === true && switched.checked === false && switched.grey && switched.mode === 'import' && switched.row === 'from 2 of 3 sellers' && serrors.length === 0,
+      JSON.stringify({ switched, serrors }));
+    await sp.click(wineSwitch);
+    const back = await sp.evaluate(() => window.colonia.game.city.trade.routes.capua.off);
+    check('trade by partner: ticking it again switches it back on', JSON.stringify(back) === '{}', JSON.stringify(back));
     await sp.close();
   }
 

@@ -80,7 +80,7 @@ export function describeNeed(m) {
       ? `Both a medicus nearby and a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles (has ${m.have === 0 ? 'neither' : m.hospital ? 'the hospital' : 'the medicus'}).`
       : `A medicus nearby, or a hospital within ${CONFIG.HOSPITAL_RADIUS} tiles.`;
     case 'goods': return `${GOODS[m.good].name} sold by a market vendor (needs a warehouse stocked with ${GOODS[m.good].name.toLowerCase()}${madeBy(m.good)}).`;
-    case 'wine': return `Two sources of wine in the city (has ${m.have}): a working winery, and each open trade route that sells wine while wine is set to import.`;
+    case 'wine': return `Two sources of wine in the city (has ${m.have}): a working winery, and each open trade route that sells wine while wine is set to import and switched on with that partner.`;
     case 'des': return `Desirability ${m.need} (now ${m.have}). Gardens, statues, plazas, temples and grand homes help; humble homes, industry and storage hurt.`;
     case 'space': return `Room to grow into a ${m.need}×${m.need} home: homes of its level or lower, clear land or gardens beside it.`;
     case 'sick': return `To be well again: ${m.have} day${m.have === 1 ? '' : 's'} of sickness left, or a physician's visit.`;

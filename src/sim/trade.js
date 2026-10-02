@@ -27,6 +27,10 @@
  *   - Per good, the player chooses: none / import / export, plus a stock level:
  *       export: sell only while city stock is ABOVE the level
  *       import: buy only while city stock is BELOW the level
+ *     and per partner, on its route card, a switch for each good it deals
+ *     in (sim/tradeSwitches.js): a good trades with a partner only while
+ *     its setting allows it and that partner's switch is on. A partner with
+ *     every switch off sends no traders.
  *   - Each partner buys/sells at most a fixed amount per good per year. What
  *     it buys may be set by the mission and change during it (demand in
  *     force, sim/tradeDemand.js); tradeMonthly tells the player when.
@@ -58,6 +62,7 @@ import { partnerBuys, routeInterval, buysInForce, demandChangeAt } from './trade
 import { homeSiteId } from '../data/sites.js';
 import { tripDays } from '../data/empireRoutes.js';
 import { tradePrice } from './prices.js';
+import { partnerOn, partnerIdle } from './tradeSwitches.js';
 
 /** 'land' or 'sea' */
 export function routeKind(partnerId) {
@@ -74,7 +79,7 @@ export function newTradeState(partnerIds) {
   const routes = {};
   for (const id of partnerIds) {
     if (!TRADE_PARTNERS[id]) continue;
-    routes[id] = { open: false, sold: {}, bought: {}, nextVisit: 0, visits: 0 };
+    routes[id] = { open: false, sold: {}, bought: {}, nextVisit: 0, visits: 0, off: {} };
   }
   const settings = {};
   for (const g of GOOD_KEYS) settings[g] = { mode: 'none', level: 400 };
@@ -145,6 +150,13 @@ export function updateTrade(game) {
     const sea = routeKind(id) === 'sea';
     // The usual range, or shorter for a route busier than its traders carry (sim/tradeDemand.js).
     const [a, b] = routeInterval(game, id);
+    // Every good it deals in switched off: the wait runs as usual (the same
+    // draw), but nobody sets out (sim/tradeSwitches.js).
+    if (partnerIdle(game, id, partnerBuys(game, id))) {
+      r.nextVisit = game.time.totalDays + game.rng.range(a, b);
+      delete r.waiting;
+      continue;
+    }
     if (sea) {
       // A ship with nowhere to tie up tries again a few days later. One
       // turned away only because every staffed Emporium is taken waits
@@ -443,11 +455,11 @@ export function exportClaims(game) {
   return { open, byShip, atWh, byPartner };
 }
 
-/** A partner's yearly quota left for a good it buys, less lots its ships' workers are bringing. */
+/** A partner's yearly quota left for a good it buys, less lots its ships' workers are bringing (0: switched off with it). */
 function exportQuotaLeft(game, partnerId, good, claims) {
   const p = TRADE_PARTNERS[partnerId];
   const route = game.city.trade.routes[partnerId];
-  if (!p || !route) return 0;
+  if (!p || !route || !partnerOn(game, partnerId, good)) return 0;
   return (partnerBuys(game, partnerId)[good] || 0) - (route.sold[good] || 0) - (claims.byPartner.get(partnerId)?.[good] || 0);
 }
 
@@ -462,7 +474,8 @@ export function importsComing(game, good, exceptShip = 0, ships = true) {
   let n = 0;
   for (const w of game.walkers.values()) {
     if (w.dead) continue;
-    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) n += w.unload?.[good] || 0;
+    // (A ship whose partner is switched off for the good lands none of it: runCrane drops it.)
+    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) n += partnerOn(game, w.partner, good) ? w.unload?.[good] || 0 : 0;
     // A dock worker's load of imports, to storage or back to the quay (not an export: that has a claim).
     else if (w.type === 'cart' && !w.claim && (w.state === 'deliver' || w.state === 'return') && w.cargo?.good === good && game.buildings.get(w.origin)?.def.kind === 'dock') n += w.cargo.amount;
   }
@@ -486,7 +499,7 @@ export function keptImportRoom(game, good, exceptShip = 0, ships = true) {
   for (const b of game.buildings.values()) if (b.def.kind === 'dock') room -= b.stock[good] || 0;
   for (const w of game.walkers.values()) {
     if (w.dead) continue;
-    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) room -= w.unload?.[good] || 0;
+    if (ships && w.type === 'ship' && w.state === 'docked' && w.id !== exceptShip) room -= partnerOn(game, w.partner, good) ? w.unload?.[good] || 0 : 0;
     else if (w.type === 'cart' && !w.claim && !w.reserve && w.cargo?.good === good && game.buildings.get(w.origin)?.def.kind === 'dock') room -= w.cargo.amount;
   }
   return Math.max(0, room);
@@ -495,14 +508,14 @@ export function keptImportRoom(game, good, exceptShip = 0, ships = true) {
 /**
  * The Trade advisor's warnings: for each good set to Import that an open
  * route sells but that cannot come in now (importBlockedText), its reason.
- * Nothing for a good not on Import: a player who does not buy horses need
- * not be told to build a ranch for them.
+ * Nothing for a good not on Import, or sold only by partners switched off
+ * for it: a player who does not buy horses need not be told to build a ranch.
  */
 export function importWarnings(game) {
   const { routes, settings } = game.city.trade;
   const open = Object.keys(routes).filter((id) => routes[id].open && TRADE_PARTNERS[id]);
   return GOOD_KEYS
-    .filter((g) => settings[g]?.mode === 'import' && open.some((id) => TRADE_PARTNERS[id].sells[g]))
+    .filter((g) => settings[g]?.mode === 'import' && open.some((id) => TRADE_PARTNERS[id].sells[g] && partnerOn(game, id, g)))
     .map((g) => importBlockedText(game, g))
     .filter(Boolean);
 }
@@ -540,11 +553,11 @@ function exportSources(game, dock) {
  * What a ship will trade, fixed when it ties up (amounts are not worked out
  * again, so goods on the way never count twice; the rules that can change
  * meanwhile are checked again lot by lot):
- *   unload: per good the partner sells and you import, the least of its
+ *   unload: per good the partner sells and you import from it, the least of its
  *           quota left, the shortfall below your import level (less imports
  *           already on their way: importsComing) and what is left of
  *           SHIP_MAX_TRADE;
- *   wants:  per good the partner buys and you export, the least of its quota
+ *   wants:  per good the partner buys and you export to it, the least of its quota
  *           left (less lots its ships' workers are bringing), the surplus
  *           above your export level (less lots other workers have claimed),
  *           what is left of SHIP_MAX_TRADE, and what the quay and the
@@ -561,7 +574,7 @@ export function shipManifest(game, partnerId, dock, exceptShip = 0) {
   let budget = CONFIG.SHIP_MAX_TRADE;
   for (const [good, cap] of Object.entries(p.sells)) {
     const s = settings[good];
-    if (!s || s.mode !== 'import') continue;
+    if (!s || s.mode !== 'import' || !partnerOn(game, partnerId, good)) continue;
     // Horses only as many as the ranches (and barracks) can take in.
     const room = GOODS[good].keptAt ? keptImportRoom(game, good, exceptShip) : Infinity;
     const n = lots(Math.min(cap - (route.bought[good] || 0), s.level - cityStock(game, good) - importsComing(game, good, exceptShip), budget, room));
@@ -574,7 +587,7 @@ export function shipManifest(game, partnerId, dock, exceptShip = 0) {
   budget = CONFIG.SHIP_MAX_TRADE;
   for (const [good, cap] of Object.entries(partnerBuys(game, partnerId))) {
     const s = settings[good];
-    if (!s || s.mode !== 'export') continue;
+    if (!s || s.mode !== 'export' || !partnerOn(game, partnerId, good)) continue;
     let held = dock.stock[good] || 0;
     for (const b of sources) held += b.stock[good] || 0;
     const surplus = cityStock(game, good) - s.level - (claims.open[good] || 0);
@@ -641,7 +654,8 @@ function stayDone(game, w) {
 
 /**
  * The most of `good` the crane can land now (0: none, -1: drop the good, it
- * is no longer on Import or the partner's quota is used up): a lot of up
+ * is no longer on Import, the partner's switch for it is off, or its quota
+ * is used up): a lot of up
  * to DOCK_LOAD, as much as the quay has room for and the city can pay.
  * `level`: also no more than the city is still short of its import level
  * (a caravan or another ship may have filled it meanwhile), counting dock
@@ -654,7 +668,7 @@ function landable(game, w, dock, good, level = false) {
   const s = game.city.trade.settings[good];
   const p = TRADE_PARTNERS[w.partner];
   const route = game.city.trade.routes[w.partner];
-  if (!s || s.mode !== 'import' || !p || !route) return -1;
+  if (!s || s.mode !== 'import' || !p || !route || !partnerOn(game, w.partner, good)) return -1;
   const quota = (p.sells[good] || 0) - (route.bought[good] || 0);
   if (quota < CONFIG.CART_CAPACITY) return -1;
   const kept = !!GOODS[good].keptAt;
@@ -716,13 +730,16 @@ function land(game, w, dock, good, n) {
 /**
  * Hand up to `n` units of `good` to the ship: the city is paid and the
  * partner's quota counts them now. Only while the ship still wants the good,
- * it is still on Export and the quota has room. @returns units handed over
+ * it is still on Export, the partner's switch for it is on and the quota has
+ * room. @returns units handed over
  */
 function handOver(game, w, good, n) {
   const s = game.city.trade.settings[good];
   const p = TRADE_PARTNERS[w.partner];
   const route = game.city.trade.routes[w.partner];
   if (!s || s.mode !== 'export' || !p || !route) return 0;
+  // Switched off with this partner meanwhile: it buys no more of it this stay.
+  if (!partnerOn(game, w.partner, good)) { delete w.wants[good]; return 0; }
   const quota = (partnerBuys(game, w.partner)[good] || 0) - (route.sold[good] || 0);
   // The partner bought its year's worth meanwhile (another of its ships): it wants no more.
   if (quota < CONFIG.CART_CAPACITY) delete w.wants[good];
@@ -751,6 +768,10 @@ function handOverFromQuay(game, w, dock) {
   const mine = claims.byShip.get(w.id) || {};
   for (const good of Object.keys(w.wants)) {
     const s = settings[good];
+    // Switched off with this partner meanwhile: it no longer wants the good,
+    // so its panel stops listing it and dock workers cart that good on the
+    // quay to storage (sendQuayLot leaves alone what the ship wants).
+    if (!partnerOn(game, w.partner, good)) { delete w.wants[good]; continue; }
     if (!s || s.mode !== 'export') continue;
     const n = lots(Math.min(dock.stock[good] || 0, w.wants[good] - (mine[good] || 0), cityStock(game, good) - s.level - (claims.open[good] || 0)));
     if (n <= 0) continue;
@@ -888,8 +909,9 @@ export function dockWorkerOnward(game, w) {
 
 /**
  * A dock worker reached the warehouse it is fetching from: it loads its lot,
- * checking again that the ship is still moored, the good still on Export,
- * and that the city keeps its export level (other open claims counted).
+ * checking again that the ship is still moored, the good still on Export
+ * (and switched on with the ship's partner), and that the city keeps its
+ * export level (other open claims counted).
  * Nothing to take: the claim is released and it tries another fetch from
  * here (twice at most), else it heads home empty.
  */
@@ -900,7 +922,7 @@ export function dockFetchArrive(game, w) {
   const ship = mooredShip(game, dock);
   const s = c ? game.city.trade.settings[c.good] : null;
   let got = 0;
-  if (c && wh && (wh.def.kind === 'warehouse' || isStable(wh, c.good)) && ship && ship.id === c.ship && s && s.mode === 'export') {
+  if (c && wh && (wh.def.kind === 'warehouse' || isStable(wh, c.good)) && ship && ship.id === c.ship && s && s.mode === 'export' && partnerOn(game, ship.partner, c.good)) {
     const others = (exportClaims(game).open[c.good] || 0) - c.amount;
     got = takeGoods(wh, c.good, lots(Math.min(c.amount, wh.stock[c.good] || 0, cityStock(game, c.good) - s.level - others)));
   }
@@ -973,13 +995,13 @@ export function updateDock(game, b) {
 // Shared trading rules
 // ---------------------------------------------------------------------------
 
-/** The partner buys goods marked for export, taking them from `sources(good)` in order. */
+/** The partner buys goods marked for export (and switched on with it), taking them from `sources(good)` in order. */
 function sellExports(game, partnerId, sourcesFor, budget, out) {
   const route = game.city.trade.routes[partnerId];
   const settings = game.city.trade.settings;
   for (const [good, cap] of Object.entries(partnerBuys(game, partnerId))) {
     const s = settings[good];
-    if (!s || s.mode !== 'export' || budget <= 0) continue;
+    if (!s || s.mode !== 'export' || budget <= 0 || !partnerOn(game, partnerId, good)) continue;
     const quota = cap - (route.sold[good] || 0);
     const surplus = cityStock(game, good) - s.level;
     let want = Math.floor(Math.min(quota, surplus, budget) / 100) * 100;
@@ -1003,7 +1025,7 @@ function sellExports(game, partnerId, sourcesFor, budget, out) {
 }
 
 /**
- * The partner sells goods marked for import.
+ * The partner sells goods marked for import (and switched on with it).
  * @param {(good:string)=>number} spaceFor   room for this good at the destination
  * @param {(good:string, n:number)=>void} put  unload n units there
  */
@@ -1013,7 +1035,7 @@ function buyImports(game, partnerId, budget, out, spaceFor, put) {
   const settings = game.city.trade.settings;
   for (const [good, cap] of Object.entries(p.sells)) {
     const s = settings[good];
-    if (!s || s.mode !== 'import' || budget <= 0) continue;
+    if (!s || s.mode !== 'import' || budget <= 0 || !partnerOn(game, partnerId, good)) continue;
     const quota = cap - (route.bought[good] || 0);
     // Imports a moored ship still has aboard, or dock workers are carting, count as on their way.
     const shortfall = s.level - cityStock(game, good) - importsComing(game, good);

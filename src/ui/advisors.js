@@ -27,12 +27,13 @@
  */
 
 import { h, mount, fmt, pct, bar, kv } from './dom.js';
+import { openMessage, clickHint } from './messages.js';
 import { CONFIG } from '../config.js';
 import { LABOR_CATEGORIES, ENT_BASE_MAX, VENUE_SEATS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS, GOOD_KEYS, RECRUIT_SOURCE, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
-import { threatSummary, garrisonCounts, recallFort } from '../sim/military.js';
+import { threatSummary, garrisonCounts, recallFort, RUMOUR_MONTHS, SCOUT_MONTHS } from '../sim/military.js';
 import { squadronCounts, recallStation, fleetSummary, navalNeed } from '../sim/navy.js';
 import { trainedTotals } from '../sim/training.js';
 import { templeCount } from './trainingInfo.js';
@@ -465,10 +466,10 @@ export class Advisors {
     const threat = h('div', { class: 'card' },
       h('h4', {}, 'Threat'),
       h('div', { class: `status ${t.level === 'attack' ? 'bad' : t.level === 'warned' ? 'warn' : 'good'}` }, t.level === 'calm' ? 'Scouts see no warband near the province.' : t.text),
-      m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Raiders come from the map edges${seaOk && m.seaRaids ? `, and about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids by sea` : ''}. Scouts warn about 3 months ahead; warbands grow with your city.`) : null,
+      m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Raiders come from the map edges${seaOk && m.seaRaids ? `, and about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids by sea` : ''}. Word of a warband comes about ${RUMOUR_MONTHS} months ahead, the scouts' report of its size and side about ${SCOUT_MONTHS}; warbands grow with your city.`) : null,
       m.settings && seaOk ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `Sea raids: ${m.seaRaids ? 'on' : 'off'} (Settings).`) : null,
       t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, t.legion && t.enemies === t.legion ? 'Show me the legions' : 'Show me the raiders') : null,
-      t.level === 'warned' ? h('button', { class: 'btn small', style: { marginTop: '6px' }, title: 'Where the warband is and the side it will enter by (E)', onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map') : null);
+      t.level === 'warned' ? h('button', { class: 'btn small', style: { marginTop: '6px' }, title: 'Where the warband is and the side it will enter by (E)', onclick: () => this.app.ui.openEmpire(t.legion ? 'legion' : 'warband') }, 'Show on the empire map') : null);
     const army = h('div', { class: 'card' },
       h('h4', {}, 'Army'),
       kv('Soldiers', fmt(soldiers)),
@@ -768,7 +769,7 @@ export class Advisors {
       h('div', { class: `status ${t.level === 'none' ? 'good' : t.level}` }, t.status),
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, t.note),
       t.show ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, 'Show me the legions') : null,
-      t.map ? h('button', { class: 'btn small', style: { marginTop: '6px' }, onclick: () => this.app.ui.openEmpire() }, 'Show on the empire map') : null);
+      t.map ? h('button', { class: 'btn small', style: { marginTop: '6px' }, onclick: () => this.app.ui.openEmpire('legion') }, 'Show on the empire map') : null);
   }
 
   /**
@@ -851,8 +852,9 @@ export class Advisors {
   tab_messages(g) {
     if (!g.messages.length) return h('div', { class: 'muted' }, 'No messages yet.');
     return h('div', {}, g.messages.map((m) => h('div', {
-      class: `toast ${m.level}`, style: { animation: 'none', marginBottom: '5px' },
-      onclick: () => { if (m.x !== undefined) { this.app.renderer.camera.glideToTile(m.x, m.y); this.app.ui.closeModal(); } },
+      class: `toast ${m.level}`, style: { animation: 'none', marginBottom: '5px' }, title: clickHint(m),
+      // (The empire map takes the advisors' place; a glide needs them closed.)
+      onclick: () => { if (m.empire) openMessage(this.app, m); else if (openMessage(this.app, m)) this.app.ui.closeModal(); },
     }, h('span', { class: 'date' }, m.date), m.text)));
   }
 }

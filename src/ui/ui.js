@@ -222,11 +222,16 @@ export class UI {
     this.showModal(this.advisors.element(tab), { pause: false, kind: 'advisors' });
   }
 
-  /** The Empire screen: runs with the game, like the Advisors, so travelers move. */
-  openEmpire() {
+  /**
+   * The Empire screen: runs with the game, like the Advisors, so travelers
+   * move. `focus`: a traveler kind ('warband', 'legion') to pick out, for a
+   * message or a button about it.
+   */
+  openEmpire(focus = null) {
     if (!this.app.game) return;
     this.showModal(this.empire.element(), { pause: false, kind: 'empire' });
     this.empire.update(0); // drawn before the next frame, not one frame late
+    if (focus) this.empire.focus(focus);
   }
 
   /** E: open the Empire screen, or close it when it is open. */

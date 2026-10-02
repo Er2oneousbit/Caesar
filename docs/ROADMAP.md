@@ -356,7 +356,7 @@ Fixes from a review of v0.6:
 
 ## Caesar III parity: what the original had that Colonia does not (yet)
 
-Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0).
+Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0), #24 staged raid warnings and the legions' reminders (next release).
 
 * **#7** **Map rotation** (view the city from 4 angles).
 * **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
@@ -364,7 +364,6 @@ Open items only; each keeps its number (#n) for good, so the release notes and t
 * **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
 * **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
-* **#24** **Raid warnings as the enemy closes in**: today the scouts warn once, about 3 months ahead (size, direction, land or sea), the empire map shows the warband coming, and the next message is the landing. The original warned several times as an army drew near; match its stages (when the first sighting comes and how many reminders follow, from the reference), each saying how far off it is, how big, and from where, with a click to the empire map; the same for Caesar's legions on their 12-month march.
 * **#21** **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
 * **#22** **Hall of Fame** for the best career scores.
 * **#23** **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.

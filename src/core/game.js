@@ -213,9 +213,15 @@ export class Game {
     for (const k of keys) this.dirty[k] = true;
   }
 
-  /** Player-facing notification. level: info | good | warn | bad | imperial */
-  message(text, level = 'info', x, y) {
+  /**
+   * Player-facing notification. level: info | good | warn | bad | imperial.
+   * A click on it glides to tile `x`, `y`; or, with `opts.empire` (a
+   * traveler kind of ui/empireMap.js: 'warband', 'legion'), opens the empire
+   * map with that traveler picked out, for news of something still on its way.
+   */
+  message(text, level = 'info', x, y, opts = null) {
     const m = { id: this.nextMessageId++, text, level, x, y, date: this.time.shortLabel() };
+    if (opts && opts.empire) m.empire = opts.empire;
     this.messages.unshift(m);
     if (this.messages.length > 150) this.messages.pop();
     this.events.emit('message', m);

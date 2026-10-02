@@ -23,7 +23,7 @@ import { militaryMonthly } from '../src/sim/military.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { serializeGame } from '../src/core/save.js';
 import {
-  empireTravelers, tripDays, routePoint, routePath, warbandPoint, travelerLabel, empireHitAt, isDrawn, ROME_POS, SCOUT_MONTHS,
+  empireTravelers, tripDays, routePoint, routePath, warbandPoint, travelerLabel, empireHitAt, isDrawn, ROME_POS, SCOUT_MONTHS, RUMOUR_MONTHS, FRONTIER_DIR,
 } from '../src/ui/empireMap.js';
 import { at, isLand, ROUTES, MAP_W, MAP_H, LON_WEST, LON_EAST, LAT_NORTH, LAT_SOUTH } from '../src/data/empireGeo.js';
 import { newGame, findFree } from './helpers.mjs';
@@ -193,7 +193,7 @@ test('empire: ships only where ships can come; travelers are listed by arrival',
   assert.deepEqual(empireTravelers(land), []);
 });
 
-test('empire: a scouted warband closes in from its side over the three months, then raids show at the city', () => {
+test('empire: a scouted warband closes in from its side over its last three months, then raids show at the city', () => {
   const game = newGame({ invasions: 'occasional' });
   const m = game.military;
   game.city.population = 600;
@@ -208,15 +208,15 @@ test('empire: a scouted warband closes in from its side over the three months, t
   assert.equal(w.dir, m.warned.dir);
   assert.deepEqual(w.origin, m.warned.origin, 'the edge it enters by');
   assert.equal(w.months, 3);
-  assert.equal(w.frac, 0);
-  assert.ok(near(w.pos, warbandPoint(w.dir, 0)));
+  assert.equal(w.frac, 0.5, 'half way in: its banner runs over the whole 6 months since word came');
+  assert.ok(near(w.pos, warbandPoint(w.dir, 0.5)));
   assert.equal(travelerLabel(w), `Warband of ${w.size} from the ${w.dir}, in 3 months`);
   // Two and a half months later it is most of the way in, one month to go.
   game.time.totalMonths += 2;
   game.time.day = CONFIG.DAYS_PER_MONTH / 2;
   w = empireTravelers(game).find((t) => t.kind === 'warband');
   assert.equal(w.months, 1);
-  assert.ok(Math.abs(w.frac - 2.5 / 3) < 1e-9, `frac ${w.frac}`);
+  assert.ok(Math.abs(w.frac - (1 - 0.5 / RUMOUR_MONTHS)) < 1e-9, `frac ${w.frac}`);
   assert.equal(travelerLabel(w), `Warband of ${w.size} from the ${w.dir}, in 1 month`);
   // It walks straight at the province from its side of the map.
   const far = warbandPoint(w.dir, 0);
@@ -233,6 +233,38 @@ test('empire: a scouted warband closes in from its side over the three months, t
   const raid = list.find((t) => t.kind === 'raid');
   assert.ok(raid && raid.size > 0, 'raiders shown');
   assert.match(travelerLabel(raid), /^Raiders in the province: \d+ left$/);
+});
+
+test('empire: a warband only rumoured stands at the frontier with no number, then moves to its side when scouted', () => {
+  const game = newGame({ invasions: 'occasional' });
+  const m = game.military;
+  game.city.population = 600;
+  const spot = findFree(game, 1, 1);
+  addBuilding(game, 'house', spot.x, spot.y);
+  game.time.totalMonths = m.nextRaidMonth - RUMOUR_MONTHS;
+  militaryMonthly(game);
+  assert.equal(m.warnStage, 1, 'word of it');
+  let w = empireTravelers(game).find((t) => t.kind === 'warband');
+  assert.ok(w && w.rumour, 'on the map as a rumour');
+  assert.equal(w.size, null);
+  assert.equal(w.dir, null);
+  assert.equal(w.origin, null);
+  assert.equal(w.frac, 0);
+  assert.ok(near(w.pos, warbandPoint(FRONTIER_DIR, 0)));
+  assert.equal(travelerLabel(w), 'Warband gathering beyond the frontier, in about 6 months');
+  // Overland all the way: a band of unknown road is not drawn at sea.
+  assert.ok(isLand(warbandPoint(FRONTIER_DIR, 0)) && isLand(warbandPoint(FRONTIER_DIR, 0.5)));
+  game.time.totalMonths += 2;
+  w = empireTravelers(game).find((t) => t.kind === 'warband');
+  assert.equal(travelerLabel(w), 'Warband gathering beyond the frontier, in about 4 months');
+  assert.ok(Math.abs(w.frac - 2 / RUMOUR_MONTHS) < 1e-9);
+  // The scouts find it: its side, its size, half way in.
+  game.time.totalMonths = m.nextRaidMonth - SCOUT_MONTHS;
+  militaryMonthly(game);
+  w = empireTravelers(game).find((t) => t.kind === 'warband');
+  assert.equal(w.rumour, undefined);
+  assert.equal(w.dir, m.warned.dir);
+  assert.ok(near(w.pos, warbandPoint(w.dir, 0.5)));
 });
 
 test('empire: a click finds the traveler, the city, Rome or the province under it', () => {

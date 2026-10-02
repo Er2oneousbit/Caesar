@@ -18,8 +18,10 @@
  * reach the nearest building, so every raider just walks downhill. Walls cost
  * extra in that field, so raiders pick the cheapest place to break through.
  *
- * Invasions are announced ~3 months ahead, then a warband spawns at a map
- * edge that can reach the city's homes. It flees when mostly destroyed, or
+ * Invasions are announced in three stages (raidWarning below): word of a
+ * warband about 6 months ahead, the scouts' report of its size and road
+ * about 3 months ahead, and a last warning a month ahead. Then a warband
+ * spawns at a map edge that can reach the city's homes. It flees when mostly destroyed, or
  * withdraws (with plunder if it reached the city) after a while, so an
  * undefended city is punished but not wiped out. Where ships can sail, about
  * a third of raids come by sea instead: raider ships put the warband ashore
@@ -43,7 +45,7 @@ import { transact } from './economy.js';
 import { igniteBuilding, collapseBuilding, riskRates } from './risk.js';
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
-import { seaRaidPlan, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
+import { seaRaidPlan, seaLandingNow, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
 import { recruitDetour, recruitTrained, updateDrill, drillSpot, drilled, endDrill, abandonDrill } from './training.js';
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
 import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, AWAY_MAX_TICKS } from './battle.js';
@@ -62,6 +64,14 @@ const TOWER_COOLDOWN = 30; // ticks at full staff
 const RAID_MAX_DAYS = 80; // raiders give up and withdraw after this long
 const RAID_MAX_LOSSES = 10; // ...or after destroying this many buildings
 export const RAID_MIN_POP = 300; // hamlets smaller than this are not worth raiding (the raid is put off)
+
+// The warnings before a raid, in months before it strikes (militaryMonthly).
+// Only the scouting at SCOUT_MONTHS draws anything (the side, by the game's
+// stream, and land or sea, on a stream of its own); the rumour before it and
+// the last warning after it only read state, so they change no raid.
+export const RUMOUR_MONTHS = 6; // traders' word: a warband is gathering, not yet where or how big
+export const SCOUT_MONTHS = 3; // the scouts fix its side, size and road (land or sea)
+export const DOOR_MONTHS = 1; // a month away: the last warning
 
 // ---------------------------------------------------------------------------
 // State
@@ -82,7 +92,8 @@ export function newMilitaryState(scenario, time, flags = {}) {
   return {
     settings,
     nextRaidMonth: settings ? time.totalMonths + wait : null,
-    warned: null, // { origin:{x,y}, size, dir }
+    warned: null, // { origin:{x,y}, size, dir, sea?, landing?, noShore? }: the scouts' report
+    warnStage: 0, // warnings given for the coming raid: 0 none, 1 rumour, 2 scouted, 3 a month away
     active: null, // { id, origin, size, killed, buildingsLost, startDay, fleeing, plundered }
     nextInvasionId: 1,
     lastLossMessageDay: -99,
@@ -1142,36 +1153,112 @@ export function militaryMonthly(game) {
   if (upkeep > 0) transact(game, 'military', -upkeep);
   m.lastUpkeep = upkeep;
 
-  if (!m.settings || m.nextRaidMonth === null || m.active) return;
-  const now = game.time.totalMonths;
+  if (!m.settings || m.nextRaidMonth === null) {
+    // Raids switched off (only a debug flag can, mid-game): nothing is coming.
+    m.warned = null;
+    m.warnStage = 0;
+    return;
+  }
+  if (m.active) return;
+  raidWarning(game, m.nextRaidMonth - game.time.totalMonths);
+}
+
+/**
+ * The coming raid, `left` months before it strikes: at most one message a
+ * month, the latest stage due. A raid dated inside a stage's lead (a short
+ * interval, a raid put off, a save from before the stages) skips the stages
+ * already past rather than bunching them up:
+ *
+ *   left <= RUMOUR_MONTHS  traders' word (stage 1)
+ *   left <= SCOUT_MONTHS   the scouts' report (stage 2): side, size, land or sea
+ *   left <= DOOR_MONTHS    a month away (stage 3)
+ *   left <= 0              the raid
+ *
+ * A city under RAID_MIN_POP hears nothing, and at the scouts' check its raid
+ * is put off 6 months; if anything had been said, the warband "drifted away".
+ */
+function raidWarning(game, left) {
+  const m = game.military;
   if (game.city.population < RAID_MIN_POP) {
     // Nothing worth raiding yet: push the date back.
-    if (now >= m.nextRaidMonth - 3) {
-      m.nextRaidMonth = now + 6;
-      if (m.warned) game.message('Scouts report the warband has drifted away, for now.', 'info');
+    if (left <= SCOUT_MONTHS) {
+      m.nextRaidMonth = game.time.totalMonths + 6;
+      if (m.warned || m.warnStage > 0) game.message('Scouts report the warband has drifted away, for now.', 'info');
       m.warned = null;
+      m.warnStage = 0;
     }
     return;
   }
-  if (!m.warned && now >= m.nextRaidMonth - 3) {
-    // About a third of raids come by sea where ships can sail (sim/navy.js):
-    // decided now, on a random stream of its own, so a raid by land draws
-    // exactly what it always did.
-    const sea = seaRaidPlan(game);
-    if (sea) {
-      const size = raidSize(game);
-      const e = game.map.seaEntry;
-      m.warned = { origin: { x: e.x, y: e.y }, size, dir: screenDirection(game.map, e.x, e.y), sea: true, landing: { x: sea.x, y: sea.y } };
-      game.message(`Scouts report about ${size} raiders taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} in about 3 months. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y);
-    } else {
-      const origin = pickRaidOrigin(game);
-      m.warned = { origin, size: raidSize(game), dir: screenDirection(game.map, origin.x, origin.y) };
-      game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}. They will strike in about 3 months. Train soldiers and man your towers!`, 'warn', origin.x, origin.y);
-    }
-    game.events.emit('sound', { name: 'horn' });
-  } else if (m.warned && now >= m.nextRaidMonth) {
-    launchInvasion(game, m.warned.origin, m.warned.size, { sea: !!m.warned.sea });
+  if (!m.warned && left <= SCOUT_MONTHS) scoutRaid(game, left);
+  else if (m.warned && left <= 0) launchInvasion(game, m.warned.origin, m.warned.size, { sea: !!m.warned.sea });
+  else if (m.warned && left <= DOOR_MONTHS && m.warnStage < 3) raidAtTheDoor(game);
+  else if (!m.warned && left <= RUMOUR_MONTHS && m.warnStage < 1) {
+    m.warnStage = 1;
+    // Nothing is drawn yet (side, size and road are the scouts' to find), so
+    // the rumour gives only the time.
+    game.message(`Traders speak of a warband gathering beyond the frontier, about ${monthsAway(left)}. Scouts will learn its strength and its road nearer the time.`, 'warn', undefined, undefined, { empire: 'warband' });
   }
+}
+
+/** "6 months away", "a month away" (or "about to strike" when the day has come). */
+function monthsAway(n) {
+  if (n <= 0) return 'about to strike';
+  return n === 1 ? 'a month away' : `${n} months away`;
+}
+
+/**
+ * Stage 2, the scouts' report: the warband's side and size, and whether it
+ * comes by sea, fixed now and kept in `warned` until the raid. About a third
+ * of raids come by sea where ships can sail (sim/navy.js): decided here, on a
+ * random stream of its own, so a raid by land draws exactly what it always
+ * did. A click opens the empire map on the warband, whose card shows the edge
+ * or the landing.
+ */
+function scoutRaid(game, left) {
+  const m = game.military;
+  const sea = seaRaidPlan(game);
+  if (sea) {
+    const size = raidSize(game);
+    const e = game.map.seaEntry;
+    const when = left <= 0 ? 'any day now' : `in about ${left === 1 ? 'a month' : `${left} months`}`;
+    m.warned = { origin: { x: e.x, y: e.y }, size, dir: screenDirection(game.map, e.x, e.y), sea: true, landing: { x: sea.x, y: sea.y } };
+    game.message(`Scouts report about ${size} raiders taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} ${when}. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y, { empire: 'warband' });
+  } else {
+    const origin = pickRaidOrigin(game);
+    m.warned = { origin, size: raidSize(game), dir: screenDirection(game.map, origin.x, origin.y) };
+    game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}, ${monthsAway(left)}. Train soldiers and man your towers!`, 'warn', origin.x, origin.y, { empire: 'warband' });
+  }
+  m.warnStage = 2;
+  game.events.emit('sound', { name: 'horn' });
+}
+
+/**
+ * Stage 3, a month before the raid; a click glides to where it will come in.
+ * By land: its side again. By sea: the landing is looked for again (the city
+ * may have built along that shore since the scouts' report; no random
+ * draws) and the report is corrected to it. With none (or the Sea raids
+ * switch turned off since) the raid will come over land, from a side drawn
+ * only at the launch, so the message cannot name one. `warned.sea` stays as
+ * it is: the launch decides, exactly as before these warnings.
+ */
+function raidAtTheDoor(game) {
+  const m = game.military;
+  const w = m.warned;
+  m.warnStage = 3;
+  if (!w.sea) {
+    game.message(`The warband of about ${w.size} raiders is a month away and will come in from the ${w.dir}. Man the walls and towers!`, 'warn', w.origin.x, w.origin.y);
+    return;
+  }
+  const landing = seaLandingNow(game);
+  if (!landing) {
+    w.noShore = true;
+    game.message(`Raider ships are a month off the coast, about ${w.size} raiders, but they can find no shore to land on. Expect them overland, from a side the scouts cannot yet tell.`, 'warn', undefined, undefined, { empire: 'warband' });
+    return;
+  }
+  const moved = !w.landing || w.landing.x !== landing.x || w.landing.y !== landing.y;
+  w.landing = { x: landing.x, y: landing.y };
+  delete w.noShore;
+  game.message(`Raider ships are a month off the coast: about ${w.size} raiders, making for the shore near ${landing.x}, ${landing.y}${moved ? ' (not where the scouts first thought)' : ''}. Man the shore and send out the fleet!`, 'warn', landing.x, landing.y);
 }
 
 /** One warrior of a warband, one roll: horsemen from 1,200 people, slingers from 700. */
@@ -1201,6 +1288,7 @@ export function launchInvasion(game, origin, size, { sea = false } = {}) {
   const inv = { id: m.nextInvasionId++, origin, size, killed: 0, buildingsLost: 0, startDay: game.time.totalDays, fleeing: false, reached: false };
   m.active = inv;
   m.warned = null;
+  m.warnStage = 0; // (a raid from the console too: the next date is drawn when it ends, its warnings from nothing)
   m.stats.raids++;
   for (let k = 0; k < size; k++) {
     const type = warbandType(game);
@@ -1315,9 +1403,16 @@ export function threatSummary(game) {
     const who = [legion ? `${legion} of Caesar's legionaries` : '', raiders ? `${raiders} raiders` : ''].filter(Boolean).join(' and ');
     return { level: 'attack', text: `${who} in the province${ships ? ` (${ships} raider ship${ships === 1 ? '' : 's'} offshore)` : ''}${marching ? `. ${marching}` : ''}`, enemies, ships, legion, label: `⚔ ${enemies}` };
   }
+  const months = Math.max(0, (m.nextRaidMonth ?? 0) - game.time.totalMonths);
+  const inMonths = `${months} month${months === 1 ? '' : 's'}`;
   if (m.warned) {
-    const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    return { level: 'warned', text: `About ${m.warned.size} raiders expected ${m.warned.sea ? 'by sea ' : ''}from the ${m.warned.dir} in ~${months} months${marching ? `. ${marching}` : ''}`, enemies: 0, sea: !!m.warned.sea, label: '⚠ Raid' };
+    // Raider ships that found no shore a month out (raidAtTheDoor) come overland, from a side not known yet.
+    const from = m.warned.noShore ? 'overland (their ships found no shore)' : `${m.warned.sea ? 'by sea ' : ''}from the ${m.warned.dir}`;
+    return { level: 'warned', text: `About ${m.warned.size} raiders expected ${from} in ~${inMonths}${marching ? `. ${marching}` : ''}`, enemies: 0, sea: !!m.warned.sea, label: '⚠ Raid' };
+  }
+  if (m.warnStage > 0 && !m.active) {
+    // Only the traders' word so far (militaryMonthly): no side or size yet.
+    return { level: 'warned', text: `A warband is gathering beyond the frontier, about ${inMonths} away${marching ? `. ${marching}` : ''}`, enemies: 0, rumour: true, label: '⚠ Raid' };
   }
   if (marching) return { level: 'warned', text: marching, enemies: 0, legion: true, label: '⚠ Legions' };
   if (!m.settings) return { level: 'none', text: 'No raids in this province.', enemies: 0 };

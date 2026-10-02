@@ -2,8 +2,9 @@
  * messages.js
  * ----------------------------------------------------------------------------
  * Toast notifications in the corner. Messages with a map location jump the
- * camera there when clicked. The full history lives in game.messages and is
- * shown in the Advisors > Messages tab.
+ * camera there when clicked; news of a warband or Caesar's legions still on
+ * the way opens the empire map with it picked out. The full history lives in
+ * game.messages and is shown in the Advisors > Messages tab.
  * ----------------------------------------------------------------------------
  */
 
@@ -22,9 +23,9 @@ export class Messages {
   push(m) {
     const toast = h('div', {
       class: `toast ${m.level || 'info'}`,
-      title: m.x !== undefined ? 'Click to go there' : '',
+      title: clickHint(m),
       onclick: () => {
-        if (m.x !== undefined) this.app.renderer.camera.glideToTile(m.x, m.y);
+        openMessage(this.app, m);
         toast.remove();
       },
     }, h('span', { class: 'date' }, m.date || ''), m.text);
@@ -37,4 +38,23 @@ export class Messages {
   }
 
   clear() { this.el.replaceChildren(); }
+}
+
+/** The tooltip of a message: what a click on it does. */
+export function clickHint(m) {
+  if (m.empire) return 'Click to see it on the empire map';
+  return m.x !== undefined && m.x !== null ? 'Click to go there' : '';
+}
+
+/**
+ * A click on a message (a toast, or a line of the Messages tab): news of
+ * something still on its way (`empire`, core/game.js message()) opens the
+ * empire map with it picked out; else a message with a place glides there.
+ * @returns {boolean} it went somewhere
+ */
+export function openMessage(app, m) {
+  if (m.empire) { app.ui.openEmpire(m.empire); return true; }
+  if (m.x === undefined || m.x === null) return false;
+  app.renderer.camera.glideToTile(m.x, m.y);
+  return true;
 }

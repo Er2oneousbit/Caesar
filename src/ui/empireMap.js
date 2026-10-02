@@ -10,7 +10,8 @@
  *   sea route   blue line along the sea lanes (merchant ships)
  *   open routes are drawn solid and bold, closed ones faint and broken
  *   travelers   a caravan or ship in the partner's color, partway along its
- *               route; a scouted warband as a banner with its size (in a
+ *               route; a warband as a banner, at the frontier with no number
+ *               while only rumoured, then from its side with its size (in a
  *               boat when it comes by sea, sim/navy.js, out on the sea)
  *   armies      Caesar's legions as a purple standard on the road from Rome;
  *               a city Caesar asked troops for (a small walled square), the
@@ -19,8 +20,9 @@
  *
  * Travelers are drawn from timers the sim already keeps, never simulated:
  * a route's `nextVisit` day (sim/trade.js), the raid schedule
- * `nextRaidMonth` with the scouts' `warned` report (sim/military.js), the
- * legions' countdown (sim/legion.js) and the battle's months (sim/battle.js).
+ * `nextRaidMonth` with its `warnStage` and the scouts' `warned` report
+ * (sim/military.js), the legions' countdown (sim/legion.js) and the battle's
+ * months (sim/battle.js).
  * Nothing here changes game state, so the map is safe to draw paused or not.
  *
  * All shapes are drawn in a 100 x 60 "map unit" space and scaled to the
@@ -36,7 +38,7 @@ import {
   MAP_W, MAP_H, SEA, ISLANDS, WATERS, RIVERS, NILE, DELTA, MOUNTAINS, REGIONS, ROUTES, at, isLand,
 } from '../data/empireGeo.js';
 import { routeKind, FIRST_VISIT_DAYS } from '../sim/trade.js';
-import { enemyCount } from '../sim/military.js';
+import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS } from '../sim/military.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
 import { battleSummary } from '../sim/battle.js';
 import { THREATENED_CITIES, marchLine, enemyLine } from '../data/battles.js';
@@ -48,8 +50,18 @@ const H = MAP_H;
 /** Rome on the map, the Emperor's seat on the Tiber. */
 export const ROME_POS = at(12.48, 41.9);
 
-/** Scouts report a warband this many months before it strikes (sim/military.js). */
-export const SCOUT_MONTHS = 3;
+// Word of a warband comes RUMOUR_MONTHS before it strikes, the scouts' report
+// of its side SCOUT_MONTHS before (sim/military.js). Its banner closes in over
+// the whole RUMOUR_MONTHS: at a frontier point while its side is unknown,
+// then on its side's line, half way in.
+export { SCOUT_MONTHS, RUMOUR_MONTHS };
+
+/**
+ * Where an unscouted warband is drawn: north of the province, over the
+ * Apennines toward the Gauls (land all the way, as a band of unknown road
+ * should be). Not a side of the city's map: the scouts have not found it yet.
+ */
+export const FRONTIER_DIR = 'north';
 
 /**
  * The longest a caravan or ship is shown on the way. A route's next visit is
@@ -206,10 +218,15 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  *       The first trader of a route sets out from its city the day the route
  *       opens (it is due FIRST_VISIT_DAYS later, sooner than a far city's
  *       usual trip), so it is never seen appearing halfway along.
- *   { kind: 'warband', size, dir, origin, months, frac, pos, sea }
+ *   { kind: 'warband', size, dir, origin, months, frac, pos, sea, noShore }
  *       the warband the scouts reported: `months` until it strikes (as the
  *       Military advisor counts them), `origin` = the map-edge tile it enters
- *       by (by sea: the sea entry), `sea` = it comes by ship.
+ *       by (by sea: the sea entry), `sea` = it comes by ship, `noShore` = its
+ *       ships found no landing a month out (it will come over land).
+ *       `frac` runs over the last RUMOUR_MONTHS.
+ *   { kind: 'warband', rumour: true, months, frac, pos }
+ *       a warband only rumoured so far (size, dir and origin null), at the
+ *       frontier (FRONTIER_DIR) until the scouts find its side.
  *   { kind: 'raid', size, pos }
  *       raiders in the province now (size = how many are left).
  *
@@ -235,11 +252,12 @@ export function empireTravelers(game) {
   }
   out.sort((a, b) => a.days - b.days || a.name.localeCompare(b.name));
   const m = game.military;
-  if (m && m.warned && m.nextRaidMonth !== null && !m.active) {
+  if (m && (m.warned || m.warnStage > 0) && m.nextRaidMonth !== null && !m.active) {
     const w = m.warned;
-    const frac = clamp01(1 - (m.nextRaidMonth - nowMonths(game)) / SCOUT_MONTHS);
+    const frac = clamp01(1 - (m.nextRaidMonth - nowMonths(game)) / RUMOUR_MONTHS);
     const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, pos: warbandPoint(w.dir, frac, !!w.sea) });
+    if (w) out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, noShore: !!w.noShore, pos: warbandPoint(w.dir, frac, !!w.sea) });
+    else out.push({ kind: 'warband', rumour: true, size: null, dir: null, origin: null, months, frac, sea: false, pos: warbandPoint(FRONTIER_DIR, frac) });
   }
   if (m && m.active) {
     const n = enemyCount(game) - legionCount(game); // (Caesar's men are shown apart, below)
@@ -324,7 +342,8 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** One line about a traveler: "Massilia ship: 6 days", "Warband of 14 from the north, in 3 months". */
 export function travelerLabel(t) {
-  if (t.kind === 'warband') return `Warband of ${t.size} ${t.sea ? 'by sea ' : ''}from the ${t.dir}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
+  if (t.kind === 'warband' && t.rumour) return `Warband gathering beyond the frontier, ${t.months > 0 ? `in about ${plural(t.months, 'month')}` : 'any day now'}`;
+  if (t.kind === 'warband') return `Warband of ${t.size} ${t.sea ? 'by sea ' : ''}from the ${t.dir}${t.noShore ? ', no landing found' : ''}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
   if (t.kind === 'raid') return `Raiders in the province: ${t.size} left`;
   if (t.kind === 'legion') {
     if (!t.here) return `Caesar's legions (${t.size} men) marching from Rome, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;

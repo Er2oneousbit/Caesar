@@ -268,7 +268,7 @@ export const SCENARIOS = Object.freeze([
     distantBattles: [{ year: 2, city: 'ariminum', enemy: 12 }],
     hints: [
       'Raiders come down from the hills within two years. A Ferraria (Iron Mine) by the rocks and a Fabrica (Weaponsmith) arm the legionaries a Tirocinium (Barracks) trains for a Castra (Legion Fort).',
-      'Scouts warn you three months before a raid, and the Empire map shows the warband and the edge it will come in by. Build Turres (Towers) and a Murus (Wall) across that way in.',
+      'Word of a raid comes about six months before it and scouts report its size and road three months before, and the Empire map shows the warband and the edge it will come in by. Build Turres (Towers) and a Murus (Wall) across that way in.',
       'A Campus (Military Academy) trains your legionaries to fight harder.',
       'Capua buys iron: what the mine digs beyond the weaponsmith\'s needs is trade, and work.',
       'A Domus wants more shows than a theater gives: add an Amphitheatrum (Amphitheater), with gladiators from a Ludus Gladiatorius (Gladiator School).',

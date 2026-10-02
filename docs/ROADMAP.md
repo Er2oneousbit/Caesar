@@ -14,6 +14,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.17.2)
+
+* **Trade prices vary** (Colonia's own; the original had one price table): a good's price with a partner is its base price x the province's market x this year's drift x the partner's distance. The nearest partner trades at base and the farthest at 25% more, both ways (imports cost more, exports earn more); every trading mission has a market of 2 to 4 goods cheap or dear there (wine cheap at Cosa...); and at each New Year every good drifts, pulled halfway back toward its base plus a step of up to 10%, never past 15%, with a message naming the biggest moves (seeded by the map and the year, never saved, the same after a load). Route cards, the goods rows, the dock, ship and caravan panels, the empire card and the briefing show the prices. With the harbor demo: exports 4,171 to 4,498 Dn a year, imports unchanged; where a province's main seller is its farthest partner (Figlina, Firmum, Oasis Aurea) buying costs more
+* 685 unit tests, 143 browser checks
+
 ## Done (v0.17.1)
 
 * **Your province sits where it was**: each mission's province has its own place on the empire map (Firmum in Picenum, Paestum, Beneventum, Cosa, Copia, Mutina, Luna, Corduba up the Baetis, Carteia by the strait, Narbo, Puteoli; Pons Aelius and Urbs Magna stay on the Etruscan coast), and the sandbox setup offers a choice of six. Trade routes are worked out from there over a network of roads and sea lanes (the twelve Etruscan routes come out exactly as before), and distance now sets trade times (Colonia's own rule; in the original it did not): a trader takes half a day per map unit each way, a quiet route sends one no more often than a round trip, a busy one still often enough to sell its year, and the first comes once it has made the trip. Seven routes slow down, Alexandria's ships to Corduba from 2.4 a year to 1.9. Distant battles march along the new routes (Corduba's Italica battles: three months), raids and legions come from the new home's directions, and each route card shows its days on the road

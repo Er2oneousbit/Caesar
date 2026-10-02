@@ -33,6 +33,8 @@ import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
 import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
+import { cityStock } from './storage.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { waterBeside } from './fishing.js';
 import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 import { residenceOf } from './governor.js';
@@ -179,6 +181,10 @@ export function checkBuilding(game, type, x, y) {
     const yard = [...game.buildings.values()].some((b) => b.def.kind === 'shipyard' && map.fishBody[waterBeside(game, b)] === body);
     if (!yard) out.warnings.push('No shipyard on this water yet: the wharf needs a boat from one');
   }
+  if (def.kind === 'shipyard' && !timberInSight(game)) {
+    const sells = (game.scenario.partners || []).some((id) => TRADE_PARTNERS[id]?.sells.timber);
+    out.warnings.push(`Shipyards need timber (${CONFIG.SHIPYARD_BOAT_TIMBER} a boat): build a Silva Caedua (Timber Yard) by woods${sells ? ' or import it' : ''}`);
+  }
   if (def.venue === 'hippodrome' && def.kind === 'venue' && !countOf(game, 'chariot_maker')) {
     out.warnings.push('No Factio (Chariot Stable) yet: build one, connected by road, to start the races');
   }
@@ -240,6 +246,20 @@ export function checkArch(game, type, x, y) {
   const cost = def.cost + trees * CONFIG.CLEAR_TREE_COST + rubble * CONFIG.CLEAR_RUBBLE_COST;
   if (!canAfford(game, cost)) return fail('Not enough money');
   return { ok: true, cost, warnings: [], trees, rubble, axis };
+}
+
+/**
+ * Has the city any timber coming for a shipyard: a timber yard, a boat's
+ * worth in storage or another shipyard, or an open route that sells it?
+ * (Placement warning only: a shipyard does nothing without it.)
+ */
+function timberInSight(game) {
+  if (countOf(game, 'timber_yard')) return true;
+  let held = cityStock(game, 'timber');
+  for (const b of game.buildings.values()) if (b.def.kind === 'shipyard') held += b.stock?.timber || 0;
+  if (held >= CONFIG.SHIPYARD_BOAT_TIMBER) return true;
+  const routes = game.city.trade?.routes || {};
+  return Object.entries(routes).some(([id, r]) => r.open && TRADE_PARTNERS[id]?.sells.timber);
 }
 
 /** How many buildings of this type the city has. */

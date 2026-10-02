@@ -27,6 +27,7 @@ import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, emp
 import { generateMap } from '../src/world/mapgen.js';
 import { updateImmigration, immigrationPerDay } from '../src/sim/population.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
+import { checkBuilding } from '../src/sim/construction.js';
 import { newGame } from './helpers.mjs';
 
 log.setLevel('error');
@@ -224,4 +225,23 @@ test('the first mission is not won in its first year', () => {
   game.runDays(12 * CONFIG.DAYS_PER_MONTH);
   assert.ok(game.city.population > 400, `the town grew (${game.city.population} people)`);
   assert.equal(won, null, 'no victory in the first year');
+});
+
+test('every mission with a shipyard can get timber for its boats: woods for a timber yard, and shore for the yard', () => {
+  // Fishing boats take timber (Colonia's own rule, sim/fishing.js), so a
+  // mission that unlocks the shipyard must let the player fell it. Paestum
+  // (c4p) and Portus Mercatorum (c5) have no partner selling timber: there it
+  // must be felled, so every such map needs woods for a timber yard.
+  const missions = SCENARIOS.filter((s) => unlockedBuildings(s).has('shipyard'));
+  assert.ok(missions.length >= 5, missions.map((s) => s.id).join(' '));
+  for (const s of missions) {
+    assert.ok(unlockedBuildings(s).has('timber_yard'), `${s.id}: the timber yard comes with the shipyard`);
+    const game = new Game({ scenario: s, flags: {} });
+    const anySite = (type) => {
+      for (let y = 0; y < game.map.h - 1; y++) for (let x = 0; x < game.map.w - 1; x++) if (checkBuilding(game, type, x, y).ok) return true;
+      return false;
+    };
+    assert.ok(anySite('shipyard'), `${s.id}: shore for a shipyard`);
+    assert.ok(anySite('timber_yard'), `${s.id}: woods for a timber yard`);
+  }
 });

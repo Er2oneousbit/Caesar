@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.15.9',
-  SAVE_VERSION: 15, // v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v14 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 17, // v17: shipyards hold timber (stock, incoming), a boat takes 100; v16 is another change's; v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v14 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -288,6 +288,11 @@ export const CONFIG = {
   // staff, 5.2 at half, never with nobody), sails to the nearest fishing
   // ground, fishes 4 days and lands one load. Boats sail at walking speed.
   SHIPYARD_BOAT_DAYS: 16,
+  // Colonia's own rule (the original's boats cost nothing): a boat takes one
+  // lot of timber, used at launch, and the yard builds only while it holds
+  // the lot. It holds up to two lots (data/buildings.js inputCap): the boat on
+  // the slip and the next, so a spare that sails off is followed at once.
+  SHIPYARD_BOAT_TIMBER: 100,
   FISH_DAYS: 4, // days a boat fishes per trip (at the difficulty's production 1; slower where it is lower)
   FISH_CATCH: 100, // units of fish a boat lands per trip
   BOAT_WAIT_DAYS: 10, // x (1.02 - staffing): the boat's wait at the wharf between trips

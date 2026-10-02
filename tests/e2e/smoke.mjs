@@ -1691,10 +1691,14 @@ try {
       g.cheats.freeBuild = free;
       const wharf = [...g.buildings.values()].find((b) => b.type === 'wharf');
       if (wharf) { app.ui.info.showBuilding(wharf.id); out.wharf = document.querySelector('#info-panel')?.textContent || ''; }
+      // The builder stocks its shipyard with timber (boats take 100 each).
+      const yard = [...g.buildings.values()].find((b) => b.type === 'shipyard');
+      if (yard) { app.ui.info.showBuilding(yard.id); out.yard = document.querySelector('#info-panel')?.textContent || ''; }
       app.ui.info.close();
       return out;
     });
     check('a wharf can be placed, and its panel shows its boat and catch', /Fishing/.test(fish.wharf || '') && /Catch in store/.test(fish.wharf || '') && nerrors.length === 0, JSON.stringify({ fish: fish.fish, wharf: (fish.wharf || '').slice(0, 160), nerrors }));
+    check('the shipyard panel shows its timber against the 100 a boat takes', /Timber\s*400 \/ 100/.test(fish.yard || ''), (fish.yard || '').slice(0, 200));
     const nScreen = (tx, ty) => np.evaluate(([x, y]) => {
       const cam = window.colonia.renderer.camera;
       const wx = (x + 0.5 - (y + 0.5)) * 32;

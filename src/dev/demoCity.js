@@ -708,13 +708,20 @@ function placeJoined(game, type, size, center, maxD, fits = () => true, tries = 
   return null;
 }
 
+/** Timber a demo shipyard starts with: four boats. */
+export const DEMO_YARD_TIMBER = 4 * CONFIG.SHIPYARD_BOAT_TIMBER;
+
 /**
  * A fishing quarter: a shipyard and `wharves` wharves on the nearest water
  * with fishing grounds, a granary beside them for the catch, and a prefect
- * and engineer to keep them standing.
+ * and engineer to keep them standing. The demo city fells no timber, so with
+ * `stock` (the default) the shipyard starts with DEMO_YARD_TIMBER, four
+ * boats' worth, as buildDemoNavy stocks its navalia: more than the yard would
+ * take by cart, so the catch measured by `npm run sim -- --fishing` is the
+ * fishery's, not the demo's missing woodcutters'.
  * @returns {{ok:boolean, shipyard?:object, wharves:object[], granary?:object}}
  */
-export function buildDemoFishery(game, center, { wharves = 2 } = {}) {
+export function buildDemoFishery(game, center, { wharves = 2, stock = true } = {}) {
   const { map } = game;
   if (!game.isUnlocked('wharf') || !game.isUnlocked('shipyard')) return { ok: false, wharves: [] };
   // Water with fish and a ground: the spot must touch such water.
@@ -724,6 +731,7 @@ export function buildDemoFishery(game, center, { wharves = 2 } = {}) {
   };
   const shipyard = placeJoined(game, 'shipyard', 2, center, 45, fishing);
   if (!shipyard) return { ok: false, wharves: [] };
+  if (stock) shipyard.stock.timber = DEMO_YARD_TIMBER;
   const body = map.fishBody[map.fishWaterBeside(shipyard.x, shipyard.y, 2)];
   const sameWater = (x, y) => fishing(x, y) && map.fishBody[map.fishWaterBeside(x, y, 2)] === body;
   const built = [];

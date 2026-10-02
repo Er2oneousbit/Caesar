@@ -9,8 +9,9 @@
  *   troubles   buildings that do not work or work badly, grouped by kind of
  *              building and reason (the info panel's status line)
  *   hints      the bottlenecks in plain words: workshops waiting for a raw
- *              material, buildings without workers, harvests with nowhere to
- *              go, goods used faster than they come in, homes short of food
+ *              material (and shipyards for timber), buildings without
+ *              workers, harvests with nowhere to go, goods used faster than
+ *              they come in, homes short of food
  * ----------------------------------------------------------------------------
  */
 
@@ -29,6 +30,11 @@ function count(n, name) {
 /** "a Figlina", "3 Figlinae": a building type counted, with its Latin plural. */
 function countType(n, type) {
   return n === 1 ? withArticle(BUILDINGS[type].name) : `${n} ${pluralName(type)}`;
+}
+
+/** "A Figlina": a hint starts a sentence (withArticle gives "a Figlina"). */
+function capitalize(text) {
+  return text[0].toUpperCase() + text.slice(1);
 }
 
 /** "clay", "clay and timber". */
@@ -84,6 +90,12 @@ export function productionReport(game) {
       for (const [good, n] of Object.entries(b.def.recipe)) if (b.stock[good] < n) w.goods.add(good);
       w.n++;
       waiting.set(b.type, w);
+    } else if (b.def.kind === 'shipyard' && s.text.startsWith('Needs timber')) {
+      // A shipyard waiting for the timber of a boat a wharf needs: the same
+      // hint as a workshop's raw material (who fells it, who sells it).
+      const w = waiting.get(b.type) || { type: b.type, goods: new Set(['timber']), n: 0 };
+      w.n++;
+      waiting.set(b.type, w);
     } else if (/^(No workers available|Cannot find workers)/.test(s.text)) noWorkers++;
     else if (b.noStorage) noStorage++;
   }
@@ -93,7 +105,7 @@ export function productionReport(game) {
     const makers = [...new Set(need.flatMap((g) => makersOf(game, g)))];
     const sellers = [...new Set(need.flatMap((g) => sellersOf(game, g)))];
     const how = [makers.length ? `build more ${andList(makers)}` : null, sellers.length ? `import from ${andList(sellers)}` : null].filter(Boolean);
-    hints.push(`${countType(w.n, w.type)} ${w.n === 1 ? 'is' : 'are'} waiting for ${andList(names)}${how.length ? `: ${how.join(', or ')}` : ''}.`);
+    hints.push(`${capitalize(countType(w.n, w.type))} ${w.n === 1 ? 'is' : 'are'} waiting for ${andList(names)}${how.length ? `: ${how.join(', or ')}` : ''}.`);
   }
   if (noWorkers) hints.push(`${count(noWorkers, 'building')} ${noWorkers === 1 ? 'has' : 'have'} no workers: the city needs more people living near them, or labor priorities (Labor advisor).`);
   if (noStorage) hints.push(`${count(noStorage, 'producer')} ${noStorage === 1 ? 'has' : 'have'} nowhere to deliver: build a Granarium or a Horreum with room nearby.`);

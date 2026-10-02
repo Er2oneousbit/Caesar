@@ -29,7 +29,7 @@ import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
 import { dockBerth, dockUsed, shipsWaitingText } from '../sim/trade.js';
-import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat } from '../sim/fishing.js';
+import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat, hasBoatTimber } from '../sim/fishing.js';
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
 import { trainedText, trainingNote, schoolStatus } from './trainingInfo.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
@@ -111,6 +111,28 @@ export function ruinText(rec) {
   return `Ruins of ${withArticle(rec.what)}, ${RUIN_WORDS[rec.cause] || 'fallen'} in ${MONTH_SHORT[rec.month]} ${formatYear(rec.year)}.`;
 }
 
+/**
+ * Is this shipyard held up for timber: no spare waiting, less than a boat's
+ * timber in the yard and not enough on its way either (sim/fishing.js)?
+ */
+export function yardLacksTimber(game, b) {
+  if (spareBoat(game, b) || hasBoatTimber(b)) return false;
+  return (b.stock?.timber || 0) + (b.incoming?.timber || 0) < CONFIG.SHIPYARD_BOAT_TIMBER;
+}
+
+/**
+ * "build a Silva Caedua (Timber Yard) or buy timber.": where a shipyard's
+ * timber can come from in this mission (buying only where a partner sells
+ * it). `full`: a whole sentence, "Build ...".
+ */
+export function timberAdvice(game, full = true) {
+  const ways = [];
+  if (game.isUnlocked('timber_yard')) ways.push(`build ${withArticle(BUILDINGS.timber_yard.name)} (${BUILDINGS.timber_yard.en})`);
+  if ((game.scenario.partners || []).some((id) => TRADE_PARTNERS[id]?.sells.timber)) ways.push('buy timber');
+  const text = ways.length ? `${ways.join(' or ')}.` : 'carts bring it from a Horreum (Warehouse) holding timber.';
+  return full ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
 /** Status line for any non-house building. */
 export function buildingStatus(game, b) {
   const def = b.def;
@@ -156,14 +178,23 @@ export function buildingStatus(game, b) {
     }
     case 'wharf': {
       if (!wharfBoat(game, b)) {
-        const yard = [...game.buildings.values()].some((x) => x.def.kind === 'shipyard' && bodyOf(game, x) === bodyOf(game, b));
-        return { level: 'warn', text: yard ? 'Waiting for a boat from the shipyard.' : 'Waiting for a boat: build a Fabrica Navalis (Shipyard) on this water.' };
+        const yards = [...game.buildings.values()].filter((x) => x.def.kind === 'shipyard' && bodyOf(game, x) === bodyOf(game, b));
+        if (!yards.length) return { level: 'warn', text: 'Waiting for a boat: build a Fabrica Navalis (Shipyard) on this water.' };
+        if (yards.every((x) => yardLacksTimber(game, x))) return { level: 'warn', text: `Waiting for a boat: the shipyard has no timber. ${timberAdvice(game)}` };
+        return { level: 'warn', text: 'Waiting for a boat from the shipyard.' };
       }
       if (b.noStorage) return { level: 'warn', text: 'The catch is piling up: no granary or warehouse with room is reachable.' };
       break;
     }
     case 'shipyard':
       if (bodyOf(game, b) === 0) return { level: 'bad', text: 'Not beside water with fish.' };
+      if (yardLacksTimber(game, b)) {
+        // A red flag only while a wharf on its water waits for a boat; a
+        // yard that only lacks wood for its spare says so plainly.
+        if (wharvesWithoutBoat(game, b) > 0) return { level: 'warn', text: `Needs timber: ${timberAdvice(game, false)}` };
+        const why = [...game.buildings.values()].some((x) => x.def.kind === 'wharf' && bodyOf(game, x) === bodyOf(game, b)) ? 'every wharf on this water has one' : 'no wharf on this water yet';
+        return { level: '', text: `Needs timber for a spare boat (${why}): ${timberAdvice(game, false)}` };
+      }
       break;
     case 'dock':
       if (!game.map.seaEntry) return { level: 'bad', text: 'No river or sea here reaches the map edge: ships cannot come.' };
@@ -624,13 +655,17 @@ export class InfoPanel {
       case 'shipyard': {
         const spare = spareBoat(g, b);
         const wanting = wharvesWithoutBoat(g, b);
+        const need = CONFIG.SHIPYARD_BOAT_TIMBER;
+        const timber = b.stock?.timber || 0;
+        const coming = b.incoming?.timber || 0;
         parts.push(sec('Boatbuilding',
+          kv(`${GOODS.timber.icon} Timber`, `${fmt(timber)} / ${fmt(need)}${coming ? ` (+${fmt(coming)} on the way)` : ''}`),
           kv('Spare boat', spare ? 'Waiting on the water for a wharf' : 'None'),
           spare ? null : kv('Next boat', pct(Math.min(100, b.progress) / 100)),
           spare ? null : bar(Math.min(100, b.progress), 100),
           kv('Wharves on this water without a boat', `${wanting}`),
           kv('Boats built', `${fmt(b.boatsBuilt || 0)}`),
-          h('div', { class: 'muted' }, `A boat takes ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff and needs no materials. It goes to the nearest staffed wharf on this water that has none; the yard keeps one spare ready and builds no more until a wharf takes it.`)));
+          h('div', { class: 'muted' }, `A boat takes ${need} timber and ${CONFIG.SHIPYARD_BOAT_DAYS} days at full staff; the work stops while the yard has less than ${need}, and the timber is used when the boat is launched. Carts bring timber like a workshop's raw material; the yard holds up to ${b.def.inputCap} (two boats). A boat goes to the nearest staffed wharf on this water that has none; the yard keeps one spare ready and builds no more until a wharf takes it.`)));
         break;
       }
       case 'navalia': {

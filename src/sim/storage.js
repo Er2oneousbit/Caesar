@@ -7,7 +7,8 @@
  * Delivery priority for a cart carrying good G:
  *   1. a barracks that needs G to equip recruits (weapons, arrows, horses),
  *      or a navalia that needs G for the fleet's next ship (timber, iron, linen)
- *   2. a workshop whose recipe uses G and has room (raw materials go straight in)
+ *   2. a workshop whose recipe uses G and has room (raw materials go straight in),
+ *      or a shipyard (timber for its boats: rawRoomCap), nearest first
  *   3. a granary that accepts G (food only)
  *   4. a warehouse that accepts G
  * "Room" includes loads already on their way (reservations in b.incoming),
@@ -32,6 +33,26 @@ import { navalNeed, navaliaHasRoom } from './navy.js';
 const BARRACKS_INPUTS = BUILDINGS.barracks.inputs;
 /** Goods a navalia takes by cart (timber, iron, linen: sim/navy.js). */
 const NAVALIA_INPUTS = BUILDINGS.navalia.inputs;
+
+/**
+ * How much of a raw material a building takes like a workshop's raw
+ * material (0: none): a workshop whose recipe uses it holds WORKSHOP_RAW_CAP,
+ * a shipyard its timber up to its inputCap (sim/fishing.js). The two share
+ * one delivery tier, nearest first, so a yard and a carpenter compete for
+ * wood on equal terms and neither waits behind the other.
+ */
+export function rawRoomCap(b, good) {
+  if (!b || !b.stock || b.stock[good] === undefined) return 0;
+  if (b.def.kind === 'workshop') return b.def.recipe[good] !== undefined ? CONFIG.WORKSHOP_RAW_CAP : 0;
+  if (b.def.kind === 'shipyard') return b.def.inputs.includes(good) ? b.def.inputCap : 0;
+  return 0;
+}
+
+/** Can a workshop or shipyard take `amount` more of a raw material (loads on their way counted)? */
+export function rawHasRoom(b, good, amount) {
+  const cap = rawRoomCap(b, good);
+  return cap > 0 && b.stock[good] + (b.incoming?.[good] || 0) + amount <= cap;
+}
 
 export function isStorage(b) {
   const k = b.def.kind;
@@ -92,8 +113,8 @@ export function receiveGoods(b, good, amount, home = false) {
     b.stock[good] += n;
     return n;
   }
-  if (kind === 'workshop' && b.def.recipe[good] !== undefined) {
-    const room = Math.max(0, CONFIG.WORKSHOP_RAW_CAP - b.stock[good]);
+  if (rawRoomCap(b, good) > 0) {
+    const room = Math.max(0, rawRoomCap(b, good) - b.stock[good]);
     const n = Math.min(room, amount);
     b.stock[good] += n;
     return n;
@@ -210,7 +231,7 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
   if (kind === 'raw') {
     attempts.push((id) => {
       const b = buildings.get(id);
-      return b && b.def.kind === 'workshop' && b.def.recipe[good] !== undefined && b.stock[good] + b.incoming[good] + amount <= CONFIG.WORKSHOP_RAW_CAP;
+      return rawHasRoom(b, good, amount);
     });
   }
   if (kind === 'food') {
@@ -233,12 +254,13 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
 /**
  * How much of a good a delivery target found by findDeliveryTarget can still
  * take, counting loads on their way: a barracks or navalia up to its input cap, a
- * workshop up to WORKSHOP_RAW_CAP, storage its free room.
+ * workshop up to WORKSHOP_RAW_CAP, a shipyard up to its input cap, storage its
+ * free room.
  */
 export function deliveryRoom(b, good) {
   const kind = b.def.kind;
   if (kind === 'barracks' || kind === 'navalia') return Math.max(0, b.def.inputCap - (b.stock[good] || 0) - (b.incoming[good] || 0));
-  if (kind === 'workshop') return Math.max(0, CONFIG.WORKSHOP_RAW_CAP - (b.stock[good] || 0) - (b.incoming[good] || 0));
+  if (kind === 'workshop' || kind === 'shipyard') return Math.max(0, rawRoomCap(b, good) - (b.stock[good] || 0) - (b.incoming[good] || 0));
   return storageSpaceFor(b, good);
 }
 

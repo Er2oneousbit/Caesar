@@ -580,6 +580,7 @@ Ideas that would change the original's economy or rules; each would come as an o
 * **Names**: every building shows a Latin name, with its English name in the build menu and the inspect panel.
 * **Music**: about 10 tracks of a few minutes for day, night and the menu, picked at random; festivals and raids keep their own music, also a few minutes long. The settings do not name the tracks; the console does (`music`, `music tracks`).
 * **Saves**: until 1.0 a release may stop loading older saves (always with a readable message).
+* **The renderer for 1.0**: the canvas renderer and procedural sprites stay through the 0.x releases while gameplay is fleshed out. A three.js (WebGL, MIT) renderer is the plan for 1.0: the same deterministic sim, procedural 3D models in place of the 2D sprites (no outside art), free rotation and tilt, real lighting and shadows, instancing for big maps. It starts as a proof of concept (one district in 3D beside the 2D view, measured for speed and file size) before the move.
 * **Version numbers**: after 0.9 comes 0.10; 1.0 only when the game is ready for it. Since v0.17.0 every change is a patch release (0.17.1, 0.17.2...) until the next minor version is called for.
 
 Made with ❤️ from your friendly hacker - er2oneousbit

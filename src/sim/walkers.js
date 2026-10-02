@@ -21,7 +21,7 @@ import { performerArrive } from './entertainment.js';
 import { findDeliveryTarget, findDeliveryFit, receiveGoods, isStorage } from './storage.js';
 import { collectArrive } from './storageOrders.js';
 import { recruitArrive } from './military.js';
-import { recruitAtAcademy } from './training.js';
+import { recruitAtAcademy, recruitTraining } from './training.js';
 import { criminalAfterWait, thiefArrive, rioterArrive, rioterStep, hunterArrive, landPassable, offRoadReroute } from './crime.js';
 import { physicianArrive, physicianAfterWait } from './disease.js';
 import { boatArrive, boatAfterWait } from './fishing.js';
@@ -57,6 +57,11 @@ function stepWalker(game, w) {
       else if (what === 'nextSick') physicianAfterWait(game, w);
       else afterWait(game, w, what);
     }
+    return;
+  }
+  // A recruit training at the academy stays there (sim/training.js).
+  if (w.state === 'training' && w.type === 'recruit') {
+    recruitTraining(game, w);
     return;
   }
   // A ship at the dock: its crane lands cargo while dock workers come and go.
@@ -191,7 +196,7 @@ function onPathEnd(game, w) {
       physicianArrive(game, w);
       break;
     case 'toAcademy':
-      recruitAtAcademy(game, w); // trained, on to his fort
+      recruitAtAcademy(game, w); // he stays to train, then on to his fort
       break;
     case 'toFort':
       recruitArrive(game, w);

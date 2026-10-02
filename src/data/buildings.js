@@ -558,7 +558,7 @@ export const BUILDINGS = Object.freeze({
   military_academy: B({
     name: 'Campus', en: 'Military Academy', category: 'military', kind: 'military_academy', cost: 1000, size: 3, workers: 20, labor: 'military',
     des: [-3, 1, 1, 3], fire: 1, damage: 1,
-    desc: 'A drill yard where soldiers learn to fight in close order. Only a fully staffed academy trains anyone. Each new recruit marches here first (the academy nearest his fort), then on to his fort, and soldiers resting in a fort come over one at a time. Trained legionaries holding their ground take a quarter of a missile\'s damage and defend better; trained archers and cavalry defend a little better.',
+    desc: 'A drill yard where soldiers learn to fight in close order. Only a fully staffed academy trains anyone. Each new recruit marches here first (the academy nearest his fort) and trains for a month, his place in the fort kept for him, then marches on to his fort; soldiers already in a fort stay at their posts. Trained legionaries holding their ground take a quarter of a missile\'s damage and defend better; trained archers and cavalry defend a little better.',
   }),
   fort_legion: B({
     name: 'Castra', en: 'Legion Fort', category: 'military', kind: 'fort', unit: 'legionary', cost: 300, size: 3, workers: 8, labor: 'military',
@@ -596,7 +596,7 @@ export const BUILDINGS = Object.freeze({
   portus: B({
     name: 'Portus', en: 'Training Harbor', category: 'military', kind: 'portus', cost: 600, size: 3, workers: 12, labor: 'military',
     des: [-4, 1, 1, 3], fire: 1, damage: 1, placement: 'shore',
-    desc: 'A sheltered training harbor where liburnian crews learn to row in time, as Rome\'s first war fleet learned on benches on dry land while its ships were built. Only a fully staffed Portus trains a crew. Each new liburnian rows past it first (the Portus nearest its station, on the same water), then to its berth, and ships resting at a station come over one at a time. A trained crew rows faster, rams harder and is harder to hit. Build it on the bank of the water a Statio (Naval Station) stands by.',
+    desc: 'A sheltered training harbor where liburnian crews learn to row in time, as Rome\'s first war fleet learned on benches on dry land while its ships were built. Only a fully staffed Portus trains a crew. Each new liburnian rows here first (the Portus nearest its station, on the same water) and moors for 8 days of training, then rows to its berth; ships already at their berths stay there. A trained crew rows faster, rams harder and is harder to hit. Build it on the bank of the water a Statio (Naval Station) stands by.',
   }),
   naval_station: B({
     name: 'Statio', en: 'Naval Station', category: 'military', kind: 'station', cost: 500, size: 3, workers: 10, labor: 'military',

@@ -16,6 +16,15 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.16.0)
+
+* **Forts at rest hold their ground**, as in the original: an undeployed fort's legionaries and cavalry fight only an enemy within 2 tiles of its ranks, step out to strike and fall back, and its archers shoot only from their posts; anyone fights back against an enemy striking at him. Deploy a fort to meet raiders in the field. Before, an undeployed fort charged anything within 14 to 26 tiles. The headless sim's garrison mode now deploys its forts onto the enemy nearest the city and recalls them, as a player would
+* **Training takes time**: a recruit stays 16 days at the Campus (Military Academy), and a new liburnian 8 days at the Portus, the days counting only at full staff (a pupil waiting more than 32 days goes on untrained); his place in the fort is kept. Soldiers and ships at rest no longer go off to train. The fort, academy and Portus panels show who is training and the days left
+* **Bridges ships pass under**: a stone bridge with a pier under each tile and its deck 10 px over the water; a ship on a bridge tile is drawn under the deck, and people crossing are drawn on it (the deck was ground, and ships sailed over it)
+* Saves: version 16 (training in progress); older saves load
+* Headless sim: Easy, Normal, Hard and Insane identical to v0.15.9
+* 581 unit tests, 130 browser checks
+
 ## Done (v0.15.9)
 
 * **More fishing grounds**: at one ground per 250 tiles of water, at most 4 on one water and the original's 8 on a map, a whole coastline had 4 grounds and most rivers 1 or 2. Now one per 150 tiles, up to 10 on one water and 10 tiles apart, and the map's limit grows with its area (8 on a 96x96 map, up to 24). A 128 coast has about 10, a 128 river 4, Firmum's lakes 6 (from 4). Grounds come from the terrain, so older cities get them as they load. Headless sim: every default run identical; with two wharves the coast town lands about 1,800 fish a year (from 1,500) and the river town about 1,170 (from 670), its boats sailing shorter
@@ -503,6 +512,7 @@ Ideas that would change the original's economy or rules; each would come as an o
 * **Gifts and rank** (item 2, #6): the governor draws a salary by rank into personal savings, carried from mission to mission; gifts to Caesar come from those savings, as in the original. One rank per mission for now (Citizen in mission 1); the top ranks come with the longer campaign.
 * **The fleet in distant battles** (Colonia's own): when the threatened city lies on a sea route, Naval Station squadrons can be sent with the forts' soldiers and count toward the battle.
 * **Campaign branches** (#13): after a win the player chooses the next province, peaceful or military, both at the same rank, and may switch tracks at every split. First at steps 3, 4 and 5, each beside the existing mission: Firmum (military) beside Figlina, Paestum (peaceful) beside Pons Aelius, Beneventum (peaceful) beside Portus Mercatorum, all colonies of the 270s and 260s BC. Military provinces bring raids early, forts a step sooner and Caesar's requests for troops; peaceful ones no raids and higher culture and prosperity goals.
+* **Forts at rest and training** (from playtesting, as in the original): a fort that is not deployed holds its ground and fights only what comes to it (within about 2 tiles of its ranks, an archer within his range, or whoever strikes at a man); deploy it to fight in the field. Nobody at rest goes to be trained: soldiers in a fort and ships at their berths stay put, and only recruits on their way to their fort (and new ships on their way to their station) pass the Campus (or the Portus). Training takes time: a month at the academy, 8 days at the Portus, counted only at full staff, the recruit's place in his fort held meanwhile.
 * **Names**: every building shows a Latin name, with its English name in the build menu and the inspect panel.
 * **Music**: about 10 tracks of a few minutes for day, night and the menu, picked at random; festivals and raids keep their own music, also a few minutes long. The settings do not name the tracks; the console does (`music`, `music tracks`).
 * **Saves**: until 1.0 a release may stop loading older saves (always with a readable message).

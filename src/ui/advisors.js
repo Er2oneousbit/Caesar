@@ -540,7 +540,7 @@ export class Advisors {
       h('h4', {}, 'Forts'),
       forts.length
         ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Fort'), h('th', { class: 'r' }, 'Soldiers'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', { title: 'Sent when Caesar calls for troops (Imperial advisor)' }, 'Distant battles'), h('th', {}, '')), fortRows)
-        : h('div', { class: 'muted' }, 'No forts yet. Build a Tirocinium (Barracks) and at least one fort (Military menu). Garrisons guard the area around their fort; use Deploy to send them where raiders will come.'),
+        : h('div', { class: 'muted' }, 'No forts yet. Build a Tirocinium (Barracks) and at least one fort (Military menu). Garrisons at rest hold their fort and fight only what comes to them; use Deploy to send them out to meet raiders.'),
       h('h4', {}, 'Supplies'),
       supplies,
       h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } },

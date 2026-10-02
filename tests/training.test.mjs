@@ -3,7 +3,7 @@
  * (sim/training.js, sim/religion.js): their data and unlocks; a recruit
  * trained when he reaches the academy, never when he sets out, and the
  * academy nearest his fort (only one at full staff); soldiers and ships at
- * rest taking turns, one at a time, never while deployed or raided; damage
+ * rest never sent there (an older save's trip comes home); damage
  * with and without training; the Portus's water; a large temple counting as
  * two; the battle strength helper; the panels' words; saves from version 11.
  */
@@ -27,7 +27,7 @@ import {
 } from '../src/sim/military.js';
 import { shoreBerth, waterOf, shipSpeed, ramOf, deployStation } from '../src/sim/navy.js';
 import { academyFor, portusFor, trainsNow, updateDrill, startDrill, battleStrength, trainedOf, reachBetween } from '../src/sim/training.js';
-import { trainedText, trainingNote, schoolStatus, templeCount } from '../src/ui/trainingInfo.js';
+import { trainedText, trainingNote, schoolStatus, templeCount, inTrainingText } from '../src/ui/trainingInfo.js';
 import { buildDemoCity, buildDemoNavy } from '../src/dev/demoCity.js';
 import { Terrain } from '../src/world/map.js';
 import { newGame, build, findFree } from './helpers.mjs';
@@ -165,15 +165,25 @@ test('unlocks: the academy with the first forts, the Portus with the fleet, larg
 // Recruits
 // ---------------------------------------------------------------------------
 
-test('a recruit is trained when he reaches the academy, not when he sets out, and arrives a trained soldier', () => {
+test('a recruit trains a month at the academy, his place in the fort held, and arrives a trained soldier', () => {
   const { game, barracks, academy, fort } = lineCity();
+  const TRAIN = CONFIG.ACADEMY_TRAIN_DAYS * CONFIG.TICKS_PER_DAY;
+  assert.equal(CONFIG.ACADEMY_TRAIN_DAYS, 16);
   const w = sendRecruit(game, barracks);
   assert.equal(w.state, 'toAcademy', 'the academy first');
   assert.equal(w.academy, academy.id);
   assert.equal(w.trained, false, 'not trained as he sets out');
-  assert.ok(walkUntil(game, () => w.state === 'toFort') > 0, 'he reaches the academy');
-  assert.equal(w.trained, true, 'trained on arrival');
+  assert.ok(walkUntil(game, () => w.state === 'training') > 0, 'he reaches the academy');
   assert.equal(game.map.idx(w.x, w.y), academy.accessRoad, 'at the academy\'s road');
+  assert.equal(w.trained, false, 'not trained on arrival: he stays to train');
+  assert.equal(w.trainLeft, TRAIN);
+  assert.equal(fort.recruiting, 1, 'his place in the fort is held for him');
+  assert.equal(inTrainingText(game, academy), `1 (${CONFIG.ACADEMY_TRAIN_DAYS} days left)`, 'the academy panel');
+  assert.equal(inTrainingText(game, fort), `1 (${CONFIG.ACADEMY_TRAIN_DAYS} days left)`, 'the fort panel');
+  assert.equal(walkUntil(game, () => w.state === 'toFort'), TRAIN, 'a month of ticks at full staff, standing at the academy');
+  assert.equal(game.map.idx(w.x, w.y), academy.accessRoad);
+  assert.equal(w.trained, true, 'trained when his time is done');
+  assert.equal(inTrainingText(game, academy), null);
   assert.equal(academy.trainedHere || 0, 0, 'counted only once he joins his fort');
   assert.ok(walkUntil(game, () => w.dead) > 0, 'on to his fort');
   const [u] = [...game.units.values()];
@@ -208,20 +218,31 @@ test('the detour: the academy nearest the fort (not the barracks), and only one 
   assert.equal([...game.units.values()][0].trained, false);
 });
 
-test('a recruit whose academy is demolished on the way walks on to his fort untrained; staff lost on the way changes nothing', () => {
+test('a recruit at an academy short of staff waits, and goes on when it is staffed again; one whose academy is demolished goes on untrained', () => {
   const { game, barracks, academy } = lineCity();
+  const TRAIN = CONFIG.ACADEMY_TRAIN_DAYS * CONFIG.TICKS_PER_DAY;
   const w = sendRecruit(game, barracks);
-  academy.efficiency = 0.5; // (staff lost after he set out)
-  walkUntil(game, () => w.state === 'toFort');
-  assert.equal(w.trained, true, 'trained all the same: the academy was fully staffed when he set out');
+  walkUntil(game, () => w.state === 'training');
+  walkUntil(game, () => false, 100);
+  assert.equal(w.trainLeft, TRAIN - 100);
+  academy.efficiency = 19 / 20; // (one worker gone)
+  walkUntil(game, () => false, 500);
+  assert.equal(w.state, 'training', 'he waits at the academy');
+  assert.equal(w.trainLeft, TRAIN - 100, 'his training paused');
+  assert.match(inTrainingText(game, academy), /paused/);
+  academy.efficiency = 1;
+  assert.equal(walkUntil(game, () => w.state === 'toFort'), TRAIN - 100, 'and resumed where it stopped');
+  assert.equal(w.trained, true);
   walkUntil(game, () => w.dead);
+  academy.efficiency = 0.5;
   const w2 = sendRecruit(game, barracks);
   assert.equal(w2.state, 'toFort', 'a half-staffed academy sends nobody a detour');
   walkUntil(game, () => w2.dead);
   academy.efficiency = 1;
   const w3 = sendRecruit(game, barracks);
-  assert.equal(w3.state, 'toAcademy');
-  removeBuilding(game, academy);
+  walkUntil(game, () => w3.state === 'training');
+  walkUntil(game, () => false, TRAIN - 1);
+  removeBuilding(game, academy); // (a tick before he was done)
   game.processRoadChanges();
   walkUntil(game, () => w3.state === 'toFort' || w3.dead);
   assert.equal(w3.trained, false, 'no academy, no training');
@@ -230,108 +251,88 @@ test('a recruit whose academy is demolished on the way walks on to his fort untr
   assert.deepEqual(trained, [true, false, false]);
 });
 
+test('review: a recruit kept waiting by an academy short of staff for more than TRAIN_WAIT_MAX_DAYS goes on untrained', () => {
+  const { game, barracks, academy, fort } = lineCity();
+  const w = sendRecruit(game, barracks);
+  walkUntil(game, () => w.state === 'training');
+  academy.efficiency = 0.5;
+  const wait = CONFIG.TRAIN_WAIT_MAX_DAYS * CONFIG.TICKS_PER_DAY;
+  walkUntil(game, () => false, wait);
+  assert.equal(w.state, 'training', 'still waiting on the last tick allowed');
+  walkUntil(game, () => false, 1);
+  assert.equal(w.state, 'toFort', 'then on to his fort');
+  assert.equal(w.trained, false, 'untrained');
+  walkUntil(game, () => w.dead);
+  assert.equal(trainedText(game, fort), '0 of 1 trained');
+});
+
+test('a recruit whose academy is demolished before he gets there walks on to his fort untrained', () => {
+  const { game, barracks, academy } = lineCity();
+  const w = sendRecruit(game, barracks);
+  assert.equal(w.state, 'toAcademy');
+  removeBuilding(game, academy);
+  game.processRoadChanges();
+  walkUntil(game, () => w.state === 'toFort' || w.dead);
+  assert.equal(w.state, 'toFort', 'on his way, never training');
+  assert.equal(w.trained, false);
+});
+
 // ---------------------------------------------------------------------------
 // Soldiers at rest
 // ---------------------------------------------------------------------------
 
-test('soldiers at rest take turns at the academy, one at a time, and come back trained', () => {
-  const { game, academy, fort } = lineCity();
-  const men = garrison(game, fort);
-  updateDrill(game);
-  const away = () => men.filter((u) => u.drill);
-  assert.deepEqual(away().map((u) => u.slot), [0], 'the first untrained man, one at a time');
-  updateDrill(game);
-  assert.equal(away().length, 1, 'never two');
-  const first = men[0];
-  assert.ok(fightUntil(game, () => first.trained) > 0, 'he reaches the academy');
-  assert.equal(first.drill, 0);
-  assert.equal(academy.trainedHere, 1);
-  assert.ok(fightUntil(game, () => first.state === 'idle') > 0, 'and marches back to his post');
-  assert.ok(holdingPosition(game, first), 'back in his place');
-  updateDrill(game);
-  assert.deepEqual(away().map((u) => u.slot), [1], 'then the next');
-  // Everyone in turn.
-  for (let k = 0; k < 400 && men.some((u) => !u.trained); k++) {
-    updateDrill(game);
-    fightUntil(game, () => !men.some((u) => u.drill), 600);
-  }
-  assert.equal(trainedOf(game, fort.id).trained, FORT_CAPACITY, 'the whole fort, in time');
-  assert.equal(trainedText(game, fort), `${FORT_CAPACITY} of ${FORT_CAPACITY} trained`);
-  updateDrill(game);
-  assert.equal(away().length, 0, 'nobody left to train');
-});
-
-test('soldiers at rest: never while deployed or raided, never to an academy short of staff', () => {
-  const { game, academy, fort } = lineCity();
+test('soldiers at rest never go to the academy: they hold their posts; a recruit passing it still comes trained', () => {
+  const { game, barracks, academy, fort } = lineCity();
   const men = garrison(game, fort, 3);
-  academy.efficiency = 19 / 20;
-  updateDrill(game);
-  assert.equal(men.filter((u) => u.drill).length, 0, 'short of staff: nobody goes');
-  academy.efficiency = 1;
-  updateDrill(game);
-  assert.equal(men.filter((u) => u.drill).length, 1);
-  // Deployed: the man on his way comes back, and nobody else goes.
-  deployFort(game, fort.id, fort.x, fort.y + 8);
-  assert.equal(men.filter((u) => u.drill).length, 0, 'deploying calls him back');
-  updateDrill(game);
-  assert.equal(men.filter((u) => u.drill).length, 0);
-  recallFort(game, fort.id);
-  fightUntil(game, () => men.every((u) => u.state === 'idle'));
-  updateDrill(game);
-  assert.equal(men.filter((u) => u.drill).length, 1);
-  // A raid: home at once.
-  game.military.active = { id: 99, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false };
-  updateDrill(game);
-  assert.equal(men.filter((u) => u.drill).length, 0, 'a raid calls him home');
-  game.military.active = null;
-  // No academy at all: nothing happens, nothing changes.
-  removeBuilding(game, academy);
-  const before = JSON.stringify([...game.units.values()]);
-  updateDrill(game);
-  assert.equal(JSON.stringify([...game.units.values()]), before);
+  const spots = men.map((u) => ({ x: u.x, y: u.y }));
+  for (let d = 0; d < 20; d++) {
+    updateDrill(game);
+    fightUntil(game, () => false, CONFIG.TICKS_PER_DAY);
+  }
+  assert.equal(men.filter((u) => u.drill).length, 0, 'nobody is sent to the drill yard');
+  assert.ok(men.every((u, k) => u.state === 'idle' && Math.hypot(u.x - spots[k].x, u.y - spots[k].y) < 0.05), 'every man still at his post');
+  assert.equal(trainedOf(game, fort.id).trained, 0, 'men who joined untrained stay so');
+  assert.equal(academy.trainedHere || 0, 0);
+  // A new recruit still goes by the academy and joins trained.
+  const w = sendRecruit(game, barracks);
+  assert.equal(w.state, 'toAcademy');
+  assert.ok(walkUntil(game, () => w.dead) > 0, 'on to his fort');
+  assert.equal(trainedText(game, fort), '1 of 4 trained');
+  assert.equal(academy.trainedHere, 1);
 });
 
-test('a trip with no way there is given up, and the fort waits before sending another', () => {
-  const { game, academy, fort } = lineCity();
-  const men = garrison(game, fort, 2);
-  updateDrill(game);
-  const u = men.find((x) => x.drill);
-  u.drillDay = game.time.totalDays - CONFIG.DRILL_MAX_DAYS - 1;
-  updateDrill(game);
-  assert.equal(u.drill, 0, 'given up');
-  assert.equal(fort.drillWait, game.time.totalDays + CONFIG.DRILL_RETRY_DAYS);
-  assert.equal(men.filter((x) => x.drill).length, 0, 'nobody else for now');
-  fort.drillWait = 0;
-  updateDrill(game);
-  assert.equal(men.filter((x) => x.drill).length, 1);
-  assert.ok(academy);
-});
-
-test('review: a far academy gets time for the walk there and back; a short trip gets DRILL_MAX_DAYS', () => {
+test('a soldier on his way to the drill yard in an older save comes straight home, untrained', () => {
   const { game, academy, fort } = lineCity();
   const [u] = garrison(game, fort, 1);
-  startDrill(game, u, academy);
-  assert.equal(u.drillDays, CONFIG.DRILL_MAX_DAYS, 'a near academy: the floor');
+  const post = { x: u.x, y: u.y };
+  // (What an older save holds for a man on his trip.)
+  Object.assign(u, { drill: academy.id, drillDay: game.time.totalDays, drillDays: CONFIG.DRILL_MAX_DAYS, state: 'drill' });
+  u.x += 6;
+  updateMilitary(game);
+  assert.equal(u.drill, 0, 'the trip is off');
+  assert.ok(fightUntil(game, () => u.state === 'idle') > 0, 'he marches back');
+  assert.ok(Math.hypot(u.x - post.x, u.y - post.y) < 0.2, 'to his post');
+  assert.equal(u.trained, false);
+  assert.equal(academy.trainedHere || 0, 0);
+});
+
+test('review: a far Portus gets time for the row there; a short trip gets DRILL_MAX_DAYS; a late one is given up', () => {
+  const { game, fort } = lineCity();
+  // (The time limit is what is tested, so a soldier stands in for a ship.)
+  const [u] = garrison(game, fort, 1);
+  startDrill(game, u, { id: 998, x: u.x, y: u.y + 2, size: 3 });
+  assert.equal(u.drillDays, CONFIG.DRILL_MAX_DAYS, 'a near school: the floor');
   // 80 tiles away a legionary (1.5 tiles a day) needs about 53 days each way: never given up on day 41.
   const far = { id: 999, x: u.x + 80, y: u.y, size: 3 };
   startDrill(game, u, far);
   const oneWay = 81.5 / (UNIT_TYPES.legionary.speed * CONFIG.TICKS_PER_DAY);
   assert.ok(u.drillDays > 2 * oneWay, `${u.drillDays} days for a ${Math.round(oneWay)}-day walk`);
-  u.drill = academy.id; // (the time limit is what is tested: the trip itself goes to the real academy)
   u.drillDay = game.time.totalDays - 60;
   updateDrill(game);
-  assert.equal(u.drill, academy.id, 'still on his way on day 60');
-});
-
-test('review: an academy that loses its road ends the trips to it at once', () => {
-  const { game, academy, fort } = lineCity();
-  const men = garrison(game, fort, 1);
+  assert.equal(u.drill, far.id, 'still on the way on day 60');
+  u.drillDay = game.time.totalDays - u.drillDays - 1;
   updateDrill(game);
-  assert.equal(men[0].drill, academy.id);
-  academy.accessRoad = -1; // (its road was torn up)
-  updateMilitary(game);
-  assert.equal(men[0].drill, 0, 'called off, not marched into the wall for 40 days');
-  assert.equal(fort.drillWait || 0, 0, 'and the fort is not made to wait');
+  assert.equal(u.drill, 0, 'given up once the time is out');
 });
 
 test('review: a recruit trained on the way but lost before his fort is not counted as trained', () => {
@@ -381,7 +382,7 @@ test('damage: a trained legionary holding position, a trained archer, untrained 
   assert.equal(unitDefense(game, leg), LEG.defense + LEG.holdDefense);
   assert.equal(rollDamage(flat, raider, LEG, 1, unitDefense(game, leg)), 4.5);
   assert.equal(missileDamage(game, leg, rollDamage(flat, slinger, LEG, 1, unitDefense(game, leg))), 0.5);
-  // Standing to fight a raider in reach is holding too; running after one, marching or off to the drill yard is not.
+  // Standing to fight a raider in reach is holding too; running after one or marching is not.
   const foe = spawnUnit(game, 'raider', leg.x + 0.8, leg.y, { invasion: 1 });
   leg.state = 'engage';
   leg.target = foe.id;
@@ -395,9 +396,6 @@ test('damage: a trained legionary holding position, a trained archer, untrained 
   assert.equal(holdingPosition(game, leg), false, 'marching');
   assert.equal(missileDamage(game, leg, 3.5), 3.5);
   leg.state = 'idle';
-  leg.drill = 1;
-  assert.equal(holdingPosition(game, leg), false, 'on his way to the drill yard');
-  leg.drill = 0;
   // Attack and hit points never change.
   assert.equal(leg.maxHp, LEG.hp);
   // Archers and cavalry: +2 defense at all times.
@@ -501,7 +499,7 @@ test('the Portus: its water rule, and only a fully staffed one on the station\'s
   }
 });
 
-test('a new liburnian rows past the Portus first and reaches its berth trained; ships at rest take turns', () => {
+test('a new liburnian rows past the Portus first and reaches its berth trained; ships at rest stay at their berths', () => {
   const { game, station, portus } = portusCity();
   let firstState = null;
   for (let d = 0; d < 200 && !firstState; d++) {
@@ -518,17 +516,72 @@ test('a new liburnian rows past the Portus first and reaches its berth trained; 
   assert.equal(ship.trained, true, 'trained at the Portus');
   assert.equal(ship.state, 'berthed', 'then at its berth');
   assert.ok(portus.trainedHere >= 1);
-  // An untrained ship at rest (from an older save, say) goes over, one at a time.
+  // An untrained ship at rest (from an older save, say) stays at its berth, as soldiers at rest do.
   for (const u of game.units.values()) if (u.station === station.id) { u.trained = false; u.drill = 0; }
   const berthed = [...game.units.values()].filter((u) => u.station === station.id && u.state === 'berthed');
   assert.ok(berthed.length > 0, 'a ship at its berth');
-  staffFleet(game);
-  updateDrill(game);
-  assert.equal([...game.units.values()].filter((u) => u.station === station.id && u.drill).length, 1, 'one at a time');
+  for (let d = 0; d < 10; d++) { staffFleet(game); updateDrill(game); game.runDays(1); }
+  assert.equal([...game.units.values()].filter((u) => u.station === station.id && u.drill).length, 0, 'no trips at rest');
+  assert.ok(berthed.every((u) => u.state === 'berthed' && !u.trained), 'still berthed, untrained');
+  // A new ship on its way there is called straight to its berth when the squadron is deployed.
+  startDrill(game, berthed[0], portus);
   const berth = shoreBerth(game, station);
   assert.ok(deployStation(game, station.id, game.map.xOf(berth), game.map.yOf(berth)));
   assert.equal([...game.units.values()].filter((u) => u.drill).length, 0, 'deploying the squadron calls it back');
-  assert.match(trainingNote(game, station), /Portus at/);
+  staffFleet(game);
+  assert.match(trainingNote(game, station), /Portus at .*ships at their berths stay there/);
+});
+
+test('a new liburnian moors at the Portus for its training, paused while it is short of staff, then rows on trained; a raid calls it home untrained', () => {
+  const { game, station, portus } = portusCity();
+  const TRAIN = CONFIG.PORTUS_TRAIN_DAYS * CONFIG.TICKS_PER_DAY;
+  assert.equal(CONFIG.PORTUS_TRAIN_DAYS, 8);
+  staffFleet(game);
+  const berth = shoreBerth(game, portus);
+  const ship = spawnUnit(game, 'liburnian', game.map.xOf(berth) + 0.5, game.map.yOf(berth) + 0.5, { station: station.id, slot: 0, state: 'sail', body: game.map.navBody[berth] });
+  startDrill(game, ship, portus);
+  assert.ok(fightUntil(game, () => ship.state === 'training', 200) >= 0, 'moored at the Portus');
+  assert.equal(ship.trained, false, 'not trained on arrival');
+  assert.equal(ship.trainLeft, TRAIN - 1, 'its first tick of training');
+  assert.equal(inTrainingText(game, portus), `1 (${CONFIG.PORTUS_TRAIN_DAYS} days left)`, 'the Portus panel');
+  assert.equal(inTrainingText(game, station), `1 (${CONFIG.PORTUS_TRAIN_DAYS} days left)`, 'the station panel');
+  // A trip's time limit does not cut short a ship already there.
+  ship.drillDay = game.time.totalDays - CONFIG.DRILL_MAX_DAYS - 5;
+  updateDrill(game);
+  assert.equal(ship.drill, portus.id, 'still training');
+  fightUntil(game, () => false, 50);
+  const left = ship.trainLeft;
+  portus.efficiency = 11 / 12;
+  fightUntil(game, () => false, 300);
+  assert.equal(ship.trainLeft, left, 'paused while short of staff');
+  assert.equal(ship.state, 'training', 'still moored');
+  assert.match(inTrainingText(game, portus), /paused/);
+  portus.efficiency = 1;
+  assert.equal(fightUntil(game, () => ship.trained), left, 'resumed where it stopped');
+  assert.equal(ship.drill, 0);
+  assert.equal(portus.trainedHere, 1);
+  // A ship kept waiting more than TRAIN_WAIT_MAX_DAYS by a Portus short of staff rows on untrained.
+  const three = spawnUnit(game, 'liburnian', game.map.xOf(berth) + 0.5, game.map.yOf(berth) + 0.5, { station: station.id, slot: 2, state: 'sail', body: game.map.navBody[berth] });
+  startDrill(game, three, portus);
+  fightUntil(game, () => three.state === 'training', 200);
+  portus.efficiency = 0.5;
+  fightUntil(game, () => !three.drill, CONFIG.TRAIN_WAIT_MAX_DAYS * CONFIG.TICKS_PER_DAY + 5);
+  portus.efficiency = 1;
+  assert.equal(three.drill, 0, 'given up');
+  assert.equal(three.trained, false);
+  assert.ok(three.trainWait === 0 && three.trainLeft === 0);
+  // A second one is called home by a raid while it trains, untrained.
+  const two = spawnUnit(game, 'liburnian', game.map.xOf(berth) + 0.5, game.map.yOf(berth) + 0.5, { station: station.id, slot: 1, state: 'sail', body: game.map.navBody[berth] });
+  startDrill(game, two, portus);
+  fightUntil(game, () => two.state === 'training', 200);
+  game.military.active = { id: 9, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false };
+  updateDrill(game);
+  game.military.active = null;
+  assert.equal(two.drill, 0, 'called home');
+  assert.equal(two.trainLeft, 0);
+  assert.equal(two.trained, false);
+  fightUntil(game, () => false, 5);
+  assert.notEqual(two.state, 'training', 'rowing to its berth');
 });
 
 // ---------------------------------------------------------------------------
@@ -574,7 +627,7 @@ test('panel words: the fort\'s training line and the academy\'s status', () => {
   const { game, academy, fort } = lineCity();
   garrison(game, fort, 3);
   assert.equal(trainedText(game, fort), '0 of 3 trained');
-  assert.match(trainingNote(game, fort), new RegExp(`^Recruits train at the Campus at ${academy.x}, ${academy.y}`));
+  assert.match(trainingNote(game, fort), new RegExp(`^Recruits train at the Campus at ${academy.x}, ${academy.y} on their way here; men already in the fort stay at their posts`));
   assert.deepEqual(schoolStatus(game, academy), { level: 'good', text: 'Fully staffed: soldiers of the forts nearest it train here.' });
   academy.efficiency = 0.5;
   academy.workers = 10;
@@ -588,12 +641,12 @@ test('panel words: the fort\'s training line and the academy\'s status', () => {
 // Saves
 // ---------------------------------------------------------------------------
 
-test('saves: training and trips survive a save; a version 11 save loads with everyone untrained', () => {
-  const { game, barracks, fort } = lineCity();
+test('saves: training, trips and a recruit mid-training survive a save; version 14 and 11 saves load', () => {
+  const { game, barracks, academy, fort } = lineCity();
   const men = garrison(game, fort, 2);
   men[0].trained = true;
-  updateDrill(game);
-  assert.equal(men[1].drill > 0, true, 'the untrained one is on his way');
+  startDrill(game, men[1], academy); // (a trip: a new ship's, or a soldier's in an older save)
+  assert.equal(men[1].drill, academy.id);
   const w = sendRecruit(game, barracks);
   const data = JSON.parse(JSON.stringify(serializeGame(game)));
   assert.equal(data.version, CONFIG.SAVE_VERSION);
@@ -602,6 +655,24 @@ test('saves: training and trips survive a save; a version 11 save loads with eve
   assert.equal(again.units.get(men[0].id).trained, true);
   assert.equal(again.units.get(men[1].id).drill, men[1].drill);
   assert.equal(again.walkers.get(w.id).state, 'toAcademy');
+  // A recruit in training: where he stands, and the days he has left.
+  walkUntil(game, () => w.state === 'training');
+  walkUntil(game, () => false, 30);
+  const mid = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  const mw = mid.walkers.get(w.id);
+  assert.equal(mw.state, 'training');
+  assert.equal(mw.trainLeft, w.trainLeft);
+  assert.equal(mid.buildings.get(fort.id).recruiting, 1, 'his place still held');
+  // A version 14 save (before training took time): nobody was mid-training,
+  // and a recruit on his way trains when he gets there.
+  const v14 = JSON.parse(JSON.stringify(data));
+  v14.version = 14;
+  const old14 = deserializeGame(v14);
+  const ow = old14.walkers.get(w.id);
+  assert.equal(ow.state, 'toAcademy');
+  assert.equal(ow.trainLeft || 0, 0);
+  for (let t = 0; t < 4000 && ow.state === 'toAcademy'; t++) updateWalkers(old14);
+  assert.equal(ow.state, 'training', 'he trains on arrival');
   // A version 11 save: nobody trained, nobody on a trip, the recruit untrained.
   data.version = 11;
   for (const u of data.units) { delete u.trained; delete u.drill; delete u.drillDay; }

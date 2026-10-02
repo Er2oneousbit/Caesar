@@ -402,7 +402,7 @@ test('a save between stages tells nothing again: the stage is saved', () => {
 });
 
 test('a save from before the stages (version 14) loads with the stages already past counted as told; nothing on load, nothing late', () => {
-  assert.equal(CONFIG.SAVE_VERSION, 15);
+  assert.ok(CONFIG.SAVE_VERSION >= 15, 'the stages came with version 15');
   /** The game saved as version 14 would have saved it. */
   const asV14 = (game) => {
     const data = JSON.parse(JSON.stringify(serializeGame(game)));

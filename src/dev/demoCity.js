@@ -25,6 +25,8 @@ import { openRoute, setTradeMode, dockBerth } from '../sim/trade.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { Terrain, WaterBits } from '../world/map.js';
 import { CONFIG } from '../config.js';
+import { UNIT_TYPES } from '../data/units.js';
+import { deployFort, recallFort } from '../sim/military.js';
 
 /** Undo records of the builds made inside the current attempt() (null outside one). */
 let recording = null;
@@ -581,6 +583,48 @@ export function buildDemoGarrison(game, center, opts = {}) {
   // Placed last, so a garrison without it is laid out exactly as before.
   const academy = opts.academy ? buildDemoAcademy(game, center) : null;
   return { ok: !!barracks && forts.length > 0, barracks, forts, ranch, fletcher, towers, wall, academy };
+}
+
+// Forts commandGarrison deployed, per game (so it never recalls a fort the
+// player sent out). Derived, never saved.
+const commanded = new WeakMap();
+
+/**
+ * A player's minimum with an army (simulate.mjs --garrison, tests). A fort at
+ * rest holds its ground (sim/military.js), so while enemies are ashore (a raid
+ * or Caesar's legions) every fort with men at home is deployed onto the enemy
+ * nearest `center`, and moved after him when he gets more than 4 tiles from
+ * the rally point; when the last enemy is gone, those forts are recalled. A
+ * fort the player deployed is left alone. Call it once a day; it draws no
+ * random numbers and does nothing at all while no enemy is ashore and no fort
+ * of its own is out. @returns {number} forts it has out
+ */
+export function commandGarrison(game, center) {
+  const own = commanded.get(game) || new Set();
+  commanded.set(game, own);
+  let foe = null;
+  let best = Infinity;
+  for (const u of game.units.values()) {
+    if (u.side !== 'enemy' || UNIT_TYPES[u.type].naval) continue; // (raider ships, and those aboard, are the fleet's)
+    const d = Math.hypot(u.x - center.x, u.y - center.y);
+    if (d < best) { best = d; foe = u; }
+  }
+  if (!foe) {
+    for (const id of own) recallFort(game, id);
+    own.clear();
+    return 0;
+  }
+  const home = new Map(); // fort id -> men at home
+  for (const u of game.units.values()) if (u.fort && !u.away) home.set(u.fort, (home.get(u.fort) || 0) + 1);
+  const tx = Math.floor(foe.x);
+  const ty = Math.floor(foe.y);
+  for (const f of game.buildings.values()) {
+    if (f.def.kind !== 'fort' || !home.get(f.id)) continue;
+    if (f.rally && !own.has(f.id)) continue; // the player's
+    if (f.rally && Math.hypot(f.rally.x - (tx + 0.5), f.rally.y - (ty + 0.5)) <= 4) continue;
+    if (deployFort(game, f.id, tx, ty)) own.add(f.id);
+  }
+  return own.size;
 }
 
 /**

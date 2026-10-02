@@ -50,7 +50,7 @@ import { GOODS } from '../data/goods.js';
 import { Terrain } from '../world/map.js';
 import { RNG } from '../core/rng.js';
 import { spawnUnit, removeUnit, passable, fillField, computeField, damageBuilding, enemyPower, rollDamage, hurt, screenDirection, warbandType, unitDefense } from './military.js';
-import { portusFor, startDrill, endDrill, drilled } from './training.js';
+import { portusFor, startDrill, endDrill, drilled, trainsNow } from './training.js';
 import { awayCounts, awayOf, leaveForBattle, dropAway, AWAY_MAX_TICKS } from './battle.js';
 import { dockBerth } from './trade.js';
 import { killWalker, STRIDE_WRAP } from './entities.js';
@@ -814,17 +814,34 @@ export function ramOf(u, def = UNIT_TYPES[u.type]) {
 }
 
 /**
- * A liburnian sent to the Portus (new from the Navalia, or at rest; see
- * sim/training.js) rows to its berth and is trained on reaching it, then rows
- * on to its station. A Portus gone, or on other water: the trip is off.
- * @returns {boolean} true while still going
+ * A new liburnian sent to the Portus (sim/training.js) rows to its berth and
+ * moors there PORTUS_TRAIN_DAYS (`trainLeft`, counted only while the Portus
+ * is fully staffed, but kept waiting no more than TRAIN_WAIT_MAX_DAYS in
+ * all), then, trained, rows on to its station. A Portus gone, or
+ * on other water: the trip is off, and it rows on untrained.
+ * @returns {boolean} true while still going (or moored there)
  */
 function rowToPortus(game, u, def) {
   const p = game.buildings.get(u.drill);
   const berth = p && p.def.kind === 'portus' ? shoreBerth(game, p) : -1;
   if (berth < 0 || game.map.navBody[berth] !== u.body) { endDrill(u); return false; }
   const spot = { x: game.map.xOf(berth) + 0.5, y: game.map.yOf(berth) + 0.5 };
-  if (dist(u, spot) < 0.3) { drilled(game, u, p); return false; }
+  if (dist(u, spot) < 0.3) {
+    u.state = 'training';
+    u.moving = false;
+    if (!(u.trainLeft > 0)) u.trainLeft = CONFIG.PORTUS_TRAIN_DAYS * CONFIG.TICKS_PER_DAY;
+    if (!trainsNow(game, p)) {
+      // Short of staff: the drill waits, but not for ever (TRAIN_WAIT_MAX_DAYS): then on, untrained.
+      u.trainWait = (u.trainWait || 0) + 1;
+      if (u.trainWait <= CONFIG.TRAIN_WAIT_MAX_DAYS * CONFIG.TICKS_PER_DAY) return true;
+      endDrill(u);
+      return false;
+    }
+    u.trainLeft--;
+    if (u.trainLeft > 0) return true;
+    drilled(game, u, p);
+    return false;
+  }
   u.state = 'drill';
   steer(game, u, spot.x, spot.y, shipSpeed(u, def));
   return true;
@@ -987,6 +1004,10 @@ export function shipStatus(game, u) {
     case 'engage': return 'Fighting a raider ship';
     case 'berthed': return 'At its berth';
     case 'drill': return 'Rowing to the Portus to train its crew';
+    case 'training': {
+      const days = Math.ceil((u.trainLeft || 0) / CONFIG.TICKS_PER_DAY);
+      return `Moored at the Portus: its crew trains, ${days} day${days === 1 ? '' : 's'} left${trainsNow(game, game.buildings.get(u.drill)) ? '' : ' (paused: the Portus is short of staff)'}`;
+    }
     case 'away': return 'Sailing out to a distant battle';
     case 'holding': return st && st.rally ? `Holding the water at ${Math.floor(st.rally.x)}, ${Math.floor(st.rally.y)}` : 'Holding its place';
     default: return st && st.rally ? 'Rowing to where it was sent' : 'Rowing to its berth';

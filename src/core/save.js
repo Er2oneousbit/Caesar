@@ -119,6 +119,14 @@
  *      Messages may carry `empire` (a click opens the empire map). Older
  *      saves load with every stage whose moment has passed counted as given,
  *      so nothing is told late or twice, see upgradeWarningsV14().
+ *  16  training takes time (sim/training.js): a recruit walker training at
+ *      the academy is in state 'training' with `trainLeft` (ticks of
+ *      training at full staff still to go) and `trainWait` (ticks waited
+ *      for a full staff), and a new liburnian moored at the Portus has both
+ *      too. Soldiers at rest no longer go to the
+ *      academy. Older saves need nothing: nobody in them is mid-training
+ *      (a recruit or ship still on its way trains on arrival), and a soldier
+ *      caught on a trip to the academy comes straight home (updateRoman).
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,

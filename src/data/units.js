@@ -55,7 +55,7 @@ export const UNIT_TYPES = Object.freeze({
     name: 'Cavalryman', side: 'rome', color: '#c9962e', hp: 120, attack: 15, defense: 6, range: 1.2, aggro: 12,
     speed: 0.13, cooldown: 18, upkeep: 3, fort: 'fort_cavalry', mounted: true,
     trainedDefense: 2, strength: 1, trainedStrength: 2,
-    desc: 'Fast horsemen who hunt down raiders before they reach the city. Each recruit needs a horse.',
+    desc: 'Fast horsemen who, deployed, hunt down raiders before they reach the city. Each recruit needs a horse.',
   },
   // --- Raiders ------------------------------------------------------------------
   raider: {

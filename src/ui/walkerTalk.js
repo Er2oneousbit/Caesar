@@ -23,6 +23,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { PERFORMER_NAMES } from '../data/buildings.js';
 import { daysMoored } from '../sim/trade.js';
+import { trainsNow } from '../sim/training.js';
 
 /** Days a walker keeps saying the same thing. */
 const LINE_DAYS = 8;
@@ -104,6 +105,7 @@ function workLines(game, w) {
     case 'performer': return w.venue === 'hippodrome' ? ['Fresh horses for the races. Make way!'] : ['Off to the stage. The show must go on.'];
     case 'recruit':
       if (w.state === 'toAcademy') return ['First the drill yard, then the fort.', 'They say the academy makes a soldier of a farm boy.'];
+      if (w.state === 'training') return ['Left foot, right foot, shield up. Again!', 'A month at the post with a wooden sword, they say. My arms ache already.'];
       if (w.trained) return ['Close order, shields up: let them throw their stones.', 'Twenty years of service, and then a farm of my own.'];
       return ['Off to the fort. Rome needs me.', 'Twenty years of service, and then a farm of my own.'];
     case 'homeless': return ['Our home is gone. Is there a roof anywhere?', 'We lost everything. We need a place to stay.'];
@@ -251,6 +253,11 @@ export function walkerDoing(game, w) {
       return 'Leaving the city';
     case 'toVenue': return `On the way to perform at ${the(target)}`;
     case 'toAcademy': return `Marching to ${the(game.buildings.get(w.academy))} to be trained, then to ${the(target)}`;
+    case 'training': {
+      const academy = game.buildings.get(w.academy);
+      const days = Math.ceil((w.trainLeft || 0) / CONFIG.TICKS_PER_DAY);
+      return `Training at ${the(academy)} for ${the(target)}: ${days} day${days === 1 ? '' : 's'} left${trainsNow(game, academy) ? '' : ' (paused: the academy is short of staff)'}`;
+    }
     case 'toFort': return `Marching to ${the(target)}${w.trained ? ', trained at the Campus' : ''}`;
     case 'toWarehouse': return `Bringing goods to ${the(target)}`;
     case 'toDock': return `Sailing to ${the(target)}`;

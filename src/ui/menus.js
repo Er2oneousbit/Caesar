@@ -22,6 +22,7 @@ import { RANKS, SANDBOX_RANK, TOP_RANK } from '../data/ranks.js';
 import { SITES, SANDBOX_SITES, HOME_SITE } from '../data/sites.js';
 import { marketLine } from '../sim/prices.js';
 import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
+import { AUTO_PAUSE, autoPauseSwitches } from './autoPause.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
 const SLOT_NAMES = { auto: 'Autosave', quick: 'Quicksave', slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3', slot4: 'Slot 4', slot5: 'Slot 5' };
@@ -360,6 +361,7 @@ export function settingsMenu(app) {
     check('muted', 'Mute all sounds'),
     check('edgeScroll', 'Scroll when the mouse touches the screen edge'),
     check('autosave', `Autosave every ${CONFIG.AUTOSAVE_EVERY_MONTHS} months and when you leave the page`, 'Uses the "Autosave" slot in this browser\'s local storage.'),
+    autoPauseField(app),
     check('ambient', 'Ambient effects: drifting cloud shadows and birds', 'Purely decorative. Swaying trees and other small animations also turn off when your system asks for reduced motion.'),
     check('dayNight', 'Day and night', 'The sun sets every few minutes of game time and the city lights its lamps. Tool previews stay bright.'),
     check('seasons', 'Seasons', 'Grass and trees change color through the year: spring blossoms, autumn leaves, bare winter trees. Switched off, the map and the weather stay in summer (no snow); the calendar season still shows next to the date.'),
@@ -369,6 +371,22 @@ export function settingsMenu(app) {
       h('select', { onchange: (e) => { s.theme = e.target.value; app.applySettings(); } },
         [['auto', 'Match system'], ['light', 'Marble (light)'], ['dark', 'Basalt (dark)']].map(([k, n]) => h('option', { value: k, selected: s.theme === k }, n)))),
   ], [h('button', { class: 'btn primary', onclick: () => app.ui.closeModal() }, 'Done')], 'narrow', () => app.ui.closeModal());
+}
+
+/**
+ * Settings > Auto-pause (ui/autoPause.js): a switch per event. Each change
+ * stores a new object, so the defaults' frozen one is never written to.
+ */
+function autoPauseField(app) {
+  const on = autoPauseSwitches(app.settings);
+  return h('div', { class: 'field auto-pause' }, h('label', {}, 'Pause the game when...'),
+    AUTO_PAUSE.map((sw) => h('label', { class: 'check-row' },
+      h('input', {
+        type: 'checkbox', checked: on[sw.key], dataset: { pause: sw.key },
+        onchange: (e) => { app.settings.autoPause = { ...autoPauseSwitches(app.settings), [sw.key]: e.target.checked }; app.applySettings(); },
+      }),
+      h('span', {}, sw.label))),
+    h('div', { class: 'muted', style: { fontSize: '12px' } }, 'A note says what stopped the game: click it to look, and Space or P resumes. For a raid, the scouts\' report comes about 3 months ahead; the traders\' word before it and the reminder a month out never pause.'));
 }
 
 export function creditsMenu(app) {

@@ -39,11 +39,13 @@ import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
 import { deployFort, enemyCount } from './sim/military.js';
 import { deployStation } from './sim/navy.js';
+import { AUTO_PAUSE_DEFAULTS, autoPauseFor, autoPauseText } from './ui/autoPause.js';
+import { stepOfKind, nextIdleFrom, cyclable, kindPosition } from './ui/cycle.js';
 
 /** Input events that count as a user activation (HTML spec) in some browser. */
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
 
-const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true, difficulty: 'normal', seaRaids: true };
+const DEFAULT_SETTINGS = { volume: 0.5, muted: false, music: true, musicVolume: 0.35, edgeScroll: true, autosave: true, showFps: false, theme: 'auto', ambient: true, dayNight: true, seasons: true, weather: true, difficulty: 'normal', seaRaids: true, autoPause: AUTO_PAUSE_DEFAULTS };
 
 /** Does the player's system ask for less motion (accessibility setting)? */
 function prefersReducedMotion() {
@@ -108,6 +110,9 @@ export class App {
     this.errorCount = 0;
     this.gameUnsub = [];
     this.deploying = 0; // fort id while the player picks where to deploy its soldiers
+    this.ticking = false; // inside the main loop's sim ticks (only their events may auto-pause)
+    this.pauseToast = null; // the auto-pause's "Paused: ..." toast, until the game runs again
+    this.lastIdle = 0; // the idle building the I key showed last, to go on from
     this.lastExitSave = -Infinity; // performance.now() of the last save-on-exit (throttle)
     this.autosaveWarned = false;
     this.applySettings();
@@ -273,7 +278,7 @@ export class App {
     else this.centerOnEntry();
     const ev = game.events;
     this.gameUnsub.push(
-      ev.on('message', (m) => this.ui.messages.push(m)),
+      ev.on('message', (m) => this.onGameMessage(m)),
       ev.on('sound', ({ name }) => this.sfx.play(name)),
       ev.on('victory', () => this.onVictory()),
       ev.on('defeat', ({ reason }) => this.onDefeat(reason)),
@@ -286,6 +291,24 @@ export class App {
     this.paused = this.flags.speed === 0;
     window.colonia = this;
     log.info(`Game started: ${game.scenario.name} (${game.scenario.id}), seed ${game.seed}`);
+  }
+
+  /**
+   * A message from the running game: show it, and pause if an auto-pause
+   * switch (Settings, ui/autoPause.js) asks for it. Only for the main loop's
+   * own ticks: a console command or a test fast-forwarding never stops the
+   * game, and the menu's demo city is not subscribed at all.
+   */
+  onGameMessage(m) {
+    this.ui.messages.push(m);
+    if (!this.ticking || this.paused || !autoPauseFor(m, this.settings)) return;
+    this.paused = true; // the main loop stops ticking at once (frame())
+    this.ui.messages.dismiss(this.pauseToast);
+    // The note says why, and a click looks: where it happened, the empire
+    // map for news from afar, or the Imperial advisor for Caesar's letters.
+    const open = m.kind === 'legionMarch' ? (app) => app.ui.openEmpire('legion')
+      : m.kind === 'request' || m.kind === 'troops' ? (app) => app.ui.openAdvisors('imperial') : null;
+    this.pauseToast = this.ui.messages.push({ text: autoPauseText(m), level: 'pause', date: m.date, x: m.x, y: m.y, empire: m.empire, open, sticky: true });
   }
 
   onMonth() {
@@ -654,6 +677,61 @@ export class App {
     this.renderer.deployFort = 0;
   }
 
+  // ------------------------------------------------- building to building
+  /** Glide to building `id` and open its panel. */
+  goToBuilding(id) {
+    const b = this.game?.buildings.get(id);
+    if (!b) return;
+    if (this.ui.hasModal() && this.ui.modalKind !== 'outcome') this.ui.closeModal(); // the Advisors or the Empire map (the keys work over them)
+    this.renderer.camera.glideToTile(b.x + (b.size - 1) / 2, b.y + (b.size - 1) / 2);
+    this.ui.info.showBuilding(b.id);
+  }
+
+  /**
+   * Where building `b` stands among its kind, for its panel's row (ui/cycle.js;
+   * asked through the app so the panel and cycle.js do not import each other).
+   */
+  buildingPlace(b) {
+    return this.game ? kindPosition(this.game, b) : null;
+  }
+
+  /** The building whose panel is open (not a home), or null. */
+  panelBuilding() {
+    const t = this.ui.info.open ? this.ui.info.target : null;
+    const b = t && t.kind === 'building' ? this.game?.buildings.get(t.id) : null;
+    return cyclable(b) ? b : null;
+  }
+
+  /**
+   * The , and . keys and the panel's arrows: the building of the same kind
+   * before or after the one whose panel is open (`idle`: the idle ones
+   * only, ui/cycle.js). Says so when there is no other.
+   */
+  cycleKind(dir, idle = false) {
+    const b = this.panelBuilding();
+    if (!b) { this.ui.messages.push({ text: 'Open a building first: , and . go to the one before or after it of the same kind.', level: 'info', date: '' }); return; }
+    const to = stepOfKind(this.game, b, dir, idle);
+    if (to && to.id !== b.id) { this.goToBuilding(to.id); return; }
+    const what = b.def.name;
+    const text = idle ? (to ? `This is the only idle ${what}.` : `No ${what} is idle.`) : `This is the only ${what}.`;
+    this.ui.messages.push({ text, level: 'info', date: '' });
+  }
+
+  /**
+   * The I key and the Production advisor: the next idle building of any
+   * kind (Shift+I: the one before), going on from the open panel's
+   * building, or else from the one shown last.
+   */
+  nextIdle(dir = 1) {
+    const g = this.game;
+    if (!g) return;
+    const { to, only } = nextIdleFrom(g, this.panelBuilding(), g.buildings.get(this.lastIdle) || null, dir);
+    if (!to) { this.ui.messages.push({ text: 'No idle buildings: everything built is working.', level: 'good', date: '' }); return; }
+    if (only) { this.ui.messages.push({ text: 'This is the only idle building.', level: 'info', date: '' }); return; }
+    this.lastIdle = to.id;
+    this.goToBuilding(to.id);
+  }
+
   /** Center the view on the raiders (or open the military advisor if none are here). */
   focusThreat() {
     const g = this.game;
@@ -787,16 +865,27 @@ export class App {
         const speed = this.game ? CONFIG.SPEEDS[this.speedIndex] : 1;
         this.acc += dt * CONFIG.TICKS_PER_SECOND * speed;
         const t0 = performance.now();
-        while (this.acc >= 1 && ticks < CONFIG.MAX_TICKS_PER_FRAME) {
-          g.tick();
-          this.acc -= 1;
-          ticks++;
+        this.ticking = !!this.game;
+        try {
+          // An auto-pause (onGameMessage) stops the loop after that tick. Only
+          // the player's game: the menu's demo city runs whatever `paused`
+          // was left at by the game before it (it froze when this read
+          // `!this.paused`).
+          while (this.acc >= 1 && ticks < CONFIG.MAX_TICKS_PER_FRAME && !(this.game && this.paused)) {
+            g.tick();
+            this.acc -= 1;
+            ticks++;
+          }
+        } finally {
+          this.ticking = false;
         }
-        if (ticks >= CONFIG.MAX_TICKS_PER_FRAME) this.acc = 0; // drop backlog, do not spiral
+        if (ticks >= CONFIG.MAX_TICKS_PER_FRAME || (this.game && this.paused)) this.acc = 0; // drop backlog, do not spiral (or carry it past a pause)
         simMs = performance.now() - t0;
         alpha = this.acc;
       }
       if (!this.game && this.menuGame) this.menuDrift(dt);
+      // The auto-pause's note goes once the game runs again.
+      if (this.pauseToast && !(this.game && this.isPaused())) { this.ui.messages.dismiss(this.pauseToast); this.pauseToast = null; }
       this.input.update(dt);
       this.renderer.render(alpha, dt);
       this.music.setMood(this.musicMood());

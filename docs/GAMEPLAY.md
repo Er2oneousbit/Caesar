@@ -197,6 +197,8 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 
 **Finding what is wrong.** The **Problems** overlay (top bar) raises a column over each home with a problem, the most urgent first: a sick home (pale green); a home already falling back a level (tall, colored by the first thing it lacks); a home in unrest (wine red: mood under 30, or it has already sent out a protester or thief; only where there is crime); and a home that cannot move up, colored by the first thing it lacks (water, food, temples, entertainment, education, health, goods, desirability, room to grow), unless it is already as good as the province allows (its next level needs a building or a trade partner the mission does not have); empty lots no settler can reach and buildings that do not work are red, buildings that work badly (understaffed, short of goods, nowhere to deliver) amber. Point at a column for the reason; a legend lists the colors. The **Production** advisor shows, for each good, what was made, used (eaten, worked up, built into boats and ships, used by homes, spent on recruits, sent to the Emperor), imported and exported last month and what the storehouses hold; lists the buildings that are not working, grouped by reason, with a *Show* button that goes to each in turn; and names the bottlenecks: workshops waiting for a raw material, and shipyards for timber (and what makes it or who sells it), buildings without workers, harvests with nowhere to go, goods used faster than they come in, homes short of food. The **Overview** tab charts population, treasury and mood month by month (up to 20 years).
 
+**Going from building to building.** A building's panel (not a home's), where there are two or more of its kind, has a row with **◀** and **▶** (or the **,** and **.** keys): the one before or after it of the same kind, every Officina Lignaria in turn, say, in the order they were built, wrapping round; the view glides there and its panel opens. **Next idle (n)** goes to the next one of that kind that is idle (n counts them; greyed out when no other is). Idle means its status line is red (no road, no workers, no water...) or amber (waiting for a raw material, nowhere to deliver, no shows booked, a farm resting for the winter...), as the Problems overlay marks it; understaffed alone does not count, since the building still works, only slower. **I** goes through the idle buildings of every kind, kind by kind (**Shift+I** goes back), on from the building whose panel is open; the Production advisor has the same as a button, *Next idle building (I)*.
+
 ## Money
 
 * **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.
@@ -363,6 +365,21 @@ Caesar asks the province for troops to defend a city of the empire. In every mis
 ### Triumphal arches
 
 Each distant battle won earns one **Fornix** (Triumphal Arch; Government & Decor, shown there only while one is there to build, *Free (1)*): 3x3, free, no workers, never burns or decays (Caesar's legions and raiders can wreck it, 1,200 health). It is built **across a straight road**: the road must run through its middle row or column from side to side, plain road (not a plaza, bridge or the Imperial road's entrance) with no roadblock, and its other six tiles must be open land with no road (so not over a junction or a road two wide). The road runs on under it and walkers pass as before (soldiers and raiders go round it). Desirability +18 beside it, in rings of 18, 18, 15, 15, 12 (the falling reading of the original's numbers). An arch that is lost (demolished or destroyed) may be built again; its road stays clear (rubble falls only either side of it).
+
+## Auto-pause
+
+*Settings* has a switch for each event that can pause the game the moment it happens, so nothing slips by at 8x:
+
+| Switch | Pauses when | Default |
+|---|---|---|
+| A fire breaks out | a building catches fire on its own, or rioters set one alight. Not a fire spreading from one already burning, nor buildings raiders or Caesar's legions set alight (part of the attack) | off |
+| Scouts report a raid, or Caesar's legions set out | the scouts' report, about 3 months before a raid (by land or sea: the first word with its side and size); Caesar's legions leaving Rome. The traders' word about 6 months out and the reminder a month out never pause | off |
+| Raiders or Caesar's legions arrive | a warband (or its ships) comes onto the map; the legions march in | **on** |
+| Caesar makes a request or calls for troops | the Emperor asks for goods or money; he calls for troops for a distant battle | off |
+| A building collapses | a building falls down from neglect (not one torn down in a raid) | off |
+| Disease breaks out | disease breaks out in a home (the month's sum of further cases does not pause) | off |
+
+Only the arrival is on at first: it is the one that costs buildings within days if you are looking elsewhere, and a pause nobody asked for would look like a freeze. When the game pauses, a note in the corner says why (*Paused: a fire broke out*); click it to look (where it happened, the empire map for the legions setting out, the Imperial advisor for Caesar's letters). It stays until you click it or the game runs again: Space or P resumes. Only the running game pauses: the main menu's town, a console command (`fire`, `invade`...) and the headless sim never do. The switches change nothing in the city itself: a game plays the same with them on or off.
 
 ## Saving
 

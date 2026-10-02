@@ -503,8 +503,6 @@ Playing smoother:
 
 * **Blueprints**: copy and paste housing blocks, and a ghost planner that builds each piece once you can afford it.
 * **Pinned stats**: pin any good or rating to the top bar.
-* **Cycle idle buildings**: jump between the idle buildings of one kind.
-* **Auto-pause on events**: fires, scouted raids, the Emperor's requests.
 * **Per-building labor priority**, on top of the category priorities.
 * **Custom difficulty**: sliders over the lever table (every lever already lives in one table).
 * **Interactive tutorial mission**.

@@ -273,7 +273,7 @@ function announce(game, b, deaths, cause, sent) {
   if (b.house.pop <= 0) help = 'The home stands empty.';
   else if (sent) help = 'A physician is on the way.';
   else help = 'No physician is near enough to help: a staffed Medicus nearby would send one.';
-  game.message(`${head}: ${dead}. ${help}`, 'bad', b.x, b.y);
+  game.message(`${head}: ${dead}. ${help}`, 'bad', b.x, b.y, { kind: 'disease' });
   game.events.emit('sound', { name: 'wrath' }); // a low, grim note (the war horn is for riots and raids)
 }
 

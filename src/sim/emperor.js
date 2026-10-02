@@ -88,7 +88,7 @@ export function updateEmperor(game) {
     const amount = keptCap(game, good, round50(Math.min(2400, 200 + 100 * game.rng.range(1, 2 + scale)) * requestSize));
     c.request = { kind: 'goods', good, amount, deadline: now + months };
   }
-  game.message(`The Emperor requests ${describeRequest(c.request)} within ${months} months. Open the Imperial advisor to send it.`, 'imperial');
+  game.message(`The Emperor requests ${describeRequest(c.request)} within ${months} months. Open the Imperial advisor to send it.`, 'imperial', undefined, undefined, { kind: 'request' });
   game.events.emit('sound', { name: 'fanfare' });
 }
 

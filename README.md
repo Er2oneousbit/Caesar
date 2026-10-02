@@ -34,6 +34,7 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 * **Cloth and clothing** (new, not in the original): flax fields that flower blue, a Textrinum (linen weaver) at its loom and a Taberna Vestiaria (clothing maker) with tunics drying in the yard. From the Insula up, homes need clothing too; linen can also be bought from Hispania and Egypt.
 * **The governor's career:** a rank from Citizen up to Caesar, a salary you set yourself (Rome frowns on a greedy governor) paid into personal savings that follow you from mission to mission, gifts to the Emperor from those savings, and a residence of your own: a house, a villa or a marble palace.
 * **Four difficulties**, Easy to Insane.
+* **Auto-pause** on the events you choose in *Settings* (a fire, a scouted raid, raiders arriving, Caesar's letters, a collapse, disease), with a note that takes you there; and **idle buildings** one click (or the **I** key) apart, or every building of a kind in turn from its panel.
 * **Trade** by land and sea with twelve partner cities, each buying and selling its own goods up to a yearly quota (a busy route sends its traders more often, a far one less often) at its own prices: a far partner charges more and pays more, each province has a few goods cheap or dear, and every price moves a little each New Year. Choose whom you trade each good with: every partner's card has a switch per good, so you can sell only to the buyers who pay best. Ships wait at your Emporium (trade dock) while its workers unload them and bring your exports aboard. An empire map (E) of the Mediterranean, with your province where its city stood, that shows the caravans and ships on their way, the warbands gathering against you (from the first traders' word six months out; your scouts report their size and road three months out, and a last warning comes a month before), Caesar's legions on the road and your troops marching to a distant battle.
 * **Granary and warehouse orders:** per good, accept it, refuse it, or *get* it (the building's cart fetches it from other storage), and an *Empty* switch that sends everything elsewhere.
 * **Defense:** a barracks, forts for legionaries, archers and cavalry (on horses you breed or import, kept at the ranch until a barracks needs them), watchtowers, walls and gates. Forts at rest hold their ground, as in the original: deploy them to meet raiders in the field (a deployed fort takes no recruits until it is recalled). A Campus (military academy) trains your soldiers: trained legionaries holding their ground shrug off sling stones and arrows.
@@ -67,6 +68,8 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | Ctrl+Z | Undo the last construction (full refund, for a few days) |
 | O, Shift+O | Next overlay, overlays off |
 | E | Empire map |
+| , / . | The building before / after the open one, of the same kind |
+| I, Shift+I | Next / previous idle building |
 | F1 / F2 | Help / Advisors |
 | F5 / F9 | Quick save / quick load |
 | M | Music on / off |
@@ -82,6 +85,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | An old save will not load | Until version 1.0 a new release may not load older saves, and says so. Start a new city. |
 | "Could not save: storage is full" | Delete old slots in *Load game* (each shows its size), or export them to files first. |
 | Slow when zoomed far out | Switch off *Ambient effects* and *Weather* in *Settings*. |
+| The game paused by itself | An auto-pause switch in *Settings* (raiders arriving is on at first). The note in the corner says why: click it to look, Space resumes. |
 | Night too dark, or rain distracting | Switch off *Day and night* or *Weather* in *Settings* (both are purely visual). |
 | In debt and cannot build | Ask Rome for a loan in the Finance advisor (F2): the money comes at once and is repaid monthly with interest. |
 | Tax income is falling | Click a home: its tax line says whether a tax collector has registered it, and for how long. A lone Forum's collector can wander off along the Imperial road; a second Forum, or roadblocks at the ends of your blocks, keep collectors on your streets. |

@@ -1330,11 +1330,11 @@ function scoutRaid(game, left) {
     const e = game.map.seaEntry;
     const when = left <= 0 ? 'any day now' : `in about ${left === 1 ? 'a month' : `${left} months`}`;
     m.warned = { origin: { x: e.x, y: e.y }, size, dir: screenDirection(game.map, e.x, e.y), sea: true, landing: { x: sea.x, y: sea.y } };
-    game.message(`Scouts report about ${size} raiders taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} ${when}. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y, { empire: 'warband' });
+    game.message(`Scouts report about ${size} raiders taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} ${when}. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y, { empire: 'warband', kind: 'scouted' });
   } else {
     const origin = pickRaidOrigin(game);
     m.warned = { origin, size: raidSize(game), dir: screenDirection(game.map, origin.x, origin.y) };
-    game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}, ${monthsAway(left)}. Train soldiers and man your towers!`, 'warn', origin.x, origin.y, { empire: 'warband' });
+    game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}, ${monthsAway(left)}. Train soldiers and man your towers!`, 'warn', origin.x, origin.y, { empire: 'warband', kind: 'scouted' });
   }
   m.warnStage = 2;
   game.events.emit('sound', { name: 'horn' });
@@ -1411,7 +1411,7 @@ export function launchInvasion(game, origin, size, { sea = false } = {}) {
     spawnUnit(game, type, x + 0.5, y + 0.5, { invasion: inv.id, state: 'advance' });
   }
   computeField(game);
-  game.message(`Raiders are attacking from the ${screenDirection(map, origin.x, origin.y)}! (${size} warriors)`, 'bad', origin.x, origin.y);
+  game.message(`Raiders are attacking from the ${screenDirection(map, origin.x, origin.y)}! (${size} warriors)`, 'bad', origin.x, origin.y, { kind: 'raid' });
   game.events.emit('sound', { name: 'horn' });
   game.events.emit('invasion', inv);
   return inv;

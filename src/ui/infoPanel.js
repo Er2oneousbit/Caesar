@@ -239,7 +239,8 @@ export function buildingStatus(game, b) {
     default:
       break;
   }
-  if (def.workers && b.efficiency < 1) return { level: 'warn', text: `Understaffed: working at ${pct(b.efficiency)}.` };
+  // `understaffed`: it still works, only slower (ui/cycle.js does not count it idle).
+  if (def.workers && b.efficiency < 1) return { level: 'warn', text: `Understaffed: working at ${pct(b.efficiency)}.`, understaffed: true };
   return { level: 'good', text: 'Working normally.' };
 }
 
@@ -415,6 +416,28 @@ export class InfoPanel {
   }
 
   /**
+   * The buildings of this one's kind (ui/cycle.js): the one before, the one
+   * after (the , and . keys) and the next idle one. Only where there are two
+   * or more; "Next idle" is greyed out when no other one is idle.
+   */
+  cycleRow(b) {
+    const p = this.app.buildingPlace(b);
+    if (!p || p.count < 2) return null;
+    const name = b.def.name;
+    const others = p.idle - (p.selfIdle ? 1 : 0);
+    return h('div', { class: 'panel-sec row cycle-row' },
+      h('button', { class: 'btn small cycle-prev', title: `The ${name} before this one (,)`, 'aria-label': `Previous ${name}`, onclick: () => this.app.cycleKind(-1) }, '◀'),
+      h('span', { class: 'muted num' }, `${p.index} of ${p.count}`),
+      h('button', { class: 'btn small cycle-next', title: `The next ${name} (.)`, 'aria-label': `Next ${name}`, onclick: () => this.app.cycleKind(1) }, '▶'),
+      h('button', {
+        class: 'btn small cycle-idle',
+        disabled: others <= 0,
+        title: others > 0 ? `The next ${name} that is not working, or short of what it needs (I goes through the idle buildings of every kind)` : `No other ${name} is idle`,
+        onclick: () => this.app.cycleKind(1, true),
+      }, `Next idle (${p.idle})`));
+  }
+
+  /**
    * Fire and collapse risk. What cannot burn or collapse (a warehouse, a
    * well, a Tent's roof) says so: "0%" would read as "safe for now".
    */
@@ -546,7 +569,7 @@ export class InfoPanel {
   renderBuilding(g, b) {
     const def = b.def;
     const st = buildingStatus(g, b);
-    const parts = [this.head(def.name, `${b.size * (def.span || 1)}×${b.size}`, def.en), h('div', { class: `status ${st.level}` }, st.text)];
+    const parts = [this.head(def.name, `${b.size * (def.span || 1)}×${b.size}`, def.en), h('div', { class: `status ${st.level}` }, st.text), this.cycleRow(b)];
     if (def.workers) {
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Employment'),

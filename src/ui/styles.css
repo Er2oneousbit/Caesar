@@ -320,6 +320,9 @@ table.tbl td.r, table.tbl th.r { text-align: right; }
 .panel-head h3 .en { font-family: var(--font-body); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
 .panel-close { border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--ink-soft); line-height: 1; }
 .panel-sec { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+/* Previous / next building of the same kind, and the next idle one (ui/cycle.js). */
+.cycle-row { gap: 6px; }
+.cycle-row .cycle-idle { margin-left: auto; }
 .panel-sec h5 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
 .kv { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; font-size: 13px; }
 .kv.link { cursor: pointer; }
@@ -377,6 +380,8 @@ table.tbl.coverage td.num, table.tbl.coverage td.r { white-space: nowrap; }
 .toast.warn { border-left-color: var(--warn); }
 .toast.bad { border-left-color: var(--bad); }
 .toast.imperial { border-left-color: var(--imperial); }
+/* The auto-pause's note (app.js onGameMessage): stays until the game runs again. */
+.toast.pause { border-left-color: var(--gold); font-weight: 600; }
 .toast .date { color: var(--ink-soft); font-size: 11px; margin-right: 6px; }
 .toast.fade { opacity: 0; transition: opacity 0.6s; }
 @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }

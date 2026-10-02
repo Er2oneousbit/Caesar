@@ -81,11 +81,13 @@ export function updateRisk(game, b) {
 }
 
 /** What the rubble remembers for each way a building is set alight (sim/ruins.js). */
-const RUIN_OF_FIRE = { fire: 'fire', wrath: 'wrath', raid: 'raidFire', raidQuiet: 'raidFire', riot: 'riot', riotQuiet: 'riot', legion: 'legionFire', legionQuiet: 'legionFire' };
+const RUIN_OF_FIRE = { fire: 'fire', spread: 'fire', wrath: 'wrath', raid: 'raidFire', raidQuiet: 'raidFire', riot: 'riot', riotQuiet: 'riot', legion: 'legionFire', legionQuiet: 'legionFire' };
 
 /**
  * Burn a building down: it becomes a burning ruin.
- * @param {'fire'|'wrath'|'raid'|'raidQuiet'|'riot'|'riotQuiet'|'legion'|'legionQuiet'} cause
+ * @param {'fire'|'spread'|'wrath'|'raid'|'raidQuiet'|'riot'|'riotQuiet'|'legion'|'legionQuiet'} cause
+ *        spread = caught from a fire beside it: burns and reads as 'fire',
+ *        but is not a new outbreak for the auto-pause (ui/autoPause.js);
  *        raidQuiet, riotQuiet, legionQuiet = no message (raiders, a mob or
  *        Caesar's legions wrecking a whole street would otherwise flood the
  *        log); wrath = no message either, the angry god's own message says
@@ -116,7 +118,9 @@ export function igniteBuilding(game, b, cause = 'fire') {
   // `in`, not `??`: the quiet causes are null on purpose (`??` turned them
   // back into a "Fire!" message for every building raiders burned).
   const text = cause in texts ? texts[cause] : `Fire! ${aLabel[0].toUpperCase()}${aLabel.slice(1)} has burned down.`;
-  if (text) game.message(text, 'bad', b.x, b.y);
+  // A fire that breaks out (or a riot's) is news the auto-pause may stop for;
+  // one spreading from a fire already burning is not a new event.
+  if (text) game.message(text, 'bad', b.x, b.y, cause === 'fire' || cause === 'riot' ? { kind: 'fire' } : null);
   game.events.emit('sound', { name: 'fire' });
   if (tiles.length) dispatchPrefect(game, tiles[0]);
 }
@@ -137,7 +141,7 @@ export function collapseBuilding(game, b, cause = 'decay') {
   game.city.stats.collapses++;
   if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause === 'legion') game.message(`Caesar's legions have torn down ${aLabel}!`, 'bad', b.x, b.y);
-  else if (cause !== 'raidQuiet' && cause !== 'legionQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y);
+  else if (cause !== 'raidQuiet' && cause !== 'legionQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y, { kind: 'collapse' });
   game.events.emit('collapse', { x: b.x, y: b.y, size: b.size });
   game.events.emit('sound', { name: 'collapse' });
 }
@@ -177,7 +181,7 @@ export function updateFires(game) {
   for (const nb of near) {
     if (!buildings.has(nb.id)) continue;
     nb.fireRisk += CONFIG.FIRE_HEAT_PER_DAY;
-    if (rng.chance(CONFIG.FIRE_SPREAD_CHANCE)) igniteBuilding(game, nb);
+    if (rng.chance(CONFIG.FIRE_SPREAD_CHANCE)) igniteBuilding(game, nb, 'spread');
   }
 }
 

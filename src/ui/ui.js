@@ -321,7 +321,8 @@ export class UI {
         mount(this.legendEl,
           h('b', {}, legend.name),
           legend.legend.map(([color, label]) => h('div', { class: 'legend-row' }, h('i', { style: { background: color } }), label)),
-          h('div', { class: 'muted' }, 'Point at a column to see why.'));
+          h('div', { class: 'muted' }, 'Point at a column to see why.'),
+          legend.key === 'problems' ? h('div', { class: 'muted' }, 'I: the next idle building.') : null);
       }
     }
     const t = app.renderer.hoverTile;

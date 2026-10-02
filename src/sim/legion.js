@@ -163,7 +163,7 @@ export function startMarch(game) {
   cs.noticeStage = 1;
   const months = Math.round(CONFIG.LEGION_MARCH_DAYS / CONFIG.DAYS_PER_MONTH);
   const again = cs.attacks > 0 ? ' again' : '';
-  game.message(`Caesar has lost patience with your governorship (favor ${Math.floor(game.city.ratings.favor)}). ${cs.size} of his legionaries are marching${again} from Rome and will reach the province in ${months} months. Win back his favor before they come and they will turn for home; if not, they will make for your residence and the finest homes. Ready your army!`, 'bad');
+  game.message(`Caesar has lost patience with your governorship (favor ${Math.floor(game.city.ratings.favor)}). ${cs.size} of his legionaries are marching${again} from Rome and will reach the province in ${months} months. Win back his favor before they come and they will turn for home; if not, they will make for your residence and the finest homes. Ready your army!`, 'bad', undefined, undefined, { kind: 'legionMarch' });
   game.events.emit('sound', { name: 'horn' });
 }
 
@@ -260,7 +260,7 @@ export function launchLegion(game, size = 0) {
   computeLegionField(game);
   const e = map.entry;
   const aim = { residence: 'your residence', homes: 'the finest homes', anything: 'whatever stands in the province' }[legionTargets(game).what];
-  game.message(`Caesar's legions have arrived: ${n} imperial legionaries are marching in from the ${screenDirection(map, e.x, e.y)}, making for ${aim}!`, 'bad', e.x, e.y);
+  game.message(`Caesar's legions have arrived: ${n} imperial legionaries are marching in from the ${screenDirection(map, e.x, e.y)}, making for ${aim}!`, 'bad', e.x, e.y, { kind: 'legion' });
   game.events.emit('sound', { name: 'horn' });
   game.events.emit('invasion', { legion: army.id });
   return army;

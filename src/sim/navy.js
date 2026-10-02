@@ -628,7 +628,7 @@ export function launchSeaInvasion(game, size) {
     u.pathIndex = u.path.length > 1 ? 1 : 0;
   }
   const dir = screenDirection(map, e.x, e.y);
-  game.message(`Raider ships are coming from the ${dir}: ${n} ship${n === 1 ? '' : 's'} with ${size} warriors. They will land near ${landing.x}, ${landing.y}.`, 'bad', landing.x, landing.y);
+  game.message(`Raider ships are coming from the ${dir}: ${n} ship${n === 1 ? '' : 's'} with ${size} warriors. They will land near ${landing.x}, ${landing.y}.`, 'bad', landing.x, landing.y, { kind: 'raid' });
   game.events.emit('sound', { name: 'horn' });
   game.events.emit('invasion', inv);
   return inv;

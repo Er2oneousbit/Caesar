@@ -220,10 +220,14 @@ export class Game {
    * A click on it glides to tile `x`, `y`; or, with `opts.empire` (a
    * traveler kind of ui/empireMap.js: 'warband', 'legion'), opens the empire
    * map with that traveler picked out, for news of something still on its way.
+   * `opts.kind` names the event for the UI's auto-pause switches (ui/autoPause.js:
+   * fire, scouted, raid, legion, legionMarch, request, troops, collapse,
+   * disease). It is a label only: nothing in the sim reads it.
    */
   message(text, level = 'info', x, y, opts = null) {
     const m = { id: this.nextMessageId++, text, level, x, y, date: this.time.shortLabel() };
     if (opts && opts.empire) m.empire = opts.empire;
+    if (opts && opts.kind) m.kind = opts.kind;
     this.messages.unshift(m);
     if (this.messages.length > 150) this.messages.pop();
     this.events.emit('message', m);

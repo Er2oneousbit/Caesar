@@ -37,6 +37,8 @@ export const KEY_HELP = [
   ['Ctrl+Z or U', 'Undo last construction'],
   ['O / Shift+O', 'Next overlay / turn overlays off'],
   ['E', 'Empire map: trade partners, caravans and ships on the way, warbands'],
+  [', / .', 'The building before / after the open one of the same kind'],
+  ['I / Shift+I', 'Next / previous idle building (not working, or short of goods)'],
   ['Home', 'Glide to the map entrance'],
   ['F1', 'Help'],
   ['F2', 'Advisors'],
@@ -341,6 +343,10 @@ export class Input {
       case 'u': case 'U': a.undo(); break;
       case 'm': case 'M': a.toggleMusic(); break;
       case 'e': case 'E': if (!e.repeat) a.ui.toggleEmpire(); break; // holding E must not flicker it open and shut
+      case ',': a.cycleKind(-1); break;
+      case '.': a.cycleKind(1); break;
+      case 'i': a.nextIdle(1); break;
+      case 'I': a.nextIdle(-1); break;
       case 'o': a.cycleOverlay(1); break;
       case 'O': a.setOverlay('none'); break;
       case '+': case '=': this.app.renderer.camera.zoomStep(1); break;

@@ -182,7 +182,7 @@ export function requestTroops(game, cityId, enemy) {
   const b = { city: cityId, enemy, requested: now, due: now + CONFIG.BATTLE_MONTHS, phase: 'pending', sent: null, outcome: null, homeIn: 0, foreignLeft: 0 };
   game.military.battle = b;
   const sea = c.route === 'sea';
-  game.message(`Caesar calls for troops: ${enemyWords(enemy)} of ${c.enemy} threatens ${c.name}, and the battle will be fought in ${CONFIG.BATTLE_MONTHS} months. Switch forts${sea ? ' (and, for a city by the sea, naval stations)' : ''} to Empire service and send them from the Imperial advisor; they need about ${marchMonths(homeSiteId(game), cityId)} months to get there.`, 'imperial');
+  game.message(`Caesar calls for troops: ${enemyWords(enemy)} of ${c.enemy} threatens ${c.name}, and the battle will be fought in ${CONFIG.BATTLE_MONTHS} months. Switch forts${sea ? ' (and, for a city by the sea, naval stations)' : ''} to Empire service and send them from the Imperial advisor; they need about ${marchMonths(homeSiteId(game), cityId)} months to get there.`, 'imperial', undefined, undefined, { kind: 'troops' });
   game.events.emit('sound', { name: 'fanfare' });
   return b;
 }

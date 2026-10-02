@@ -62,6 +62,7 @@ import { homesWithFood } from '../sim/population.js';
 import { loanTerms, takeLoan } from '../sim/loans.js';
 import { healthReport, educationReport, entertainmentReport, crimeNow, HEALTH_KINDS, EDUCATION_KINDS, VENUE_KINDS, TRAINER_KINDS } from '../sim/coverage.js';
 import { sickHomes } from '../sim/disease.js';
+import { idleBuildings } from './cycle.js';
 import {
   coverageText, healthVerdict, healthIsLow, cityHealthLine, crimeLine, healthAdviceText, educationAdviceText,
   entertainmentAdviceText, pluralName, educationLadderText,
@@ -355,7 +356,8 @@ export class Advisors {
           h('td', { class: 'r num' }, fmt(Math.round(r.stock))),
           h('td', { class: `r num ${r.net > 0.5 ? 'ok' : r.net < -0.5 ? 'no' : ''}` }, Math.abs(r.net) < 0.5 ? '0' : `${r.net > 0 ? '+' : ''}${fmt(Math.round(r.net))}`)))) : h('div', { class: 'muted' }, 'Nothing made or stored yet.'),
       h('div', { class: 'muted' }, 'Used: eaten, worked up in workshops, built into boats and ships, used by homes, spent on recruits and sent to the Emperor. In store: granaries, warehouses and docks.'),
-      h('h4', {}, 'Buildings not working as they should'),
+      h('div', { class: 'row' }, h('h4', { style: { flex: 1 } }, 'Buildings not working as they should'),
+        idleBuildings(g).length ? h('button', { class: 'btn small next-idle', title: 'Go to the idle buildings one by one, kind by kind (I; Shift+I goes back). Understaffed ones still work and are left out.', onclick: () => this.app.nextIdle(1) }, 'Next idle building (I)') : null),
       rep.troubles.length ? h('table', { class: 'tbl' },
         rep.troubles.map((grp) => h('tr', {},
           h('td', {}, h('span', { class: grp.level === 'bad' ? 'no' : '' }, grp.level === 'bad' ? '●' : '○'), ` ${grp.name}${grp.ids.length > 1 ? ` ×${grp.ids.length}` : ''}`),

@@ -1080,6 +1080,170 @@ try {
   await page.evaluate(() => window.colonia.ui.info.close());
   if (shownType.modal) await page.keyboard.press('Escape'); // the click closed the advisors (Escape on the map opens the game menu)
 
+  // 5a5. Auto-pause (ui/autoPause.js): Settings turns on "a fire breaks out";
+  //      a fire in the running game then pauses it, with a note that goes
+  //      there on a click, outlasts other toasts and leaves when the game
+  //      runs again. A fire from the console never pauses; with the switch
+  //      off a fire does not either.
+  //      Each fire comes on its own: one home's fire risk held over the
+  //      threshold until the daily check lights it.
+  const pauseWas = await page.evaluate(() => ({ speed: window.colonia.speedIndex, paused: window.colonia.paused, autoPause: window.colonia.settings.autoPause }));
+  await page.keyboard.press('Escape'); // the game menu
+  await page.click('.modal .btn:has-text("Settings")');
+  const switches = await page.evaluate(() => [...document.querySelectorAll('.auto-pause input[data-pause]')].map((i) => `${i.dataset.pause}:${i.checked ? 'on' : 'off'}`));
+  await page.click('.auto-pause input[data-pause="fire"]');
+  const fireOn = await page.evaluate(() => ({ live: window.colonia.settings.autoPause.fire, stored: JSON.parse(localStorage.getItem('colonia.settings')).autoPause.fire }));
+  await page.click('.modal .btn:has-text("Done")');
+  check('Settings lists the auto-pause switches (only raiders arriving on at first) and stores the one turned on',
+    switches.join(' ') === 'fire:off scouted:off arrive:on caesar:off collapse:off disease:off' && fireOn.live === true && fireOn.stored === true, JSON.stringify({ switches, fireOn }));
+  const consoleFire = await page.evaluate(() => {
+    const app = window.colonia;
+    app.setSpeed(1);
+    const before = app.game.city.stats.fires;
+    app.ui.console.run('fire');
+    return { burned: app.game.city.stats.fires - before, paused: app.paused };
+  });
+  check('a fire set from the console does not pause the game', consoleFire.burned === 1 && !consoleFire.paused, JSON.stringify(consoleFire));
+  /**
+   * Hold one occupied home's fire risk over the threshold until it burns;
+   * `pick` chooses the home. The fires still burning are put out first: one
+   * spreading (no pause, by design) could reach the home before its own
+   * fire breaks out, and the check would wait on the wrong fire.
+   */
+  const lightAHome = (pick) => page.evaluate((k) => {
+    const g = window.colonia.game;
+    g.fires.clear();
+    const homes = [...g.buildings.values()].filter((b) => b.house && b.house.pop > 0 && b.fireRisk > 0).sort((a, b) => a.id - b.id);
+    const b = homes[k] || homes[0];
+    if (!b) return null;
+    window.__torch = { id: b.id, fires: g.city.stats.fires };
+    window.colonia.setSpeed(4);
+    return { id: b.id, x: b.x, y: b.y };
+  }, pick);
+  const burnt = () => page.waitForFunction(() => {
+    const g = window.colonia.game;
+    const b = g.buildings.get(window.__torch.id);
+    if (b) b.fireRisk = 1e6; // (a passing prefect would lower it again)
+    return !b && g.city.stats.fires > window.__torch.fires;
+  }, null, { timeout: 30000, polling: 50 }).then(() => true, () => false);
+  const torch = await lightAHome(0);
+  const lit = torch ? await burnt() : false;
+  const paused = await page.evaluate(() => {
+    const app = window.colonia;
+    const note = document.querySelector('.toast.pause');
+    const days = app.game.time.totalDays;
+    return { paused: app.paused, note: note ? note.textContent : null, kind: app.game.messages.find((m) => /^Fire!/.test(m.text))?.kind, days };
+  });
+  await page.waitForTimeout(300);
+  const stillDays = await page.evaluate(() => window.colonia.game.time.totalDays);
+  check('with the switch on, a fire in the running game pauses it and a note says so',
+    lit && paused.paused && paused.kind === 'fire' && /Paused: a fire broke out/.test(paused.note || '') && stillDays === paused.days, JSON.stringify({ torch, lit, paused, stillDays }));
+  // Four overlay toasts while paused: the oldest toasts go, the note stays.
+  for (let k = 0; k < 4; k++) await page.keyboard.press('o');
+  await page.keyboard.press('Shift+O');
+  const outlasts = await page.evaluate(() => ({ note: !!document.querySelector('.toast.pause'), toasts: document.querySelectorAll('#messages .toast').length }));
+  check('the auto-pause note outlasts newer toasts while the game is paused', outlasts.note && outlasts.toasts <= 4, JSON.stringify(outlasts));
+  // The note glides to the fire (the ruin of the home).
+  await page.evaluate(() => window.colonia.renderer.camera.centerOnTile(2, 2));
+  await page.click('.toast.pause').catch(() => {});
+  await page.waitForTimeout(1200);
+  const looked = await page.evaluate(() => { const c = window.colonia.renderer.camera; const r = window.colonia.canvas.getBoundingClientRect(); return { at: c.screenToTile(r.width / 2, r.height / 2), paused: window.colonia.paused }; });
+  check('clicking the auto-pause note looks at the fire, and the game stays paused', !!torch && Math.abs(looked.at.x - torch.x) <= 2 && Math.abs(looked.at.y - torch.y) <= 2 && looked.paused, JSON.stringify({ torch, looked }));
+  // Resume, and a second fire: this time the note is left alone and Space
+  // makes it go. Then the switch off: the next fire does not pause.
+  await page.keyboard.press('Space');
+  const torchB = await lightAHome(1);
+  const litB = torchB ? await burnt() : false;
+  const pausedB = await page.evaluate(() => ({ paused: window.colonia.paused, notes: document.querySelectorAll('.toast.pause:not(.fade)').length }));
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(900);
+  const resumed = await page.evaluate(() => ({ paused: window.colonia.paused, notes: [...document.querySelectorAll('.toast.pause')].length }));
+  check('a second fire pauses again; Space resumes and the note goes', litB && pausedB.paused && pausedB.notes === 1 && !resumed.paused && resumed.notes === 0, JSON.stringify({ torchB, litB, pausedB, resumed }));
+  await page.evaluate(() => { const s = window.colonia.settings; s.autoPause = { ...s.autoPause, fire: false }; window.colonia.applySettings(); });
+  const torch2 = await lightAHome(2);
+  const lit2 = torch2 ? await burnt() : false;
+  const offState = await page.evaluate(() => ({ paused: window.colonia.paused, kind: window.colonia.game.messages.find((m) => /^Fire!/.test(m.text))?.kind, notes: document.querySelectorAll('.toast.pause:not(.fade)').length }));
+  check('with the switch off a fire does not pause the game',
+    lit2 && !offState.paused && offState.kind === 'fire' && offState.notes === 0, JSON.stringify({ torch2, lit2, offState }));
+  await page.evaluate((was) => {
+    const app = window.colonia;
+    app.game.fires.clear(); // put the fires out, so the steps that follow find the city as it was
+    app.settings.autoPause = was.autoPause;
+    app.applySettings();
+    app.setSpeed(was.speed);
+    app.paused = true;
+  }, pauseWas);
+
+  // 5a6. Cycling buildings (ui/cycle.js): a panel's arrows (and , and .) go
+  //      to the previous / next building of its kind by id; "Next idle" to
+  //      the next one of the kind that is not working; I goes through the
+  //      idle buildings of every kind; the Production advisor's button too.
+  //      The panel's own status line is the judge of "idle" here: red, or
+  //      amber for anything but understaffing.
+  const cyc = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const byType = new Map();
+    for (const b of g.buildings.values()) if (!b.house && b.def.workers && !(b.main && b.main !== b.id)) byType.set(b.type, [...(byType.get(b.type) || []), b]);
+    const [type, list] = [...byType.entries()].sort((a, b) => b[1].length - a[1].length)[0] || [];
+    if (!list || list.length < 3) return null;
+    list.sort((a, b) => a.id - b.id);
+    // The third one cannot find workers (the game is paused: nothing undoes it).
+    list[2].laborAccess = 0;
+    list[2].efficiency = 0;
+    const idle = list.filter((b) => {
+      app.ui.info.showBuilding(b.id);
+      const st = document.querySelector('#info-panel .status');
+      return st.classList.contains('bad') || (st.classList.contains('warn') && !/^Understaffed/.test(st.textContent));
+    }).map((b) => b.id);
+    app.ui.info.showBuilding(list[0].id);
+    return { type, ids: list.map((b) => b.id), idle };
+  });
+  const panelId = () => page.evaluate(() => { const t = window.colonia.ui.info.target; return t && t.kind === 'building' && window.colonia.ui.info.open ? t.id : 0; });
+  if (cyc) {
+    await page.waitForTimeout(100);
+    const row = await page.evaluate(() => document.querySelector('#info-panel .cycle-row')?.textContent || '');
+    await page.click('#info-panel .cycle-next');
+    const viaNext = await panelId();
+    await page.keyboard.press(',');
+    const viaComma = await panelId();
+    await page.keyboard.press('.');
+    await page.keyboard.press('.');
+    const viaDots = await panelId();
+    await page.evaluate((id) => window.colonia.ui.info.showBuilding(id), cyc.ids[0]);
+    await page.click('#info-panel .cycle-idle');
+    await page.waitForTimeout(1200);
+    const viaIdle = await panelId();
+    const wantIdle = cyc.idle.find((id) => id > cyc.ids[0]) || cyc.idle[0];
+    const glide = await page.evaluate((id) => { const b = window.colonia.game.buildings.get(id); const c = window.colonia.renderer.camera; const r = window.colonia.canvas.getBoundingClientRect(); const t = c.screenToTile(r.width / 2, r.height / 2); return Math.hypot(t.x - b.x, t.y - b.y); }, viaIdle);
+    check('a building\'s panel goes to the next and previous of its kind (button, comma and period keys) and to the next idle one, the view gliding there',
+      new RegExp(`^◀1 of ${cyc.ids.length}▶Next idle \\(${cyc.idle.length}\\)$`).test(row) && viaNext === cyc.ids[1] && viaComma === cyc.ids[0] && viaDots === cyc.ids[2] && viaIdle === wantIdle && glide < 4,
+      JSON.stringify({ cyc, row, viaNext, viaComma, viaDots, viaIdle, wantIdle, glide }));
+  } else check('the demo city has three buildings of a kind to cycle through', false);
+  // I and the Production advisor: an idle building's panel each time.
+  const idleNow = () => page.evaluate(() => {
+    const st = document.querySelector('#info-panel:not(.hidden) .status');
+    return st ? { id: window.colonia.ui.info.target?.id, idle: st.classList.contains('bad') || (st.classList.contains('warn') && !/^Understaffed/.test(st.textContent)) } : null;
+  });
+  await page.evaluate(() => window.colonia.ui.info.close());
+  await page.keyboard.press('i');
+  const viaI = await idleNow();
+  await page.keyboard.press('i');
+  const viaI2 = await idleNow();
+  await page.evaluate(() => window.colonia.ui.info.close());
+  await page.keyboard.press('F2');
+  await page.click('.tab:has-text("Production")');
+  await page.click('.modal .next-idle');
+  const viaAdvisor = await idleNow();
+  const advisorClosed = await page.evaluate(() => !document.querySelector('.modal'));
+  check('I and the Production advisor\'s button open idle buildings\' panels, one after another',
+    !!viaI && viaI.idle && !!viaI2 && viaI2.idle && viaI2.id !== viaI.id && !!viaAdvisor && viaAdvisor.idle && advisorClosed && errors.length === 0, JSON.stringify({ viaI, viaI2, viaAdvisor, advisorClosed, errors }));
+  await page.evaluate((was) => {
+    const app = window.colonia;
+    app.ui.info.close();
+    app.paused = was.paused;
+  }, pauseWas);
+
   // 5b. Military: garrison, fort panel + deploy by clicking the map, raid alert, advisor
   const gar = await page.evaluate(() => {
     const app = window.colonia;
@@ -1611,9 +1775,15 @@ try {
   check('confirming restart starts a fresh map', fresh === 0, `${fresh} buildings`);
 
   // 6b. A campaign mission on Insane: the briefing picks the difficulty,
-  //     scales the starting funds, and the game remembers both.
-  await page.evaluate(() => window.colonia.toMainMenu());
+  //     scales the starting funds, and the game remembers both. The game is
+  //     left paused: the menu's town behind it must run all the same (it
+  //     stood frozen once a pause could stop the loop for any game).
+  await page.evaluate(() => { window.colonia.paused = true; window.colonia.toMainMenu(); });
   await page.waitForSelector('.menu-card');
+  const menuTicks = await page.evaluate(() => window.colonia.menuGame?.time.totalTicks ?? -1);
+  await page.waitForTimeout(600);
+  const menuTicks2 = await page.evaluate(() => window.colonia.menuGame?.time.totalTicks ?? -1);
+  check('the menu\'s town runs after leaving a paused game', menuTicks >= 0 && menuTicks2 > menuTicks, JSON.stringify({ menuTicks, menuTicks2 }));
   await page.click('.menu-card button:has-text("Campaign")');
   await page.click('.scenario >> nth=0');
   await page.selectOption('.modal select.difficulty-select', 'insane');

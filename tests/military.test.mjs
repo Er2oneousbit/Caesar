@@ -537,3 +537,36 @@ test('raiders in the province: no victory until they are gone, and peace falls t
   assert.equal(game.city.victory, true);
   assert.equal(game.city.victoryHeld, undefined);
 });
+
+test('a deployed soldier crosses a river by its bridge to reach a raider on the far bank, not straight at the water', async () => {
+  // Playtest: soldiers walked straight at raiders across a river.
+  const { straightClear } = await import('../src/sim/military.js');
+  const { game, fort, men } = heldFort('fort_legion', 1);
+  const { map } = game;
+  const soldier = men[0];
+  // A river two tiles wide, east of the fort, with one bridge 6 tiles south.
+  const rx = Math.floor(soldier.x) + 4;
+  const by = Math.floor(soldier.y) + 6;
+  for (let y = 1; y < map.h - 1; y++) {
+    for (const x of [rx, rx + 1]) {
+      const i = map.idx(x, y);
+      if (map.building[i]) continue;
+      map.terrain[i] = Terrain.WATER;
+      map.road[i] = y === by ? 3 : 0; // Road.BRIDGE on the crossing row
+    }
+  }
+  assert.ok(deployFort(game, fort.id, Math.floor(soldier.x) + 2, Math.floor(soldier.y)), 'deployed toward the river');
+  const raider = spawnUnit(game, 'raider', rx + 3.5, soldier.y, { invasion: 1 });
+  raider.state = 'camp';
+  assert.equal(straightClear(game, soldier, raider.x, raider.y), false, 'the river is in the way');
+  let crossed = false;
+  let atBank = 0;
+  for (let t = 0; t < 2400 && game.units.has(raider.id) && !crossed; t++) {
+    raider.x = rx + 3.5; raider.y = soldier.y; // he stays put on the far bank
+    updateMilitary(game);
+    if (Math.floor(soldier.x) > rx + 1) crossed = true;
+    if (Math.abs(soldier.x - (rx - 0.5)) < 0.6 && Math.abs(Math.floor(soldier.y) - by) > 1) atBank++;
+  }
+  assert.ok(crossed || !game.units.has(raider.id), 'he got across');
+  assert.ok(atBank < 20, `he did not stand on the bank facing the water (${atBank} ticks)`);
+});

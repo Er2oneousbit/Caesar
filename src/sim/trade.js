@@ -6,8 +6,10 @@
  *   - The player opens a route (one-time cost) in the Trade advisor.
  *   - Land routes: every 1-2 months a caravan walks in along the Imperial road
  *     to the nearest staffed warehouse, sells the city its imports, buys its
- *     exports, then leaves by the exit. A route busier than its traders can
- *     carry at that pace sends them more often (sim/tradeDemand.js).
+ *     exports, then leaves by the exit. A partner whose round trip on the
+ *     empire map is longer than that sends them less often, and a route
+ *     busier than its traders can carry at that pace more often
+ *     (sim/tradeDemand.js).
  *   - Sea routes: a merchant ship sails in from the map edge (map.seaEntry)
  *     to a free, staffed Dock and moors there while goods move both ways:
  *       - on mooring it fixes its manifest: what it will sell (imports) and
@@ -49,6 +51,8 @@ import { dispatchCart, cartsOut } from './production.js';
 import { transact } from './economy.js';
 import { logGoods } from './goodsLedger.js';
 import { partnerBuys, routeInterval, buysInForce, demandChangeAt } from './tradeDemand.js';
+import { homeSiteId } from '../data/sites.js';
+import { tripDays } from '../data/empireRoutes.js';
 
 /** 'land' or 'sea' */
 export function routeKind(partnerId) {
@@ -72,8 +76,18 @@ export function newTradeState(partnerIds) {
   return { routes, settings, log: [] };
 }
 
-/** Days from opening a route to its first caravan or ship (the empire map sends that one out from its city on the day). */
+/** The fewest days from opening a route to its first caravan or ship. */
 export const FIRST_VISIT_DAYS = 8;
+
+/**
+ * Days from opening a route to its first caravan or ship: FIRST_VISIT_DAYS,
+ * or the whole trip from a partner farther away (data/empireRoutes.js
+ * tripDays): the first trader sets out from its city the day the route
+ * opens, and the empire map shows it all the way.
+ */
+export function firstVisitDays(game, partnerId) {
+  return Math.max(FIRST_VISIT_DAYS, tripDays(homeSiteId(game), partnerId));
+}
 
 /** Open a trade route. @returns {{ok:boolean, reason?:string}} */
 export function openRoute(game, id) {
@@ -85,7 +99,7 @@ export function openRoute(game, id) {
   if (game.city.treasury < p.openCost && !game.cheats.freeBuild) return { ok: false, reason: 'Not enough money.' };
   transact(game, 'other', -p.openCost);
   route.open = true;
-  route.nextVisit = game.time.totalDays + FIRST_VISIT_DAYS;
+  route.nextVisit = game.time.totalDays + firstVisitDays(game, id);
   const how = routeKind(id) === 'sea' ? 'Their ships will call at your Emporium soon.' : 'Their caravans will arrive along the Imperial road soon.';
   game.message(`Trade route to ${p.name} is open. ${how}`, 'good');
   return { ok: true };

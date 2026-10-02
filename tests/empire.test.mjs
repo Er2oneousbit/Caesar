@@ -17,13 +17,15 @@ import assert from 'node:assert/strict';
 
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
-import { TRADE_PARTNERS, HOME_POS } from '../src/data/scenarios.js';
+import { TRADE_PARTNERS, SCENARIOS } from '../src/data/scenarios.js';
+import { SITES, SANDBOX_SITES } from '../src/data/sites.js';
 import { openRoute, routeKind, FIRST_VISIT_DAYS } from '../src/sim/trade.js';
+import { visitInterval, routeVolume } from '../src/sim/tradeDemand.js';
 import { militaryMonthly } from '../src/sim/military.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { serializeGame } from '../src/core/save.js';
 import {
-  empireTravelers, tripDays, routePoint, routePath, warbandPoint, travelerLabel, empireHitAt, isDrawn, ROME_POS, SCOUT_MONTHS, RUMOUR_MONTHS, FRONTIER_DIR, placeLabels,
+  empireTravelers, tripDays, routePoint, routePath, warbandPoint, travelerLabel, empireHitAt, isDrawn, ROME_POS, SCOUT_MONTHS, RUMOUR_MONTHS, frontierDir, placeLabels,
 } from '../src/ui/empireMap.js';
 import { at, isLand, ROUTES, MAP_W, MAP_H, LON_WEST, LON_EAST, LAT_NORTH, LAT_SOUTH } from '../src/data/empireGeo.js';
 import { newGame, findFree } from './helpers.mjs';
@@ -31,6 +33,18 @@ import { newGame, findFree } from './helpers.mjs';
 log.setLevel('error');
 
 const near = (a, b, eps = 1e-9) => Math.abs(a[0] - b[0]) < eps && Math.abs(a[1] - b[1]) < eps;
+
+/** The Etruscan coast, the sandbox's default site (tests/helpers.mjs newGame plays there). */
+const ETRURIA = 'etruria';
+const HOME_POS = SITES.etruria.pos;
+
+/** Every site a game can be played at, with the partners it trades with there: a mission's, or all twelve for a sandbox site. */
+function sitesAndPartners() {
+  const out = new Map();
+  for (const s of SCENARIOS) out.set(s.site, new Set([...(out.get(s.site) || []), ...s.partners]));
+  for (const id of SANDBOX_SITES) out.set(id, new Set(Object.keys(TRADE_PARTNERS)));
+  return out;
+}
 
 /** A sandbox where ships can come (river maps reach the sea). */
 function seaGame() {
@@ -42,18 +56,32 @@ function seaGame() {
 }
 
 test('empire: every trip fits between two visits, so a route has at most one traveler out', () => {
+  // From every site, to every partner it trades with, at the partners' own
+  // demand: the shortest interval is at least the trip (a quiet route's is
+  // the round trip; a busy one's is shorter but still longer than the trip;
+  // the missions' own demand: tests/sites.test.mjs).
+  for (const [site, partners] of sitesAndPartners()) {
+    for (const id of partners) {
+      const d = tripDays(site, id);
+      const p = TRADE_PARTNERS[id];
+      assert.ok(d >= 1 && visitInterval(routeKind(id), routeVolume(p.buys, p.sells), d)[0] >= d, `${site} ${id}: ${d} days`);
+    }
+  }
+  // From the Etruscan coast every round trip fits in the usual interval.
   for (const id of Object.keys(TRADE_PARTNERS)) {
-    const d = tripDays(id);
-    assert.ok(d >= 1 && d <= CONFIG.CARAVAN_INTERVAL_DAYS[0], `${id}: ${d} days`);
+    const usual = routeKind(id) === 'sea' ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
+    assert.ok(2 * tripDays(ETRURIA, id) <= usual[0], `${id}: ${tripDays(ETRURIA, id)} days`);
   }
   // Far partners take longer than near ones.
-  assert.ok(tripDays('alexandria') > tripDays('capua'));
+  assert.ok(tripDays(ETRURIA, 'alexandria') > tripDays(ETRURIA, 'capua'));
 });
 
-test('empire: a route curve runs from the partner (0) to the province (1)', () => {
-  for (const id of Object.keys(TRADE_PARTNERS)) {
-    assert.ok(near(routePoint(id, 0), TRADE_PARTNERS[id].pos), `${id} starts at the partner`);
-    assert.ok(near(routePoint(id, 1), HOME_POS), `${id} ends at the province`);
+test('empire: a route curve runs from the partner (0) to the province (1), wherever the province is', () => {
+  for (const site of Object.keys(SITES)) {
+    for (const id of Object.keys(TRADE_PARTNERS)) {
+      assert.ok(near(routePoint(site, id, 0), TRADE_PARTNERS[id].pos), `${site} ${id} starts at the partner`);
+      assert.ok(near(routePoint(site, id, 1), SITES[site].pos), `${site} ${id} ends at the province`);
+    }
   }
 });
 
@@ -61,26 +89,28 @@ test('empire: closed routes send nobody; an opened land route sends a caravan th
   const game = newGame();
   assert.deepEqual(empireTravelers(game), [], 'no routes open, no raids: nobody on the way');
   assert.ok(openRoute(game, 'tarraco').ok);
-  // Opening a route sends the first caravan in 8 days (sim/trade.js): it
-  // sets out from Tarraco that day, so its trip is those 8 days.
+  // Opening a route sends the first caravan when it can have come: Tarraco
+  // is 13 days from the Etruscan coast (more than the 8 a near partner's
+  // first caravan takes). It sets out from Tarraco that day.
   let [c] = empireTravelers(game);
-  const trip = FIRST_VISIT_DAYS;
+  const trip = tripDays(ETRURIA, 'tarraco');
+  assert.equal(trip, 13);
   assert.equal(c.kind, 'caravan');
   assert.equal(c.id, 'tarraco');
-  assert.equal(c.days, 8);
+  assert.equal(c.days, 13);
   assert.equal(c.trip, trip);
   assert.equal(c.onWay, true);
   assert.equal(c.frac, 0);
   assert.ok(near(c.pos, TRADE_PARTNERS.tarraco.pos), 'at its city');
-  assert.equal(travelerLabel(c), 'Tarraco caravan: 8 days');
+  assert.equal(travelerLabel(c), 'Tarraco caravan: 13 days');
   // Half a day later it is half a day further: it glides between days.
   game.time.tick = CONFIG.TICKS_PER_DAY / 2;
   [c] = empireTravelers(game);
-  assert.equal(c.days, 8, 'whole days, rounded up');
-  assert.ok(Math.abs(c.frac - (1 - 7.5 / trip)) < 1e-9, `frac ${c.frac}`);
+  assert.equal(c.days, 13, 'whole days, rounded up');
+  assert.ok(Math.abs(c.frac - (1 - 12.5 / trip)) < 1e-9, `frac ${c.frac}`);
   game.time.tick = 0;
-  // Five days on (the sim run for real), three days are left.
-  game.runDays(5);
+  // Ten days on (the sim run for real), three days are left.
+  game.runDays(10);
   [c] = empireTravelers(game);
   assert.equal(c.days, 3);
   assert.equal(travelerLabel(c), 'Tarraco caravan: 3 days');
@@ -99,28 +129,47 @@ test('empire: closed routes send nobody; an opened land route sends a caravan th
 test('empire: a far route\'s first trader sets out from its city when the route opens, never halfway along', () => {
   const game = seaGame();
   assert.ok(openRoute(game, 'alexandria').ok);
-  // Due in 8 days, while a trip from Alexandria is shown over 32: before,
-  // the first ship popped up three quarters of the way to the province.
-  assert.ok(tripDays('alexandria') > FIRST_VISIT_DAYS * 2);
+  // Alexandria is 29 days from the Etruscan coast: its first ship is due
+  // then (once 8 days, when it popped up most of the way to the province).
+  const trip = tripDays(ETRURIA, 'alexandria');
+  assert.equal(trip, 29);
   let [s] = empireTravelers(game);
   assert.equal(s.kind, 'ship');
-  assert.equal(s.days, FIRST_VISIT_DAYS);
+  assert.equal(s.days, trip);
+  assert.equal(s.trip, trip);
   assert.equal(s.onWay, true, 'drawn from the start');
   assert.equal(s.frac, 0);
   assert.ok(near(s.pos, TRADE_PARTNERS.alexandria.pos), 'at Alexandria');
-  // Halfway through its 8 days it is halfway along the route.
-  game.time.totalDays += FIRST_VISIT_DAYS / 2;
+  // Halfway through its trip it is halfway along the route.
+  game.time.totalDays += trip / 2;
   [s] = empireTravelers(game);
   assert.ok(Math.abs(s.frac - 0.5) < 1e-9, `frac ${s.frac}`);
   // Once a ship has called, the next is due weeks later and takes the whole
   // trip, setting out from Alexandria as its last days begin.
   const r = game.city.trade.routes.alexandria;
   r.visits = 1;
-  r.nextVisit = game.time.totalDays + tripDays('alexandria');
+  r.nextVisit = game.time.totalDays + trip;
   [s] = empireTravelers(game);
-  assert.equal(s.trip, tripDays('alexandria'));
+  assert.equal(s.trip, trip);
   assert.equal(s.frac, 0);
   assert.ok(near(s.pos, TRADE_PARTNERS.alexandria.pos));
+});
+
+test('empire: a near partner\'s first trader is due in a week and sets out the day the route opens', () => {
+  const game = seaGame();
+  assert.ok(openRoute(game, 'massilia').ok);
+  assert.equal(tripDays(ETRURIA, 'massilia'), 6, 'six days by sea from the Etruscan coast');
+  let [s] = empireTravelers(game);
+  assert.equal(s.days, FIRST_VISIT_DAYS, 'never sooner than a week after opening');
+  assert.equal(s.trip, FIRST_VISIT_DAYS, 'shown over the whole week, from its city');
+  assert.equal(s.frac, 0);
+  // A later ship is shown over its real six days.
+  const r = game.city.trade.routes.massilia;
+  r.visits = 1;
+  r.nextVisit = game.time.totalDays + 10;
+  [s] = empireTravelers(game);
+  assert.equal(s.trip, 6);
+  assert.equal(s.onWay, false);
 });
 
 /** Is there water within `r` map units of `p`? */
@@ -146,33 +195,55 @@ test('empire: the map is the real Mediterranean, longitude and latitude projecte
   assert.ok(P('carthago')[1] > ROME_POS[1] && P('alexandria')[0] > P('corinthus')[0], 'Carthago south of Rome, Alexandria east of Corinthus');
 });
 
-test('empire: every city on land, every port by the sea, every road over land and every sea lane over water', () => {
+test('empire: every city on land, every port by the sea, every road over land and every sea lane over water, from every province', () => {
   assert.ok(isLand(ROME_POS), 'Rome');
-  assert.ok(isLand(HOME_POS) && waterNear(HOME_POS, 1), 'the province: on land, on the coast so ships can come');
+  assert.ok(isLand(HOME_POS) && waterNear(HOME_POS, 1), 'the Etruscan coast: on land, on the coast so ships can come');
   for (const [id, p] of Object.entries(TRADE_PARTNERS)) {
     assert.ok(isLand(p.pos), `${id} on land`);
     assert.ok(ROUTES[id] && ROUTES[id].length > 0, `${id} has a route drawn through its waypoints`);
-    const sea = routeKind(id) === 'sea';
     // Ports touch the sea; Cirta, inland, is within 2 map units of its harbor.
-    if (sea) assert.ok(waterNear(p.pos, 2), `${id} by the sea`);
-    const { len } = routePath(id);
-    for (let i = 0; i <= 400; i++) {
-      const q = routePoint(id, i / 400);
-      // A ship's last stretch crosses the shore to the city (and from the
-      // province's harbor): 2 map units at each end are left out.
-      const fromEnd = Math.min((i / 400) * len, (1 - i / 400) * len);
-      if (sea && fromEnd < 2) continue;
-      assert.equal(isLand(q), !sea, `${id} ${sea ? 'sea lane' : 'road'} at ${(i / 400).toFixed(3)}: (${q[0].toFixed(2)}, ${q[1].toFixed(2)}) is ${isLand(q) ? 'land' : 'water'}`);
+    if (routeKind(id) === 'sea') assert.ok(waterNear(p.pos, 2), `${id} by the sea`);
+  }
+  // Every mission's site with every partner of that mission, and every
+  // sandbox site with all twelve.
+  for (const [site, partners] of sitesAndPartners()) {
+    const s = SITES[site];
+    assert.ok(isLand(s.pos), `${site} on land`);
+    if ([...partners].some((id) => routeKind(id) === 'sea')) assert.ok(waterNear(s.pos, 2) || s.river, `${site}: by the sea or up a river, so ships can come`);
+    for (const id of partners) {
+      const sea = routeKind(id) === 'sea';
+      const { len, river } = routePath(site, id);
+      for (let i = 0; i <= 400; i++) {
+        const q = routePoint(site, id, i / 400);
+        // A ship's last stretch crosses the shore to the city (and from the
+        // province's harbor): 2 map units at each end are left out, and
+        // the river a ship comes up to Corduba.
+        const run = (i / 400) * len;
+        if (sea && (run < 2 || len - run < river + 2)) continue;
+        assert.equal(isLand(q), !sea, `${site} ${id} ${sea ? 'sea lane' : 'road'} at ${(i / 400).toFixed(3)}: (${q[0].toFixed(2)}, ${q[1].toFixed(2)}) is ${isLand(q) ? 'land' : 'water'}`);
+      }
     }
   }
 });
 
-test('empire: warbands close in over land from the north and by sea from the south', () => {
-  // The province is on the coast: its northern sides are the Alps and the
-  // Po valley, its south and south-west the Tyrrhenian Sea (drawn in a boat).
-  assert.ok(isLand(warbandPoint('north', 0)) && isLand(warbandPoint('north-west', 0)) && isLand(warbandPoint('north-east', 0)));
-  assert.equal(isLand(warbandPoint('south', 0)), false);
-  assert.equal(isLand(warbandPoint('south-west', 0)), false);
+test('empire: warbands close in over land on land and by sea at sea, from every province', () => {
+  // The Etruscan coast: its northern sides are the Alps and the Po valley,
+  // its south and south-west the Tyrrhenian Sea (drawn in a boat).
+  const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  assert.ok(isLand(warbandPoint(ETRURIA, 'north', 0)) && isLand(warbandPoint(ETRURIA, 'north-west', 0)) && isLand(warbandPoint(ETRURIA, 'north-east', 0)));
+  assert.equal(isLand(warbandPoint(ETRURIA, 'south', 0, true)), false);
+  assert.equal(isLand(warbandPoint(ETRURIA, 'south-west', 0, true)), false);
+  // A band that comes by land from the sea side is drawn on the nearest side
+  // over land (it once stood in the sea): from the south, the Apennines.
+  for (const site of Object.keys(SITES)) {
+    for (const d of dirs) {
+      for (const f of [0, 0.5, 1]) assert.ok(isLand(warbandPoint(site, d, f)), `${site}: a band by land from the ${d} is on land`);
+    }
+  }
+  // At sea from every site raided by sea (the sandbox's sites, Populonia).
+  for (const site of [...SANDBOX_SITES, 'populonia']) {
+    for (const f of [0, 1]) assert.equal(isLand(warbandPoint(site, 'south', f, true)), false, `${site}: by sea`);
+  }
 });
 
 test('empire: ships only where ships can come; travelers are listed by arrival', () => {
@@ -209,7 +280,7 @@ test('empire: a scouted warband closes in from its side over its last three mont
   assert.deepEqual(w.origin, m.warned.origin, 'the edge it enters by');
   assert.equal(w.months, 3);
   assert.equal(w.frac, 0.5, 'half way in: its banner runs over the whole 6 months since word came');
-  assert.ok(near(w.pos, warbandPoint(w.dir, 0.5)));
+  assert.ok(near(w.pos, warbandPoint(ETRURIA, w.dir, 0.5)));
   assert.equal(travelerLabel(w), `Warband of ${w.size} from the ${w.dir}, in 3 months`);
   // Two and a half months later it is most of the way in, one month to go.
   game.time.totalMonths += 2;
@@ -219,10 +290,10 @@ test('empire: a scouted warband closes in from its side over its last three mont
   assert.ok(Math.abs(w.frac - (1 - 0.5 / RUMOUR_MONTHS)) < 1e-9, `frac ${w.frac}`);
   assert.equal(travelerLabel(w), `Warband of ${w.size} from the ${w.dir}, in 1 month`);
   // It walks straight at the province from its side of the map.
-  const far = warbandPoint(w.dir, 0);
-  const close = warbandPoint(w.dir, 1);
+  const far = warbandPoint(ETRURIA, w.dir, 0);
+  const close = warbandPoint(ETRURIA, w.dir, 1);
   assert.ok(Math.hypot(close[0] - HOME_POS[0], close[1] - HOME_POS[1]) < Math.hypot(far[0] - HOME_POS[0], far[1] - HOME_POS[1]));
-  assert.ok(warbandPoint('north', 0)[1] < HOME_POS[1] && warbandPoint('east', 0)[0] > HOME_POS[0], 'north is up, east is right');
+  assert.ok(warbandPoint(ETRURIA, 'north', 0)[1] < HOME_POS[1] && warbandPoint(ETRURIA, 'east', 0)[0] > HOME_POS[0], 'north is up, east is right');
   // The raid starts: the warband is gone, the raiders show at the city.
   game.time.day = 0;
   game.time.totalMonths = m.nextRaidMonth;
@@ -250,10 +321,10 @@ test('empire: a warband only rumoured stands at the frontier with no number, the
   assert.equal(w.dir, null);
   assert.equal(w.origin, null);
   assert.equal(w.frac, 0);
-  assert.ok(near(w.pos, warbandPoint(FRONTIER_DIR, 0)));
+  assert.ok(near(w.pos, warbandPoint(ETRURIA, frontierDir(ETRURIA), 0)));
   assert.equal(travelerLabel(w), 'Warband gathering beyond the frontier, in about 6 months');
   // Overland all the way: a band of unknown road is not drawn at sea.
-  assert.ok(isLand(warbandPoint(FRONTIER_DIR, 0)) && isLand(warbandPoint(FRONTIER_DIR, 0.5)));
+  assert.ok(isLand(warbandPoint(ETRURIA, frontierDir(ETRURIA), 0)) && isLand(warbandPoint(ETRURIA, frontierDir(ETRURIA), 0.5)));
   game.time.totalMonths += 2;
   w = empireTravelers(game).find((t) => t.kind === 'warband');
   assert.equal(travelerLabel(w), 'Warband gathering beyond the frontier, in about 4 months');
@@ -264,7 +335,7 @@ test('empire: a warband only rumoured stands at the frontier with no number, the
   w = empireTravelers(game).find((t) => t.kind === 'warband');
   assert.equal(w.rumour, undefined);
   assert.equal(w.dir, m.warned.dir);
-  assert.ok(near(w.pos, warbandPoint(w.dir, 0.5)));
+  assert.ok(near(w.pos, warbandPoint(ETRURIA, w.dir, 0.5)));
 });
 
 test('empire: a click finds the traveler, the city, Rome or the province under it', () => {

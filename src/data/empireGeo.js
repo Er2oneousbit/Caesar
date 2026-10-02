@@ -224,6 +224,8 @@ export const RIVERS_LL = Object.freeze({
   padus: [[7.1, 44.7], [7.68, 45.07], [8.6, 45.1], [9.69, 45.05], [10.02, 45.13], [11.0, 45.05], [11.9, 44.95], [12.45, 44.95]],
   tiberis: [[12.1, 43.7], [12.4, 43.1], [12.38, 42.46], [12.48, 41.9], [12.28, 41.74]],
   iberus: [[-4.0, 43.0], [-2.45, 42.47], [-0.88, 41.65], [0.52, 40.81], [0.85, 40.72]],
+  // The Baetis, past Corduba and Hispalis, whose ships come up it (data/sites.js).
+  baetis: [[-2.9, 37.9], [-3.6, 37.98], [-4.05, 38.03], [-4.78, 37.88], [-5.35, 37.62], [-5.99, 37.39], [-6.2, 37.1], [-6.36, 36.8]],
   danuvius: [[16.4, 48.2], [17.1, 48.15], [18.0, 47.75], [18.9, 47.8], [19.05, 47.5], [18.9, 46.0], [19.0, 45.35], [20.45, 44.82], [22.5, 44.6], [24.0, 43.75], [25.4, 43.65], [25.95, 43.85], [27.27, 44.1], [28.03, 44.33], [28.05, 45.43], [28.8, 45.18], [29.65, 45.15]],
   nilus: [[31.75, 26.0], [31.7, 26.55], [31.18, 27.18], [30.75, 28.1], [31.1, 29.07], [31.23, 30.05], [31.15, 30.2]],
   nilusWest: [[31.15, 30.2], [30.85, 30.6], [30.5, 31.1], [30.42, 31.45]],
@@ -282,8 +284,10 @@ export const REGIONS_LL = Object.freeze([
  * Alpine passes, the Po valley, the road through Rome); ships keep to the
  * water, south between Corsica and Italy and, for the east, through the
  * Strait of Messina. A test walks every curve: roads on land, lanes at sea.
- * Written for the province's place (HOME_POS, the Etruscan coast): move
- * the province and these must move with it.
+ * Written for the Etruscan coast (data/sites.js), where every province sat
+ * before missions moved: they are the spine of the network of roads and
+ * lanes that leads to every other site (data/empireRoutes.js), which must
+ * give the Etruscan coast exactly these routes back (a test holds it).
  */
 export const ROUTES_LL = Object.freeze({
   tarraco: [[2.0, 41.6], [2.75, 42.1], [2.85, 42.6], [3.0, 43.3], [4.36, 43.84], [5.45, 43.75], [6.6, 43.65], [7.6, 44.0], [8.6, 44.5], [9.8, 44.3]],

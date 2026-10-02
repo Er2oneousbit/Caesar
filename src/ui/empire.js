@@ -25,6 +25,7 @@ import { h, mount } from './dom.js';
 import { tradeRouteCard } from './advisors.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { routeKind } from '../sim/trade.js';
+import { SITES, homeSiteId } from '../data/sites.js';
 import { battleSummary } from '../sim/battle.js';
 import {
   MAP_W, MAP_H, drawEmpire, empireTravelers, empireHitAt, travelerLabel, isDrawn, figureCenter, figureScale,
@@ -241,7 +242,8 @@ export class EmpireView {
     } else if (hit && hit.kind === 'battle') {
       text = battleLine(g);
     } else if (hit && hit.kind === 'home') {
-      text = `${g.city.name || 'Your province'}: your province`;
+      const site = SITES[homeSiteId(g)];
+      text = `${g.city.name || 'Your province'}: your province. ${site.name}, ${site.region}.`;
     } else if (hit && hit.kind === 'rome') {
       text = 'Rome: the Emperor\'s city';
     }

@@ -17,6 +17,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done, not yet released
+
+* **Each province where its city stood**: every mission has its place on the empire map (Corduba on the Baetis, Puteoli on the Bay of Naples, Narbo Martius on the Via Domitia...); Pons Aelius, Urbs Magna and the sandbox stay on the Etruscan coast, and the sandbox setup can pick Luna, Cosa, Puteoli, Paestum or Narbo Martius instead. Routes run over a network of roads and sea lanes built on the Etruscan coast's twelve routes, which it reproduces point for point.
+* **Distance counts** (Colonia's own rule; the original's trade ignored its map): a trader is on the way half a day per map unit each way; a quiet route sends its traders no oftener than one round trip, and the busy rule applies after that, so every route still carries its year. Eight routes of seven missions come less often (Tarraco from Beneventum, Luceria, Copia and Puteoli; Lugdunum and Alexandria from Corduba; Alexandria from Carteia and Narbo Martius: 4.4 caravans a year become 3.7 to 4.2, 2.4 ships 1.9 to 2.2); three busy ones (Rhodus from Corduba, Corinthus and Delos from Carteia) change their days but keep their pace; nothing changes from the Etruscan coast. The first trader comes after its trip, at least 8 days. Distant battles march from the province: Corduba's two Italica battles become a 3-month march down the Baetis (12 months by sea from the Etruscan coast).
+* Headless sim: Easy, Normal, Hard and Insane, the capacity and pace tables and the mission runs identical; the harbor run moves (its first ships come after their trips)
+* 669 unit tests, 140 browser checks
+
 ## Done (v0.17.0)
 
 * **The campaign runs to step 10, a peaceful and a military province at every step from 3**: Cosa (peaceful, lakes 144, 5,600 people) beside Oasis Aurea at step 6; Copia (peaceful, river 160, 6,000) beside Urbs Magna at step 7; Mutina (military, plains 176, 6,000) and Luna (peaceful, coast 176, 7,000) at step 8; Corduba (military, river 192, 8,000) and Carteia (peaceful, coast 192, 9,500) at step 9; Narbo Martius (military, river 256, 10,000) and Puteoli (peaceful, coast 224, 12,000) at step 10. Every goal is 85 to 90% of what a sensibly built city of its buildings employs (`npm run sim -- --capacity`), with trade demand on the original's tiers; the missions grow longer step by step (6.5 to 15.4 years at the fastest). One rank a step, Procurator at 6 to Proconsul at 10; winning step 10 makes you Caesar

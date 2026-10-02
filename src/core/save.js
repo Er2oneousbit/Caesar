@@ -173,6 +173,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario, withDifficulty } from '../data/scenarios.js';
+import { SITES } from '../data/sites.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
 import { isStable, stableRoom } from '../sim/storage.js';
@@ -384,6 +385,10 @@ export function deserializeGame(data, flags = {}) {
 
   const scenario = data.scenario && data.scenario.map ? data.scenario : withDifficulty(findScenario(data.scenario?.id), data.difficulty);
   assert(scenario, `unknown scenario "${data.scenario?.id}"`);
+  // A sandbox saved before the province could move has no site: the
+  // Etruscan coast, where it always was (data/sites.js siteIdOf). One that
+  // names a site this game does not know cannot be put on the map.
+  assert(scenario.site === undefined || Object.hasOwn(SITES, scenario.site), `unknown province site "${scenario.site}"`);
 
   const map = GameMap.deserialize(data.map, decodeLayer);
   const rng = new RNG(1);

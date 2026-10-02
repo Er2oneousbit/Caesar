@@ -11,10 +11,13 @@
  *   pos         where it is on the empire map (data/empireGeo.js `at`)
  *   route       'land' (soldiers march) or 'sea' (they sail, and the Naval
  *               Stations' squadrons may go too, sim/battle.js)
- *   path        [lon, lat] points the province's army passes on its way,
- *               from the province to the city (over land, or at sea: a test
- *               holds each to its kind). Its length sets the march in months
- *               (marchMonths)
+ *   path        [lon, lat] points the army passes on its way from the
+ *               Etruscan coast to the city (over land, or at sea: a test
+ *               holds each to its kind), drawn for that site before the
+ *               province moved by mission and kept for it. From any other
+ *               site the army takes the roads or the sea lanes
+ *               (data/empireRoutes.js networkWay). The way's length sets the
+ *               march in months (marchMonths)
  *   enemyFrom   [lon, lat] where the enemy gathers; it marches in a
  *               straight line to the city over enemyMonths months, arriving
  *               in the battle's month
@@ -26,7 +29,8 @@
 
 import { CONFIG } from '../config.js';
 import { at, project } from './empireGeo.js';
-import { HOME_POS } from './scenarios.js';
+import { SITES, HOME_SITE } from './sites.js';
+import { networkWay, lineLength } from './empireRoutes.js';
 
 export const THREATENED_CITIES = Object.freeze({
   // A Latin colony on the Po (founded 218 BC), the Gauls' first target.
@@ -82,27 +86,31 @@ export const THREATENED_IDS = Object.freeze(Object.keys(THREATENED_CITIES));
  */
 export const SANDBOX_THREATENED_IDS = Object.freeze(['placentia', 'ariminum', 'saguntum', 'messana']);
 
-/** The army's way to a city on the empire map (map units): the province, the path, the city. */
-export function marchLine(id) {
+/**
+ * The army's way from a site to a city on the empire map (map units): the
+ * site, the points it passes, the city. From the Etruscan coast, the city's
+ * own `path`; from anywhere else the roads (a city reached by land) or the
+ * lanes and the site's river (by sea), to the point of them nearest the city.
+ */
+export function marchLine(siteId, id) {
   const c = THREATENED_CITIES[id];
-  return [HOME_POS, ...c.path.map((p) => project(p)), c.pos];
-}
-
-/** Length of a polyline (map units). */
-function lineLength(pts) {
-  let len = 0;
-  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-  return len;
+  const site = (SITES[siteId] || SITES[HOME_SITE]).pos;
+  if (!SITES[siteId] || siteId === HOME_SITE) return [site, ...c.path.map((p) => project(p)), c.pos];
+  const way = networkWay(siteId, c.route, c.pos);
+  // A way that ends on the city itself (Ariminum is a stage on the Adriatic road) ends there once.
+  const last = way[way.length - 1];
+  if (last && Math.hypot(last[0] - c.pos[0], last[1] - c.pos[1]) < 0.05) way.pop();
+  return [site, ...way, c.pos];
 }
 
 /**
- * Months the province's army marches to a city: the length of its way on
- * the empire map at CONFIG.BATTLE_MONTH_UNITS a month, at least
+ * Months the province's army marches from a site to a city: the length of
+ * its way on the empire map at CONFIG.BATTLE_MONTH_UNITS a month, at least
  * BATTLE_MIN_MONTHS (the original counted the markers on its map).
  */
-export function marchMonths(id) {
+export function marchMonths(siteId, id) {
   if (!THREATENED_CITIES[id]) return CONFIG.BATTLE_MIN_MONTHS;
-  return Math.max(CONFIG.BATTLE_MIN_MONTHS, Math.round(lineLength(marchLine(id)) / CONFIG.BATTLE_MONTH_UNITS));
+  return Math.max(CONFIG.BATTLE_MIN_MONTHS, Math.round(lineLength(marchLine(siteId, id)) / CONFIG.BATTLE_MONTH_UNITS));
 }
 
 /** The enemy's line on the empire map: where it gathers, then the city. */

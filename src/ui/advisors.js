@@ -42,7 +42,9 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
 import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
 import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } from '../sim/trade.js';
-import { partnerBuys } from '../sim/tradeDemand.js';
+import { partnerBuys, routeInterval } from '../sim/tradeDemand.js';
+import { homeSiteId } from '../data/sites.js';
+import { tripDays } from '../data/empireRoutes.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
@@ -114,6 +116,10 @@ export function tradeRouteCard(app, g, id, onChange) {
   else if (!docks.length) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Ships need an Emporium (Trade Dock): build one on the bank of the river or sea.');
   else if (!staffedDock) how = h('div', { class: 'status warn', style: { fontSize: '12px' } }, 'Your Emporium has no workers: ships cannot tie up.');
   else how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Ships wait at your Emporium while dock workers unload them and fetch exports from warehouses near it.');
+  // How far it is and how often its traders come (a far quiet route less often, a busy one more: sim/tradeDemand.js).
+  const trip = tripDays(homeSiteId(g), id);
+  const [a, b] = routeInterval(g, id);
+  const pace = h('div', { class: 'muted route-pace', style: { fontSize: '12px' } }, `About ${trip} day${trip === 1 ? '' : 's'} ${sea ? 'at sea' : 'on the road'} each way; ${sea ? 'a ship' : 'a caravan'} every ${a} to ${b} days.`);
   return h('div', { class: 'card' },
     h('div', { class: 'row' },
       h('h4', { style: { flex: 1 } }, h('span', { style: { color: p.color } }, '● '), p.name),
@@ -124,6 +130,7 @@ export function tradeRouteCard(app, g, id, onChange) {
         onclick: () => { const res = openRoute(g, id); if (!res.ok) app.ui.toastError(res.reason); onChange(); },
       }, `Open route (${fmt(p.openCost)} Dn)`)),
     how,
+    pace,
     h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought)),
     h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold)));
 }

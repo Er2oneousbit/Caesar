@@ -19,6 +19,7 @@ import { DIFFICULTY } from '../data/difficulty.js';
 import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
 import { goalStatus } from '../sim/ratings.js';
 import { RANKS, SANDBOX_RANK, TOP_RANK } from '../data/ranks.js';
+import { SITES, SANDBOX_SITES, HOME_SITE } from '../data/sites.js';
 import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
@@ -221,6 +222,7 @@ export function sandboxMenu(app) {
     invasions: 'occasional',
     seaRaids: app.settings.seaRaids !== false,
     rank: SANDBOX_RANK,
+    site: HOME_SITE,
   };
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
@@ -247,6 +249,10 @@ export function sandboxMenu(app) {
         h('select', { class: 'rank-select', onchange: (e) => { state.rank = Number(e.target.value); } },
           RANKS.map((r, i) => h('option', { value: i, selected: i === state.rank }, `${r.name} (salary ${r.salary} Dn a month)`))),
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Sets the salary Rome expects you to draw: more costs favor, less earns a little.')),
+      h('div', { class: 'field' }, h('label', {}, 'Province'),
+        h('select', { class: 'site-select', onchange: (e) => { state.site = e.target.value; } },
+          SANDBOX_SITES.map((id) => h('option', { value: id, selected: id === state.site }, `${SITES[id].name} (${SITES[id].region})`))),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Where your city stands on the empire map: the way each partner\'s traders come, how long a far one takes (it comes less often) and how far your army marches to a distant battle. The landscape above is the map you build on.')),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', checked: state.seaRaids, onchange: (e) => { state.seaRaids = e.target.checked; } }),
         h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP)))),

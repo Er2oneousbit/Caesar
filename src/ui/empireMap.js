@@ -33,23 +33,25 @@
 
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
-import { TRADE_PARTNERS, HOME_POS } from '../data/scenarios.js';
+import { TRADE_PARTNERS } from '../data/scenarios.js';
 import {
-  MAP_W, MAP_H, SEA, ISLANDS, WATERS, RIVERS, NILE, DELTA, MOUNTAINS, REGIONS, ROUTES, at, isLand,
+  MAP_W, MAP_H, SEA, ISLANDS, WATERS, RIVERS, NILE, DELTA, MOUNTAINS, REGIONS, at, isLand,
 } from '../data/empireGeo.js';
-import { routeKind, FIRST_VISIT_DAYS } from '../sim/trade.js';
+import { SITES, homeSiteId } from '../data/sites.js';
+import { smoothLine, routePath, tripDays, legionWay, lineLength, ROME_LL } from '../data/empireRoutes.js';
+import { routeKind, firstVisitDays } from '../sim/trade.js';
 import { routeInterval } from '../sim/tradeDemand.js';
 import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS } from '../sim/military.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
 import { battleSummary, recallSummary } from '../sim/battle.js';
 import { THREATENED_CITIES, marchLine, enemyLine } from '../data/battles.js';
 
-export { MAP_W, MAP_H };
+export { MAP_W, MAP_H, routePath, tripDays };
 const W = MAP_W;
 const H = MAP_H;
 
 /** Rome on the map, the Emperor's seat on the Tiber. */
-export const ROME_POS = at(12.48, 41.9);
+export const ROME_POS = at(...ROME_LL);
 
 // Word of a warband comes RUMOUR_MONTHS before it strikes, the scouts' report
 // of its side SCOUT_MONTHS before (sim/military.js). Its banner closes in over
@@ -58,23 +60,10 @@ export const ROME_POS = at(12.48, 41.9);
 export { SCOUT_MONTHS, RUMOUR_MONTHS };
 
 /**
- * Where an unscouted warband is drawn: north of the province, over the
- * Apennines toward the Gauls (land all the way, as a band of unknown road
- * should be). Not a side of the city's map: the scouts have not found it yet.
+ * The fewest days a caravan or ship is shown on the way, so a partner next
+ * door (Capua seen from Puteoli, a day off) is seen at all.
  */
-export const FRONTIER_DIR = 'north';
-
-/**
- * The longest a caravan or ship is shown on the way. A route's next visit is
- * at least this many days after the last one (CARAVAN_INTERVAL_DAYS), so at
- * most one traveler per route is ever on the map. A busy route's traders
- * come more often (sim/tradeDemand.js): theirs is shown over no more than
- * its shortest interval (empireTravelers).
- */
-const MAX_TRIP_DAYS = CONFIG.CARAVAN_INTERVAL_DAYS[0];
-const MIN_TRIP_DAYS = 10;
-/** Days on the way per map unit along the route: far partners take longer. */
-const DAYS_PER_UNIT = 0.55;
+const MIN_SHOWN_TRIP_DAYS = 2;
 
 /** Where a scouted warband is first drawn, and where it stops (map units from the province). */
 const WARBAND_FAR = 9;
@@ -92,60 +81,12 @@ const LAND = '#e3d3ac';
 const SEA_FILL = '#9cc2dc';
 const SHORE = '#5f86a6';
 
-// ---------------------------------------------------------------------------
-// Routes: a smooth curve through each route's waypoints (pure; tested headless)
-// ---------------------------------------------------------------------------
+// Routes are smooth curves from each partner to the province's site, found
+// on the network of roads and sea lanes (data/empireRoutes.js routePath).
 
-/** Points per stretch between two waypoints when a route is turned into a line. */
-const CURVE_STEPS = 10;
-
-/**
- * Centripetal Catmull-Rom curve through `pts`, as a polyline. Centripetal
- * (rather than uniform) keeps the curve from overshooting or looping at
- * sharp turns, so a lane threading a strait stays in it.
- */
-function smoothLine(pts) {
-  if (pts.length < 3) return pts.map((p) => [p[0], p[1]]);
-  const ext = (a, b) => [2 * a[0] - b[0], 2 * a[1] - b[1]]; // mirror for the ends
-  const all = [ext(pts[0], pts[1]), ...pts, ext(pts[pts.length - 1], pts[pts.length - 2])];
-  const out = [[pts[0][0], pts[0][1]]];
-  for (let i = 1; i < all.length - 2; i++) {
-    const [p0, p1, p2, p3] = [all[i - 1], all[i], all[i + 1], all[i + 2]];
-    const knot = (a, b) => Math.max(1e-6, Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])));
-    const t1 = knot(p0, p1);
-    const t2 = t1 + knot(p1, p2);
-    const t3 = t2 + knot(p2, p3);
-    const lerp = (a, b, ta, tb, t) => [((tb - t) * a[0] + (t - ta) * b[0]) / (tb - ta), ((tb - t) * a[1] + (t - ta) * b[1]) / (tb - ta)];
-    for (let s = 1; s <= CURVE_STEPS; s++) {
-      const t = t1 + ((t2 - t1) * s) / CURVE_STEPS;
-      const a1 = lerp(p0, p1, 0, t1, t);
-      const a2 = lerp(p1, p2, t1, t2, t);
-      const a3 = lerp(p2, p3, t2, t3, t);
-      const b1 = lerp(a1, a2, 0, t2, t);
-      const b2 = lerp(a2, a3, t1, t3, t);
-      out.push(lerp(b1, b2, t1, t2, t));
-    }
-  }
-  return out;
-}
-
-const pathCache = new Map();
-
-/**
- * A partner's route as drawn: { pts, cum, len }, a polyline from the partner
- * (first point) to your province (last), with the distance run at each point.
- */
-export function routePath(partnerId) {
-  let path = pathCache.get(partnerId);
-  if (path) return path;
-  const p = TRADE_PARTNERS[partnerId];
-  const pts = smoothLine([p.pos, ...(ROUTES[partnerId] || []), HOME_POS]);
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-  path = { pts, cum, len: cum[cum.length - 1] };
-  pathCache.set(partnerId, path);
-  return path;
-}
+/** The site of the province on the map, and where it is drawn. */
+const siteOf = (game) => homeSiteId(game);
+const homeAt = (game) => SITES[siteOf(game)].pos;
 
 // ---------------------------------------------------------------------------
 // Travelers: game state in, positions out (pure, no canvas; tested headless)
@@ -162,19 +103,28 @@ export function nowMonths(game) {
   return t.totalMonths + (t.day + t.tick / CONFIG.TICKS_PER_DAY) / CONFIG.DAYS_PER_MONTH;
 }
 
-/** Days a caravan or ship from this partner is shown on the way (by the length of its route). */
-export function tripDays(partnerId) {
-  if (!TRADE_PARTNERS[partnerId]) return MAX_TRIP_DAYS;
-  const d = routePath(partnerId).len;
-  return Math.max(MIN_TRIP_DAYS, Math.min(MAX_TRIP_DAYS, Math.round(d * DAYS_PER_UNIT)));
+/**
+ * Days a route's next caravan or ship is shown on the way: its trip from its
+ * city (data/empireRoutes.js tripDays), at least MIN_SHOWN_TRIP_DAYS, and
+ * never longer than the route's shortest interval, so it always sets out from
+ * its city and never two are out at once (a quiet route's interval is at
+ * least the round trip; a busy one's comes sooner, sim/tradeDemand.js).
+ * The first trader of a route sets out the day the route opens: it is shown
+ * over the days to its visit (sim/trade.js firstVisitDays, at least a week
+ * even from next door), and so is never seen appearing halfway along.
+ */
+export function shownTripDays(game, partnerId, first = false) {
+  const trip = first ? firstVisitDays(game, partnerId) : Math.max(MIN_SHOWN_TRIP_DAYS, tripDays(siteOf(game), partnerId));
+  return Math.min(trip, routeInterval(game, partnerId)[0]);
 }
 
 /**
- * Point on a partner's route, `frac` of the way from the partner (0) to your
- * province (1), measured along the route as drawn so travelers keep an even pace.
+ * Point on a partner's route from a site, `frac` of the way from the partner
+ * (0) to the province (1), measured along the route as drawn so travelers
+ * keep an even pace.
  */
-export function routePoint(partnerId, frac) {
-  const { pts, cum, len } = routePath(partnerId);
+export function routePoint(siteId, partnerId, frac) {
+  const { pts, cum, len } = routePath(siteId, partnerId);
   const want = Math.max(0, Math.min(1, frac)) * len;
   let i = 1;
   while (i < pts.length - 1 && cum[i] < want) i++;
@@ -185,28 +135,51 @@ export function routePoint(partnerId, frac) {
   return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
 }
 
+/** The side a warband only rumoured is drawn on: the site's frontier (data/sites.js), over land toward its likely enemies. */
+export function frontierDir(siteId) {
+  return (SITES[siteId] || SITES.etruria).frontier;
+}
+
+/** Is the way in from `d` over land, from `far` map units out to WARBAND_NEAR? (Sampled every half unit.) */
+function landWayIn(home, d, far) {
+  const [dx, dy] = DIR_STEP[d];
+  for (let r = far; r >= WARBAND_NEAR - 1e-9; r -= 0.5) if (!isLand([home[0] + dx * r, home[1] + dy * r])) return false;
+  return true;
+}
+
 /**
- * Where a warband from `dir` stands on the map, `frac` of the way in. One
- * that comes by sea (`sea`) sails on the sea: from `dir`, or the nearest
- * direction round from it whose whole way in is sea.
+ * Where a warband from `dir` stands on the map from a site, `frac` of the
+ * way in. One that comes by sea (`sea`) sails on the sea: from `dir`, or the
+ * nearest direction round from it whose way in is sea at both ends. One that
+ * comes by land walks over land: from `dir`, or the nearest direction round
+ * from it whose whole way in is land; on a narrow coast where none is (Firmum
+ * between the Apennines and the Adriatic), from a little nearer. The label
+ * keeps the side of the city's map it comes from.
  */
-export function warbandPoint(dir, frac, sea = false) {
-  const at = (d) => {
+export function warbandPoint(siteId, dir, frac, sea = false) {
+  const home = (SITES[siteId] || SITES.etruria).pos;
+  const point = (d, far = WARBAND_FAR) => {
     const [dx, dy] = DIR_STEP[d] || DIR_STEP.north;
-    const r = WARBAND_FAR + (WARBAND_NEAR - WARBAND_FAR) * frac;
-    return [HOME_POS[0] + dx * r, HOME_POS[1] + dy * r];
+    const r = far + (WARBAND_NEAR - far) * frac;
+    return [home[0] + dx * r, home[1] + dy * r];
   };
-  if (!sea) return at(dir);
   const order = Object.keys(DIR_STEP);
   const k = Math.max(0, order.indexOf(dir));
-  for (const step of [0, 1, -1, 2, -2, 3, -3, 4]) {
-    const d = order[(k + step + 8) % 8];
-    const [dx, dy] = DIR_STEP[d];
-    const far = [HOME_POS[0] + dx * WARBAND_FAR, HOME_POS[1] + dy * WARBAND_FAR];
-    const near = [HOME_POS[0] + dx * WARBAND_NEAR, HOME_POS[1] + dy * WARBAND_NEAR];
-    if (!isLand(far) && !isLand(near)) return at(d);
+  const round = [0, 1, -1, 2, -2, 3, -3, 4].map((step) => order[(k + step + 8) % 8]);
+  if (sea) {
+    for (const d of round) {
+      const [dx, dy] = DIR_STEP[d];
+      const far = [home[0] + dx * WARBAND_FAR, home[1] + dy * WARBAND_FAR];
+      const near = [home[0] + dx * WARBAND_NEAR, home[1] + dy * WARBAND_NEAR];
+      if (!isLand(far) && !isLand(near)) return point(d);
+    }
+    return point(dir);
   }
-  return at(dir);
+  for (let far = WARBAND_FAR; far >= WARBAND_NEAR + 1; far -= 2) {
+    const d = round.find((side) => landWayIn(home, side, far));
+    if (d) return point(d, far);
+  }
+  return point(dir);
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -218,9 +191,9 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  *       one per open route that ships can reach. `days` = whole days until it
  *       arrives; `onWay` = it has set out (the last `trip` days before its
  *       visit); `frac` = share of the trip done (0 while it has not set out).
- *       The first trader of a route sets out from its city the day the route
- *       opens (it is due FIRST_VISIT_DAYS later, sooner than a far city's
- *       usual trip), so it is never seen appearing halfway along.
+ *       `trip` = shownTripDays: the first trader of a route sets out from its
+ *       city the day the route opens, so it is never seen appearing halfway
+ *       along.
  *   { kind: 'warband', size, dir, origin, months, frac, pos, sea, noShore }
  *       the warband the scouts reported: `months` until it strikes (as the
  *       Military advisor counts them), `origin` = the map-edge tile it enters
@@ -229,7 +202,7 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
  *       `frac` runs over the last RUMOUR_MONTHS.
  *   { kind: 'warband', rumour: true, months, frac, pos }
  *       a warband only rumoured so far (size, dir and origin null), at the
- *       frontier (FRONTIER_DIR) until the scouts find its side.
+ *       site's frontier (frontierDir) until the scouts find its side.
  *   { kind: 'raid', size, pos }
  *       raiders in the province now (size = how many are left).
  *
@@ -239,21 +212,19 @@ export function empireTravelers(game) {
   const out = [];
   const now = nowDays(game);
   const seaOk = !!game.map.seaEntry;
+  const site = siteOf(game);
+  const home = homeAt(game);
   for (const [id, r] of Object.entries(game.city.trade.routes)) {
     const p = TRADE_PARTNERS[id];
     if (!p || !r.open) continue;
     const sea = routeKind(id) === 'sea';
     if (sea && !seaOk) continue; // no ship ever comes (cannot be opened there anyway)
     const left = Math.max(0, r.nextVisit - now);
-    // No trader has reached the city yet: the one on the way set out when the
-    // route opened, FIRST_VISIT_DAYS before it is due. Later ones are due at
-    // least the route's shortest interval after the last (MAX_TRIP_DAYS, or
-    // less on a busy route), and are shown over no more than that, so they
-    // always set out from home and never two at once.
-    const trip = Math.min(r.visits ? tripDays(id) : FIRST_VISIT_DAYS, tripDays(id), routeInterval(game, id)[0]);
+    // (No trader has reached the city yet: the one on the way set out when the route opened.)
+    const trip = shownTripDays(game, id, !r.visits);
     const onWay = left <= trip;
     const frac = onWay ? clamp01(1 - left / trip) : 0;
-    out.push({ kind: sea ? 'ship' : 'caravan', id, name: p.name, color: p.color, days: Math.ceil(left), trip, onWay, frac, pos: routePoint(id, frac) });
+    out.push({ kind: sea ? 'ship' : 'caravan', id, name: p.name, color: p.color, days: Math.ceil(left), trip, onWay, frac, pos: routePoint(site, id, frac) });
   }
   out.sort((a, b) => a.days - b.days || a.name.localeCompare(b.name));
   const m = game.military;
@@ -261,12 +232,12 @@ export function empireTravelers(game) {
     const w = m.warned;
     const frac = clamp01(1 - (m.nextRaidMonth - nowMonths(game)) / RUMOUR_MONTHS);
     const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    if (w) out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, noShore: !!w.noShore, pos: warbandPoint(w.dir, frac, !!w.sea) });
-    else out.push({ kind: 'warband', rumour: true, size: null, dir: null, origin: null, months, frac, sea: false, pos: warbandPoint(FRONTIER_DIR, frac) });
+    if (w) out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, noShore: !!w.noShore, pos: warbandPoint(site, w.dir, frac, !!w.sea) });
+    else out.push({ kind: 'warband', rumour: true, size: null, dir: null, origin: null, months, frac, sea: false, pos: warbandPoint(site, frontierDir(site), frac) });
   }
   if (m && m.active) {
     const n = enemyCount(game) - legionCount(game); // (Caesar's men are shown apart, below)
-    if (n > 0) out.push({ kind: 'raid', size: n, pos: [HOME_POS[0] + 2.6, HOME_POS[1] - 2.4] });
+    if (n > 0) out.push({ kind: 'raid', size: n, pos: [home[0] + 2.6, home[1] - 2.4] });
   }
   out.push(...empireArmies(game));
   return out;
@@ -288,11 +259,35 @@ export function linePoint(pts, frac) {
   return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u];
 }
 
-/** The way from Rome to just short of the province, for Caesar's legions. */
-function legionRoad() {
-  const d = Math.hypot(ROME_POS[0] - HOME_POS[0], ROME_POS[1] - HOME_POS[1]) || 1;
-  const k = LEGION_NEAR / d;
-  return [ROME_POS, [HOME_POS[0] + (ROME_POS[0] - HOME_POS[0]) * k, HOME_POS[1] + (ROME_POS[1] - HOME_POS[1]) * k]];
+/**
+ * The way from Rome to just short of the province, for Caesar's legions:
+ * along the roads (data/empireRoutes.js legionWay), drawn as a curve. Their
+ * march is LEGION_MARCH_DAYS from anywhere (the time the governor has to
+ * win back favor, a rule rather than a journey), so a far province's
+ * legions simply move faster on the map.
+ */
+const legionRoads = new Map();
+export function legionRoad(siteId) {
+  if (!legionRoads.has(siteId)) legionRoads.set(siteId, cutShort(smoothLine(legionWay(siteId)), LEGION_NEAR));
+  return legionRoads.get(siteId);
+}
+
+/** A polyline less its last `cut` map units. */
+function cutShort(pts, cut) {
+  const want = Math.max(0, lineLength(pts) - cut);
+  const out = [pts[0]];
+  let run = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    if (run + seg >= want) {
+      const u = seg > 0 ? (want - run) / seg : 0;
+      out.push([pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u]);
+      return out;
+    }
+    run += seg;
+    out.push(pts[i]);
+  }
+  return out;
 }
 
 /**
@@ -310,13 +305,15 @@ function legionRoad() {
  */
 export function empireArmies(game) {
   const out = [];
+  const site = siteOf(game);
+  const home = homeAt(game);
   const ls = legionSummary(game);
   if (ls.state === 'marching') {
     const days = ls.days - game.time.tick / CONFIG.TICKS_PER_DAY;
     const frac = clamp01(1 - days / (game.military.caesar.marchDays || CONFIG.LEGION_MARCH_DAYS));
-    out.push({ kind: 'legion', size: ls.size, months: ls.months, frac, pos: linePoint(legionRoad(), frac) });
+    out.push({ kind: 'legion', size: ls.size, months: ls.months, frac, pos: linePoint(legionRoad(site), frac) });
   } else if (ls.state !== 'none') {
-    out.push({ kind: 'legion', here: true, state: ls.state, size: ls.men, pos: [HOME_POS[0] - 2.6, HOME_POS[1] + 3.6] }); // (below and left of the province: its name is above it, raiders to its right)
+    out.push({ kind: 'legion', here: true, state: ls.state, size: ls.men, pos: [home[0] - 2.6, home[1] + 3.6] }); // (below and left of the province: its name is above it, raiders to its right)
   }
   const bs = battleSummary(game);
   const part = nowMonths(game) - game.time.totalMonths; // how far into this month
@@ -325,7 +322,7 @@ export function empireArmies(game) {
   for (const r of recallSummary(game)) {
     if (r.rider > 0 || !THREATENED_CITIES[r.city]) continue;
     const frac = clamp01(r.homeTotal / Math.max(1, r.march)) * clamp01((r.homeIn - part) / Math.max(1, r.homeTotal));
-    out.push({ kind: 'troops', city: r.city, name: r.cityName, home: true, post: r.name, months: r.homeIn, pos: linePoint(smoothLine(marchLine(r.city)), frac) });
+    out.push({ kind: 'troops', city: r.city, name: r.cityName, home: true, post: r.name, months: r.homeIn, pos: linePoint(smoothLine(marchLine(site, r.city)), frac) });
   }
   if (!bs) return out;
   if (bs.phase === 'pending') {
@@ -339,18 +336,18 @@ export function empireArmies(game) {
       const step = s.toGo <= 1 ? 0 : s.toGo - 1 > nextEnemy ? 2 : 1;
       const toGoF = Math.max(1, s.toGo - part * step);
       const at = 1 - toGoF / s.march;
-      if (s.men + s.ships > 0) out.push({ kind: 'troops', city: bs.city, name: bs.name, strength: s.strength, months: s.toGo, pos: linePoint(smoothLine(marchLine(bs.city)), at) });
+      if (s.men + s.ships > 0) out.push({ kind: 'troops', city: bs.city, name: bs.name, strength: s.strength, months: s.toGo, pos: linePoint(smoothLine(marchLine(site, bs.city)), at) });
       // A rider rides out after them, reaching them as they get there.
       for (const r of bs.recalls) {
         if (r.rider <= 0) continue;
         const ridden = clamp01((r.riderTotal - r.rider + part) / Math.max(1, r.riderTotal));
-        out.push({ kind: 'rider', city: bs.city, name: bs.name, post: r.name, months: r.rider, pos: linePoint(smoothLine(marchLine(bs.city)), at * ridden) });
+        out.push({ kind: 'rider', city: bs.city, name: bs.name, post: r.name, months: r.rider, pos: linePoint(smoothLine(marchLine(site, bs.city)), at * ridden) });
       }
     }
   } else if (bs.phase === 'returning') {
     const total = game.military.battle.homeTotal || bs.homeIn || 1;
     const frac = clamp01(1 - (bs.homeIn - part) / total);
-    out.push({ kind: 'troops', city: bs.city, name: bs.name, home: true, months: bs.homeIn, pos: linePoint(smoothLine(marchLine(bs.city)).reverse(), frac) });
+    out.push({ kind: 'troops', city: bs.city, name: bs.name, home: true, months: bs.homeIn, pos: linePoint(smoothLine(marchLine(site, bs.city)).reverse(), frac) });
   }
   return out;
 }
@@ -414,7 +411,7 @@ export function empireHitAt(game, travelers, mx, my, radius, k = 1) {
   const b = game.military?.battle;
   if (b && THREATENED_CITIES[b.city]) consider(THREATENED_CITIES[b.city].pos, { kind: 'battle', id: b.city });
   consider(ROME_POS, { kind: 'rome' });
-  consider(HOME_POS, { kind: 'home' });
+  consider(homeAt(game), { kind: 'home' });
   for (const t of travelers) if (isDrawn(t)) consider(figureCenter(t, k), { kind: 'traveler', t }, radius * 0.25);
   return best;
 }
@@ -460,6 +457,8 @@ export function empireMapCanvas(game, cssWidth = 640) {
 export function drawEmpire(ctx, game, opts = {}) {
   const { travelers = [], pxPerUnit = 6.4, selected = null, hover = null, time = 0 } = opts;
   const k = figureScale(pxPerUnit);
+  const site = siteOf(game);
+  const home = homeAt(game);
   drawBase(ctx, pxPerUnit);
   const routes = game.city.trade.routes;
   const seaOk = !!game.map.seaEntry;
@@ -467,7 +466,7 @@ export function drawEmpire(ctx, game, opts = {}) {
   for (const [id, r] of Object.entries(routes)) {
     if (!TRADE_PARTNERS[id]) continue;
     const sea = routeKind(id) === 'sea';
-    drawRoute(ctx, routePath(id).pts, sea, r.open, sea && !seaOk, pxPerUnit);
+    drawRoute(ctx, routePath(site, id).pts, sea, r.open, sea && !seaOk, pxPerUnit);
   }
   drawRome(ctx, ROME_POS, k, false);
   for (const [id, r] of Object.entries(routes)) {
@@ -476,20 +475,20 @@ export function drawEmpire(ctx, game, opts = {}) {
     if (id === selected) ring(ctx, p.pos, 2.2 * k, '#2a241c');
     drawCity(ctx, p.pos, null, p.color, r.open, false, k);
   }
-  drawCity(ctx, HOME_POS, null, '#a8322b', true, true, k);
+  drawCity(ctx, home, null, '#a8322b', true, true, k); // the star where the province is (data/sites.js)
   // A distant battle (sim/battle.js): the threatened city, the enemy's line
   // of march and the province's road to it.
   const bs = battleSummary(game);
   if (bs) {
     const pp = pxPerUnit ? Math.max(0.22, Math.min(0.45, 1.6 / pxPerUnit)) : 0.4;
     dashed(ctx, enemyLine(bs.city), 'rgba(122,31,26,0.75)', pp, [0.9, 0.7]);
-    if (bs.phase !== 'foreign') dashed(ctx, smoothLine(marchLine(bs.city)), bs.sea ? 'rgba(31,95,153,0.8)' : 'rgba(168,50,43,0.8)', pp, [0.4, 0.5]);
+    if (bs.phase !== 'foreign') dashed(ctx, smoothLine(marchLine(site, bs.city)), bs.sea ? 'rgba(31,95,153,0.8)' : 'rgba(168,50,43,0.8)', pp, [0.4, 0.5]);
     drawBattleCity(ctx, THREATENED_CITIES[bs.city].pos, bs.phase === 'foreign', k);
   }
   // Names last, each where it clashes with no other name or marker (Italy
   // is crowded: Rome, Capua and the province sit close together).
   const names = [
-    { text: game.city.name || 'Your province', pos: HOME_POS, r: 2 * k, bold: true, sides: ['above', 'right', 'left', 'below'] },
+    { text: game.city.name || 'Your province', pos: home, r: 2 * k, bold: true, sides: ['above', 'right', 'left', 'below'] },
     { text: 'Rome', pos: ROME_POS, r: 1.2 * k, bold: true, sides: ['left', 'below', 'right', 'above'] },
     ...Object.keys(routes).filter((id) => TRADE_PARTNERS[id]).map((id) => ({ text: TRADE_PARTNERS[id].name, pos: TRADE_PARTNERS[id].pos, r: 1.1 * k, bold: false, sides: TRADE_PARTNERS[id].labelSides || ['above', 'below', 'right', 'left'] })),
     // (The threatened city's name on the side away from the enemy coming at it.)
@@ -509,7 +508,7 @@ export function drawEmpire(ctx, game, opts = {}) {
     else if (t.kind === 'rider') drawRider(ctx, x, y, k);
   }
   if (hover) {
-    const pos = hover.kind === 'traveler' ? figureCenter(hover.t, k) : hover.kind === 'city' ? TRADE_PARTNERS[hover.id].pos : hover.kind === 'battle' ? THREATENED_CITIES[hover.id].pos : hover.kind === 'rome' ? ROME_POS : HOME_POS;
+    const pos = hover.kind === 'traveler' ? figureCenter(hover.t, k) : hover.kind === 'city' ? TRADE_PARTNERS[hover.id].pos : hover.kind === 'battle' ? THREATENED_CITIES[hover.id].pos : hover.kind === 'rome' ? ROME_POS : home;
     ring(ctx, pos, 2.6 * k, 'rgba(42,36,28,0.55)', true);
   }
 }

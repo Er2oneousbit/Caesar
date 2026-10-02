@@ -79,6 +79,7 @@ import { CONFIG } from '../config.js';
 import { RNG } from '../core/rng.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { THREATENED_CITIES, SANDBOX_THREATENED_IDS, marchMonths, enemyWords } from '../data/battles.js';
+import { homeSiteId } from '../data/sites.js';
 import { Unit, removeUnit } from './military.js';
 import { battleStrength, endDrill } from './training.js';
 import { waterOf, shoreBerth } from './navy.js';
@@ -181,7 +182,7 @@ export function requestTroops(game, cityId, enemy) {
   const b = { city: cityId, enemy, requested: now, due: now + CONFIG.BATTLE_MONTHS, phase: 'pending', sent: null, outcome: null, homeIn: 0, foreignLeft: 0 };
   game.military.battle = b;
   const sea = c.route === 'sea';
-  game.message(`Caesar calls for troops: ${enemyWords(enemy)} of ${c.enemy} threatens ${c.name}, and the battle will be fought in ${CONFIG.BATTLE_MONTHS} months. Switch forts${sea ? ' (and, for a city by the sea, naval stations)' : ''} to Empire service and send them from the Imperial advisor; they need about ${marchMonths(cityId)} months to get there.`, 'imperial');
+  game.message(`Caesar calls for troops: ${enemyWords(enemy)} of ${c.enemy} threatens ${c.name}, and the battle will be fought in ${CONFIG.BATTLE_MONTHS} months. Switch forts${sea ? ' (and, for a city by the sea, naval stations)' : ''} to Empire service and send them from the Imperial advisor; they need about ${marchMonths(homeSiteId(game), cityId)} months to get there.`, 'imperial');
   game.events.emit('sound', { name: 'fanfare' });
   return b;
 }
@@ -241,7 +242,7 @@ export function sendTroops(game) {
   const b = currentBattle(game);
   const units = serviceUnits(game, b.city);
   const strength = strengthOf(units);
-  const march = marchMonths(b.city);
+  const march = marchMonths(homeSiteId(game), b.city);
   b.sent = { month: game.time.totalMonths, march, toGo: march, strength, men: [], ships: [], count: units.length };
   let men = 0;
   let ships = 0;
@@ -365,11 +366,12 @@ export function stepMarch(game, b) {
 }
 
 /**
- * How far off troops `toGo` months away now (or, by default, those already
- * sent; else troops sent this month) will be when the battle comes: the march
- * played forward month by month. In time when it is BATTLE_IN_TIME or less.
+ * How far off troops `toGo` months away now (by default, those already
+ * sent; for troops sent this month, pass their march) will be when the
+ * battle comes: the march played forward month by month. In time when it is
+ * BATTLE_IN_TIME or less.
  */
-export function projectedToGo(b, now, toGo = b.sent ? b.sent.toGo : marchMonths(b.city)) {
+export function projectedToGo(b, now, toGo = b.sent.toGo) {
   let t = toGo;
   for (let m = now + 1; m < b.due; m++) {
     const e = enemyToGo(b, b.due - m);
@@ -724,6 +726,7 @@ export function battleSummary(game) {
   const left = Math.max(0, b.due - now);
   const ready = b.phase === 'pending' && !b.sent ? serviceUnits(game, b.city) : [];
   const s = b.sent;
+  const march = marchMonths(homeSiteId(game), b.city); // from this province's site (data/sites.js)
   return {
     city: b.city,
     name: c.name,
@@ -736,8 +739,8 @@ export function battleSummary(game) {
     monthsLeft: left,
     enemyToGo: enemyToGo(b, left),
     enemyMonths: c.enemyMonths,
-    march: marchMonths(b.city),
-    inTime: b.phase === 'pending' ? projectedToGo(b, now) <= CONFIG.BATTLE_IN_TIME : null, // (sent now, or as sent)
+    march,
+    inTime: b.phase === 'pending' ? projectedToGo(b, now, s ? s.toGo : march) <= CONFIG.BATTLE_IN_TIME : null, // (sent now, or as sent)
     sent: s ? { toGo: s.toGo, strength: s.strength, men: s.men.length + leaving(game).filter((u) => !UNIT_TYPES[u.type].naval).length, ships: s.ships.length + leaving(game).filter((u) => UNIT_TYPES[u.type].naval).length, month: s.month, march: s.march } : null,
     outcome: b.outcome,
     homeIn: b.homeIn,

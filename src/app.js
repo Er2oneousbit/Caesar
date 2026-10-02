@@ -241,6 +241,7 @@ export class App {
       invasions: opts.invasions || 'occasional',
       seaRaids: opts.seaRaids !== false,
       rank: opts.rank,
+      site: opts.site,
     });
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');

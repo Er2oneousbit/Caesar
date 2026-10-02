@@ -26,6 +26,7 @@ import {
 } from '../src/sim/tradeDemand.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { empireTravelers, tripDays } from '../src/ui/empireMap.js';
+import { usualInterval } from '../src/sim/tradeDemand.js';
 import { walkerInfo } from '../src/ui/walkerTalk.js';
 import { buildDemoCity, buildDemoHarbor } from '../src/dev/demoCity.js';
 
@@ -52,9 +53,13 @@ test('demand: the missions with no demand of their own buy what the partners\' t
       }
       // The busy-route rule leaves every one of their routes at its pace:
       // the busiest, Aquileia's caravans (3,200 a year) and Corinthus's ships
-      // (5,200), are at 92% and 90% of what their traders carry.
-      const usual = routeKind(id) === 'sea' ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
-      assert.deepEqual(routeInterval(at(s, 0), id), [...usual], `${s.id} ${id}: its usual interval`);
+      // (5,200), are at 92% and 90% of what their traders carry. The usual
+      // pace is the round trip's for a partner far from the province's site
+      // (Tarraco from Beneventum and Luceria; tests/sites.test.mjs).
+      const usual = usualInterval(routeKind(id), tripDays(s.site, id));
+      assert.deepEqual(routeInterval(at(s, 0), id), usual, `${s.id} ${id}: its usual interval`);
+      const far = usual[0] > (routeKind(id) === 'sea' ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS)[0];
+      assert.equal(far, ['c5p tarraco', 'c6 tarraco'].includes(`${s.id} ${id}`), `${s.id} ${id}: far`);
     }
   }
   assert.ok(routeVolume(TRADE_PARTNERS.aquileia.buys, TRADE_PARTNERS.aquileia.sells) / carryPerYear('land') < 0.93);
@@ -223,15 +228,15 @@ test('busy routes: a land route raised to 6,000 a year carries far more than the
 
 test('busy routes: the empire map shows a busy route\'s trader over no more than its shortest interval', () => {
   // 10,800 a year by caravan: every 10 to 18 days, shorter than Tarraco's
-  // 14-day trip, so the trip shown is cut to 10 days. Shown over 14, the
-  // next caravan would appear 4 days along its road, beside the one arriving.
+  // 13-day trip, so the trip shown is cut to 10 days. Shown over 13, the
+  // next caravan would appear 3 days along its road, beside the one arriving.
   const game = demandGame({ demand: { tarraco: { wheat: 10000 } } });
   game.cheats.freeBuild = true;
   assert.ok(openRoute(game, 'tarraco').ok);
   const r = game.city.trade.routes.tarraco;
   const [shortest] = routeInterval(game, 'tarraco');
   assert.equal(shortest, 10);
-  assert.ok(tripDays('tarraco') > shortest, 'the clamp matters here');
+  assert.ok(tripDays('etruria', 'tarraco') > shortest, 'the clamp matters here');
   r.visits = 1;
   r.nextVisit = game.time.totalDays + shortest;
   const [c] = empireTravelers(game);

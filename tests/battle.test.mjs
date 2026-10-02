@@ -73,9 +73,9 @@ test('threatened cities: on land, their ways over land or sea, a few months\' ma
   for (const id of THREATENED_IDS) {
     const c = THREATENED_CITIES[id];
     assert.ok(isLand(c.pos), `${c.name} is on land`);
-    const line = marchLine(id);
+    const line = marchLine('etruria', id);
     for (const p of line.slice(1, -1)) assert.equal(isLand(p), c.route === 'land', `${c.name}: way point ${p.map((v) => v.toFixed(1))} ${c.route === 'land' ? 'on land' : 'at sea'}`);
-    const m = marchMonths(id);
+    const m = marchMonths('etruria', id);
     assert.ok(m >= CONFIG.BATTLE_MIN_MONTHS && m <= 12, `${c.name}: ${m} months`);
     assert.ok(c.enemyMonths >= 4);
   }
@@ -91,10 +91,11 @@ test('threatened cities: on land, their ways over land or sea, a few months\' ma
   }
   // The sandbox's random requests keep to the third century's four cities,
   // so a sandbox city draws as it always did; the later towns come with the
-  // late campaign's provinces (Italica's way is the longest, 12 months by sea).
+  // late campaign's provinces (from the Etruscan coast Italica's way is the
+  // longest, 12 months by sea; from Corduba, its own province, it is 3).
   assert.deepEqual(SANDBOX_THREATENED_IDS, ['placentia', 'ariminum', 'saguntum', 'messana']);
   assert.ok(SANDBOX_THREATENED_IDS.every((id) => THREATENED_CITIES[id]));
-  assert.deepEqual([THREATENED_CITIES.italica.route, marchMonths('italica')], ['sea', 12]);
+  assert.deepEqual([THREATENED_CITIES.italica.route, marchMonths('etruria', 'italica')], ['sea', 12]);
 });
 
 test('a scheduled request comes in its year, in a month from Martius to October drawn from the seed; one in progress drops the next', () => {

@@ -28,12 +28,28 @@
  *   route of the first seven missions keeps its pace (the busiest, Aquileia's
  *   caravans at 3,200 and Corinthus's ships at 5,200, are at 92% and 90% of
  *   it).
+ *
+ * Far routes (Colonia's own rule: in the original a partner's place on the
+ *   empire map changed nothing about trade)
+ *   A trader needs tripDays days to come from its city and as many to go
+ *   back (data/empireRoutes.js: half a day per map unit of its route). A
+ *   quiet route's traders cannot come more often than one round trip, so
+ *   the usual range [a, b] becomes [max(a, 2 x trip), that + (b - a)]. The
+ *   busy rule then scales that range, so a far busy route keeps several
+ *   traders on the road at once and still carries its whole year. Every
+ *   round trip from the Etruscan coast (Alexandria's is the longest, 58
+ *   days against the ships' 64) fits in the usual range: there, and for
+ *   every near partner anywhere, nothing changes. The capacity model
+ *   (sim/capacity.js) counts ships without distance (visitsPerYear): a far
+ *   route sends fewer ships, but each stays longer for its bigger loads.
  * ----------------------------------------------------------------------------
  */
 
 import { CONFIG } from '../config.js';
 import { RNG } from '../core/rng.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
+import { homeSiteId } from '../data/sites.js';
+import { tripDays } from '../data/empireRoutes.js';
 
 /** The original's yearly quota tiers (15, 25 and 40 loads of 100), and 0 for none. */
 export const DEMAND_TIERS = Object.freeze([0, 1500, 2500, 4000]);
@@ -94,9 +110,21 @@ export function partnerBuys(game, partnerId) {
   return buysInForce(game.scenario, game.seed, partnerId, game.time.totalMonths);
 }
 
-/** Units a route's traders carry in a year at the usual pace (each way). */
-export function carryPerYear(kind) {
+/**
+ * The usual [shortest, longest] days between a route's traders, stretched
+ * for a trader `trip` days from its city each way: never shorter than the
+ * round trip, the spread kept. Exactly the usual range while the round trip
+ * fits in it.
+ */
+export function usualInterval(kind, trip = 0) {
   const [a, b] = kind === 'sea' ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
+  const lo = Math.max(a, 2 * trip);
+  return [lo, lo + (b - a)];
+}
+
+/** Units a route's traders carry in a year at the usual pace (each way), for traders `trip` days away. */
+export function carryPerYear(kind, trip = 0) {
+  const [a, b] = usualInterval(kind, trip);
   const carry = kind === 'sea' ? CONFIG.SHIP_MAX_TRADE : CONFIG.CARAVAN_MAX_TRADE;
   return (carry * DAYS_PER_YEAR) / ((a + b) / 2);
 }
@@ -108,31 +136,38 @@ export function routeVolume(buys, sells) {
 }
 
 /** The factor a route's interval is scaled by: 1, or less for a route busier than its traders carry. */
-export function visitFactor(kind, volume) {
-  return volume > 0 ? Math.min(1, carryPerYear(kind) / volume) : 1;
+export function visitFactor(kind, volume, trip = 0) {
+  return volume > 0 ? Math.min(1, carryPerYear(kind, trip) / volume) : 1;
 }
 
 /**
  * The [shortest, longest] days between a route's traders for a yearly
- * volume: the usual range, scaled down for a busy route (whole days, at
- * least 1). Exactly the usual range when the route is not busy, so the
- * game's random draw for the next visit is unchanged.
+ * volume and a trip of `trip` days each way (0: distance not counted): the
+ * usual range stretched to the round trip (usualInterval), then scaled down
+ * for a busy route (whole days, at least 1). Exactly the usual range when
+ * the route is neither far nor busy, so the game's random draw for the next
+ * visit is unchanged.
  */
-export function visitInterval(kind, volume) {
-  const range = kind === 'sea' ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
-  const f = visitFactor(kind, volume);
+export function visitInterval(kind, volume, trip = 0) {
+  const range = usualInterval(kind, trip);
+  const f = visitFactor(kind, volume, trip);
   if (f >= 1) return [range[0], range[1]];
   return [Math.max(1, Math.round(range[0] * f)), Math.max(1, Math.round(range[1] * f))];
 }
 
-/** A route's interval in this game now (its demand in force and its sales). */
+/** A route's interval in this game now: its demand in force, its sales and its trip from the province's site. */
 export function routeInterval(game, partnerId) {
   const p = TRADE_PARTNERS[partnerId];
   const kind = p?.route === 'sea' ? 'sea' : 'land';
-  return visitInterval(kind, p ? routeVolume(partnerBuys(game, partnerId), p.sells) : 0);
+  return visitInterval(kind, p ? routeVolume(partnerBuys(game, partnerId), p.sells) : 0, p ? tripDays(homeSiteId(game), partnerId) : 0);
 }
 
-/** Traders a year a route sends on average for a yearly volume (the model's dock count). */
+/**
+ * Traders a year a route sends on average for a yearly volume (the capacity
+ * model's dock count). Distance is not counted: a far quiet route's ships
+ * come less often but carry more each, so the days ships spend at the docks
+ * follow the goods (see the header).
+ */
 export function visitsPerYear(kind, volume) {
   const [a, b] = visitInterval(kind, volume);
   return DAYS_PER_YEAR / ((a + b) / 2);

@@ -17,6 +17,13 @@
  *                                 regions: true gathers the fields, woods
  *                                 and hills in regions far apart, so the
  *                                 city grows in districts (the last step)
+ *   site                          where the province is on the empire map
+ *                                 (data/sites.js): the mission's real place,
+ *                                 which sets its trade routes, how often far
+ *                                 partners come and the army's march to a
+ *                                 distant battle. The sandbox's is picked in
+ *                                 its setup (SANDBOX_SITES; missing = the
+ *                                 Etruscan coast)
  *   funds                         starting treasury (Dn)
  *   startYear                     negative = BC
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
@@ -77,6 +84,7 @@ import { at } from './empireGeo.js';
 import { BUILDINGS, TOOLS } from './buildings.js';
 import { SANDBOX_RANK, TOP_RANK, clampRank } from './ranks.js';
 import { GOD_KEYS } from './gods.js';
+import { HOME_SITE, SANDBOX_SITES } from './sites.js';
 
 /**
  * Trade partners.
@@ -129,16 +137,6 @@ export const TRADE_PARTNERS = Object.freeze({
 /** The nine partners of the first seven missions (Urbs Magna trades with all of them). */
 export const FIRST_NINE = Object.freeze(['tarraco', 'massilia', 'lugdunum', 'aquileia', 'capua', 'carthago', 'cirta', 'corinthus', 'alexandria']);
 
-/**
- * Where the player's province sits on the empire map: the Etruscan coast by
- * the mouth of the Arno (Pisae's country). The province is anyone's, but
- * here it reads well: on the coast, so ships can come; on the peninsula, so
- * caravans walk in from Gaul, over the Alps, along the Po and from Capua
- * through Rome; north of Rome, so every route fans out from it without
- * crossing Italy, and the south of the boot (heel and toe) stays clear.
- * Moving it means moving the routes too (ROUTES_LL in data/empireGeo.js).
- */
-export const HOME_POS = at(10.45, 43.72);
 
 /**
  * Invasion settings. `first` = months until the first raid, `interval` = months
@@ -242,6 +240,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c1', step: 1, name: 'Novum Castrum', title: 'First Foundations',
     intro: 'The Senate has granted you a patch of riverside land and a handful of settlers. Lay out roads, give families a place to live, keep them fed and keep the fires down. Grow a town, bring the gods to its streets and keep the peace to prove you can govern.',
     map: { size: 64, type: 'river', seed: 'novum-castrum' },
+    site: 'castrum_novum', // where it is on the empire map (data/sites.js)
     funds: 6000, startYear: -280,
     goals: { population: 300, culture: 15, prosperity: 0, peace: 35, favor: 0 },
     paceYears: 1.25,
@@ -262,6 +261,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c2', step: 2, name: 'Aquae Clarae', title: 'Clear Waters',
     intro: 'A lakeside town needs clean water and a little culture. Build reservoirs by the lakes, run aqueducts, and give citizens fountains, schools and a stage.',
     map: { size: 96, type: 'lakes', seed: 'aquae-clarae' },
+    site: 'volsinii', // where it is on the empire map (data/sites.js)
     funds: 7000, startYear: -270,
     goals: { population: 450, culture: 35, prosperity: 20, peace: 45, favor: 0 },
     paceYears: 2.1,
@@ -279,6 +279,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c3', step: 3, track: 'peaceful', name: 'Figlina', title: 'Clay and Commerce',
     intro: 'The plains of Figlina are rich in clay. Build an industry, fill warehouses and open your first trade route. Prosperity is now expected of you.',
     map: { size: 112, type: 'plains', seed: 'figlina' },
+    site: 'figline', // where it is on the empire map (data/sites.js)
     funds: 7000, startYear: -255,
     goals: { population: 950, culture: 45, prosperity: 30, peace: 50, favor: 0 },
     paceYears: 2.5,
@@ -298,6 +299,7 @@ export const SCENARIOS = Object.freeze([
     // A seed with no water reaching the map's edge: the Picenes come over
     // the hills, never by ship, so the province needs no fleet.
     map: { size: 112, type: 'lakes', seed: 'firmum-picenum' },
+    site: 'firmum', // where it is on the empire map (data/sites.js)
     funds: 7000, startYear: -255,
     goals: { population: 1100, culture: 35, prosperity: 20, peace: 48, favor: 0 },
     paceYears: 2.3,
@@ -320,6 +322,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c4', step: 4, track: 'military', name: 'Pons Aelius', title: 'The River Crossing',
     intro: 'A great river divides this province. Bridge it, harvest its forests and olive groves, and entertain a growing people with gladiatorial games.',
     map: { size: 128, type: 'river', seed: 'pons-aelius' },
+    site: 'etruria', // where it is on the empire map (data/sites.js)
     funds: 8000, startYear: -240,
     goals: { population: 2700, culture: 50, prosperity: 40, peace: 55, favor: 0 },
     paceYears: 2.9,
@@ -339,6 +342,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c4p', step: 4, track: 'peaceful', name: 'Paestum', title: 'City of Temples',
     intro: 'The Greeks of Poseidonia raised great temples on this shore long before Rome made their city the Latin colony of Paestum in 273 BC. Keep the gods content, fill the harbor with ships from Massilia and Corinthus, and make Paestum a city the Greeks would envy. No enemy threatens this shore: Rome will judge you by what you build.',
     map: { size: 128, type: 'coast', seed: 'paestum' },
+    site: 'paestum', // where it is on the empire map (data/sites.js)
     funds: 8000, startYear: -240,
     goals: { population: 2700, culture: 60, prosperity: 50, peace: 65, favor: 40 },
     paceYears: 3.75,
@@ -355,6 +359,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c5', step: 5, track: 'military', name: 'Portus Mercatorum', title: 'Merchant Shore',
     intro: 'A coastal province with iron in its hills and vines on its slopes. Grow a wealthy city worthy of villas, and keep the Emperor happy.',
     map: { size: 128, type: 'coast', seed: 'portus-mercatorum' },
+    site: 'populonia', // where it is on the empire map (data/sites.js)
     funds: 9000, startYear: -225,
     goals: { population: 4600, culture: 60, prosperity: 50, peace: 60, favor: 55 },
     paceYears: 5.1,
@@ -373,6 +378,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c5p', step: 5, track: 'peaceful', name: 'Beneventum', title: 'The Market on the Appian Way',
     intro: 'The Samnite town of Maleventum became the Latin colony of Beneventum, the "good outcome", in 268 BC, and the Appian Way runs through it from Capua. Every caravan between Capua and the Adriatic passes here: build a market town worthy of the road, with rich homes, full warehouses and busy streets. The Samnite wars are over; the Senate expects prosperity, not victories.',
     map: { size: 128, type: 'river', seed: 'beneventum' },
+    site: 'beneventum', // where it is on the empire map (data/sites.js)
     funds: 9000, startYear: -225,
     goals: { population: 3000, culture: 65, prosperity: 60, peace: 70, favor: 65 },
     paceYears: 4.2,
@@ -389,6 +395,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c6', step: 6, track: 'military', name: 'Oasis Aurea', title: 'Sands of Gold',
     intro: 'Water is life in the desert. Only the land around the oases can feed your people. Plan every aqueduct carefully.',
     map: { size: 128, type: 'desert', seed: 'oasis-aurea' },
+    site: 'luceria', // where it is on the empire map (data/sites.js)
     funds: 10000, startYear: -210,
     goals: { population: 3500, culture: 60, prosperity: 55, peace: 70, favor: 60 },
     paceYears: 4.2,
@@ -403,6 +410,7 @@ export const SCENARIOS = Object.freeze([
     intro: 'Cosa, a Latin colony of 273 BC, stands on a hill above the Etruscan coast and its lagoon. Hannibal has been in Italy for eight years, and the colonies are tired of sending men and money: next year twelve of them will refuse, and Cosa will be among the eighteen that keep faith. Plant vines, send wine to Gaul and Greece from the lagoon harbor, and give Rome a colony it can count on. No enemy reaches this coast: Rome will judge you by what you build.',
     // A lake of the seed reaches the map's edge: the lagoon, open to ships.
     map: { size: 144, type: 'lakes', seed: 'cosa-portus' },
+    site: 'cosa', // where it is on the empire map (data/sites.js)
     funds: 10000, startYear: -210,
     goals: { population: 5600, culture: 70, prosperity: 65, peace: 75, favor: 70 },
     paceYears: 6.5,
@@ -422,6 +430,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c7', step: 7, track: 'military', name: 'Urbs Magna', title: 'The Great City',
     intro: 'Your greatest charge yet: build a city to rival Rome itself.',
     map: { size: 160, type: 'lakes', seed: 'urbs-magna' },
+    site: 'etruria', // where it is on the empire map (data/sites.js)
     funds: 12000, startYear: -190,
     goals: { population: 5800, culture: 75, prosperity: 70, peace: 75, favor: 65 },
     paceYears: 6.8,
@@ -439,6 +448,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c7p', step: 7, track: 'peaceful', name: 'Copia', title: 'Plenty',
     intro: 'In 193 BC Rome planted a Latin colony on the plain where Greek Thurii stood, beside the ruins of Sybaris, and named it Copia: plenty. The richest farmland of the south is yours, and Greece and Hispania are hungry. Feed your city and theirs: here the fields are the work. No enemy threatens the plain; Rome will judge you by culture, prosperity and the Emperor\'s favor.',
     map: { size: 160, type: 'river', seed: 'copia' },
+    site: 'copia', // where it is on the empire map (data/sites.js)
     funds: 12000, startYear: -190,
     goals: { population: 6000, culture: 77, prosperity: 73, peace: 78, favor: 70 },
     paceYears: 7.1,
@@ -460,6 +470,7 @@ export const SCENARIOS = Object.freeze([
     // The Po plain: ponds, but no water reaches the map's edge, so no ship
     // comes, every raid comes by land and there is no fleet.
     map: { size: 176, type: 'plains', seed: 'mutina' },
+    site: 'mutina', // where it is on the empire map (data/sites.js)
     funds: 14000, startYear: -177,
     goals: { population: 6000, culture: 75, prosperity: 70, peace: 76, favor: 66 },
     paceYears: 7.1,
@@ -483,6 +494,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c8p', step: 8, track: 'peaceful', name: 'Luna', title: 'The White Mountains',
     intro: 'Luna, a citizen colony of 177 BC at the mouth of the Macra, stands on land taken from the Ligurians, under mountains of white stone. Quarry the marble, fell the hill forests and ship both from the harbor: Carthago and Rhodus are building, and they pay well. No enemy reaches this shore; Rome will judge you by culture, prosperity and the Emperor\'s favor.',
     map: { size: 176, type: 'coast', seed: 'luna' },
+    site: 'luna', // where it is on the empire map (data/sites.js)
     funds: 14000, startYear: -177,
     goals: { population: 7000, culture: 78, prosperity: 75, peace: 80, favor: 75 },
     paceYears: 8.5,
@@ -505,6 +517,7 @@ export const SCENARIOS = Object.freeze([
     // The Baetis carries ships to the sea: the fleet comes with the raids,
     // though the Lusitanians themselves never come by water.
     map: { size: 192, type: 'river', seed: 'corduba' },
+    site: 'corduba', // where it is on the empire map (data/sites.js)
     funds: 16000, startYear: -150,
     goals: { population: 8000, culture: 76, prosperity: 71, peace: 77, favor: 68 },
     paceYears: 9.9,
@@ -527,6 +540,7 @@ export const SCENARIOS = Object.freeze([
     id: 'c9p', step: 9, track: 'peaceful', name: 'Carteia', title: 'The Colony of the Strait',
     intro: 'Carteia, on the bay below the great Rock, became in 171 BC the first Latin colony outside Italy: a town for more than four thousand sons of Roman soldiers and Spanish women. Here two seas meet, and the ships of Gades, Delos and the whole sea put in. Make it a market for all of them. No enemy threatens the bay; Rome will judge you by culture, prosperity and the Emperor\'s favor.',
     map: { size: 192, type: 'coast', seed: 'carteia' },
+    site: 'carteia', // where it is on the empire map (data/sites.js)
     funds: 16000, startYear: -150,
     goals: { population: 9500, culture: 79, prosperity: 76, peace: 82, favor: 80 },
     paceYears: 11.95,
@@ -549,6 +563,7 @@ export const SCENARIOS = Object.freeze([
     // Atax reaches the sea (the fleet); land on every edge, so war bands can
     // come from any side.
     map: { size: 256, type: 'river', seed: 'narbo-martius', regions: true },
+    site: 'narbo', // where it is on the empire map (data/sites.js)
     funds: 20000, startYear: -118,
     goals: { population: 10000, culture: 77, prosperity: 72, peace: 78, favor: 70 },
     paceYears: 12.65,
@@ -573,6 +588,7 @@ export const SCENARIOS = Object.freeze([
     intro: 'Puteoli, a citizen colony of 194 BC on the Bay of Naples, is becoming Italy\'s great port for the ships of Alexandria and the East; the poet Lucilius called it a lesser Delos. Twelve partners trade here. Build the greatest market of your career: a city of many districts, its fields, forests and quarries far apart, with culture and prosperity at their height and the Emperor\'s favor higher still. No enemy threatens the bay. Win here, and Rome will hail you Caesar.',
     // Regions far apart, as at Narbo (world/mapgen.js); the sea on one side.
     map: { size: 224, type: 'coast', seed: 'puteoli', regions: true },
+    site: 'puteoli', // where it is on the empire map (data/sites.js)
     funds: 20000, startYear: -118,
     goals: { population: 12000, culture: 80, prosperity: 78, peace: 85, favor: 85 },
     paceYears: 15.4,
@@ -603,11 +619,12 @@ export function withDifficulty(scenario, difficulty = 'normal') {
 }
 
 /** Sandbox settings template. The New Game screen fills in the blanks. */
-export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true, rank = SANDBOX_RANK } = {}) {
+export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true, rank = SANDBOX_RANK, site = HOME_SITE } = {}) {
   return {
     id: 'sandbox', name: 'Sandbox', title: 'Free Build',
     intro: 'No goals, no deadlines. Build the city you want.',
     map: { size, type, seed },
+    site: SANDBOX_SITES.includes(site) ? site : HOME_SITE, // picked in the setup (data/sites.js)
     funds: Math.round(funds * difficultyOf(difficulty).funds),
     startYear: -300,
     goals: { population: 0, culture: 0, prosperity: 0, peace: 0, favor: 0 },

@@ -127,6 +127,14 @@
  *      academy. Older saves need nothing: nobody in them is mid-training
  *      (a recruit or ship still on its way trains on arrival), and a soldier
  *      caught on a trip to the academy comes straight home (updateRoman).
+ *  20  horses live at the Horse Ranch, never in a warehouse (data/goods.js
+ *      keptAt): a ranch has `incoming` (horses on their way to its stables),
+ *      and a warehouse's stock, incoming and orders have no horses. An older
+ *      save's warehouse horses move to ranches with room, in id order (the
+ *      roads are not built yet while a save loads); what no ranch has room for
+ *      stays at its warehouse, which sends it to a barracks that needs it or
+ *      a ranch with room, a horse a day (sim/production.js). The warehouse's
+ *      horse order is dropped. See upgradeHorsesV19().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -153,6 +161,7 @@ import { WALKER_TYPES } from '../data/walkers.js';
 import { findScenario, withDifficulty } from '../data/scenarios.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
+import { isStable, stableRoom } from '../sim/storage.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
@@ -443,6 +452,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 13) upgradeGovernorV12(game);
   if (data.version < 14) upgradeEmpireV13(game);
   if (data.version < 15) upgradeWarningsV14(game);
+  if (data.version < 20) upgradeHorsesV19(game);
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -694,6 +704,43 @@ export function upgradeWarningsV14(game) {
   else if (m.settings && !m.active && left !== null && left <= RUMOUR_MONTHS && game.city.population >= RAID_MIN_POP) m.warnStage = 1;
   else m.warnStage = 0;
   if (m.caesar) m.caesar.noticeStage = noticeStageFor(m.caesar.countdown);
+}
+
+/**
+ * A save before version 20 (before horses lived at the Horse Ranch): every
+ * ranch gets its `incoming` (nothing on the way), and the horses in
+ * warehouses move to ranches with room, the lowest ids first. What no ranch
+ * has room for stays at its warehouse as a last resort, with no order for it
+ * (warehouses never take horses in again); that warehouse's supply cart takes
+ * it on to a barracks that needs horses or a ranch with room (sim/production.js
+ * updateWarehouseSupply). A cart on its way to a warehouse with horses finds
+ * it refusing them and goes on to a barracks or ranch, or home.
+ * @returns {number} horses' units moved to ranches (for the tests)
+ */
+export function upgradeHorsesV19(game) {
+  const ranches = [];
+  for (const b of game.buildings.values()) {
+    if (!isStable(b, b.def.produces)) continue;
+    if (!b.incoming || typeof b.incoming !== 'object') b.incoming = {};
+    b.incoming.horses ??= 0;
+    b.stock.horses ??= 0;
+    ranches.push(b);
+  }
+  let moved = 0;
+  for (const wh of game.buildings.values()) {
+    if (wh.def.kind !== 'warehouse') continue;
+    if (wh.orders) delete wh.orders.horses;
+    if (wh.incoming) delete wh.incoming.horses;
+    for (const r of ranches) {
+      const n = Math.min(wh.stock.horses || 0, stableRoom(r));
+      if (n <= 0) continue;
+      r.stock.horses += n;
+      wh.stock.horses -= n;
+      moved += n;
+    }
+    if (!(wh.stock.horses > 0)) delete wh.stock.horses;
+  }
+  return moved;
 }
 
 /**

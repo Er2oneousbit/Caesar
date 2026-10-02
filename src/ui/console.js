@@ -10,10 +10,11 @@
 import { h } from './dom.js';
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
+import { BUILDINGS } from '../data/buildings.js';
 import { buildDemoCity, buildDemoGarrison, buildDemoHarbor, buildDemoFishery, buildDemoHippodrome, buildDemoCloth, buildDemoNavy, buildDemoAcademy, buildDemoPortus } from '../dev/demoCity.js';
 import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
-import { isStorage, storageCapacity, storageUsed } from '../sim/storage.js';
+import { isStorage, storageCapacity, storageUsed, isStable, stableRoom } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
 import { squadronCounts, shipStatus } from '../sim/navy.js';
 import { startMarch, launchLegion, legionCount, siegeOrder } from '../sim/legion.js';
@@ -186,15 +187,18 @@ export class DebugConsole {
         const n = Number(args[1]) || 400;
         if (!GOODS[good]) throw new Error(`unknown good. Options: ${Object.keys(GOODS).join(', ')}`);
         let left = n;
+        // Horses go to the Horse Ranches' stables: no warehouse keeps them.
+        const kept = !!GOODS[good].keptAt;
         for (const b of g.buildings.values()) {
           if (left <= 0) break;
-          if (!isStorage(b) || b.stock[good] === undefined) continue;
-          const room = storageCapacity(b) - storageUsed(b);
+          if (kept ? !isStable(b, good) : !isStorage(b) || b.stock[good] === undefined) continue;
+          const room = kept ? stableRoom(b) : storageCapacity(b) - storageUsed(b);
           const put = Math.min(room, left);
           b.stock[good] += put;
           left -= put;
         }
-        return left > 0 ? `Stored ${n - left}; no room for ${left} (build a granary/warehouse).` : `Stored ${n} ${good}.`;
+        const where = kept ? `${BUILDINGS[GOODS[good].keptAt].name} with room` : 'granary/warehouse';
+        return left > 0 ? `Stored ${n - left}; no room for ${left} (build a ${where}).` : `Stored ${n} ${good}.`;
       }
       case 'fire':
       case 'collapse': {

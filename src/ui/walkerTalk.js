@@ -98,7 +98,9 @@ function workLines(game, w) {
     }
     case 'cart':
       if (w.state === 'collect') return ['Off to fetch more. They want it kept in stock here.', 'Empty there, full on the way back.'];
-      if (w.state === 'dockFetch') return ['The ship will not wait for ever. Off to the warehouse!', 'Load the ship, then home for a cup of wine.'];
+      if (w.state === 'dockFetch') return [`The ship will not wait for ever. Off to the ${w.want === 'horses' ? 'ranch' : 'warehouse'}!`, 'Load the ship, then home for a cup of wine.'];
+      // Horses are led on a rope, not carted (render/walkerArt.js).
+      if (w.cargo?.good === 'horses') return [`${amountText(w.cargo.good, w.cargo.amount)} on the rope. Easy now, easy.`, 'Good horses for the cavalry.'];
       if (w.cargo) return [`${amountText(w.cargo.good, w.cargo.amount)} on board. Mind the wheels!`, 'Heavy load, but it pays.'];
       return ['Back for the next load.'];
     case 'buyer': return w.load && Object.keys(w.load).length ? ['A full basket for the market. My back will not thank me.'] : ['The market needs stock. Off to the storehouse.'];

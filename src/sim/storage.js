@@ -13,6 +13,13 @@
  * "Room" includes loads already on their way (reservations in b.incoming),
  * so two carts never race to fill the same last slot.
  *
+ * Horses are different (data/goods.js keptAt): they live in a Horse Ranch's
+ * stables, never in a warehouse. A cart (a dock worker's, with imports) takes
+ * them to a barracks that needs them, else to a ranch with room
+ * (STABLE_CAPACITY). A ranch's own grooms go only to a barracks: one ranch
+ * never passes horses to another. The ranches count as city storage for
+ * horses (cityStock, takeFromCity: trade levels, the Emperor, the advisors).
+ *
  * Storage orders (the player's, per building; sim/storageOrders.js runs the
  * carts they send): each good is 'accept', 'refuse' or 'get', and the
  * building has an Empty switch. Refuse and Empty only stop deliveries IN
@@ -25,6 +32,7 @@
 import { CONFIG } from '../config.js';
 import { GOODS } from '../data/goods.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { STABLE_CAPACITY } from '../data/units.js';
 import { militaryNeed, barracksHasRoom } from './military.js';
 import { navalNeed, navaliaHasRoom } from './navy.js';
 
@@ -62,10 +70,12 @@ export function storageRoom(b) {
 /**
  * Does this storage building take deliveries of a good? Only its orders
  * decide (Refuse or Empty say no; Accept and Get say yes), not its room or
- * staff. Goods it has no place for (wine in a granary) are never accepted.
+ * staff. Goods it has no place for (wine in a granary, horses anywhere) are
+ * never accepted: horses an older save left in a warehouse stay there only
+ * until a ranch or a barracks takes them.
  */
 export function storageAccepts(b, good) {
-  if (!isStorage(b) || !b.orders || b.stock[good] === undefined) return false;
+  if (!isStorage(b) || !b.orders || b.stock[good] === undefined || GOODS[good]?.keptAt) return false;
   return !b.emptying && b.orders[good] !== 'refuse';
 }
 
@@ -74,6 +84,35 @@ export function storageSpaceFor(b, good) {
   if (!storageAccepts(b, good)) return 0;
   if (b.efficiency <= 0) return 0; // unstaffed storage cannot receive
   return storageRoom(b);
+}
+
+// ---------------------------------------------------------------------------
+// Horses at the ranch
+// ---------------------------------------------------------------------------
+
+/** Is this building where `good` is kept instead of a warehouse (a Horse Ranch, for horses)? */
+export function isStable(b, good = 'horses') {
+  return !!b && !!good && GOODS[good]?.keptAt === b.type;
+}
+
+/** Room in a ranch's stables, counting horses already on their way there. */
+export function stableRoom(b) {
+  return Math.max(0, STABLE_CAPACITY - (b.stock.horses || 0) - (b.incoming?.horses || 0));
+}
+
+/**
+ * Can a cart deliver `amount` of `good` to this ranch now? Like a warehouse,
+ * it needs some staff (grooms to take the horses in) and room.
+ */
+export function stableTakes(b, good, amount) {
+  return isStable(b, good) && b.efficiency > 0 && stableRoom(b) >= amount;
+}
+
+/** Every building that keeps `good` (the Horse Ranches, for horses), in id order. */
+export function stablesOf(game, good = 'horses') {
+  const out = [];
+  for (const b of game.buildings.values()) if (isStable(b, good)) out.push(b);
+  return out;
 }
 
 /**
@@ -112,6 +151,12 @@ export function receiveGoods(b, good, amount, home = false) {
     b.stock[good] += amount; // markets never refuse what their own buyer brings
     return amount;
   }
+  if (!home && isStable(b, good)) {
+    // Horses delivered to a ranch (imports): as many as its stables hold.
+    const n = Math.min(Math.max(0, STABLE_CAPACITY - b.stock[good]), amount);
+    b.stock[good] += n;
+    return n;
+  }
   if ((kind === 'farm' || kind === 'raw' || kind === 'wharf') && b.def.produces === good) {
     b.stock[good] += amount; // returned undeliverable cargo
     return amount;
@@ -127,12 +172,16 @@ export function takeGoods(b, good, amount) {
   return n;
 }
 
-/** Does this building count as city storage (granaries, warehouses, dock quays)? */
+/**
+ * Does this building count as city storage (granaries, warehouses, dock
+ * quays, and a Horse Ranch's stables)? A ranch's stock is only its horses,
+ * so counting it whole is right.
+ */
 function holdsCityGoods(b) {
-  return isStorage(b) || b.def.kind === 'dock';
+  return isStorage(b) || b.def.kind === 'dock' || isStable(b, b.def.produces);
 }
 
-/** Units of a good stored across all granaries/warehouses (and goods waiting on dock quays). */
+/** Units of a good stored across all granaries, warehouses and ranches (and goods waiting on dock quays). */
 export function cityStock(game, good) {
   let n = 0;
   for (const b of game.buildings.values()) if (holdsCityGoods(b) && b.stock[good]) n += b.stock[good];
@@ -158,13 +207,15 @@ export function takeFromCity(game, good, amount) {
 }
 
 /**
- * Every storage building of `kind` ('warehouse' or 'granary') on the road
+ * Every storage building of `kind` ('warehouse' or 'granary', or a test of
+ * the building such as isStable) on the road
  * network of tile `fromIdx`, in order of road distance (nearest first), with
  * that distance and the road tile it was reached from. One search, so a
  * caller can weigh distance against what each one holds.
  * @returns {{b:object, dist:number, goal:number}[]}
  */
 export function storageByRoad(game, fromIdx, kind, excludeId = 0) {
+  const wanted = typeof kind === 'function' ? kind : (b) => b.def.kind === kind;
   const { map, pf, buildings } = game;
   const { w, h, building } = map;
   const out = [];
@@ -178,7 +229,7 @@ export function storageByRoad(game, fromIdx, kind, excludeId = 0) {
       if (!id || id === excludeId || seen.has(id)) continue;
       seen.add(id);
       const b = buildings.get(id);
-      if (b && b.def.kind === kind) out.push({ b, dist: pf.reachedDist(i), goal: i });
+      if (b && wanted(b)) out.push({ b, dist: pf.reachedDist(i), goal: i });
     }
     return false; // keep going: we want all of them
   });
@@ -187,11 +238,15 @@ export function storageByRoad(game, fromIdx, kind, excludeId = 0) {
 
 /**
  * Find the best place for a cart to deliver `amount` units of `good`.
+ * `excludeId` is the cart's own building (never its target). Horses go to a
+ * barracks that needs them, else to a ranch with room, but a ranch's own
+ * cart only ever to a barracks (no horses passed from ranch to ranch).
  * @returns {{id:number, goal:number, path:number[]}|null}
  */
 export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
   const { pf, buildings } = game;
   const kind = GOODS[good]?.kind;
+  const kept = !!GOODS[good]?.keptAt;
   const attempts = [];
   if (BARRACKS_INPUTS.includes(good) && militaryNeed(game, good) > 0) {
     attempts.push((id) => {
@@ -219,10 +274,14 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
       return b && b.def.kind === 'granary' && storageSpaceFor(b, good) >= amount;
     });
   }
-  attempts.push((id) => {
-    const b = buildings.get(id);
-    return b && b.def.kind === 'warehouse' && storageSpaceFor(b, good) >= amount;
-  });
+  if (!kept) {
+    attempts.push((id) => {
+      const b = buildings.get(id);
+      return b && b.def.kind === 'warehouse' && storageSpaceFor(b, good) >= amount;
+    });
+  } else if (!isStable(buildings.get(excludeId), good)) {
+    attempts.push((id) => stableTakes(buildings.get(id), good, amount));
+  }
   for (const pred of attempts) {
     const found = pf.findNearest(fromIdx, pred, 120, excludeId);
     if (found) return found;
@@ -233,10 +292,11 @@ export function findDeliveryTarget(game, fromIdx, good, amount, excludeId = 0) {
 /**
  * How much of a good a delivery target found by findDeliveryTarget can still
  * take, counting loads on their way: a barracks or navalia up to its input cap, a
- * workshop up to WORKSHOP_RAW_CAP, storage its free room.
+ * workshop up to WORKSHOP_RAW_CAP, a ranch its stables' room, storage its free room.
  */
 export function deliveryRoom(b, good) {
   const kind = b.def.kind;
+  if (isStable(b, good)) return stableRoom(b);
   if (kind === 'barracks' || kind === 'navalia') return Math.max(0, b.def.inputCap - (b.stock[good] || 0) - (b.incoming[good] || 0));
   if (kind === 'workshop') return Math.max(0, CONFIG.WORKSHOP_RAW_CAP - (b.stock[good] || 0) - (b.incoming[good] || 0));
   return storageSpaceFor(b, good);

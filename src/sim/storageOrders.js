@@ -47,7 +47,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { GOOD_KEYS, FOOD_TYPES } from '../data/goods.js';
+import { WAREHOUSE_GOODS, FOOD_TYPES } from '../data/goods.js';
 import { spawnWalker, releaseReservation } from './entities.js';
 import { followPath, goHome } from './movement.js';
 import { isStorage, storageRoom, storageByRoad, findDeliveryTarget, takeGoods } from './storage.js';
@@ -75,7 +75,18 @@ export const GRANARY_SMALL_SOURCE = 400;
 
 /** The goods a storage building has orders for, in the order its cart looks at them. */
 export function orderGoods(b) {
-  return b.def.kind === 'granary' ? FOOD_TYPES : GOOD_KEYS;
+  return b.def.kind === 'granary' ? FOOD_TYPES : WAREHOUSE_GOODS;
+}
+
+/**
+ * The goods Empty sends out, in order: those it has orders for, then any it
+ * holds without orders (horses an older save left in a warehouse: they go
+ * to a barracks or a ranch).
+ */
+function emptyGoods(b) {
+  const goods = orderGoods(b);
+  const extra = Object.keys(b.stock).filter((g) => b.stock[g] > 0 && !goods.includes(g));
+  return extra.length ? [...goods, ...extra] : goods;
 }
 
 /** Set one good's order. */
@@ -136,7 +147,7 @@ function runOrders(game, b) {
 /** Send one load of the first good that has somewhere to go. */
 function emptyStep(game, b) {
   const stuck = [];
-  for (const good of orderGoods(b)) {
+  for (const good of emptyGoods(b)) {
     const have = b.stock[good] || 0;
     if (have < 1) continue;
     const amount = Math.min(CONFIG.CART_LOAD, have);

@@ -85,7 +85,7 @@ export function productionReport(game) {
       w.n++;
       waiting.set(b.type, w);
     } else if (/^(No workers available|Cannot find workers)/.test(s.text)) noWorkers++;
-    else if (b.noStorage) noStorage++;
+    else if (b.noStorage && b.herd === undefined) noStorage++; // (a ranch's grooms want a barracks, not storage)
   }
   for (const w of waiting.values()) {
     const need = [...w.goods];

@@ -122,3 +122,11 @@ export const TRAIN_DAYS = 8;
 export const HERD_START = 2;
 export const HERD_MAX = 8;
 export const HERD_GROWTH_DAYS = 30;
+
+/**
+ * Horses a ranch's stables hold, in units (100 = one horse): 8, a cavalry
+ * fort's worth. Horses stay here (never in a warehouse) until a Tirocinium
+ * needs them or a trader buys them; a full ranch foals no more, and imports
+ * need room here (sim/storage.js stableRoom).
+ */
+export const STABLE_CAPACITY = 800;

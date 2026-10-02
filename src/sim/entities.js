@@ -13,7 +13,7 @@
 import { CONFIG } from '../config.js';
 import { BUILDINGS, SHOW_KINDS } from '../data/buildings.js';
 import { GOD_KEYS } from '../data/gods.js';
-import { FOOD_TYPES, HOUSE_GOODS, GOOD_KEYS, emptyStock } from '../data/goods.js';
+import { FOOD_TYPES, HOUSE_GOODS, GOOD_KEYS, WAREHOUSE_GOODS, emptyStock } from '../data/goods.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { HERD_START } from '../data/units.js';
 import { clearRuin } from './ruins.js';
@@ -120,10 +120,11 @@ function initKind(b, def) {
       b.orderNote = null; // what the last Get or Empty check found, for the info panel
       break;
     case 'warehouse':
-      b.stock = emptyStock(GOOD_KEYS);
-      b.incoming = emptyStock(GOOD_KEYS);
+      // Every good but horses, which stay at the Horse Ranch (data/goods.js keptAt).
+      b.stock = emptyStock(WAREHOUSE_GOODS);
+      b.incoming = emptyStock(WAREHOUSE_GOODS);
       // Warehouses accept everything except food by default (food goes to granaries).
-      b.orders = Object.fromEntries(GOOD_KEYS.map((k) => [k, FOOD_TYPES.includes(k) ? 'refuse' : 'accept']));
+      b.orders = Object.fromEntries(WAREHOUSE_GOODS.map((k) => [k, FOOD_TYPES.includes(k) ? 'refuse' : 'accept']));
       b.emptying = false;
       b.orderNote = null;
       break;
@@ -138,6 +139,7 @@ function initKind(b, def) {
       if (def.produces === 'horses') {
         b.herd = HERD_START; // breeding mares (see data/units.js)
         b.herdDays = 0;
+        b.incoming = { horses: 0 }; // imported horses on their way to its stables (sim/storage.js)
       }
       break;
     case 'workshop': {

@@ -36,7 +36,7 @@ import { skyAt, dayTime, DAY_TICKS } from '../src/render/lighting.js';
 import { seasonOf, seasonPalette, seasonalKind, Weather, WEATHER, SEASON_NAMES, MONTH_LOOK, SNOW_LEVELS, coverLevelOf } from '../src/render/weather.js';
 import { groundColor } from '../src/render/terrainArt.js';
 import { GameTime } from '../src/sim/time.js';
-import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf, aqueductMaskAt, altarFlameOffset } from '../src/render/renderer.js';
+import { blendCode, mapGateOffset, lookStep, waterHintLayers, waterHintOf, meadowHintLayer, aqueductMaskAt, altarFlameOffset } from '../src/render/renderer.js';
 import { aqueductSpec } from '../src/render/terrainArt.js';
 import { buildingSpec, TEMPLE_LOOKS, templeAltar } from '../src/render/buildingArt.js';
 import { recordingContext } from '../src/render/draw.js';
@@ -614,10 +614,21 @@ test('water hints: housing shows well and fountain water, piped-water buildings 
   assert.equal(waterHintOf(WaterBits.PIPED | WaterBits.HOSPITAL, house), -1, 'pipes and hospitals are not water for a home');
   for (const tool of ['fountain', 'baths']) {
     const layers = waterHintLayers(tool);
-    assert.deepEqual(layers.map((l) => l.key), ['piped'], tool);
+    assert.equal(layers[0].key, 'piped', tool);
     assert.equal(waterHintOf(WaterBits.PIPED, layers), 0);
-    assert.equal(waterHintOf(WaterBits.WELL | WaterBits.FOUNTAIN, layers), -1);
+    assert.equal(waterHintOf(WaterBits.WELL, layers), -1);
   }
+  // Placing a fountain also shows the water the fountains already give (a
+  // mission 2 playtest could not see it): over the piped area, in the same
+  // clear blue as for housing; baths have no use for it.
+  const fl = waterHintLayers('fountain');
+  assert.deepEqual(fl.map((l) => l.key), ['piped', 'fountain']);
+  assert.equal(waterHintOf(WaterBits.PIPED | WaterBits.FOUNTAIN, fl), 1, 'fountain water over the pipes');
+  assert.equal(fl[1].style, house[1].style);
+  assert.deepEqual(waterHintLayers('baths').map((l) => l.key), ['piped']);
+  // The fountain hint must read over roofs: a full-strength edge, 2 px wide.
+  const alpha = (rgba) => Number(rgba.match(/,\s*([\d.]+)\)$/)[1]);
+  assert.ok(alpha(house[1].style.edge) >= 0.9 && house[1].style.width >= 2, JSON.stringify(house[1].style));
   // The piped area is teal, never one of the blues of the water homes get:
   // placing a fountain shows it under the fountains' reach, and in the same
   // pale blue the two could not be told apart.
@@ -626,6 +637,18 @@ test('water hints: housing shows well and fountain water, piped-water buildings 
   assert.equal(waterHintLayers('baths')[0].style, piped);
   // Wells and reservoirs show their own coverage while placed; others nothing.
   for (const tool of ['well', 'reservoir', 'road', 'prefecture', null]) assert.deepEqual(waterHintLayers(tool), [], String(tool));
+});
+
+test('meadow hint: every farm placed on meadow shows the meadow while in hand, clearly enough to read over snow', () => {
+  // In winter snow hides the meadow's colour and flowers, and the land a farm
+  // could use looked like any other (mission 2 playtest).
+  const farms = Object.entries(BUILDINGS).filter(([, d]) => d.placement === 'meadow').map(([k]) => k);
+  assert.ok(farms.includes('farm_wheat') && farms.includes('farm_veg'), farms.join());
+  for (const k of farms) assert.equal(meadowHintLayer(k)?.key, 'meadow', k);
+  for (const k of ['house', 'road', 'fountain', 'clay_pit', null]) assert.equal(meadowHintLayer(k), null, String(k));
+  const st = meadowHintLayer('farm_wheat').style;
+  const alpha = (rgba) => Number(rgba.match(/,\s*([\d.]+)\)$/)[1]);
+  assert.ok(alpha(st.edge) >= 0.9 && st.width >= 2, JSON.stringify(st));
 });
 
 test('aqueducts: a reservoir beside one is marked, so the channel steps down to its rim', () => {

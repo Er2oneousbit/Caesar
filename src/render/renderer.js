@@ -209,7 +209,7 @@ const EXIT_COLOR = '#b8322b';
  */
 /** Radius colors: the building being placed or selected (dark) vs. existing coverage (pale). */
 const RADIUS_STRONG = Object.freeze({ fill: 'rgba(28,96,214,0.36)', edge: 'rgba(16,64,170,0.95)' });
-const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(120,186,250,0.8)' });
+const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(84,160,240,0.95)' });
 /**
  * The reservoirs' piped area in teal, not blue: placing a fountain shows the
  * piped area under the existing fountains' reach, and in the same pale blue
@@ -218,9 +218,15 @@ const RADIUS_PALE = Object.freeze({ fill: 'rgba(150,208,255,0.28)', edge: 'rgba(
  */
 const PIPED_STRONG = Object.freeze({ fill: 'rgba(16,150,128,0.34)', edge: 'rgba(8,110,92,0.95)' });
 const PIPED_PALE = Object.freeze({ fill: 'rgba(110,220,190,0.26)', edge: 'rgba(60,180,150,0.8)' });
-/** Faint water hints under a tool: the palest blue, a stronger one for fountain water, teal for pipes. */
+/**
+ * Water hints under a tool: the palest blue for well water, a clear blue
+ * for fountain water, teal for pipes. The fountain hint is drawn over roofs
+ * and paving, and at 0.24 fill with a thin, half-clear edge it vanished over
+ * a housing block (mission 2 playtest): it now has a full-strength edge two
+ * pixels wide, as a clicked fountain's own area has.
+ */
 const HINT_FAINT = Object.freeze({ fill: 'rgba(150,208,255,0.15)', edge: 'rgba(120,186,250,0.45)' });
-const HINT_FOUNTAIN = Object.freeze({ fill: 'rgba(80,156,240,0.24)', edge: 'rgba(56,128,226,0.6)' });
+const HINT_FOUNTAIN = Object.freeze({ fill: 'rgba(60,132,236,0.3)', edge: 'rgba(28,92,210,0.95)', width: 2 });
 const HINT_PIPED = Object.freeze({ fill: 'rgba(110,220,190,0.16)', edge: 'rgba(60,180,150,0.5)' });
 const BLUE = Object.freeze({ strong: RADIUS_STRONG, pale: RADIUS_PALE });
 const TEAL = Object.freeze({ strong: PIPED_STRONG, pale: PIPED_PALE });
@@ -236,8 +242,10 @@ const WATER_AREA = Object.freeze({
  * did this for housing): the layers to show, weakest first. Housing plots
  * show where homes would get water (well water pale, fountain water a
  * stronger blue); buildings that need piped water (fountains, baths) show
- * the reservoirs' piped area, where they would run. Wells and reservoirs
- * already show their own coverage while being placed.
+ * the reservoirs' piped area, where they would run, and a fountain also
+ * the water the fountains already give, so a new one can be set where it is
+ * needed (with the cursor off the map there was nothing else to show it).
+ * Wells and reservoirs already show their own coverage while being placed.
  * @returns {Array<{key:string, bit:number, style:{fill:string, edge:string}}>}
  */
 export function waterHintLayers(tool) {
@@ -248,8 +256,25 @@ export function waterHintLayers(tool) {
     ];
   }
   const def = BUILDINGS[tool];
-  if (def && def.needsPiped) return [{ key: 'piped', bit: WaterBits.PIPED, style: HINT_PIPED }];
-  return [];
+  if (!def || !def.needsPiped) return [];
+  const piped = { key: 'piped', bit: WaterBits.PIPED, style: HINT_PIPED };
+  if (def.kind === 'fountain') return [piped, { key: 'fountain', bit: WaterBits.FOUNTAIN, style: HINT_FOUNTAIN }];
+  return [piped];
+}
+
+/**
+ * Meadow under a farm tool: farms grow only on meadow (a farm's output
+ * scales with the share of meadow under it), and in winter snow covers the
+ * meadow's colour and flowers, so the land a farm could use was impossible
+ * to tell from grass (mission 2 playtest). A green-gold tint with a clear
+ * edge, drawn over the snow like the water hints.
+ */
+const HINT_MEADOW = Object.freeze({ fill: 'rgba(196,206,64,0.3)', edge: 'rgba(150,152,20,0.95)', width: 2 });
+
+/** The meadow hint layer for a tool, or null: tools whose buildings are placed on meadow. */
+export function meadowHintLayer(tool) {
+  const def = BUILDINGS[tool];
+  return def && def.placement === 'meadow' ? { key: 'meadow', style: HINT_MEADOW } : null;
 }
 
 /** The hint layer a tile's water bits fall in: the strongest that applies, or -1. */
@@ -1298,15 +1323,28 @@ export class Renderer {
    * mid-frame (see ARCHITECTURE.md, Draw calls).
    */
   drawWaterHints(layers, skip = null) {
+    const map = this.game.map;
+    const counts = this.drawTileHints(layers, (j) => waterHintOf(map.water[j], layers), skip);
+    // Exposed for the browser smoke test: tiles hinted this frame, by layer.
+    if (counts) this.stats.waterHint = counts;
+  }
+
+  /**
+   * Tint tiles by hint layer: `layerOf(i)` gives a tile's layer (an index
+   * into `layers`, the strongest wins) or -1. Each layer is filled once and
+   * outlined where it meets weaker ground (see drawWaterHints).
+   * @returns {Object<string, number>|null} tiles hinted, by layer key
+   */
+  drawTileHints(layers, layerOf, skip = null) {
     const v = this.viewTiles;
-    if (!v || !layers.length) return;
+    if (!v || !layers.length) return null;
     const { ctx, camera: cam } = this;
     const k = cam.scale;
     const map = this.game.map;
     const cls = (j) => {
       if (j < 0) return -1;
       if (skip && skip(j)) return Infinity;
-      return waterHintOf(map.water[j], layers);
+      return layerOf(j);
     };
     const edges = layers.map(() => []);
     const tiles = layers.map(() => []);
@@ -1339,9 +1377,8 @@ export class Renderer {
       }
       ctx.fill();
     });
-    layers.forEach((l, n) => this.strokeEdges(edges[n], l.style.edge, 1));
-    // Exposed for the browser smoke test: tiles hinted this frame, by layer.
-    this.stats.waterHint = counts;
+    layers.forEach((l, n) => this.strokeEdges(edges[n], l.style.edge, l.style.width || 1));
+    return counts;
   }
 
   drawCoverage(strong, isPale = null, colors = BLUE) {
@@ -1370,7 +1407,7 @@ export class Renderer {
       this.fillDiamond((x - y) * HALF_W, (x + y) * HALF_H, colors.strong.fill);
       for (const [j, a, b] of sides(x, y)) if (!strong.has(j)) strongEdges.push(a, b);
     }
-    this.strokeEdges(paleEdges, colors.pale.edge, 1);
+    this.strokeEdges(paleEdges, colors.pale.edge, 1.4);
     this.strokeEdges(strongEdges, colors.strong.edge, 1.6);
     // Exposed for the browser smoke test (and the curious): tiles painted this frame.
     this.stats.coverage = { strong: strong.size, pale: paleCount };
@@ -1678,6 +1715,8 @@ export class Renderer {
     // (under the rest; tiles the coverage preview paints are left to it).
     const hints = waterHintLayers(this.tool);
     if (hints.length) this.drawWaterHints(hints, water ? (i) => strong.has(i) || (map.water[i] & water.bit) !== 0 : null);
+    const meadow = meadowHintLayer(this.tool);
+    this.stats.meadowHint = meadow ? this.drawTileHints([meadow], (i) => (map.terrain[i] === Terrain.MEADOW ? 0 : -1))?.meadow ?? 0 : null;
     if (!plan) {
       if (this.hoverTile) this.outlineFootprint(this.hoverTile.x, this.hoverTile.y, 1, 'rgba(255,255,255,0.55)', 1);
       return;

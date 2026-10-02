@@ -16,6 +16,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.1)
+
+* **Fountain water is easy to see while you build**: with the Housing tool the fountains' area had a pale fill and a thin, half-clear edge that vanished over a housing block; it now has a clear blue edge two pixels wide. Placing a fountain now also shows where the fountains already give water, even with the cursor off the map (it showed only the reservoirs' piped area there), and their edge is stronger while the new fountain's area is shown
+* **Meadow shows through the snow**: in winter snow hid the meadow's colour, so the land a farm could use looked like any other. With a farm (or any building placed on meadow) in hand, meadow is now tinted green-gold with a clear outline, in every season
+* 549 unit tests
+
 ## Done (v0.15.0)
 
 * **Campaign branches** (parity #13, the first three): after a win you choose your next province, a peaceful or a military one, both at the same rank, and may switch tracks at every choice; a city that is overrun is offered the same step's choice again. Three new provinces, all Roman colonies of the 270s and 260s BC: **Firmum** (military, step 3, beside Figlina), a frontier hill town against the Picenes with a legion fort and the Campus a step early, raids from its second year and a call for troops for Ariminum; **Paestum** (peaceful, step 4, beside Pons Aelius), an old Greek city of temples trading by sea; **Beneventum** (peaceful, step 5, beside Portus Mercatorum), a market town on the Via Appia. Their population goals fit their jobs (`npm run sim -- --capacity`): 1,100, 2,700 and 3,000 people; peace sets their pace (2.3, 3.75 and 4.2 years). Savings go to both provinces of the next step

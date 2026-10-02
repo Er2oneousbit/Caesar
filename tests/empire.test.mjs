@@ -23,7 +23,7 @@ import { militaryMonthly } from '../src/sim/military.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { serializeGame } from '../src/core/save.js';
 import {
-  empireTravelers, tripDays, routePoint, routePath, warbandPoint, travelerLabel, empireHitAt, isDrawn, ROME_POS, SCOUT_MONTHS, RUMOUR_MONTHS, FRONTIER_DIR,
+  empireTravelers, tripDays, routePoint, routePath, warbandPoint, travelerLabel, empireHitAt, isDrawn, ROME_POS, SCOUT_MONTHS, RUMOUR_MONTHS, FRONTIER_DIR, placeLabels,
 } from '../src/ui/empireMap.js';
 import { at, isLand, ROUTES, MAP_W, MAP_H, LON_WEST, LON_EAST, LAT_NORTH, LAT_SOUTH } from '../src/data/empireGeo.js';
 import { newGame, findFree } from './helpers.mjs';
@@ -300,4 +300,30 @@ test('empire: reading the travelers changes nothing in the game', () => {
   }
   assert.equal(state(), before);
   assert.deepEqual(game.rng.getState(), rng);
+});
+
+test('a name with no free side goes where it covers the least of the others, not on top of one', () => {
+  // Vercellae, threatened in Narbo Martius, sits among Lugdunum, Massilia,
+  // Aquileia and the province: every side of its marker clashed, and its
+  // name printed over Massilia's. Here a city ringed by markers: the one to
+  // its left is small, so the name goes left (drawn right-aligned).
+  const drawn = [];
+  const ctx = {
+    font: '', textAlign: 'left', lineWidth: 1, strokeStyle: '', fillStyle: '',
+    measureText: (t) => ({ width: t.length * 1.2 }),
+    strokeText() {},
+    fillText(text, x, y) { drawn.push({ text, x, y, align: this.textAlign }); },
+  };
+  const centre = [50, 30];
+  const names = [
+    { text: 'N', pos: [50, 25], r: 4, bold: false, sides: ['above'] },
+    { text: 'S', pos: [50, 35], r: 4, bold: false, sides: ['below'] },
+    { text: 'E', pos: [58, 30], r: 4, bold: false, sides: ['right'] },
+    { text: 'W', pos: [43.5, 30], r: 0.6, bold: false, sides: ['left'] },
+    { text: 'Vercellae', pos: centre, r: 1.2, bold: false, sides: ['below', 'right', 'left', 'above'] },
+  ];
+  placeLabels(ctx, names, 1);
+  const v = drawn.find((d) => d.text === 'Vercellae');
+  assert.equal(v.align, 'right', JSON.stringify(drawn));
+  assert.ok(v.x < centre[0]);
 });

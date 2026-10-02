@@ -59,7 +59,7 @@ export const CONSOLE_HELP = [
   ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
   ['legion', 'Caesar\'s legions set out from Rome now (they arrive in 12 months)'],
   ['legion now [n]', 'Caesar\'s legions (n men; default: the next attack\'s size) arrive at the map entrance now'],
-  ['battle [city] [n]', 'Caesar calls for troops now: city placentia | ariminum | saguntum | messana, enemy strength n'],
+  ['battle [city] [n]', `Caesar calls for troops now: city ${Object.keys(THREATENED_CITIES).join(' | ')}, enemy strength n`],
   ['battle now', 'Fight the pending distant battle now'],
   ['arch', 'Grant a triumphal arch to build, as for a distant battle won'],
   ['army', 'List forts, naval stations, soldiers, ships, barracks and navalia stock and the raid schedule'],

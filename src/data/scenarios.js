@@ -6,13 +6,17 @@
  * Scenario fields:
  *   id, name, title, intro        display text (id: c1 to c7, and a step
  *                                 number with a track letter for the
- *                                 missions added beside them: c3m, c4p...)
- *   step                          place in the campaign, 1 to 7. Winning any
+ *                                 missions added beside them: c3m, c4p...,
+ *                                 and for both of steps 8 to 10: c8m, c8p...)
+ *   step                          place in the campaign, 1 to 10. Winning any
  *                                 mission of a step opens every mission of
  *                                 the next (missionOpen, nextMissions)
  *   track: 'peaceful'|'military'  at a step with two missions, which kind
  *                                 this one is; missing at a single step
- *   map: { size, type, seed }     passed to world/mapgen.js
+ *   map: { size, type, seed, regions }  passed to world/mapgen.js (mapOptions);
+ *                                 regions: true gathers the fields, woods
+ *                                 and hills in regions far apart, so the
+ *                                 city grows in districts (the last step)
  *   funds                         starting treasury (Dn)
  *   startYear                     negative = BC
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
@@ -57,7 +61,9 @@
  *   rank                          the governor's rank (data/ranks.js): one per
  *                                 step, Citizen at step 1 and one up each step
  *                                 after (both missions of a step share it,
- *                                 as in the original); the sandbox's is picked in
+ *                                 as in the original), Proconsul at step 10,
+ *                                 whose win makes the governor Caesar
+ *                                 (rankAfterWin); the sandbox's is picked in
  *                                 its setup. Sets the salary (sim/governor.js)
  *   difficulty                    key of data/difficulty.js (missing = normal;
  *                                 campaign missions get it from withDifficulty)
@@ -160,8 +166,11 @@ export const INVASION_PRESETS = Object.freeze({
  * of work) and held under the capacity model's sensible ceiling by a test
  * (sim/capacity.js, `npm run sim -- --capacity`). Missions 3 to 7 ask for a
  * little under what a city of working homes alone employs; the model now
- * counts a few villas too, which leaves them room to spare (see the ROADMAP
- * note "The late missions need more jobs").
+ * counts a few villas too, which leaves them room to spare. The provinces
+ * added from step 6 on ask for 85 to 90% of the model's sensible ceiling,
+ * villas counted (never more than 92%: the villa quarter is the model's
+ * riskiest assumption), with demand of their own on the original's tiers;
+ * the population sets their pace, and the last step is the longest.
  *
  * Length: each mission's goals are set so the fastest possible city takes the
  * mission's paceYears (sim/pace.js). In missions 1 and 2 peace sets it (a
@@ -175,8 +184,9 @@ export const INVASION_PRESETS = Object.freeze({
  */
 /**
  * The fleet (sim/navy.js): the missions with raids and water ships can sail
- * (4, the river; 5, the coast; 7, a lake at the map's edge) and the sandbox.
- * Firmum is raided but its lakes never reach the map's edge: no fleet there.
+ * (4, the river; 5, the coast; 7, a lake at the map's edge; Corduba and
+ * Narbo Martius, rivers) and the sandbox. Firmum and Mutina are raided but
+ * their water never reaches the map's edge: no fleet there.
  */
 export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
 /*

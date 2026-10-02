@@ -794,10 +794,11 @@ export function drawRome(ctx, pos, k = 1, named = true) {
 /**
  * Draw city names, each on the first side of its marker (in its `sides`
  * order) where it overlaps no marker, no name already placed and stays on
- * the map; if every side clashes, the first. Earlier names win.
+ * the map; if every side clashes, the one that covers the least of the
+ * others. Earlier names win.
  * @param {{text:string, pos:number[], r:number, bold:boolean, sides:string[]}[]} names
  */
-function placeLabels(ctx, names, k) {
+export function placeLabels(ctx, names, k) {
   const taken = names.map(({ pos: [x, y], r }) => [x - r, y - r, x + r, y + r]); // the markers
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const size = 2.3 * k;
@@ -818,7 +819,12 @@ function placeLabels(ctx, names, k) {
       return [x0, by - 0.8 * size, x0 + w, by + 0.22 * size];
     };
     const fits = (b) => b[0] >= 0.5 && b[2] <= W - 0.5 && b[1] >= 0.5 && b[3] <= H - 0.5 && !taken.some((t, j) => j !== i && hits(b, t));
-    const side = n.sides.find((s) => fits(box(spots[s]))) || n.sides[0];
+    // Where every side clashes (Vercellae among Lugdunum, Massilia, Aquileia
+    // and the province), the side that covers the least of the others, so
+    // two names never print over each other whole.
+    const overlap = (b) => taken.reduce((a, t, j) => a + (j !== i && hits(b, t) ? (Math.min(b[2], t[2]) - Math.max(b[0], t[0])) * (Math.min(b[3], t[3]) - Math.max(b[1], t[1])) : 0), 0);
+    const side = n.sides.find((s) => fits(box(spots[s])))
+      || n.sides.reduce((best, s) => (overlap(box(spots[s])) < overlap(box(spots[best])) ? s : best), n.sides[0]);
     const [tx, by, align] = spots[side];
     taken.push(box(spots[side]));
     label(ctx, n.text, tx, by, k, n.bold, align);

@@ -25,6 +25,7 @@
 import { CONFIG, HALF_W, HALF_H } from '../config.js';
 import { recordingContext, hash01 } from './draw.js';
 import { buildingSpec, templeAltar } from './buildingArt.js';
+import { turnUV } from './turn.js';
 import { makeCanvas } from './sprites.js';
 
 /** One day and night: 5 minutes of game time at 1x speed. */
@@ -122,12 +123,12 @@ const lightCache = new Map(); // sprite key -> { windows, doors, torches, cx, cy
  * Where a building's lights are, in local world px from its footprint's top
  * corner. Cached per sprite key (type, size, variant, art state).
  */
-export function lightsOf(key, type, S, variant, state) {
+export function lightsOf(key, type, S, variant, state, turn = 0) {
   let info = lightCache.get(key);
   if (info) return info;
   const { ctx, lights } = recordingContext();
   try {
-    buildingSpec(type, S, variant, state).draw(ctx);
+    buildingSpec(type, S, variant, state, false, 0, false, turn).draw(ctx);
   } catch {
     // Art that cannot be recorded simply has no windows at night.
   }
@@ -135,7 +136,7 @@ export function lightsOf(key, type, S, variant, state) {
   const doors = [];
   for (const l of lights) (l.kind === 'door' ? doors : windows).push([l.x, l.y, Math.max(1.6, Math.min(l.w, l.h) * 0.8)]);
   const [cx, cy] = lp(S / 2, S / 2, 8);
-  info = { windows, doors, torches: torchesFor(type, S, state).map(([u, v, z]) => lp(u, v, z)), cx, cy };
+  info = { windows, doors, torches: torchesFor(type, S, state).map(([u, v, z]) => lp(...turnUV(u, v, S, turn), z)), cx, cy };
   if (lightCache.size > 2000) lightCache.clear();
   lightCache.set(key, info);
   return info;

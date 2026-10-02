@@ -587,6 +587,7 @@ function breakUp(game, grower, o, inside, moved) {
  */
 function newPiece(game, x, y, level, pop, stock, share, source, families = source.house) {
   const b = addBuilding(game, 'house', x, y, 1, { quiet: true });
+  b.turn = source.turn || 0; // (it was part of that home: it keeps its turn)
   const h = b.house;
   if (b.accessRoad < 0) {
     addStock(source.house, stock, share);
@@ -665,7 +666,7 @@ function makeVacant(game, b) {
     const { x, y } = b;
     setFootprint(game, b, x, y, 1);
     for (let dy = 0; dy < size; dy++) {
-      for (let dx = 0; dx < size; dx++) if (dx || dy) addBuilding(game, 'house', x + dx, y + dy, 1, { quiet: true });
+      for (let dx = 0; dx < size; dx++) if (dx || dy) addBuilding(game, 'house', x + dx, y + dy, 1, { quiet: true }).turn = b.turn || 0;
     }
   }
   game.markDirty('des');

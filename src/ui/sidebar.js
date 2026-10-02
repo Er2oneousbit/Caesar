@@ -11,7 +11,7 @@ import { h, mount, fmt } from './dom.js';
 import { CATEGORIES, BUILDINGS, TOOLS, LABOR_CATEGORIES, buildingsInCategory, fullName } from '../data/buildings.js';
 import { iconCanvas } from './icons.js';
 import { Minimap } from '../render/minimap.js';
-import { planNoRoadWarning } from '../sim/construction.js';
+import { planNoRoadWarning, turnRule } from '../sim/construction.js';
 import { archesToBuild } from '../sim/battle.js';
 
 /**
@@ -123,13 +123,32 @@ export class Sidebar {
     if (def.workers) facts.push(`${def.workers} workers (${LABOR_CATEGORIES[def.labor] || 'Industry'})`);
     this.planEl = h('div', {});
     mount(this.infoEl,
-      h('h4', {}, def.name, englishName(def)),
+      h('h4', {}, def.name, englishName(def), preview ? null : this.turnButton(key)),
       facts.length ? h('div', { class: 'muted' }, facts.join(' · ')) : null,
       // The plan (cost, why it cannot go here, warnings) above the
       // description, so the fixed-height box never scrolls it out of sight.
       this.planEl,
       h('div', { style: { marginTop: '3px' } }, def.desc),
     );
+  }
+
+  /**
+   * The Turn button (R) beside the name of the building in hand, with how
+   * far it is turned; greyed out, saying why, for one that turns itself.
+   */
+  turnButton(key) {
+    const def = BUILDINGS[key];
+    if (!def || !def.size) return null;
+    const why = turnRule(key);
+    const turn = this.app.input ? this.app.input.turnFor(key) : 0;
+    return h('button', {
+      class: 'btn small turn-btn',
+      dataset: { turn: String(turn) }, // (for the smoke test)
+      disabled: !!why,
+      title: why || `Turn it a quarter turn clockwise (R)${turn ? `: turned ${turn * 90}°` : ''}`,
+      style: { float: 'right', padding: '0 6px' },
+      onclick: () => this.app.input?.turnTool(),
+    }, turn ? `⟳ ${turn * 90}°` : '⟳');
   }
 
   /** Live preview summary while placing. */

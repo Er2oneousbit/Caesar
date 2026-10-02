@@ -48,7 +48,7 @@ export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', '
 export function recordRuin(game, tiles, what, cause, site = null) {
   if (!game.ruins) return null;
   const rec = { what, cause, month: game.time.month, year: game.time.year };
-  if (site) rec.site = { type: site.type, x: site.x, y: site.y, size: site.size };
+  if (site) rec.site = { type: site.type, x: site.x, y: site.y, size: site.size, ...(site.turn ? { turn: site.turn } : {}) };
   for (const i of tiles) game.ruins.set(i, rec);
   return rec;
 }
@@ -77,7 +77,8 @@ function validSite(s, map) {
   const { type, x, y, size } = s;
   if (typeof type !== 'string' || !(type === 'house' || type === 'wall' || Object.hasOwn(BUILDINGS, type))) return null;
   if (![x, y, size].every(Number.isInteger) || size < 1 || size > 5 || x < 0 || y < 0 || x + size > map.w || y + size > map.h) return null;
-  return { type, x, y, size };
+  const turn = Number.isInteger(s.turn) && s.turn > 0 && s.turn < 4 ? s.turn : 0; // (none before version 22)
+  return { type, x, y, size, ...(turn ? { turn } : {}) };
 }
 
 /**

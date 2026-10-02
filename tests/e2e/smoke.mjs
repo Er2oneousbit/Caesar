@@ -341,6 +341,27 @@ try {
       return ![...app.game.buildings.values()].some((v) => v.type === 'prefecture' && v.x === x && v.y === y);
     }, lone);
     check('the lone prefecture is undone again', gone);
+    // R turns the building in hand: the ghost turns, the build panel says
+    // so, and it is placed turned (then undone again).
+    await page.evaluate(() => window.colonia.ui.selectTool('prefecture'));
+    await page.mouse.move(lp.x - 6, lp.y);
+    await page.mouse.move(lp.x, lp.y);
+    await page.waitForTimeout(150);
+    const before = await page.evaluate(() => window.colonia.renderer.stats.ghostTurn);
+    await page.keyboard.press('r');
+    await page.waitForTimeout(200);
+    const turned = await page.evaluate(() => ({ ghost: window.colonia.renderer.stats.ghostTurn, button: document.querySelector('#tool-info .turn-btn')?.dataset.turn, tool: window.colonia.input.tool }));
+    await page.mouse.click(lp.x, lp.y);
+    const placedTurned = await page.evaluate(({ x, y }) => {
+      const app = window.colonia;
+      const b = [...app.game.buildings.values()].find((v) => v.type === 'prefecture' && v.x === x && v.y === y);
+      const turn = b ? b.turn : null;
+      app.undo();
+      delete app.input.turns.prefecture; // (later steps place prefectures as they always did)
+      return turn;
+    }, lone);
+    await page.keyboard.press('Escape');
+    check('R turns the building in hand: the ghost and the Turn button show it, and it is placed turned', before === 0 && turned.ghost === 1 && turned.button === '1' && turned.tool === 'prefecture' && placedTurned === 1, JSON.stringify({ before, turned, placedTurned }));
   }
 
   // 4. Menus and advisors via keyboard

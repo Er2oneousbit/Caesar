@@ -42,7 +42,7 @@ export function riskRates(b) {
 
 /** Where a building stood and what would put it back (a home: its plots), for the rubble's Rebuild. */
 function siteOf(b) {
-  return { type: b.house ? 'house' : b.type, x: b.x, y: b.y, size: b.size };
+  return { type: b.house ? 'house' : b.type, x: b.x, y: b.y, size: b.size, turn: b.turn || 0 };
 }
 
 /**

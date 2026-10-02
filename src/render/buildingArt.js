@@ -24,7 +24,7 @@ import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { GODS } from '../data/gods.js';
 import { P, poly, quad, ground, box, gableRoof, hipRoof, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
-import { drawTurned, withOrigin, turnUV, unit, decal, TS } from './turn.js';
+import { drawTurned, drawTurnedOver, withOrigin, turnUV, unit, decal, TS } from './turn.js';
 import { shipyardArt, wharfArt } from './waterArt.js';
 import { navaliaArt, stationArt, portusArt } from './navyArt.js';
 import { hippodromeArt, chariotMakerArt } from './hippodromeArt.js';
@@ -912,8 +912,8 @@ export const TEMPLE_LOOKS = {
  * piece at the front left. The renderer's live flame (altarFlameOffset) and
  * the night torch (lighting.js) sit on it.
  */
-export function templeAltar(S) {
-  return [S - 0.24, S - 0.08];
+export function templeAltar(S, turn = 0) {
+  return turnUV(S - 0.24, S - 0.08, S, turn);
 }
 
 function templeArt(ctx, S, variant, state, key) {
@@ -940,7 +940,7 @@ function templeArt(ctx, S, variant, state, key) {
   });
   // the god's piece at the front left, an altar with its fire at the front right
   frontPiece(ctx, look.front, 0.24, S - 0.1);
-  altar(ctx, ...templeAltar(S));
+  altar(ctx, S - 0.24, S - 0.08); // (templeAltar: the live flame's spot)
 }
 
 /**
@@ -993,7 +993,7 @@ function largeTempleArt(ctx, S, look) {
   });
   // the god's piece at the front left, the altar with its fire at the front right
   frontPiece(ctx, look.front, 0.36, S - 0.12);
-  altar(ctx, ...templeAltar(S));
+  altar(ctx, S - 0.24, S - 0.08);
 }
 
 /** A small altar with its fire. */
@@ -2458,8 +2458,23 @@ export const WAREHOUSE_BAYS = [
   [1.25, 0.3], [2.05, 0.3], [1.25, 1.1], [2.05, 1.1], [0.3, 1.25], [0.3, 2.05], [1.25, 2.05], [2.05, 2.05],
 ];
 
-/** Draw goods stacks (dynamic, every frame) inside a warehouse sprite's local space. */
-export function drawWarehouseStock(ctx, stock) {
+/**
+ * Draw goods stacks (dynamic, every frame) inside a warehouse sprite's local
+ * space; turned with the warehouse, its office drawn again over any stack
+ * it stands in front of (turn.js drawTurnedOver).
+ */
+export function drawWarehouseStock(ctx, stock, turn = 0, snow = 0) {
+  drawTurnedOver(ctx, 3, turn, (c) => overArt(c, snow, () => warehouseArt(c, 3)), (c) => warehouseCrates(c, stock));
+}
+
+/** The building's own art drawn again over live details: as in its sprite (snow, bare flag poles). */
+function overArt(ctx, snow, fn) {
+  liveFlags = true;
+  setRoofSnow(snow);
+  try { fn(); } finally { liveFlags = false; setRoofSnow(0); }
+}
+
+function warehouseCrates(ctx, stock) {
   let bay = 0;
   for (const [good, amount] of Object.entries(stock)) {
     if (amount < 1) continue;
@@ -2479,7 +2494,11 @@ export function drawWarehouseStock(ctx, stock) {
 }
 
 /** Granary fill indicator: grain sacks in front of the building. */
-export function drawGranaryStock(ctx, S, fill) {
+export function drawGranaryStock(ctx, S, fill, turn = 0, snow = 0) {
+  drawTurnedOver(ctx, S, turn, (c) => overArt(c, snow, () => granaryArt(c, S)), (c) => granarySacks(c, S, fill));
+}
+
+function granarySacks(ctx, S, fill) {
   const sacks = Math.round(fill * 10);
   for (let k = 0; k < sacks; k++) {
     const u = 0.35 + (k % 5) * 0.3;

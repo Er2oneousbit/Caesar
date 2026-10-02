@@ -480,6 +480,9 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 19) upgradeRecallsV18(game);
   if (data.version < 20) upgradeHorsesV19(game);
   if (data.version < 21) upgradeTradeSwitchesV20(game);
+  if (data.version < 22) upgradeTurnsV21(game);
+  // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
+  for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
 
   // Rebuild derived state (no simulation side effects).
   game.recomputeDerived();
@@ -797,6 +800,15 @@ export function upgradeHorsesV19(game) {
     }
   }
   return moved;
+}
+
+/**
+ * A save before version 22 (before buildings could be turned): every
+ * building stands as it always did, at turn 0, and the hippodrome lies
+ * along x as it always had to.
+ */
+export function upgradeTurnsV21(game) {
+  for (const b of game.buildings.values()) b.turn = 0;
 }
 
 /**

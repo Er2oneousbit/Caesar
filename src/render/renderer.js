@@ -68,6 +68,7 @@ import { Ambient } from './ambient.js';
 import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.js';
 import { Weather, seasonPalette } from './weather.js';
 import { hash01 } from './draw.js';
+import { turnUV } from './turn.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
 /** A fort's or naval station's color: its rally standard and the ghost one while deploying. */
@@ -143,8 +144,8 @@ export function mapGateOffset(map, end, dir = null) {
  * piece stands since each god got its look, so it burned over a herm or a
  * rose bush.)
  */
-export function altarFlameOffset(S) {
-  const [u, v] = templeAltar(S);
+export function altarFlameOffset(S, turn = 0) {
+  const [u, v] = templeAltar(S, turn);
   return [(u - v) * HALF_W, (u + v) * HALF_H - 5];
 }
 
@@ -167,13 +168,20 @@ export function lookStep(cur, prev, next, hard = false) {
 
 /**
  * A building sprite's cache key (before the snow suffix, `~n{level}`, which
- * must stay last so a look change can drop sprites by suffix). A sick home
+ * must stay last so a look change can drop sprites by suffix). A turned
+ * building (render/turn.js) adds `:t{turn}` after the art state (turn 0
+ * adds nothing, so its keys are as they always were). A sick home
  * (sim/disease.js) is drawn with a sign of its own, so it has a key of its
- * own: `:sick`, after the art state.
+ * own: `:sick`, after those.
  */
 export function buildingKey(b, variant, state) {
   const sick = b.house && b.house.pop > 0 && b.house.sick > 0;
-  return `b:${b.type}:${b.size}:${variant}:${state}${sick ? ':sick' : ''}`;
+  return `b:${b.type}:${b.size}:${variant}:${state}${turnKey(b.turn)}${sick ? ':sick' : ''}`;
+}
+
+/** The sprite key part for a turn: `:t1`..`:t3`, nothing for turn 0. */
+export function turnKey(turn) {
+  return turn ? `:t${turn & 3}` : '';
 }
 
 /**
@@ -985,7 +993,7 @@ export class Renderer {
         if (!isLit(b, lamps)) continue;
         const variant = this.artVariant(b);
         const state = artState(b, farmDormant(game, b));
-        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}`, b.type, b.size, variant, state);
+        const info = lightsOf(`${b.type}:${b.size}:${variant}:${state}${turnKey(b.turn)}`, b.type, b.size, variant, state, b.turn || 0);
         const ox = ((b.x - b.y) * HALF_W - cam.x) * k;
         const oy = ((b.x + b.y) * HALF_H - cam.y) * k;
         // Each building fades in over a little while after its turn comes.
@@ -1143,7 +1151,7 @@ export class Renderer {
     const sick = key.endsWith(':sick');
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
     const snow = this.pal.snow;
-    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick), this.snowPrev === null ? null : key + this.snowPrev);
+    const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick, b.turn || 0), this.snowPrev === null ? null : key + this.snowPrev);
     if (spr && spr.s) this.buildingBoxes.push({ x: b.x, y: b.y, S: b.size, H: spr.ay / spr.s });
     if (lacksRoad(b)) this.noRoadMarks.push({ b, H: spr && spr.s ? spr.ay / spr.s : 0 });
     const n = depths.length;
@@ -1170,7 +1178,8 @@ export class Renderer {
       items.push({ d: front + 0.0005, kind: K_EXTRA, b, wx, wy, stock: true });
     }
     if ((b.type === 'pottery_ws' || b.type === 'weapons_ws') && b.efficiency > 0 && b.progress > 0 && Math.random() < 0.03) {
-      this.effects.smoke(wx + (0.99 - 0.34) * HALF_W, wy + (0.99 + 0.34) * HALF_H - 32);
+      const [u, v] = turnUV(0.99, 0.34, b.size, b.turn || 0); // the kiln's chimney (workshopArt), turned with it
+      this.effects.smoke(wx + (u - v) * HALF_W, wy + (u + v) * HALF_H - 32);
     }
     // Hearth smoke from lived-in homes (only when zoomed in enough to see it).
     if (b.house && b.house.pop > 0 && b.house.tier >= 4 && b.house.tier <= 12 && this.camera.zoom >= 1 && Math.random() < 0.0015) {
@@ -1180,7 +1189,7 @@ export class Renderer {
       items.push({ d: front + 0.0006, kind: K_EXTRA, b, wx, wy, spray: true });
     }
     // Live details. Flag cloth always (the sprite only has the poles).
-    const flags = flagsFor(b.type, b.size);
+    const flags = flagsFor(b.type, b.size, b.turn || 0);
     if (flags.length) items.push({ d: front + 0.0007, kind: K_EXTRA, b, wx, wy: wy + rise, flags });
     if (this.camera.zoom < 0.75 || rise) return; // the rest is too small to see when zoomed out
     if (kind === 'market' && b.efficiency > 0 && hasStock(b)) {
@@ -1193,8 +1202,8 @@ export class Renderer {
       items.push({ d: front + 0.0004, kind: K_EXTRA, b, wx, wy, live: 'altar' });
     } else if (b.type === 'weapons_ws' && b.efficiency > 0 && b.progress > 0 && this.motionOn && Math.random() < 0.035) {
       // The smith hammers: sparks fly out of the forge door (workshopArt door, left face).
-      const [dx, dy] = [(0.6 - 1.07) * HALF_W, (0.6 + 1.07) * HALF_H - 4];
-      this.effects.sparks(wx + dx, wy + dy, 4 + Math.floor(Math.random() * 4));
+      const [u, v] = turnUV(0.6, 1.07, b.size, b.turn || 0);
+      this.effects.sparks(wx + (u - v) * HALF_W, wy + (u + v) * HALF_H - 4, 4 + Math.floor(Math.random() * 4));
     }
   }
 
@@ -1615,9 +1624,9 @@ export class Renderer {
       const ox = (it.wx - cam.x) * k;
       const oy = (it.wy - cam.y) * k;
       if (it.live === 'market') drawShoppers(ctx, ox, oy, k, b.size, t, b.id);
-      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5);
+      else if (it.live === 'crowd') drawCrowd(ctx, ox, oy, k, b.type, b.size, t, b.id, b.type === 'theater' ? 0.2 : 0.5, b.turn || 0);
       else if (it.live === 'altar') {
-        const [fx, fy] = altarFlameOffset(b.size);
+        const [fx, fy] = altarFlameOffset(b.size, b.turn || 0);
         drawAltarFlame(ctx, ox + fx * k, oy + fy * k, k, t, b.id);
       }
       return;
@@ -1634,11 +1643,12 @@ export class Renderer {
     if (it.stock) {
       ctx.save();
       ctx.setTransform(k, 0, 0, k, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k));
-      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock);
+      // (Turned with the building: its own walls drawn again over what they hide.)
+      if (b.def.kind === 'warehouse') drawWarehouseStock(ctx, b.stock, b.turn || 0, this.pal.snow);
       else {
         let used = 0;
         for (const key in b.stock) used += b.stock[key];
-        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY);
+        drawGranaryStock(ctx, b.size, used / CONFIG.GRANARY_CAPACITY, b.turn || 0, this.pal.snow);
       }
       ctx.restore();
     }
@@ -1771,6 +1781,7 @@ export class Renderer {
   drawToolPreview() {
     const { game, plan } = this;
     this.stats.ghostNoRoad = false; // exposed for the browser smoke test
+    this.stats.ghostTurn = null; // (the building ghost's turn, for the smoke test)
     this.stats.roadEdges = 0;
     const map = game.map;
     const def = plan ? BUILDINGS[plan.tool] : null;
@@ -1839,11 +1850,15 @@ export class Renderer {
         // (its own key, before the snow suffix that must stay last).
         // `type`, `state`: a hippodrome's other sections, a waterside building's turn.
         const snow = this.pal.snow;
+        // `turn`: as the player turned it (R), the same key as once built.
         const type = it.type || plan.tool;
         const st = it.state || 0;
+        const turn = it.turn || 0;
+        const tk = turnKey(turn);
         const spr = it.noRoad
-          ? this.sprites.get(`b:${type}:${it.size}:0:${st}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow), NO_ROAD_TINT))
-          : this.sprites.get(`b:${type}:${it.size}:0:${st}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow));
+          ? this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}:noroad${this.snowKey}`, () => tintedSpec(buildingSpec(type, it.size, 0, st, true, snow, false, turn), NO_ROAD_TINT))
+          : this.sprites.get(`b:${type}:${it.size}:0:${st}${tk}${this.snowKey}`, () => buildingSpec(type, it.size, 0, st, true, snow, false, turn));
+        this.stats.ghostTurn = turn;
         this.fillDiamond(wx, wy, color, it.size);
         this.ctx.globalAlpha = 0.72;
         this.blit(spr, wx, wy);

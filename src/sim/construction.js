@@ -49,6 +49,24 @@ export function isAreaBuilding(key) {
   return !!def && def.size === 1 && ['house', 'decor', 'well'].includes(def.kind);
 }
 
+/**
+ * Can the player turn this building as he places it (R)? Null if he can,
+ * else why not: a waterside building faces its water and a triumphal arch
+ * runs along its road (both decided by the world, not the player).
+ */
+export function turnRule(type) {
+  const def = BUILDINGS[type];
+  if (!def || !def.size) return 'Only buildings turn';
+  if (def.placement === 'shore' || def.placement === 'fishingShore') return `The ${def.name} faces its water: it turns itself`;
+  if (def.kind === 'arch') return `The ${def.name} follows its road: it turns itself`;
+  return null;
+}
+
+/** The turn a building of this type is placed with: `turn` if the player may choose it, else 0. */
+export function placedTurn(type, turn) {
+  return turnRule(type) ? 0 : (Number(turn) || 0) & 3;
+}
+
 /** How a tool is dragged: 'single' | 'area' | 'path' | 'line'. */
 export function dragMode(tool) {
   if (TOOLS[tool]) return TOOLS[tool].drag;
@@ -280,11 +298,12 @@ export function rebuildPlan(game, i) {
   const rec = ruinAt(game, i);
   if (!rec || !rec.site) return null;
   const { type, x, y, size } = rec.site;
-  if (type === 'house') return planAction(game, 'house', x, y, x + size - 1, y + size - 1);
+  const turn = rec.site.turn || 0; // (built back the way it stood)
+  if (type === 'house') return planAction(game, 'house', x, y, x + size - 1, y + size - 1, turn);
   if (type === 'wall') return planAction(game, 'wall', x, y, x, y);
   if (!BUILDINGS[type]) return null;
   const off = anchorOffset(type);
-  const plan = planAction(game, type, x + off.x, y + off.y, x + off.x, y + off.y);
+  const plan = planAction(game, type, x + off.x, y + off.y, x + off.x, y + off.y, turn);
   // planAction anchors on the middle tile: the same footprint, or nothing.
   return plan.items[0] && plan.items[0].x === x && plan.items[0].y === y ? plan : null;
 }
@@ -317,29 +336,32 @@ function ghostState(game, def, x, y, water) {
 
 /**
  * Build a preview plan for a tool drag from (x0,y0) to (x1,y1).
- * For single buildings (x1,y1) is the cursor tile.
+ * For single buildings (x1,y1) is the cursor tile. `turn`: quarter turns
+ * of the building being placed (R; ignored for what turns itself, turnRule).
  */
-export function planAction(game, tool, x0, y0, x1, y1) {
+export function planAction(game, tool, x0, y0, x1, y1, turn = 0) {
   const mode = dragMode(tool);
   if (tool === 'road' || tool === 'aqueduct' || tool === 'wall') return planPath(game, tool, x0, y0, x1, y1);
   if (tool === 'plaza') return planPlaza(game, x0, y0, x1, y1);
   if (tool === 'clear') return planClear(game, x0, y0, x1, y1);
   if (tool === 'bridge') return planBridge(game, x0, y0, x1, y1);
   if (tool === 'roadblock') return planRoadblock(game, x1, y1);
-  if (mode === 'area') return planBuildingArea(game, tool, x0, y0, x1, y1);
+  if (mode === 'area') return planBuildingArea(game, tool, x0, y0, x1, y1, placedTurn(tool, turn));
   // Single building
   const a = anchorFor(tool, x1, y1);
   const chk = checkBuilding(game, tool, a.x, a.y);
   const def = BUILDINGS[tool];
   const S = def?.size || 1;
-  const items = [{ x: a.x, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y, chk.water) : 0 }];
+  const t = def ? placedTurn(tool, turn) : 0;
+  const items = [{ x: a.x, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y, chk.water) : 0, turn: t }];
   // A hippodrome's other sections: drawn in the preview, built with the first.
   for (let k = 1; k < (def?.span || 1); k++) {
-    items.push({ x: a.x + k * S, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: 0, noRoad: !!chk.noRoad, part: true, type: `${tool}_part`, state: k });
+    items.push({ x: a.x + k * S, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: 0, noRoad: !!chk.noRoad, part: true, type: `${tool}_part`, state: k, turn: t });
   }
   return {
     tool,
     kind: 'building',
+    turn: t,
     items,
     cost: chk.ok ? chk.cost : 0,
     count: chk.ok ? 1 : 0,
@@ -359,7 +381,7 @@ function rectTiles(map, x0, y0, x1, y1) {
   return out;
 }
 
-function planBuildingArea(game, tool, x0, y0, x1, y1) {
+function planBuildingArea(game, tool, x0, y0, x1, y1, turn = 0) {
   const items = [];
   let cost = 0;
   let count = 0;
@@ -376,11 +398,11 @@ function planBuildingArea(game, tool, x0, y0, x1, y1) {
       count++;
       for (const w of chk.warnings) warnings.add(w);
     }
-    items.push({ x, y, size: 1, ok, reason, cost: chk.cost, noRoad: !!chk.noRoad });
+    items.push({ x, y, size: 1, ok, reason, cost: chk.cost, noRoad: !!chk.noRoad, turn });
   }
   // Only show "not enough money" style reasons when nothing at all is valid.
   const firstBad = items.find((i) => !i.ok);
-  return { tool, kind: 'area', items, cost, count, warnings: [...warnings], reason: count === 0 && firstBad ? firstBad.reason : null };
+  return { tool, kind: 'area', turn, items, cost, count, warnings: [...warnings], reason: count === 0 && firstBad ? firstBad.reason : null };
 }
 
 /** Can a road/aqueduct/wall tile go here? Returns cost to enter (Infinity = blocked). */
@@ -786,6 +808,7 @@ export function applyPlan(game, plan) {
         }
       }
       const b = addBuilding(game, plan.tool, it.x, it.y);
+      b.turn = placedTurn(plan.tool, it.turn ?? plan.turn); // (the R key's choice; looks only)
       if (chk.axis !== undefined) b.axis = chk.axis; // a triumphal arch: the way its road runs (art, sim/battle.js)
       if (b.def.placement === 'shore') dockBerth(game, b); // berth + which side faces the water (docks, the navalia, naval stations)
       if (b.def.placement === 'fishingShore') waterBeside(game, b); // slip or mooring + which side faces the water

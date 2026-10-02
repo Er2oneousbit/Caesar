@@ -98,6 +98,10 @@ export class Building {
     this.shows = null; // venues: days of performances booked by type
     this.fertility = 0; // farms: share of meadow tiles (0..1)
     this.variant = id % 4; // art variety
+    // Quarter turns clockwise of its art, 0..3 (render/turn.js), chosen as it
+    // is placed (R). Looks only, except a hippodrome's: it lays its sections
+    // along x (0, 2) or y (1, 3) (sim/construction.js).
+    this.turn = 0;
     this.recruiterCooldown = 0;
     this.buyerCooldown = 0;
     initKind(this, def);

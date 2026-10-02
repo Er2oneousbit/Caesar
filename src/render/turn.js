@@ -64,11 +64,16 @@ export function turnDir(du, dv, t) {
   }
 }
 
-/** A rectangle u0..u0+du, v0..v0+dv of the current drawing, turned: [u0, v0, du, dv]. */
-export function turnRectNow(u0, v0, du, dv) {
-  const a = turnUV(u0 + TS.ou, v0 + TS.ov, TS.S, TS.t);
-  const b = turnUV(u0 + du + TS.ou, v0 + dv + TS.ov, TS.S, TS.t);
+/** A rectangle u0..u0+du, v0..v0+dv of an S x S footprint turned t times: [u0, v0, du, dv]. */
+export function turnedRect(u0, v0, du, dv, S, t) {
+  const a = turnUV(u0, v0, S, t);
+  const b = turnUV(u0 + du, v0 + dv, S, t);
   return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])];
+}
+
+/** A rectangle of the current drawing, turned (with the sub-square offset). */
+export function turnRectNow(u0, v0, du, dv) {
+  return turnedRect(u0 + TS.ou, v0 + TS.ov, du, dv, TS.S, TS.t);
 }
 
 /** A point of the current drawing, turned (with the sub-square offset). */
@@ -105,6 +110,42 @@ export function drawTurned(ctx, S, t, fn, opts = {}) {
   const stats = rec.replay(ctx);
   turnCheck.last = stats;
   return stats;
+}
+
+/**
+ * Live details drawn over a building's sprite every frame (a warehouse's
+ * crates, a granary's sacks), turned with it. `base(ctx)` draws again the
+ * parts of the building that could stand in front of them (an office, the
+ * granary itself) and `items(ctx)` the details; all are sorted together and
+ * painted from the first detail on, so a part of the building in front of a
+ * detail covers it again while the parts behind (already in the sprite) are
+ * not drawn twice. At turn 0 the details are simply drawn.
+ */
+export function drawTurnedOver(ctx, S, t, base, items) {
+  t &= 3;
+  if (!t) return drawTurned(ctx, S, 0, items);
+  const rec = new TurnRecorder(ctx);
+  const prev = { ...TS };
+  TS.S = S; TS.t = t; TS.ou = 0; TS.ov = 0; TS.rec = rec;
+  try {
+    base(rec.proxy);
+    rec.baseUnits = rec.units.length;
+    items(rec.proxy);
+  } finally {
+    Object.assign(TS, prev);
+  }
+  return rec.replay(ctx, true);
+}
+
+/**
+ * Points of the current drawing turned the way `t` turns an S x S footprint,
+ * with no recorder: for live details placed by footprint points (a fire on
+ * an altar, sparks from a door), which have nothing to sort against.
+ */
+export function asTurned(S, t, fn) {
+  const prev = { ...TS };
+  TS.S = S; TS.t = t & 3; TS.ou = 0; TS.ov = 0; TS.rec = null;
+  try { return fn(); } finally { Object.assign(TS, prev); }
 }
 
 /**
@@ -386,10 +427,15 @@ export class TurnRecorder {
   }
 
   /** Paint the recording onto `ctx`, back to front. @returns stats for tests */
-  replay(ctx) {
+  replay(ctx, overOnly = false) {
     const units = this.units.filter((u) => u.ops.length);
     const boxes = units.map(screenBox);
-    const order = sortUnits(units, boxes);
+    let order = sortUnits(units, boxes);
+    if (overOnly) {
+      // drawTurnedOver: from the first detail on (see there).
+      const first = order.findIndex((u) => u.idx >= this.baseUnits);
+      order = first < 0 ? [] : order.slice(first);
+    }
     ctx.save?.();
     try {
       const applied = {};

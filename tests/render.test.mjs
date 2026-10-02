@@ -913,3 +913,16 @@ test('bridges: a ship passes under the deck, a walker crosses on it (playtest: s
   assert.deepEqual(bridgeSpan(map, 7.5, 5.5, true), { d: undefined, lift: 0 });
   assert.ok(BRIDGE_DECK_Z >= 8, 'high enough to read as a bridge a ship goes under');
 });
+
+test('the menu city opens in daylight (it always opened at nightfall)', async () => {
+  const { dayTime, ticksUntil, MENU_TIME, skyAt, DAY_TICKS } = await import('../src/render/lighting.js');
+  const atMenu = 16 * 5 * CONFIG.TICKS_PER_DAY; // the menu city's 80 days
+  assert.ok(skyAt(dayTime(atMenu)).lamps > 0.5, 'the bug: 80 days end at night');
+  const t = atMenu + ticksUntil(atMenu, MENU_TIME);
+  assert.ok(Math.abs(dayTime(t) - MENU_TIME) < 0.01);
+  assert.equal(skyAt(dayTime(t)).lamps, 0, 'full daylight');
+  for (const start of [0, 7, 1234, DAY_TICKS - 1]) {
+    const n = ticksUntil(start, MENU_TIME);
+    assert.ok(n >= 0 && n < DAY_TICKS, `never more than a day (${n})`);
+  }
+});

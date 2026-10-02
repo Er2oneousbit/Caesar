@@ -17,6 +17,7 @@
  */
 
 import { CONFIG } from './config.js';
+import { ticksUntil, MENU_TIME } from './render/lighting.js';
 import { worldOf, fitTour } from './render/camera.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
@@ -542,6 +543,7 @@ export class App {
       g.log = { ...log, info() {}, debug() {} };
       const res = buildDemoCity(g, { level: 2 });
       g.runDays(16 * 5);
+      g.runTicks(ticksUntil(g.time.totalTicks, MENU_TIME)); // open in daylight (lighting.js)
       this.menuGame = g;
       this.renderer.attach(g);
       this.renderer.camera.zoomIndex = MENU_ZOOM;

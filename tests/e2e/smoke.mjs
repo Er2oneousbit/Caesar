@@ -727,6 +727,20 @@ try {
   });
   check('a hippodrome can be placed; any section opens its panel with the races', !!water.main && water.target === water.main && /Races/.test(water.hipPanel || '') && errors.length === 0, JSON.stringify({ hip: water.hip, target: water.target, main: water.main }));
 
+  // 5a2d. The victory screen's festival music ends with the screen: "Keep
+  //       building" used to leave it on for the rest of the game.
+  const won = await page.evaluate(() => {
+    const app = window.colonia;
+    const boost = app.game.city.festivalBoost;
+    app.game.city.festivalBoost = 0;
+    app.onVictory();
+    const during = app.musicMood();
+    return { during, boost };
+  });
+  await page.click('.modal button:has-text("Keep building")');
+  const kept = await page.evaluate((boost) => { const app = window.colonia; const mood = app.musicMood(); app.game.city.festivalBoost = boost; return { mood, override: app.musicOverride, modal: app.ui.hasModal() }; }, won.boost);
+  check('victory plays festival music until "Keep building", then the music follows the city again', won.during === 'festival' && kept.override === null && kept.mood !== 'festival' && !kept.modal, JSON.stringify({ won, kept }));
+
   // 5a2d. The cloth industry from the build menu: each of the three buildings
   //       is in its category, the click picks it as the tool, and a click on
   //       the map places it (the flax farm on meadow, all beside a road).

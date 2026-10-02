@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.6)
+
+* **The victory music ends with the victory screen**: a won mission plays festival music to celebrate, and "Keep building" left it on for the rest of the game, so a festival held afterwards changed nothing (mission 3 playtest). Closing the screen now gives the music back to the city
+* 128 browser checks
+
 ## Done (v0.15.5)
 
 * **Soldiers, raiders and Caesar's legionaries are clickable**: only walkers and ships were. A click on one opens its panel: health, what it is doing, its arms, and for a soldier his fort (and whether it is deployed), his training and his pay

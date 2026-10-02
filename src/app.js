@@ -441,6 +441,17 @@ export class App {
     return `Saved colonia-${mood}.wav (${seconds} s, ${Math.round(blob.size / 1024)} KB).`;
   }
 
+  /**
+   * Victory screen: keep building the won city. The festival music that
+   * celebrates the victory ends with the screen: left on, it played for the
+   * rest of the game, and a real festival afterwards changed nothing
+   * (playtest, mission 3).
+   */
+  keepBuilding() {
+    this.musicOverride = null;
+    this.ui.closeModal();
+  }
+
   /** Leave the current game and show the main menu over a living demo city. */
   toMainMenu() {
     for (const u of this.gameUnsub) u();

@@ -412,7 +412,7 @@ export function victoryMenu(app) {
     victoryGovernorLine(g) ? h('p', { class: 'governor-line' }, victoryGovernorLine(g)) : null,
     h('p', { class: 'muted' }, `Founded ${fmt(g.time.totalMonths / 12)} years ago · ${fmt(g.city.stats.fires)} fires · ${fmt(g.city.stats.collapses)} collapses`),
   ], [
-    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Keep building'),
+    h('button', { class: 'btn', onclick: () => app.keepBuilding() }, 'Keep building'),
     nextStepButton(app),
     h('button', { class: 'btn', onclick: () => app.toMainMenu() }, 'Main menu'),
   ], 'narrow');

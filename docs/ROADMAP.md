@@ -13,6 +13,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.17.3)
+
+* **Trade by partner**: each good a partner buys or sells has a switch beside its price on that partner's route card (in the Trade advisor and on the empire map), all on by default. A good trades with a partner only if its Import/Export setting allows it and that partner's switch is on, so you choose whom to sell to and whom to buy from; the Goods table says "to 3 of 5 buyers", and a partner with every good switched off sends nobody. The trade log names what each visit sold and bought. Saves: version 21 (older saves load with every switch on)
+* Headless sim: every level and the harbor runs identical to v0.17.2
+* 697 unit tests, 145 browser checks
+
 ## Done (v0.17.2)
 
 * **Trade prices vary** (Colonia's own; the original had one price table): a good's price with a partner is its base price x the province's market x this year's drift x the partner's distance. The nearest partner trades at base and the farthest at 25% more, both ways (imports cost more, exports earn more); every trading mission has a market of 2 to 4 goods cheap or dear there (wine cheap at Cosa...); and at each New Year every good drifts, pulled halfway back toward its base plus a step of up to 10%, never past 15%, with a message naming the biggest moves (seeded by the map and the year, never saved, the same after a load). Route cards, the goods rows, the dock, ship and caravan panels, the empire card and the briefing show the prices. With the harbor demo: exports 4,171 to 4,498 Dn a year, imports unchanged; where a province's main seller is its farthest partner (Figlina, Firmum, Oasis Aurea) buying costs more

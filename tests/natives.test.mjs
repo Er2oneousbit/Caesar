@@ -335,3 +335,30 @@ test('natives: a village is never "idle" in the building tour, nor a problem on 
   assert.equal(problemOf(game, v.m), null);
   assert.equal(problemOf(game, v.huts[0]), null);
 });
+
+test('natives: villages leave the city\'s run as it would be without them: its buildings\' ids (their work ticks), and where raiders come from', async () => {
+  const { buildDemoCity } = await import('../src/dev/demoCity.js');
+  const { launchInvasion } = await import('../src/sim/military.js');
+  // Mutina's sweep moved (peace 56 to 47 with no attack): the villages took
+  // ids 1 to 33, so every building of the city worked on another tick of the
+  // day, and they counted in the city's middle that raiders come away from.
+  const runs = [false, true].map((natives) => {
+    const game = villageGame(natives);
+    const res = buildDemoCity(game, { level: 2 });
+    assert.ok(res.ok, res.reason);
+    const own = [...game.buildings.values()].filter((b) => b.def.kind !== 'village');
+    game.military.settings = { base: 6 };
+    const inv = launchInvasion(game);
+    return { ids: own.map((b) => `${b.type}@${b.x},${b.y}#${b.id}`).sort(), origin: inv && inv.origin };
+  });
+  assert.deepEqual(runs[1].ids, runs[0].ids, 'the city\'s buildings, places and ids as without villages');
+  assert.deepEqual(runs[1].origin, runs[0].origin, 'the raid comes from the same edge');
+});
+
+test('natives: a save keeps the villages\' ids apart: the next building of the city gets the id it would have had', () => {
+  const game = villageGame();
+  const next = game.nextBuildingId;
+  const back = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  assert.equal(back.nextBuildingId, next);
+  assert.ok(villagesOf(back).length >= 1);
+});

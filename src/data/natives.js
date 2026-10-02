@@ -58,6 +58,16 @@ export function nativesFor(scenario) {
   return MISSION_NATIVES[scenario.id] || null;
 }
 
+/**
+ * The ids village pieces get (sim/natives.js foundVillages): from here up,
+ * apart from the city's own. A building's id sets which tick of the day it
+ * works on (entities.js phase) and its look, so villages taking ids 1 to 33
+ * shifted every building of the city by as many and moved a whole run
+ * (Mutina's sweep: peace 56 to 47 with no attack). Kept out of the city's
+ * count when a save is loaded (core/save.js).
+ */
+export const NATIVE_ID_BASE = 1000000;
+
 export const NATIVES = Object.freeze({
   HUT_LAND: 3,
   MEETING_LAND: 6,

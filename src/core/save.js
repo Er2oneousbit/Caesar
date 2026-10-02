@@ -186,6 +186,7 @@ import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
 import { log } from './debug.js';
+import { NATIVE_ID_BASE } from '../data/natives.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
 export const MIN_SAVE_VERSION = 4;
@@ -431,7 +432,7 @@ export function deserializeGame(data, flags = {}) {
     if (freshOrders && b.orders && b.orders !== freshOrders) b.orders = { ...freshOrders, ...b.orders };
     game.buildings.set(b.id, b);
     for (const i of footprintTiles(map, b.x, b.y, b.size)) map.building[i] = b.id;
-    maxB = Math.max(maxB, b.id);
+    if (b.id < NATIVE_ID_BASE) maxB = Math.max(maxB, b.id); // (a native village's ids are apart: sim/natives.js)
   }
   game.nextBuildingId = Math.max(game.nextBuildingId, maxB + 1);
 

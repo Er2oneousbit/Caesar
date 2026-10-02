@@ -1254,7 +1254,7 @@ function pickRaidOrigin(game) {
   let n = 0;
   let sx = 0;
   let sy = 0;
-  for (const b of game.buildings.values()) { sx += b.x; sy += b.y; n++; }
+  for (const b of game.buildings.values()) if (b.def.kind !== 'village') { sx += b.x; sy += b.y; n++; } // (the city's own: not a native village, sim/natives.js)
   if (n) { cx = sx / n; cy = sy / n; }
   let best = null;
   let bestScore = -Infinity;

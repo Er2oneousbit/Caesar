@@ -48,7 +48,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { NATIVES, NATIVE_PEOPLES, nativesFor } from '../data/natives.js';
+import { NATIVES, NATIVE_PEOPLES, NATIVE_ID_BASE, nativesFor } from '../data/natives.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { GOOD_KEYS, GOODS } from '../data/goods.js';
 import { Terrain } from '../world/map.js';
@@ -127,8 +127,8 @@ function offendersNear(game, b, r) {
 
 /**
  * A new game: place the scenario's villages (none in most), on the map's own
- * stream (world/natives.js). Buildings get ids after the map's, so a game
- * without villages is exactly as before.
+ * stream (world/natives.js), with ids from NATIVE_ID_BASE up, so the
+ * city's own buildings are numbered as in a game without villages.
  */
 export function foundVillages(game) {
   const spec = nativesFor(game.scenario);
@@ -136,6 +136,10 @@ export function foundVillages(game) {
   const plans = planVillages(game.map, game.seed, spec.villages);
   if (!plans.length) return 0;
   game.city.natives = villagesState(spec.people);
+  // Ids of their own (NATIVE_ID_BASE up), so the city's buildings get the
+  // ids, and with them the update ticks, they would have had with none.
+  const cityNext = game.nextBuildingId;
+  game.nextBuildingId = NATIVE_ID_BASE;
   for (const p of plans) {
     const m = addBuilding(game, 'native_meeting', p.meeting.x, p.meeting.y, undefined, { quiet: true });
     m.village = m.id;
@@ -152,6 +156,7 @@ export function foundVillages(game) {
     }
     for (const f of p.fields) addBuilding(game, 'native_crops', f.x, f.y, undefined, { quiet: true }).village = m.id;
   }
+  game.nextBuildingId = cityNext;
   return plans.length;
 }
 

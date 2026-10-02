@@ -15,6 +15,12 @@ Sandbox maps come in Small (64x64), Medium (96x96), Large (128x128) and **Uber (
 
 **Farm plots** (meadow, the yellow-green land farms need) come as whole fields: broad patches, most near water, with no field smaller than 12 tiles, so a 3x3 farm usually sits entirely on meadow at full fertility.
 
+## Turning the view
+
+The city can be seen from any of its four sides, as in the original: **Q** (or **]**) turns it a quarter turn clockwise on the screen, **Shift+Q** (or **[**) back, and so do the **⟳** and **⟲** buttons in the top bar. Between them a needle points north: the north of the game's compass, which the scouts' reports use (straight up at the start), and a click on it turns the view back to the start. The tile in the middle of the screen stays there as the view turns, at once. Everything turns with it: the ground, roads, walls and aqueducts, every building (drawn from that side), the people, soldiers and ships, overlays, the building being placed and its footprint. The minimap turns with the view too (an **N** by its corner marks north), so the camera frame on it stays a plain rectangle. Scrolling (keys, mouse at the edge, dragging) follows the screen, whichever way the city is turned.
+
+The view is only a way of looking: nothing in the city changes with it (R still turns a building clockwise as the screen shows it, and a building turned so keeps that turn when the view turns again). Saves keep the view's turn with the camera; a new game starts unturned.
+
 ## Difficulty
 
 Chosen in the Sandbox setup and in every campaign briefing (the menus remember your last choice). Each mission in the Campaign list shows the hardest level you have beaten it on. All levers live in `src/data/difficulty.js`:

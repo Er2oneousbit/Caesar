@@ -8,7 +8,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **v0.18: rotation**: ~~rotate buildings while placing them (R), every building's art turned as a whole (the hippodrome laid north-south too; gates, the arch and waterside buildings keep following their road or water), with a facing in the save~~ (part 1 done: `render/turn.js` draws any building at any of four turns, `b.turn` in saves v22); then rotating the view (parity #7), reusing the turned art (draw each building at `(b.turn + view turn) & 3`), with the renderer, ground pieces, walker directions, picking, overlays and the minimap working from any of four sides.
+1. **v0.18: rotation**: ~~rotate buildings while placing them (R), every building's art turned as a whole (the hippodrome laid north-south too; gates, the arch and waterside buildings keep following their road or water), with a facing in the save~~ (part 1 done: `render/turn.js` draws any building at any of four turns, `b.turn` in saves v22); ~~then rotating the view (parity #7), reusing the turned art (draw each building at `(b.turn + view turn) & 3`), with the renderer, ground pieces, walker directions, picking, overlays and the minimap working from any of four sides~~ (part 2 done: `render/view.js`, Q / Shift+Q and the top bar's buttons, the minimap turning with the view, the turn kept with the camera in saves).
 2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
 3. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
 
@@ -459,9 +459,8 @@ Fixes from a review of v0.6:
 
 ## Caesar III parity: what the original had that Colonia does not (yet)
 
-Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0), #24 staged raid warnings and the legions' reminders (v0.15.7), #13 campaign branches, a peaceful and a military province at every step from 3 to 10 (v0.15.0 and v0.17.0).
+Open items only; each keeps its number (#n) for good, so the release notes and the Done lists still point at it. Done so far: #3 crime (v0.10.0), #4 disease (v0.11.0), #11 walker click-to-inspect (v0.9.0), #10 granary and warehouse orders, #12 the empire map and #14 the original's five gods (v0.12.0), #2 fishing wharves and shipyards, #5 the hippodrome and #15 the Health, Education and Entertainment advisors (v0.13.0), #1 the Emperor's legions and distant battles, #6 the governor's residence, salary and rank, #16 triumphal arches, #17 the Military Academy (with Colonia's own Portus) and #18 large temples (v0.14.0), #24 staged raid warnings and the legions' reminders (v0.15.7), #13 campaign branches, a peaceful and a military province at every step from 3 to 10 (v0.15.0 and v0.17.0), #7 map rotation, the city seen from four sides (v0.18).
 
-* **#7** **Map rotation** (view the city from 4 angles).
 * **#8** **Scenario/map editor**, which doubles as modding (missions saved as data files).
 * **#9** **Events**: floods, earthquakes, a gladiator revolt, a change of Emperor, Rome raising or cutting wages, price changes, trade route disruptions (a route shut for a year); difficulty scales how often they come.
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.

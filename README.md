@@ -30,6 +30,7 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 * **Advisors (F2)** for every part of the city. The Health, Education and Entertainment advisors show, for each kind of building, how many work, whom they reach and how many of the people whose homes need them they serve, with one line of advice on what holds homes back most; the Overview gives city health and crime at a glance.
 * **Fishing:** a shipyard builds fishing boats from timber; a wharf's boat sails out to where the gulls circle and brings the catch home. Fish is a food of its own, and the sea does not freeze in winter.
 * **Turn your buildings:** press **R** while placing one to turn it a quarter turn (every building is drawn from all four sides); the next of its kind starts the same way. Buildings by the water still face it, and an arch still follows its road.
+* **Turn the view:** see the city from any of its four sides (**Q**, or the buttons in the top bar), as in the original; the minimap turns with it.
 * **The Circus:** a 15-tile hippodrome with chariot races (a Factio sends the teams), laid east-west or, turned, north-south: the grandest show in the city and the key to its finest palaces.
 * **Sea raids and a fleet** (new, not in the original, which had no war at sea): where a river or the coast reaches the sea, about a third of raids come by ship, throwing fire pots at boats and buildings by the shore before they land. A Navalia builds liburnians, light warships with two banks of oars and a bronze ram, from timber, iron and linen; naval stations (Stationes) berth them in squadrons you send out like a fort's soldiers, and the Portus, a training harbor, teaches their crews to row in time. A *Sea raids* switch turns it off.
 * **Cloth and clothing** (new, not in the original): flax fields that flower blue, a Textrinum (linen weaver) at its loom and a Taberna Vestiaria (clothing maker) with tunics drying in the yard. From the Insula up, homes need clothing too; linen can also be bought from Hispania and Egypt.
@@ -67,6 +68,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | 1 2 3 4 | Speed 1x 2x 4x 8x |
 | H / R / X | Housing / Road / Clear tool |
 | R (placing a building) | Turn it a quarter turn clockwise (the ⟳ button beside its name does the same) |
+| Q / Shift+Q (or ] / [) | Turn the view: the city a quarter turn clockwise / back (the ⟳ ⟲ buttons in the top bar; the needle between them points north) |
 | Ctrl+Z | Undo the last construction (full refund, for a few days) |
 | O, Shift+O | Next overlay, overlays off |
 | E | Empire map |

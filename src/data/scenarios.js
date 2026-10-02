@@ -400,7 +400,7 @@ export const SCENARIOS = Object.freeze([
   },
   {
     id: 'c6p', step: 6, track: 'peaceful', name: 'Cosa', title: 'The Loyal Colony',
-    intro: 'Cosa, a Latin colony of 273 BC, stands on a hill above the Etruscan coast and its lagoon. Hannibal has been in Italy for eight years, and the colonies are tired of sending men and money; when twelve of them refused, Cosa was among the eighteen that kept faith. Plant vines, send wine to Gaul and Greece from the lagoon harbor, and give Rome a colony it can count on. No enemy reaches this coast: Rome will judge you by what you build.',
+    intro: 'Cosa, a Latin colony of 273 BC, stands on a hill above the Etruscan coast and its lagoon. Hannibal has been in Italy for eight years, and the colonies are tired of sending men and money: next year twelve of them will refuse, and Cosa will be among the eighteen that keep faith. Plant vines, send wine to Gaul and Greece from the lagoon harbor, and give Rome a colony it can count on. No enemy reaches this coast: Rome will judge you by what you build.',
     // A lake of the seed reaches the map's edge: the lagoon, open to ships.
     map: { size: 144, type: 'lakes', seed: 'cosa-portus' },
     funds: 10000, startYear: -210,
@@ -449,7 +449,7 @@ export const SCENARIOS = Object.freeze([
     demandChanges: [{ year: 4, partner: 'tarraco', good: 'wheat', to: 4000 }],
     hints: [
       'Corinthus and Tarraco buy wheat by the shipload and the caravan, Massilia vegetables, Lugdunum fruit and Aquileia meat: Copia\'s people work in the fields. Within a few years Tarraco will want more.',
-      'Traders take goods only from warehouses, and carts fill the granaries first: give a Horreum (Warehouse) by the fields a Get order for wheat.',
+      'Traders buy only from warehouses, and a warehouse refuses food until told: set a Horreum (Warehouse) by the fields to Accept the foods you sell. Farm carts fill the granaries first, so once the city is fed set the granaries near those farms to Refuse them.',
       'The Circus (Hippodrome, one per city) comes with this province: its charioteers bring entertainment to every home they pass, and the Imperial Palatium needs its races.',
       'No raiders come to Copia, and you may build no forts. Keep Caesar\'s favor high with his requests and gifts, for if it runs out his legions come.',
     ],
@@ -519,7 +519,7 @@ export const SCENARIOS = Object.freeze([
     hints: [
       'Weapons are Corduba\'s trade: a Ferraria (Iron Mine) by the rocks and a Fabrica (Weaponsmith). Carthago, Alexandria and Cirta buy them, Gades sells iron, and within a few years Carthago wants 4,000 a year.',
       'The Lusitanians come over the hills, never by water: towers and walls with gates across the roads in, and a mixed army.',
-      'Twice Caesar will call for troops to save Italica, down the river and along the coast: soldiers sail, and Stationes (Naval Stations) can send their squadrons too.',
+      'Twice Caesar will call for troops to save Italica, along the coast and up its river: a year at sea, so send them early. Soldiers sail, and Stationes (Naval Stations) can send their squadrons too.',
       'Gades, beyond the Pillars of Hercules, and Rhodus trade by the river: build Emporia (Trade Docks) on its banks.',
     ],
   },
@@ -585,7 +585,7 @@ export const SCENARIOS = Object.freeze([
     demandChanges: [{ year: 3, partner: 'rhodus', good: 'wheat', to: 4000 }, { year: 6, partner: 'alexandria', good: 'wine', to: 2500 }, { year: 9, partner: 'corinthus', good: 'wine', to: 1500 }],
     hints: [
       `Puteoli needs districts: its fields, its forests and its rocky hills lie far apart, and a building hires only from homes within ${CONFIG.LABOR_RANGE} road tiles. Give each its own quarter of homes, markets and services, joined to the rest by good roads.`,
-      'Delos buys 4,000 oil and 4,000 wine a year. Rhodus will want 4,000 wheat a year from the third year and Alexandria more wine from the sixth, but in the ninth Corinthus buys less wine: plan for the fall.',
+      'Delos buys 4,000 oil and 4,000 wine a year. Rhodus will want 4,000 wheat a year from the third year (wheat for sale goes from a warehouse set to Accept it) and Alexandria more wine from the sixth, but in the ninth Corinthus buys less wine: plan for the fall.',
       'Twelve partners and the busiest routes send their ships more often: build several Emporia (Trade Docks) along the shore.',
       'No raiders come to Puteoli, and you may build no forts, but Rome asks for favor 85: meet every request, send gifts and keep the city content, for if favor runs out his legions come.',
       'Villas and palaces lift prosperity: give the patricians a quarter of their own, away from the workshops and the docks.',

@@ -13,7 +13,7 @@ import { h, fmt } from './dom.js';
 import { CONFIG } from '../config.js';
 import { withDifficulty, INVASION_PRESETS, LAST_STEP, missionsAtStep, missionOpen, nextMissions, stepOf } from '../data/scenarios.js';
 import { trackName, goalsLine, postCard, choiceLine } from './campaignInfo.js';
-import { RAID_MIN_POP } from '../sim/military.js';
+import { RAID_MIN_POP, seaRaidsFor } from '../sim/military.js';
 import { MAP_SIZES, MAP_SIZE_NOTES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../data/difficulty.js';
 import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAGE_BUDGET } from '../core/save.js';
@@ -341,7 +341,7 @@ export function settingsMenu(app) {
         type: 'checkbox', checked: s.seaRaids !== false, 'aria-label': 'Sea raids',
         onchange: (e) => {
           s.seaRaids = e.target.checked;
-          if (app.game) app.game.military.seaRaids = s.seaRaids; // the city being played too
+          if (app.game) app.game.military.seaRaids = seaRaidsFor(app.game.scenario, s.seaRaids); // the city being played too (a mission raided only by land stays so)
           app.applySettings();
         },
       }),

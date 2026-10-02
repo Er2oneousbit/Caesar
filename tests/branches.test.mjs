@@ -174,7 +174,13 @@ test('the late siblings ask for a little under the people their jobs allow, and 
     // Their demand is on the original's tiers.
     for (const goods of Object.values(s.demand)) for (const v of Object.values(goods)) assert.ok([1500, 2500, 4000].includes(v), `${id}: ${v}`);
     for (const c of s.demandChanges) assert.ok([0, 1500, 2500, 4000].includes(c.to) && s.partners.includes(c.partner), `${id}: ${c.partner} ${c.good}`);
+    // Food sold abroad leaves from a warehouse set to Accept it: a
+    // warehouse's Get fetches only from other warehouses, never a granary
+    // (sim/storageOrders.js), so a hint sending the player to Get wheat
+    // would export nothing (Copia's first said so).
+    for (const h of s.hints) assert.ok(!/Get order for (wheat|food)/.test(h), `${id}: ${h}`);
   }
+  assert.match(findScenario('c7p').hints.join(' '), /to Accept the foods you sell/);
 });
 
 // ---------------------------------------------------------------------------

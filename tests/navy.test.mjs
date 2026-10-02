@@ -14,14 +14,14 @@ import { RNG } from '../src/core/rng.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
 import { serializeGame, deserializeGame, upgradeNavyV10 } from '../src/core/save.js';
-import { sandboxScenario, SCENARIOS, NAVY_KEYS } from '../src/data/scenarios.js';
+import { sandboxScenario, SCENARIOS, NAVY_KEYS, findScenario } from '../src/data/scenarios.js';
 import { UNIT_TYPES, STATION_CAPACITY } from '../src/data/units.js';
 import { generateMap, mapOptions } from '../src/world/mapgen.js';
 import { Terrain } from '../src/world/map.js';
 import { addBuilding, removeBuilding, spawnWalker } from '../src/sim/entities.js';
 import { checkBuilding } from '../src/sim/construction.js';
 import { findDeliveryTarget } from '../src/sim/storage.js';
-import { spawnUnit, updateMilitary, militaryMonthly, militaryDaily, launchInvasion, enemyCount, fillField, threatSummary } from '../src/sim/military.js';
+import { spawnUnit, updateMilitary, militaryMonthly, militaryDaily, launchInvasion, enemyCount, fillField, threatSummary, seaRaidsFor } from '../src/sim/military.js';
 import {
   seaRaidPlan, seaRoll, findLanding, updateNavalia, updateNavalDemand, navalNeed, squadron, squadronCounts,
   deployStation, recallStation, stationSpots, shoreBerth, waterOf,
@@ -458,6 +458,18 @@ test('switch: a sandbox set up without sea raids, or the flag, keeps every raid 
   assert.equal(new Game({ scenario: on, flags: {} }).military.seaRaids, true);
   assert.equal(new Game({ scenario: on, flags: { searaids: 'off' } }).military.seaRaids, false);
   assert.equal(new Game({ scenario: s, flags: { searaids: 'on' } }).military.seaRaids, true, 'Settings\' choice for a new mission wins');
+  // ...but not over a mission raided only by land: Corduba and Narbo
+  // Martius have water to the sea (and the fleet), yet their enemies come
+  // over land, whatever the Settings (the app passes searaids=on) or a
+  // restart say, and switching them on mid-game changes nothing.
+  for (const id of ['c9m', 'c10m']) {
+    const m = findScenario(id);
+    assert.equal(m.seaRaids, false);
+    assert.equal(new Game({ scenario: m, flags: { searaids: 'on' } }).military.seaRaids, false, id);
+    assert.equal(seaRaidsFor(m, true), false, `${id}: the Settings toggle`);
+  }
+  assert.equal(seaRaidsFor(findScenario('c7'), true), true, 'Urbs Magna: some raids by sea');
+  assert.equal(seaRaidsFor(s, true), true, 'a sandbox set up without them may be switched on');
   // With the switch off, a raid asked to come by sea comes by land.
   const { game } = coastCity();
   game.military.seaRaids = false;

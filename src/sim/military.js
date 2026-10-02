@@ -88,6 +88,18 @@ export const DOOR_MONTHS = 1; // a month away: the last warning
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether raids may come by sea: what the switch asks (`wanted`), unless a
+ * campaign mission rules them out with its `seaRaids: false` (Corduba's
+ * Lusitanians and Narbo Martius's Cimbri and Teutones come over land,
+ * whatever the Settings say). A sandbox's `seaRaids` is only where its setup
+ * left the switch, which the Settings and the flag may move.
+ */
+export function seaRaidsFor(scenario, wanted) {
+  if (scenario && scenario.id !== 'sandbox' && scenario.seaRaids === false) return false;
+  return !!wanted;
+}
+
+/**
  * Fresh military state for a new game.
  * @param {object} scenario  scenario.military = invasion settings or null;
  *                           scenario.difficulty scales the wait for the first raid
@@ -114,8 +126,9 @@ export function newMilitaryState(scenario, time, flags = {}) {
     // Sea raids (sim/navy.js): the switch. Off (the sandbox's setup, the
     // Settings, a scenario's seaRaids: false or the flag searaids=off), every
     // raid comes by land, exactly as before. The flag searaids=on (Settings'
-    // choice for a new mission) wins over the scenario.
-    seaRaids: flags.searaids === 'off' ? false : flags.searaids === 'on' ? true : scenario.seaRaids !== false,
+    // choice for a new mission) wins over a sandbox's setup, never over a
+    // mission that rules sea raids out (seaRaidsFor).
+    seaRaids: seaRaidsFor(scenario, flags.searaids === 'off' ? false : flags.searaids === 'on' ? true : scenario.seaRaids !== false),
     stats: { raids: 0, repelled: 0, enemiesKilled: 0, soldiersLost: 0, prefectsLost: 0, buildingsLost: 0, trained: 0, seaRaids: 0, shipsSunk: 0, shipsLost: 0, shipsBuilt: 0, boatsSunk: 0 },
     caesar: newCaesarState(), // Caesar's legions (sim/legion.js)
     battle: null, // a distant battle Caesar asked troops for (sim/battle.js)

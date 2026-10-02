@@ -23,7 +23,7 @@ import { SCENARIOS, TRADE_PARTNERS } from '../src/data/scenarios.js';
 import { addBuilding, spawnWalker } from '../src/sim/entities.js';
 import { GOODS } from '../src/data/goods.js';
 import { planAction } from '../src/sim/construction.js';
-import { openRoute, setTradeMode, shipArrive, dockBerth, routeKind, caravanArrive, caravanPacks } from '../src/sim/trade.js';
+import { openRoute, setTradeMode, shipArrive, dockBerth, routeKind, caravanArrive, caravanPacks, updateTrade, shipsWaiting, shipsWaitingText } from '../src/sim/trade.js';
 import { buildDemoCity, buildDemoHarbor } from '../src/dev/demoCity.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -124,6 +124,46 @@ test('a ship waits at the dock: imports land on the quay and go to storage, expo
   game.runDays(16);
   assert.equal(dock.stock.wine, 0, 'quay emptied');
   assert.ok(wh.stock.wine > 0, 'wine reached the warehouse');
+});
+
+test('a ship that finds every Emporium taken waits offshore, and the dock and the Trade advisor say so', () => {
+  // A stay lasts weeks, so a city with several sea partners needs more than
+  // one Emporium; the player was never told ships were being turned away.
+  const game = newGame({ type: 'coast', seed: 'beach' });
+  const res = buildDemoCity(game, { level: 2 });
+  assert.ok(res.ok, res.reason);
+  game.runDays(16 * 6);
+  const { dock } = buildDemoHarbor(game, res.center);
+  assert.ok(dock, 'a dock');
+  for (const r of Object.values(game.city.trade.routes)) r.nextVisit = 1e9;
+  for (let d = 0; d < 40 && !(dock.efficiency > 0); d++) game.runDays(1);
+  assert.ok(dock.efficiency > 0, 'staffed');
+  const sea = Object.keys(game.city.trade.routes).filter((id) => routeKind(id) === 'sea');
+  const [a, b] = sea;
+  for (const id of [a, b]) game.city.trade.routes[id].open = true;
+  // The Emporium is taken by a's ship; b's comes due.
+  const ship = spawnWalker(game, 'ship', dockBerth(game, dock), null, { partner: a, target: dock.id, state: 'toDock', speed: CONFIG.SHIP_SPEED });
+  dock.shipId = ship.id;
+  const route = game.city.trade.routes[b];
+  route.nextVisit = game.time.totalDays;
+  updateTrade(game);
+  assert.equal(route.waiting, true);
+  assert.equal(route.nextVisit, game.time.totalDays + 6, 'it tries again in 6 days');
+  assert.deepEqual(shipsWaiting(game), [TRADE_PARTNERS[b].name]);
+  assert.match(shipsWaitingText(game), new RegExp(`A ship from ${TRADE_PARTNERS[b].name} is waiting offshore for a free Emporium`));
+  // The Emporium frees up: the waiting ship ties up and the notice goes.
+  dock.shipId = 0;
+  route.nextVisit = game.time.totalDays;
+  updateTrade(game);
+  assert.equal(route.waiting, undefined);
+  assert.equal(shipsWaitingText(game), null);
+  // No staffed Emporium at all is not "waiting" (the route card says why).
+  dock.efficiency = 0;
+  dock.shipId = 0;
+  for (const w of [...game.walkers.values()]) if (w.type === 'ship') game.walkers.delete(w.id);
+  route.nextVisit = game.time.totalDays;
+  updateTrade(game);
+  assert.equal(route.waiting, undefined);
 });
 
 test('a caravan leaves with packs of what it bought, biggest lot first (for the art)', () => {

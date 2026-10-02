@@ -40,7 +40,7 @@ import { GODS, GOD_KEYS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
 import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
-import { openRoute, setTradeMode, routeKind } from '../sim/trade.js';
+import { openRoute, setTradeMode, routeKind, shipsWaitingText } from '../sim/trade.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
@@ -437,6 +437,7 @@ export class Advisors {
           h('span', { class: 'muted', style: { flex: 1 } }, '╌ land route (caravans)   ··· sea route (ships)   solid = open. ', seaOk ? 'Ships can reach this province.' : 'No ships can reach this province: only land routes work here.'),
           h('button', { class: 'btn small', title: 'Who is on the way, and when (E)', onclick: () => this.app.ui.openEmpire() }, 'Empire map'))),
       h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships wait at a staffed Emporium (Trade Dock) while its workers cart their imports to storage and fetch exports from warehouses near it (a stay of 2 to 7 weeks: several sea partners need more than one Emporium). Prices are per 100 units.'),
+      shipsWaitingText(g) ? h('div', { class: 'status warn', style: { marginTop: '8px' } }, `⚓ ${shipsWaitingText(g)}`) : null,
       h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
       h('h4', {}, 'Goods'),
       h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Good'), h('th', { class: 'r' }, 'In storage'), h('th', {}, 'Mode'), h('th', {}, 'Level'), h('th', {}, '')), rows),

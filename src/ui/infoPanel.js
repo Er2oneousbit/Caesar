@@ -28,7 +28,7 @@ import { dockShipText, dockRows, dockHint } from './dockInfo.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
 import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
-import { dockBerth, dockUsed } from '../sim/trade.js';
+import { dockBerth, dockUsed, shipsWaitingText } from '../sim/trade.js';
 import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat } from '../sim/fishing.js';
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
 import { trainedText, trainingNote, schoolStatus } from './trainingInfo.js';
@@ -578,6 +578,7 @@ export class InfoPanel {
           kv('Ship', dockShipText(g, b)),
           ...dockRows(g, b).map(([k, v]) => kv(k, v)),
           kv('Sea routes open', open.join(', ') || 'None (open them in the Trade advisor)'),
+          shipsWaitingText(g) ? h('div', { class: 'status warn' }, `⚓ ${shipsWaitingText(g)}`) : null,
           kv('On the quay', `${fmt(dockUsed(b))} / ${fmt(CONFIG.DOCK_CAPACITY)}`), bar(dockUsed(b), CONFIG.DOCK_CAPACITY),
           goods.length ? h('div', {}, goods.map(([k, v]) => h('span', { class: 'chip' }, `${GOODS[k].icon} ${GOODS[k].name} ${fmt(v)}`))) : null,
           h('div', { class: 'muted' }, `A ship waits here while it trades. The crane lands its imports on the quay (you pay as they land) and dock workers cart them to storage; they fetch exports from staffed warehouses within ${CONFIG.DOCK_REACH} road tiles (you are paid as each load goes aboard). The ship sails when both are done, or after ${CONFIG.SHIP_MAX_STAY_DAYS} days: keep storage near the Emporium.`)));

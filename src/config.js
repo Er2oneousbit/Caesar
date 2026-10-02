@@ -17,7 +17,7 @@ export const CONFIG = {
   // --- Game identity ------------------------------------------------------
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
-  VERSION: '0.15.3',
+  VERSION: '0.15.4',
   SAVE_VERSION: 14, // v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v13 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 

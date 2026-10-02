@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.4)
+
+* **Ships waiting for a free Emporium are shown**: a ship stays 2 to 7 weeks, so a city with several sea partners keeps one Emporium busy, and a ship that found every staffed Emporium taken turned back and tried again 6 days later without a word. Now its route is marked waiting, and the Emporium's panel and the Trade advisor say which partners' ships are waiting offshore and that another Emporium would take them in
+* 552 unit tests
+
 ## Done (v0.15.3)
 
 * **The governor's residence needs servants** (Colonia's own; the original's needed no workers): the Praetorium 4, the Praetorium Maius 8 and the Regia 12, Government labor like the Forum, so it needs a road like any building with workers. It gives its desirability only as far as it is staffed: an unstaffed residence is a shuttered house that adds nothing. Its staffing changing works the desirability out again at once (it is otherwise worked out only when the map changes)
@@ -399,7 +404,6 @@ From playtesting (still to decide which to take):
 * **The early missions on Hard and Insane**: the sweep's demo city finds them harsh, partly because it builds what those missions do not unlock (`npm run sim -- --unlocks` builds only what they allow); measure again with it before changing anything.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
-* **A city with many sea partners needs 2 to 3 Docks** (found when ships started waiting at the dock while dock workers load and unload them): a stay now lasts 2 to 7 weeks and a Dock is held from the moment a ship sets sail for it, so five sea partners (about 12 ships a year) keep one Dock busy, and a ship that finds every Dock taken tries again 6 days later. Measured with `npm run sim -- --type coast --seed beach --years 4 --harbor` (the warehouse 16 road tiles from the dock): one Dock served 13 ships in 3.5 years (29 days a stay on average) where it served 29 at 6 days a stay, and exports fell from 5,698 to 4,309 Dn a year; a second Dock brought them back to 5,440 (6,363 with two Docks before). Faithful to the original, but the player should be told: ships waiting offshore at an anchorage beside a busy Dock (the original's queue) instead of the route retrying, or a "harbor" indicator (*Ships are waiting for a free Dock*) in the Trade advisor and on the Dock.
 
 Playing smoother:
 

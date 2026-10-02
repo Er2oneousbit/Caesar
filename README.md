@@ -88,7 +88,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | A building never gets workers | No road touches it. A red sign with a crossed-out road floats over it, and after 8 days a message says where it is. Run a road along any of its edges; a road that only meets a corner does not count. |
 | Fountains or baths ran dry | The reservoir feeding them, or an aqueduct linking it to a full one, is gone (raiders, or demolished by mistake). A fountain also needs its workers. Click a reservoir or fountain: its panel says whether it is full. Wells, fountains and reservoirs never burn or wear out. |
 | Caesar's legions are coming | The Emperor's favor fell to 10 or less. Raise it before they arrive (his requests, gifts from your savings, troops when he calls for them) and they turn for home; otherwise ready your army. The mission is lost only if the city is overrun. The Imperial advisor (F2) says where they are and what they will do. |
-| Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Emporium (Trade Dock) on its bank. Use land routes on maps without one. |
+| Ships never come | Sea routes need a river or coast that reaches the map edge, and a staffed Emporium (Trade Dock) on its bank. Use land routes on maps without one. If the Emporium's panel says ships are waiting offshore, every Emporium is busy: build another. |
 | "Something broke in the city" screen | Click *Copy report* and include it in a bug report. *Download emergency save* keeps your city. |
 
 ---

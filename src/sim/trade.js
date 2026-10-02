@@ -87,6 +87,19 @@ export function setTradeMode(game, good, mode, level) {
   if (Number.isFinite(level)) s.level = Math.max(0, Math.min(3200, Math.round(level / 100) * 100));
 }
 
+/** Sea partners whose ship is waiting offshore for a free Emporium (see updateTrade). */
+export function shipsWaiting(game) {
+  return Object.entries(game.city.trade.routes).filter(([, r]) => r.open && r.waiting).map(([id]) => TRADE_PARTNERS[id].name);
+}
+
+/** The notice for ships waiting offshore, or null when none is. */
+export function shipsWaitingText(game) {
+  const names = shipsWaiting(game);
+  if (!names.length) return null;
+  const one = names.length === 1;
+  return `${one ? 'A ship' : `${names.length} ships`} from ${names.join(', ')} ${one ? 'is' : 'are'} waiting offshore for a free Emporium. Another Emporium would take ${one ? 'it' : 'them'} in.`;
+}
+
 /** Daily: send caravans and ships for open routes when due. */
 export function updateTrade(game) {
   const { routes } = game.city.trade;
@@ -101,8 +114,14 @@ export function updateTrade(game) {
     const sea = routeKind(id) === 'sea';
     const [a, b] = sea ? CONFIG.SHIP_INTERVAL_DAYS : CONFIG.CARAVAN_INTERVAL_DAYS;
     if (sea) {
-      // A ship with nowhere to tie up tries again a few days later.
-      r.nextVisit = game.time.totalDays + (spawnShip(game, id) ? game.rng.range(a, b) : 6);
+      // A ship with nowhere to tie up tries again a few days later. One
+      // turned away only because every staffed Emporium is taken waits
+      // offshore (`waiting`): the dock panel and the Trade advisor say so,
+      // since a city with many sea partners needs more than one Emporium.
+      const res = spawnShip(game, id);
+      r.nextVisit = game.time.totalDays + (res === true ? game.rng.range(a, b) : 6);
+      if (res === 'busy') r.waiting = true;
+      else delete r.waiting;
     } else {
       r.nextVisit = game.time.totalDays + game.rng.range(a, b);
       spawnCaravan(game, id);
@@ -231,18 +250,19 @@ function spawnShip(game, partnerId) {
   }
   const entry = map.idx(map.seaEntry.x, map.seaEntry.y);
   let best = null;
+  let busy = false;
   for (const b of game.buildings.values()) {
     if (b.def.kind !== 'dock' || b.efficiency <= 0) continue;
-    if (b.shipId && game.walkers.has(b.shipId)) continue; // a ship is already there or on its way
     const berth = dockBerth(game, b);
     if (berth < 0) continue;
+    if (b.shipId && game.walkers.has(b.shipId)) { busy = true; continue; } // a ship is already there or on its way
     const path = shipPath(game, entry, berth);
     if (path && (!best || path.length < best.path.length)) best = { dock: b, path };
   }
   if (!best) {
     const anyDock = [...game.buildings.values()].some((b) => b.def.kind === 'dock');
     if (!anyDock) warnOnce(game, 'noDockWarned', `A ship from ${p.name} found no Emporium and sailed on. Build an Emporium (Trade Dock) on the shore to trade by sea.`);
-    return false;
+    return busy ? 'busy' : false;
   }
   const w = spawnWalker(game, 'ship', entry, null, {
     partner: partnerId,

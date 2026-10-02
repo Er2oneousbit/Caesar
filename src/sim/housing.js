@@ -572,7 +572,7 @@ function breakUp(game, grower, o, inside, moved) {
       grower.house.pop += p.pop;
       addStock(grower.house, snapshot, 1 / n);
     } else {
-      newPiece(game, p.x, p.y, level, p.pop, snapshot, 1 / n, grower, oh);
+      newPiece(game, p.x, p.y, level, p.pop, snapshot, 1 / n, grower, oh, o.turn);
     }
   }
 }
@@ -583,11 +583,11 @@ function breakUp(game, grower, o, inside, moved) {
  * would be a home nobody can serve: it stays a vacant lot, its people look
  * for another home (setting out from the source's road) and its share of the
  * stock stays with the source. `families`: the house data its people come
- * from (the source's own, unless it is a neighbor the source broke up).
+ * from (the source's own, unless it is a neighbor the source broke up), and
+ * `turn` the turn of the home it was part of (looks only).
  */
-function newPiece(game, x, y, level, pop, stock, share, source, families = source.house) {
-  const b = addBuilding(game, 'house', x, y, 1, { quiet: true });
-  b.turn = source.turn || 0; // (it was part of that home: it keeps its turn)
+function newPiece(game, x, y, level, pop, stock, share, source, families = source.house, turn = source.turn) {
+  const b = addBuilding(game, 'house', x, y, 1, { quiet: true, turn: turn || 0 }); // (the turn of the home it was part of)
   const h = b.house;
   if (b.accessRoad < 0) {
     addStock(source.house, stock, share);
@@ -666,7 +666,7 @@ function makeVacant(game, b) {
     const { x, y } = b;
     setFootprint(game, b, x, y, 1);
     for (let dy = 0; dy < size; dy++) {
-      for (let dx = 0; dx < size; dx++) if (dx || dy) addBuilding(game, 'house', x + dx, y + dy, 1, { quiet: true }).turn = b.turn || 0;
+      for (let dx = 0; dx < size; dx++) if (dx || dy) addBuilding(game, 'house', x + dx, y + dy, 1, { quiet: true, turn: b.turn || 0 });
     }
   }
   game.markDirty('des');

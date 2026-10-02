@@ -190,12 +190,44 @@ function initKind(b, def) {
 }
 
 /**
+ * The ground a building of `def` covers with its top-left tile at (x, y),
+ * turned `turn` (0..3): a square, or for one in sections (the hippodrome,
+ * `span` 3) the row of them, along x at turns 0 and 2 and along y at 1 and
+ * 3, with where each section's top-left tile stands. The sections follow
+ * the way the turn takes the art's +u edge (render/turn.js): section 0, the
+ * rounded end, is at the left (x) or top (y) end at turns 0 and 1 and at
+ * the other end at turns 2 and 3, so the stretches of track still meet.
+ * @returns {{x:number, y:number, w:number, h:number, sections:Array<{x:number,y:number}>}}
+ */
+export function spanLayout(def, x, y, turn = 0) {
+  const S = def.size;
+  const n = def.span || 1;
+  const t = turn & 3;
+  const alongY = t % 2 === 1;
+  const sections = [];
+  for (let k = 0; k < n; k++) {
+    const at = (t >= 2 ? n - 1 - k : k) * S; // section k's distance along the row
+    sections.push(alongY ? { x, y: y + at } : { x: x + at, y });
+  }
+  return { x, y, w: alongY ? S : S * n, h: alongY ? S * n : S, sections };
+}
+
+/** The top-left tile of a building in sections whose main (section 0) stands at (x, y). */
+export function spanOrigin(def, x, y, turn = 0) {
+  const s0 = spanLayout(def, 0, 0, turn).sections[0];
+  return { x: x - s0.x, y: y - s0.y };
+}
+
+/**
  * The ground a building covers: a square of `size`, or for a building in
- * sections (the hippodrome, `span` 3) the whole row of them along x.
+ * sections (the hippodrome, `span` 3) the whole row of them (spanLayout).
  */
 export function footprintRect(b) {
-  const span = b.def.span || 1;
-  return { x: b.x, y: b.y, w: b.size * span, h: b.size };
+  const def = b.def;
+  if (!(def.span > 1) || b.main) return { x: b.x, y: b.y, w: b.size, h: b.size };
+  const o = spanOrigin(def, b.x, b.y, b.turn || 0);
+  const r = spanLayout(def, o.x, o.y, b.turn || 0);
+  return { x: r.x, y: r.y, w: r.w, h: r.h };
 }
 
 /**
@@ -330,9 +362,10 @@ export function faceWater(game, b) {
   if (i >= 0) b.waterSide = sideToward(game.map, i, b.x, b.y, b.size);
 }
 
-export function addBuilding(game, type, x, y, size, { quiet = false } = {}) {
+export function addBuilding(game, type, x, y, size, { quiet = false, turn = 0 } = {}) {
   const id = game.nextBuildingId++;
   const b = new Building(id, type, x, y, size);
+  b.turn = turn & 3; // (before its road: a hippodrome's row of sections depends on it)
   const { map } = game;
   for (const i of footprintTiles(map, x, y, b.size)) {
     map.building[i] = id;

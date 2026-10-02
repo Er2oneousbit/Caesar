@@ -30,7 +30,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
-import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward } from './entities.js';
+import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward, spanLayout, spanOrigin } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
 import { cityStock } from './storage.js';
@@ -93,11 +93,13 @@ export function planNoRoadWarning(plan) {
 }
 
 /**
- * Validate placing building `type` with its top-left corner at (x, y).
+ * Validate placing building `type` with its top-left corner at (x, y),
+ * turned `turn` (only a hippodrome's ground depends on it: its row of
+ * sections runs along y at turns 1 and 3, sim/entities.js spanLayout).
  * `noRoad`: the spot has no road the building could use (see the warnings above).
  * @returns {{ok:boolean, reason?:string, cost:number, warnings:string[], noRoad?:boolean, fertility?:number}}
  */
-export function checkBuilding(game, type, x, y) {
+export function checkBuilding(game, type, x, y, turn = 0) {
   const def = BUILDINGS[type];
   const fail = (reason, cost = def ? def.cost : 0) => ({ ok: false, reason, cost, warnings: [] });
   if (!def) return fail('Unknown building');
@@ -105,7 +107,8 @@ export function checkBuilding(game, type, x, y) {
   if (!game.isUnlocked(type) || !def.category) return fail('Not available in this scenario');
   const { map } = game;
   const S = def.size;
-  const W = S * (def.span || 1); // a hippodrome: three sections in a row along x
+  // A hippodrome: three sections in a row, along x or (turned) along y.
+  const { w: W, h: H } = spanLayout(def, x, y, turn);
   if (def.limit && countOf(game, type) >= def.limit) return fail(`Only ${def.limit === 1 ? 'one' : def.limit} ${def.name} in a city`);
   // One residence at a time, whatever its size: a bigger one is built after
   // the old one is demolished, never in place of it (the player chooses).
@@ -114,7 +117,7 @@ export function checkBuilding(game, type, x, y) {
   let trees = 0;
   let rubble = 0;
   let meadow = 0;
-  for (let dy = 0; dy < S; dy++) {
+  for (let dy = 0; dy < H; dy++) {
     for (let dx = 0; dx < W; dx++) {
       const tx = x + dx;
       const ty = y + dy;
@@ -171,7 +174,7 @@ export function checkBuilding(game, type, x, y) {
   // Soft warnings (placement allowed, but it will not work well).
   // (A building with no workers, the Oracle, works without a road.)
   if (def.needsRoad && def.kind !== 'house' && def.workers > 0) {
-    const hasRoad = perimeterTiles(map, x, y, W, S).some((i) => map.road[i]);
+    const hasRoad = perimeterTiles(map, x, y, W, H).some((i) => map.road[i]);
     if (!hasRoad) {
       out.warnings.push(NO_ROAD_WARNING);
       out.noRoad = true;
@@ -302,22 +305,25 @@ export function rebuildPlan(game, i) {
   if (type === 'house') return planAction(game, 'house', x, y, x + size - 1, y + size - 1, turn);
   if (type === 'wall') return planAction(game, 'wall', x, y, x, y);
   if (!BUILDINGS[type]) return null;
-  const off = anchorOffset(type);
-  const plan = planAction(game, type, x + off.x, y + off.y, x + off.x, y + off.y, turn);
+  // (x, y) is where the building (a hippodrome's main section) stood.
+  const o = spanOrigin(BUILDINGS[type], x, y, turn);
+  const off = anchorOffset(type, turn);
+  const plan = planAction(game, type, o.x + off.x, o.y + off.y, o.x + off.x, o.y + off.y, turn);
   // planAction anchors on the middle tile: the same footprint, or nothing.
   return plan.items[0] && plan.items[0].x === x && plan.items[0].y === y ? plan : null;
 }
 
-/** From a building's top-left tile to its center tile (where the cursor holds it). */
-export function anchorOffset(type) {
+/** From a building's top-left tile to its center tile (where the cursor holds it), turned `turn`. */
+export function anchorOffset(type, turn = 0) {
   const def = BUILDINGS[type];
   if (!def) return { x: 0, y: 0 };
-  return { x: Math.floor((def.size * (def.span || 1) - 1) / 2), y: Math.floor((def.size - 1) / 2) };
+  const { w, h } = spanLayout(def, 0, 0, turn);
+  return { x: Math.floor((w - 1) / 2), y: Math.floor((h - 1) / 2) };
 }
 
 /** Anchor a building so the cursor tile sits at its center. */
-export function anchorFor(type, cx, cy) {
-  const off = anchorOffset(type);
+export function anchorFor(type, cx, cy, turn = 0) {
+  const off = anchorOffset(type, turn);
   return { x: cx - off.x, y: cy - off.y };
 }
 
@@ -348,15 +354,20 @@ export function planAction(game, tool, x0, y0, x1, y1, turn = 0) {
   if (tool === 'roadblock') return planRoadblock(game, x1, y1);
   if (mode === 'area') return planBuildingArea(game, tool, x0, y0, x1, y1, placedTurn(tool, turn));
   // Single building
-  const a = anchorFor(tool, x1, y1);
-  const chk = checkBuilding(game, tool, a.x, a.y);
   const def = BUILDINGS[tool];
-  const S = def?.size || 1;
   const t = def ? placedTurn(tool, turn) : 0;
-  const items = [{ x: a.x, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y, chk.water) : 0, turn: t }];
-  // A hippodrome's other sections: drawn in the preview, built with the first.
-  for (let k = 1; k < (def?.span || 1); k++) {
-    items.push({ x: a.x + k * S, y: a.y, size: S, ok: chk.ok, reason: chk.reason, cost: 0, noRoad: !!chk.noRoad, part: true, type: `${tool}_part`, state: k, turn: t });
+  const a = anchorFor(tool, x1, y1, t);
+  const chk = checkBuilding(game, tool, a.x, a.y, t);
+  const S = def?.size || 1;
+  // A hippodrome: its main section first, where its turn puts it, with the
+  // whole row's top-left and size (`origin`); its other sections are drawn
+  // in the preview and built with the first.
+  const lay = def ? spanLayout(def, a.x, a.y, t) : { sections: [a], w: 1, h: 1 };
+  const m = lay.sections[0];
+  const items = [{ x: m.x, y: m.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y, chk.water) : 0, turn: t, origin: { x: a.x, y: a.y, w: lay.w, h: lay.h } }];
+  for (let k = 1; k < lay.sections.length; k++) {
+    const p = lay.sections[k];
+    items.push({ x: p.x, y: p.y, size: S, ok: chk.ok, reason: chk.reason, cost: 0, noRoad: !!chk.noRoad, part: true, type: `${tool}_part`, state: k, turn: t });
   }
   return {
     tool,
@@ -796,24 +807,25 @@ export function applyPlan(game, plan) {
     // Buildings (single or area)
     for (const it of plan.items) {
       if (!it.ok || it.part) continue; // a hippodrome's sections come with its first
-      const chk = checkBuilding(game, plan.tool, it.x, it.y); // re-check: earlier items may have changed things
+      const turn = placedTurn(plan.tool, it.turn ?? plan.turn); // (the R key's choice: looks only, but for a hippodrome's row)
+      const o = it.origin || it; // the whole row's top-left, for a hippodrome
+      const chk = checkBuilding(game, plan.tool, o.x, o.y, turn); // re-check: earlier items may have changed things
       if (!chk.ok) continue;
-      const span = BUILDINGS[plan.tool].span || 1;
+      const lay = spanLayout(BUILDINGS[plan.tool], o.x, o.y, turn);
       const tiles = [];
-      for (let dy = 0; dy < it.size; dy++) {
-        for (let dx = 0; dx < it.size * span; dx++) {
-          const i = map.idx(it.x + dx, it.y + dy);
+      for (let dy = 0; dy < lay.h; dy++) {
+        for (let dx = 0; dx < lay.w; dx++) {
+          const i = map.idx(o.x + dx, o.y + dy);
           tiles.push(saveTile(i));
           clearTile(i);
         }
       }
-      const b = addBuilding(game, plan.tool, it.x, it.y);
-      b.turn = placedTurn(plan.tool, it.turn ?? plan.turn); // (the R key's choice; looks only)
+      const b = addBuilding(game, plan.tool, lay.sections[0].x, lay.sections[0].y, undefined, { turn });
       if (chk.axis !== undefined) b.axis = chk.axis; // a triumphal arch: the way its road runs (art, sim/battle.js)
       if (b.def.placement === 'shore') dockBerth(game, b); // berth + which side faces the water (docks, the navalia, naval stations)
       if (b.def.placement === 'fishingShore') waterBeside(game, b); // slip or mooring + which side faces the water
       undo.ops.push({ op: 'building', id: b.id, tiles });
-      if (span > 1) addSections(game, b, span, undo);
+      if (lay.sections.length > 1) addSections(game, b, lay.sections, undo);
       spent += chk.cost;
       done++;
     }
@@ -832,10 +844,10 @@ export function applyPlan(game, plan) {
  * hippodrome's road access takes a road beside any of them (entities.js).
  * Undoing any one removes the whole (removeBuilding takes the group).
  */
-function addSections(game, b, span, undo) {
+function addSections(game, b, sections, undo) {
   b.parts = [];
-  for (let k = 1; k < span; k++) {
-    const p = addBuilding(game, `${b.type}_part`, b.x + k * b.size, b.y);
+  for (let k = 1; k < sections.length; k++) {
+    const p = addBuilding(game, `${b.type}_part`, sections[k].x, sections[k].y, undefined, { turn: b.turn });
     p.main = b.id;
     p.section = k;
     b.parts.push(p.id);

@@ -69,6 +69,7 @@ import { NightLights, NOON, skyAt, dayTime, lightsOf, isLit } from './lighting.j
 import { Weather, seasonPalette } from './weather.js';
 import { hash01 } from './draw.js';
 import { turnUV } from './turn.js';
+import { spanOrigin } from '../sim/entities.js';
 import { overlayByKey, columnColor } from './overlays.js';
 
 /** A fort's or naval station's color: its rally standard and the ghost one while deploying. */
@@ -182,6 +183,25 @@ export function buildingKey(b, variant, state) {
 /** The sprite key part for a turn: `:t1`..`:t3`, nothing for turn 0. */
 export function turnKey(turn) {
   return turn ? `:t${turn & 3}` : '';
+}
+
+/**
+ * Where a point of the hippodrome's track (U along its 15 tiles, v across,
+ * as hippodromeArt.js draws it) is on the map, for a hippodrome whose main
+ * section is `b`, turned as its sections are (render/turn.js turnUV for
+ * each 5 x 5 section, laid out by sim/entities.js spanLayout). Also which
+ * way +U looks on the screen (1 right, -1 left), so a chariot faces the way
+ * it runs. @returns [x, y, dir]
+ */
+export function raceSpot(b, U, v) {
+  const t = (b.turn || 0) & 3;
+  const o = spanOrigin(b.def, b.x, b.y, t);
+  const L = b.size * (b.def.span || 1);
+  const S = b.size;
+  if (t === 1) return [o.x + S - v, o.y + U, -1];
+  if (t === 2) return [o.x + L - U, o.y + S - v, -1];
+  if (t === 3) return [o.x + v, o.y + L - U, 1];
+  return [o.x + U, o.y + v, 1];
 }
 
 /**
@@ -1556,7 +1576,8 @@ export class Renderer {
    * Each is drawn just after the strip of its section's sprite that holds
    * it (a strip is a screen column, drawn at its front tile's depth), so the
    * track does not paint over it.
-   * Track coordinates as in hippodromeArt.js (U along the 15 tiles, v across).
+   * Track coordinates as in hippodromeArt.js (U along the 15 tiles, v across),
+   * laid on the map the way the hippodrome is turned (raceSpot).
    */
   raceItems(b, items) {
     const A = 2.9;
@@ -1578,8 +1599,8 @@ export class Renderer {
         const a = -Math.PI / 2 + (s - straight) / R;
         U = B + Math.cos(a) * R * 1.2; v = 2.5 + Math.sin(a) * R; face = Math.sin(a) < 0 ? 1 : -1;
       }
-      const x = b.x + U;
-      const y = b.y + v;
+      const [x, y, dir] = raceSpot(b, U, v);
+      face *= dir;
       const sec = this.game.buildings.get(this.game.map.buildingAt(Math.floor(x), Math.floor(y))) || b;
       const depths = this.stripsFor(sec);
       const j = Math.floor(x) - Math.floor(y) - (sec.x - sec.y - sec.size);
@@ -1826,8 +1847,8 @@ export class Renderer {
     this.stats.ghostNoRoad = plan.items.some((it) => it.ok && it.noRoad);
     if (plan.kind === 'building' && plan.items[0] && !plan.items.some((x) => !x.part && x !== plan.items[0]) && plan.items[0].ok && plan.items[0].noRoad) {
       const it = plan.items[0];
-      const span = plan.items.length; // a hippodrome: its sections in a row
-      for (const e of accessEdgeTiles(game, it.x, it.y, it.size * span, it.size)) {
+      const o = it.origin || { x: it.x, y: it.y, w: it.size, h: it.size }; // a hippodrome: its row of sections, along x or y
+      for (const e of accessEdgeTiles(game, o.x, o.y, o.w, o.h)) {
         if (!e.open) continue;
         this.fillDiamond((e.x - e.y) * HALF_W, (e.x + e.y) * HALF_H, ROAD_EDGE_FILL);
         this.outlineFootprint(e.x, e.y, 1, ROAD_EDGE_LINE, 1.4);

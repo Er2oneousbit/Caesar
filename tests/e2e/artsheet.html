@@ -37,6 +37,7 @@
   import { LED_GOODS } from '../../src/render/cargoArt.js';
   import { GOOD_KEYS } from '../../src/data/goods.js';
   import { BUILDINGS } from '../../src/data/buildings.js';
+  import { spanLayout } from '../../src/sim/entities.js';
 
   const q = new URLSearchParams(location.search);
   const scale = Number(q.get('scale') || 2);
@@ -105,6 +106,20 @@
         row(`Level ${tier}: ${HOUSE_TIERS[tier].name}`, 'house', S, tier % 8, tier);
         if (S === 1 && tier % 3 === 1) row(`Level ${tier}: a 2x2 block`, 'house', 2, tier, tier);
       }
+    }
+    if (!words || words.some((w) => 'hippodrome'.includes(w))) {
+      // The whole hippodrome, its three sections where each turn lays them
+      // (sim/entities.js spanLayout: along y at turns 1 and 3).
+      section('hippodrome, all three sections, at each turn', [0, 1, 2, 3].map((t) => {
+        const lay = spanLayout(BUILDINGS.hippodrome, 0, 0, t);
+        const specs = lay.sections.map((p, k) => [p, buildingSpec(k ? 'hippodrome_part' : 'hippodrome', 5, 0, k, false, snow, false, t)]);
+        const s0 = specs[0][1];
+        // Back to front by where each section stands (u + v), as the game draws them.
+        const order = [...specs].sort((a, b) => a[0].x + a[0].y - (b[0].x + b[0].y));
+        return [`turn ${t}`, { w: s0.w + 2 * 160, h: s0.h + 2 * 80, ax: s0.ax + (t % 2 ? 2 * 160 : 0), ay: s0.ay, draw(ctx) {
+          for (const [p, spec] of order) { ctx.save(); ctx.translate((p.x - p.y) * 32, (p.x + p.y) * 16); spec.draw(ctx); ctx.restore(); }
+        } }];
+      }));
     }
     for (const [key, def] of Object.entries(BUILDINGS)) {
       if (!def.size || key === 'house') continue;

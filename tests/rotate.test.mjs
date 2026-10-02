@@ -12,7 +12,8 @@
  *   - saves keep it, a version 21 save loads at turn 0, a broken turn is 0
  *   - rubble remembers the turn and Rebuild puts it back so; undo of the
  *     rebuild brings the rubble back with it
- *   - homes painted over an area all take the turn
+ *   - homes painted over an area all take the turn, and so do the lots a
+ *     turned home falls back to
  * ----------------------------------------------------------------------------
  */
 
@@ -29,6 +30,7 @@ const { buildingKey } = await import('../src/render/renderer.js');
 const { igniteBuilding } = await import('../src/sim/risk.js');
 const { ruinAt } = await import('../src/sim/ruins.js');
 const { BUILDINGS } = await import('../src/data/buildings.js');
+const { growHouse, updateHouse } = await import('../src/sim/housing.js');
 const { CONFIG } = await import('../src/config.js');
 const { log } = await import('../src/core/debug.js');
 log.setLevel('error');
@@ -183,7 +185,7 @@ test('rotate: rubble remembers the turn; Rebuild puts it back turned, undo bring
   assert.equal(rebuildPlan(game, i).turn, 3);
 });
 
-test('rotate: homes painted turned are each turned', () => {
+test('rotate: homes painted turned are each turned, and the lots a turned home falls back to keep its turn', () => {
   const game = newGame({ seed: 'rotate-h' });
   const at = findFree(game, 3, 3);
   const plan = planAction(game, 'house', at.x, at.y, at.x + 1, at.y + 1, 2);
@@ -192,4 +194,18 @@ test('rotate: homes painted turned are each turned', () => {
   for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) homes.add(game.buildings.get(game.map.buildingAt(at.x + dx, at.y + dy)));
   assert.equal(homes.size, 4);
   for (const h of homes) assert.equal(h.turn, 2);
+  // One grows over the other three, then empties: the lots it falls back to keep its turn.
+  const b = game.buildings.get(game.map.buildingAt(at.x, at.y));
+  assert.ok(growHouse(game, b, 2), 'grown to 2x2');
+  b.house.tier = 13;
+  b.house.pop = 0;
+  b.house.incoming = 0;
+  updateHouse(game, b);
+  for (let dy = 0; dy < 2; dy++) {
+    for (let dx = 0; dx < 2; dx++) {
+      const lot = game.buildings.get(game.map.buildingAt(at.x + dx, at.y + dy));
+      assert.equal(lot.size, 1);
+      assert.equal(lot.turn, 2, `the lot at +${dx},+${dy}`);
+    }
+  }
 });

@@ -73,6 +73,58 @@ export const UNIT_TYPES = Object.freeze({
     speed: 0.075, cooldown: 28, siege: 4, ranged: true,
     desc: 'Hurls stones from behind the warband.',
   },
+  // --- The peoples' own warriors (data/peoples.js) --------------------------------
+  // Scaled from the original's numbers by Colonia's legionary (110 health
+  // against its 150, attack 14 against 10): health x0.73, attack x1.4, and
+  // defense about twice the original's, since a point of Colonia's defense
+  // stops half a point of damage. Their order against a legionary, in blows
+  // to kill and to be killed, is the original's (tests/peoples.test.mjs).
+  //   missileShare  share of a missile's damage taken (an elephant's hide: half)
+  swordsman: {
+    name: 'Swordsman', side: 'enemy', color: '#3f6a4a', hp: 80, attack: 14, defense: 4, range: 1.1, aggro: 4,
+    speed: 0.06, cooldown: 20, siege: 10,
+    desc: 'A Celtic warrior with a long iron sword and a tall oval shield. Slower than a raider, and steadier.',
+  },
+  axeman: {
+    name: 'Axeman', side: 'enemy', color: '#5a3a5a', hp: 88, attack: 21, defense: 5, range: 1.1, aggro: 4,
+    speed: 0.06, cooldown: 22, siege: 14,
+    desc: 'A big man with a two-handed axe. Hits as hard as anything a warband brings on foot, and hews through doors and walls.',
+  },
+  javelineer: {
+    name: 'Javelineer', side: 'enemy', color: '#b08a4a', hp: 50, attack: 7, defense: 2, range: 4, aggro: 6,
+    speed: 0.112, cooldown: 36, siege: 4, ranged: true,
+    desc: 'A light skirmisher with a bundle of javelins. Quick on his feet and gone before you can close; weak up close.',
+  },
+  chariot: {
+    name: 'War Chariot', side: 'enemy', color: '#7a3a2a', hp: 88, attack: 21, defense: 6, range: 1.2, aggro: 6,
+    speed: 0.13, cooldown: 20, siege: 6, mounted: true,
+    desc: 'A light two-wheeled car: a driver, a spearman and two ponies. As fast as your cavalry, and it strikes as hard as an axeman.',
+  },
+  elephant: {
+    name: 'War Elephant', side: 'enemy', color: '#8a8478', hp: 145, attack: 28, defense: 8, range: 1.3, aggro: 5,
+    speed: 0.05, cooldown: 26, siege: 25, missileShare: 0.5,
+    desc: 'A war elephant with a tower on its back. Slow, but it tramples soldiers and batters down walls; arrows and stones do it half harm.',
+  },
+  hoplite: {
+    name: 'Hoplite', side: 'enemy', color: '#a8602a', hp: 88, attack: 17, defense: 6, range: 1.1, aggro: 4,
+    speed: 0.06, cooldown: 20, siege: 10,
+    desc: 'Heavy infantry with a bronze round shield and a long spear, hired or drilled in the Greek way. Slow, hard to break.',
+  },
+  // A gladiator in revolt (sim/revolt.js): the original's 100 / 9 / 2 on the same scale.
+  gladiator: {
+    name: 'Gladiator', side: 'enemy', color: '#9a7a3a', hp: 75, attack: 12, defense: 4, range: 1.1, aggro: 5,
+    speed: 0.07, cooldown: 20, siege: 10,
+    desc: 'A gladiator who has broken out of his school. He fights like a soldier and burns what he can reach until the revolt is put down.',
+  },
+  // --- Wild animals (sim/wildlife.js) --------------------------------------------
+  // A wolf's bite is set by the difficulty (data/difficulty.js wolfBite), not
+  // by `attack`, which is only Normal's for the panel. Health: the original's
+  // 80 on Colonia's scale.
+  wolf: {
+    name: 'Wolf', side: 'wild', color: '#7d7568', hp: 58, attack: 6, defense: 0, range: 0.9, aggro: 6,
+    speed: 0.16, cooldown: 16, // (faster than a walker's 0.1: the original's wolves ran at double speed)
+    desc: 'A grey wolf of the hills. A pack keeps to the woods but falls on anyone who walks near: cart pushers, traders, settlers. Soldiers and towers can kill wolves; a pack with one left alive grows back.',
+  },
   // --- Caesar's legions (sim/legion.js) -------------------------------------------
   // The army Caesar sends against a governor whose favor collapsed. Stronger
   // than the province's own legionary in the proportion the original's

@@ -20,6 +20,9 @@
  *   unlockall=1    every building available in every scenario
  *   raids=MODE     off | occasional | frequent  (override invasions for new games)
  *   searaids=off   every raid comes by land (new games; sim/navy.js)
+ *   people=ID      who raids a new game: a people of data/peoples.js (gauls,
+ *                  ligurians, carthaginians...), or site for the province's own
+ *   wolves=on|off  wolf packs on a new game's map, or none (sim/wildlife.js)
  *   nofog=1        reserved for future use
  *   mute=1         start with sound off
  *
@@ -45,6 +48,8 @@ export function parseFlags(source) {
     unlockall: false,
     raids: null,
     searaids: null,
+    people: null,
+    wolves: null,
     mute: false,
   };
   let params;
@@ -75,6 +80,9 @@ export function parseFlags(source) {
   flags.unlockall = truthy(get('unlockall'));
   if (['off', 'occasional', 'frequent'].includes(get('raids'))) flags.raids = get('raids');
   if (['off', 'on'].includes(get('searaids'))) flags.searaids = get('searaids');
+  // (An unknown people falls back to the province's own: sim/military.js peopleFor.)
+  if (/^[a-z_]+$/.test(String(get('people') ?? ''))) flags.people = String(get('people'));
+  if (['off', 'on'].includes(get('wolves'))) flags.wolves = get('wolves');
   flags.mute = truthy(get('mute'));
   return flags;
 }

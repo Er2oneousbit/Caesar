@@ -16,7 +16,8 @@
  *                      stats, entertainment base, wine sources, mid-month
  *                      goods use, immigration, fires, sick homes, home moods
  *                      (day 8), trade, raid progress, Caesar's legions (their
- *                      march, the siege) and the check for a city overrun
+ *                      march, the siege) and the check for a city overrun,
+ *                      wolf packs (roaming, growing back)
  *   5. on a new month: consumption, finances, army pay, the governor's
  *                      salary, raid warnings, city mood, home moods,
  *                      religion, ratings, city health, Emperor, distant
@@ -60,8 +61,10 @@ import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome, enemiesInProvince } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
 import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
-import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
+import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort, peopleFor } from '../sim/military.js';
 import { updatePrefectFights } from '../sim/prefectFight.js';
+import { newWildlife, wildlifeDaily } from '../sim/wildlife.js';
+import { GENERIC_PEOPLE } from '../data/peoples.js';
 import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
 import { caesarDaily } from '../sim/legion.js';
 import { battleMonthly, archesToBuild } from '../sim/battle.js';
@@ -187,6 +190,16 @@ export class Game {
     this.wallHp ??= new Map(); // tile index -> remaining hp of a damaged wall/gate
     this.ruins ??= new Map(); // rubble tile index -> what fell there, why and when (sim/ruins.js)
     this.military ??= newMilitaryState(scenario, this.time, flags);
+    if (this.military.people === undefined) {
+      // A save from before peoples (data/peoples.js): the province's people
+      // from now on; a raid it had scouted or under way was the generic band.
+      this.military.people = peopleFor(scenario);
+      if (this.military.active) this.military.active.people ??= GENERIC_PEOPLE;
+      if (this.military.warned) this.military.warned.people ??= GENERIC_PEOPLE;
+    }
+    // Wolf packs (sim/wildlife.js): placed on a new game's map; a save
+    // brings its own (core/save.js gives an older one none).
+    this.wildlife ??= newWildlife(this, scenario, flags);
     this.city.crime ??= newCrimeState(); // saves from before crime (v4)
     this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
     for (const g of GOD_KEYS) this.city.gods[g] ??= newGodMood(); // a god a save lacks starts afresh
@@ -345,6 +358,7 @@ export class Game {
     updateTrade(this);
     militaryDaily(this);
     caesarDaily(this); // Caesar's legions, and the loss of a city overrun (sim/legion.js)
+    wildlifeDaily(this); // wolf packs roam, grow back or are gone (sim/wildlife.js)
     if (enemiesInProvince(this)) this.city.raidMonth = true; // no peace gained this month (sim/ratings.js)
     this.events.emit('day', this.time);
   }

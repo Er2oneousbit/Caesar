@@ -27,7 +27,9 @@ import { ORDER_LABELS, orderLines } from './storageInfo.js';
 import { dockShipText, dockRows, dockHint } from './dockInfo.js';
 import { venueActive, venueHasBoth } from '../sim/services.js';
 import { houseMonthlyTax } from '../sim/economy.js';
-import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN } from '../sim/military.js';
+import { garrisonCounts, recallFort, wallHpOf, buildingMaxHp, TOWER_RANGE, TOWER_COOLDOWN, raidPeople } from '../sim/military.js';
+import { packOf, packSummary } from '../sim/wildlife.js';
+import { WALKER_HP } from '../sim/walkerHarm.js';
 import { dockBerth, dockUsed, shipsWaitingText } from '../sim/trade.js';
 import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat, hasBoatTimber } from '../sim/fishing.js';
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
@@ -268,9 +270,22 @@ export function soldierDoing(u, fort = null) {
     case 'siege': return 'Attacking buildings';
     case 'halt': return 'Halted, waiting on the word from Rome';
     case 'flee': return 'Fleeing';
+    // A wolf (sim/wildlife.js).
+    case 'rest': return 'Resting with the pack';
+    case 'prowl': return 'Prowling with the pack';
+    case 'hunt': return 'Hunting the city\'s people';
     default: return u.state ? u.state[0].toUpperCase() + u.state.slice(1) : 'Standing by';
   }
 }
+
+/** What a people's warband makes for (data/peoples.js `target`), in words. */
+const TARGET_WORDS = {
+  nearest: 'the nearest buildings',
+  food: 'food: granaries, warehouses, markets and farms',
+  homes: 'the governor\'s house and the finest homes',
+  troops: 'forts, barracks, the academy and prefectures',
+  stores: 'warehouses and granaries',
+};
 
 export function taxLine(game, hs) {
   if (hs.tax > 0) {
@@ -875,18 +890,32 @@ export class InfoPanel {
         h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${u.id} at ${Math.floor(u.x)},${Math.floor(u.y)}`)));
   }
 
-  /** A soldier, raider or imperial legionary: who, how hurt, doing what, and for a soldier his fort. */
+  /**
+   * A soldier, raider (of whatever people), imperial legionary, gladiator in
+   * revolt or wolf: who, how hurt, doing what; for a soldier his fort, for a
+   * raider his people, for a wolf its pack.
+   */
   renderSoldier(g, u, def) {
     const ours = u.side === 'rome';
     const fort = ours ? g.buildings.get(u.fort) : null;
+    const wolf = u.type === 'wolf';
+    const pack = wolf ? packOf(g, u.pack) : null;
+    const inv = g.military.active;
+    const people = !ours && !wolf && !u.legion && !u.revolt && inv && inv.id === u.invasion ? raidPeople(g, inv) : null;
+    const side = ours ? 'Your army' : u.type === 'imperial' ? 'Caesar\'s legion' : wolf ? 'Wild animal' : u.revolt ? 'Gladiators in revolt' : people && people.mix ? people.name : 'Enemy';
+    const arms = wolf
+      ? `a bite of ${g.difficulty.wolfBite ?? def.attack} (${g.difficulty.name}): a walker dies in ${Math.ceil(WALKER_HP / (g.difficulty.wolfBite ?? def.attack))} bites`
+      : `attack ${def.attack}, defense ${def.defense}${def.range > 2 ? `, range ${def.range} tiles` : ''}${def.missileShare ? `; arrows and stones do ${pct(def.missileShare)} harm` : ''}`;
     mount(this.el,
-      this.head(def.name, ours ? 'Your army' : u.type === 'imperial' ? 'Caesar\'s legion' : 'Enemy'),
+      this.head(def.name, side),
       h('div', { class: 'muted' }, def.desc),
       kv('Health', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
       kv('Doing', soldierDoing(u, fort)),
       ours ? kv('Fort', fort ? `${fort.def.name} at ${fort.x}, ${fort.y}${fort.rally ? ' (deployed)' : ''}` : 'None') : null,
       ours ? kv('Training', u.trained ? 'Trained at the Campus' : 'Untrained') : null,
-      kv('Arms', `attack ${def.attack}, defense ${def.defense}${def.range > 2 ? `, range ${def.range} tiles` : ''}`),
+      pack ? kv('Pack', packSummary(g, pack)) : null,
+      people && people.mix ? kv('Warband', `makes for ${TARGET_WORDS[inv.target] || 'the nearest buildings'}; breaks when ${pct(1 - people.breaks)} have fallen`) : null,
+      kv(wolf ? 'Bite' : 'Arms', arms),
       ours ? kv('Pay', `${def.upkeep} Dn / month`) : null,
       h('div', { class: 'panel-sec row' },
         fort ? h('button', { class: 'btn small', onclick: () => this.showBuilding(fort.id) }, 'Its fort') : null,

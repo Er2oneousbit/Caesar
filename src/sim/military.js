@@ -36,6 +36,7 @@
 import { CONFIG } from '../config.js';
 import { UNIT_TYPES, FORT_CAPACITY, TRAIN_DAYS } from '../data/units.js';
 import { TOOLS } from '../data/buildings.js';
+import { WALKER_TYPES } from '../data/walkers.js';
 import { RECRUIT_COST, RECRUIT_SOURCE, GOODS } from '../data/goods.js';
 import { Terrain, Road, Wall } from '../world/map.js';
 import { MinHeap } from '../world/pathfinding.js';
@@ -44,12 +45,17 @@ import { difficultyOf } from '../data/difficulty.js';
 import { spawnWalker, killWalker, STRIDE_WRAP, mainOf } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
-import { igniteBuilding, collapseBuilding, riskRates } from './risk.js';
+import { igniteBuilding, collapseBuilding, riskRates, withArticle } from './risk.js';
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 import { seaRaidPlan, seaLandingNow, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
 import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training.js';
-import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary } from './legion.js';
+import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary, legionTargets } from './legion.js';
+import { PEOPLES, PEOPLE_BY_MISSION, PEOPLE_BY_SITE, GENERIC_PEOPLE, WALKER_TARGET_SOLDIERS, peopleById } from '../data/peoples.js';
+import { siteIdOf } from '../data/sites.js';
+import { canHarm, harmWalker } from './walkerHarm.js';
+import { updateWolves, wolfKilled } from './wildlife.js';
+import { revoltActive, revoltDaily, revoltMonthly, rebelCount } from './revolt.js';
 import { leaveForBattle, awayCounts, awayOf, awayUpkeep, dropAway, postsAway, takesNewMen, AWAY_MAX_TICKS } from './battle.js';
 import { fightPrefect } from './prefectFight.js';
 
@@ -134,7 +140,37 @@ export function newMilitaryState(scenario, time, flags = {}) {
     battle: null, // a distant battle Caesar asked troops for (sim/battle.js)
     battles: { won: 0, lost: 0, lastEndMonth: -999 },
     recalls: [], // riders out and recalled troops coming home from a distant battle (sim/battle.js)
+    people: peopleFor(scenario, flags.people), // who raids this province (data/peoples.js)
   };
+}
+
+/**
+ * The people who raid a province (data/peoples.js), as an id: a debug or
+ * sim flag's choice (an id, or 'site' for the province's own), else the
+ * mission's own, else its site's. A sandbox meets the generic band unless
+ * its setup asked for the province's own people (scenario.raiders 'site'),
+ * so a sandbox plays as it did before peoples.
+ */
+export function peopleFor(scenario, flag = null) {
+  const site = siteIdOf(scenario);
+  if (flag === 'site') return PEOPLE_BY_SITE[site] || GENERIC_PEOPLE;
+  if (flag && Object.hasOwn(PEOPLES, flag)) return flag;
+  if (!scenario || scenario.id === 'sandbox') return scenario?.raiders === 'site' ? PEOPLE_BY_SITE[site] || GENERIC_PEOPLE : GENERIC_PEOPLE;
+  return PEOPLE_BY_MISSION[scenario.id] || PEOPLE_BY_SITE[site] || GENERIC_PEOPLE;
+}
+
+/** The people of a raid (its own, kept from its launch), or of the province's next one. */
+export function raidPeople(game, inv = game.military.active) {
+  return peopleById(inv?.people || game.military.people);
+}
+
+/**
+ * Words for a people in messages: `many` ("raiders" for the generic band,
+ * so its messages read as they always did; else "Ligurians"), `name`.
+ */
+export function peopleWords(people) {
+  const generic = !people.mix;
+  return { many: generic ? 'raiders' : people.name, Many: generic ? 'Raiders' : people.name, generic };
 }
 
 export class Unit {
@@ -219,6 +255,8 @@ export function removeUnit(game, u, cause = 'died') {
       } else if (mine) inv.killed++;
     } else if (u.side === 'rome') {
       st.soldiersLost++;
+    } else if (u.type === 'wolf') {
+      wolfKilled(game);
     }
     game.events.emit('unitDied', { x: u.x, y: u.y, side: u.side, type: u.type });
   }
@@ -278,7 +316,7 @@ export function passable(game, side, i) {
   if (map.building[i]) return false;
   const w = map.wall[i];
   if (w === Wall.WALL) return false;
-  if (w === Wall.GATE && side === 'enemy') return false;
+  if (w === Wall.GATE && side !== 'rome') return false; // (a gate opens for Rome only: not for raiders, nor wolves)
   return true;
 }
 
@@ -676,11 +714,11 @@ export function buildingMaxHp(b) {
  * plunder: only raiders who reach the city on foot do. `legion`: Caesar's
  * army struck it (sim/legion.js), which is no part of a raid.
  */
-export function damageBuilding(game, b, dmg, { fromSea = false, legion = null } = {}) {
+export function damageBuilding(game, b, dmg, { fromSea = false, legion = null, revolt = false } = {}) {
   if (b.hp === undefined) b.hp = buildingMaxHp(b);
   b.hp -= dmg;
   b.lastRaided = game.time.totalDays;
-  const inv = legion ? null : game.military.active;
+  const inv = legion || revolt ? null : game.military.active; // (a gladiator's work is no raid's: sim/revolt.js)
   if (inv && !fromSea) inv.reached = true; // the warband made it to the city: plunder is possible
   if (b.hp > 0) return;
   if (inv) inv.buildingsLost++;
@@ -742,6 +780,55 @@ export function computeField(game) {
   fillField(game, field, () => true);
   game.enemyFieldRev = map.revision;
   game.enemyFieldTick = game.time.totalTicks;
+  computeRaidField(game);
+}
+
+// How much a raid's field toward its people's targets dislikes breaking
+// through a building that is not one (as Caesar's legions' does,
+// CONFIG.LEGION_BREAK_COST): enough that the warband walks round a block
+// rather than through it, not so much that it never comes in.
+const RAID_BREAK_COST = 20;
+
+/**
+ * The buildings a raid's people make for first (data/peoples.js `target`),
+ * as { key, isTarget } for fillField, or null when the warband simply goes
+ * for the nearest building: the generic band, or a target of which nothing
+ * stands.
+ */
+export function raidTargets(game, kind) {
+  if (!kind || kind === 'nearest') return null;
+  if (kind === 'homes') {
+    const t = legionTargets(game); // the residence, else the best homes with people (sim/legion.js)
+    return t.what === 'anything' ? null : { key: `homes:${t.key}`, isTarget: t.isTarget };
+  }
+  const kinds = TARGET_KINDS[kind];
+  if (!kinds) return null;
+  const named = (b) => !!b && (kinds.has(b.def.kind) || kinds.has(b.type));
+  for (const b of game.buildings.values()) if (named(b)) return { key: kind, isTarget: (id) => named(game.buildings.get(id)) };
+  return null;
+}
+
+/** Building kinds (or types) each target names (data/peoples.js). */
+const TARGET_KINDS = {
+  food: new Set(['granary', 'warehouse', 'market', 'farm']),
+  stores: new Set(['granary', 'warehouse']),
+  troops: new Set(['fort', 'barracks', 'military_academy', 'prefecture']),
+};
+
+/**
+ * The active raid's own field, toward its people's targets with other
+ * buildings breakable (null: none, the raiders walk the plain field). A
+ * raider standing where this field cannot reach (its targets across water)
+ * walks the plain one.
+ */
+function computeRaidField(game) {
+  const inv = game.military.active;
+  const t = inv ? raidTargets(game, inv.target) : null;
+  if (!t) { game.raidField = null; return; }
+  const map = game.map;
+  let field = game.raidField;
+  if (!field || field.length !== map.size) field = game.raidField = new Float32Array(map.size);
+  fillField(game, field, t.isTarget, RAID_BREAK_COST);
 }
 
 /**
@@ -839,8 +926,14 @@ export function unitDefense(game, u) {
   return d;
 }
 
-/** A missile's damage on arrival: a trained legionary holding position takes only holdMissile of it. */
+/**
+ * A missile's damage on arrival: a trained legionary holding position takes
+ * only holdMissile of it; a unit with a thick hide (an elephant's
+ * missileShare) takes that share of any.
+ */
 export function missileDamage(game, target, dmg) {
+  const hide = UNIT_TYPES[target.type].missileShare;
+  if (hide) dmg *= hide;
   if (!target.trained) return dmg;
   const share = UNIT_TYPES[target.type].holdMissile;
   return share && holdingPosition(game, target) ? dmg * share : dmg;
@@ -1055,7 +1148,10 @@ function updateRaider(game, u, romans) {
   const def = UNIT_TYPES[u.type];
   const map = game.map;
   const inv = game.military.active;
-  if (!inv || inv.id !== u.invasion || inv.fleeing) {
+  // A gladiator in revolt (sim/revolt.js) is no part of a raid: he fights
+  // while the revolt lasts, and then runs like a raider whose band broke.
+  const rebel = u.revolt && revoltActive(game);
+  if (!rebel && (!inv || inv.id !== u.invasion || inv.fleeing)) {
     // Run for the map edge and vanish there. A warband that came by sea runs
     // back to its landing and boards its ships, while one is still afloat.
     u.state = 'flee';
@@ -1081,11 +1177,16 @@ function updateRaider(game, u, romans) {
   }
   // A prefect fighting him: he turns on him (sim/prefectFight.js).
   if (fightPrefect(game, u, def)) return;
-  // Otherwise head for the nearest building via the flow field.
+  // A missile man of a people who aim at the city's people, in a city with
+  // few soldiers: a walker in reach (the original's rule).
+  if (def.ranged && volleyAtWalkers(game, u, def, inv, romans)) return;
+  if (u.prey) u.prey = 0;
+  // Otherwise head for his people's targets, or the nearest building, via the flow field.
   const tx = Math.floor(u.x);
   const ty = Math.floor(u.y);
   const here = map.idx(tx, ty);
-  const field = game.enemyField;
+  const rf = rebel ? null : game.raidField; // (rebels make for the nearest buildings)
+  const field = rf && Number.isFinite(rf[here]) ? rf : game.enemyField;
   let best = -1;
   let bestV = field[here];
   let bestKind = null; // 'building' | 'wall' | 'move'
@@ -1122,13 +1223,58 @@ function updateRaider(game, u, romans) {
       if (bestKind === 'wall') damageWall(game, best, dmg);
       else {
         const b = game.buildings.get(map.building[best]);
-        if (b) damageBuilding(game, b, dmg);
+        if (b) damageBuilding(game, b, dmg, { revolt: !!rebel });
       }
     }
     return;
   }
   u.state = 'advance';
   moveToward(game, u, map.xOf(best) + 0.5 + u.ox, map.yOf(best) + 0.5 + u.oy, def.speed);
+}
+
+/**
+ * A slinger's or javelineer's turn at the city's people: when his people
+ * aim at walkers (data/peoples.js missilesAtWalkers) and the city has fewer
+ * than WALKER_TARGET_SOLDIERS soldiers at home, he strikes a walker in
+ * reach, the nearest, chosen again every few ticks. The missile strikes at
+ * once (missiles only know units), as a slinger's at a prefect does.
+ * @returns {boolean} true when he spent his turn on a walker
+ */
+function volleyAtWalkers(game, u, def, inv, romans) {
+  if (romans.length >= WALKER_TARGET_SOLDIERS || !raidPeople(game, inv).missilesAtWalkers) return false;
+  let w = u.prey ? game.walkers.get(u.prey) : null;
+  const reach = (p) => canHarm(p) && Math.hypot(p.x + 0.5 - u.x, p.y + 0.5 - u.y) <= def.range;
+  if (w && !reach(w)) w = null;
+  if (!w || (game.time.totalTicks + u.id) % 6 === 0) {
+    let bestD = def.range;
+    for (const p of game.walkers.values()) {
+      if (!canHarm(p)) continue;
+      const d = Math.hypot(p.x + 0.5 - u.x, p.y + 0.5 - u.y);
+      if (d <= bestD) { bestD = d; w = p; }
+    }
+  }
+  if (!w) return false;
+  u.prey = w.id;
+  u.state = 'fight';
+  u.moving = false;
+  const sdx = (w.x + 0.5 - u.x) - (w.y + 0.5 - u.y);
+  if (Math.abs(sdx) > 0.01) u.facing = sdx > 0 ? 1 : -1;
+  if (u.cooldown <= 0) {
+    u.cooldown = def.cooldown;
+    u.strikeTick = game.time.totalTicks;
+    game.events.emit('sound', { name: 'arrow' });
+    const what = WALKER_TYPES[w.type]?.name.toLowerCase() || 'citizen';
+    const x = w.x;
+    const y = w.y;
+    if (!harmWalker(game, w, rollDamage(game, def, { defense: 0 }, enemyPower(game, u), 0))) return true;
+    const st = game.military.stats;
+    st.walkersKilled = (st.walkersKilled || 0) + 1;
+    if (!inv.walkerNews) {
+      inv.walkerNews = true; // (once a raid: the losses show in the Military advisor)
+      game.message(`${peopleWords(raidPeople(game, inv)).Many} struck down ${withArticle(what)} in the street. With few soldiers about, their missile men aim at your people.`, 'bad', x, y);
+    }
+  }
+  return true;
 }
 
 function updateProjectiles(game) {
@@ -1176,6 +1322,7 @@ export function updateMilitary(game) {
   const romans = [];
   const enemies = []; // side 'enemy' on land: raiders and Caesar's men
   const hostiles = []; // everything on land soldiers and towers fight (hostileToRome)
+  const wild = []; // wolves, who move by their own rules (sim/wildlife.js)
   const fleet = []; // liburnians
   const pirates = []; // raider ships
   for (const u of game.units.values()) {
@@ -1185,6 +1332,7 @@ export function updateMilitary(game) {
     else if (u.side === 'rome') romans.push(u);
     else {
       if (u.side === 'enemy') enemies.push(u);
+      else if (u.type === 'wolf') wild.push(u);
       if (hostileToRome(u)) hostiles.push(u);
     }
   }
@@ -1218,6 +1366,7 @@ export function updateMilitary(game) {
     if (u.legion) updateLegionary(game, u, home);
     else updateRaider(game, u, home);
   }
+  if (wild.length) updateWolves(game, wild, home);
   if (fleet.length || pirates.length) updateNavy(game, fleet, pirates);
   updateTowers(game, hostiles.filter((e) => game.units.has(e.id)));
   updateProjectiles(game);
@@ -1285,6 +1434,7 @@ export function militaryMonthly(game) {
   for (const u of game.units.values()) if (u.side === 'rome') upkeep += UNIT_TYPES[u.type].upkeep;
   if (upkeep > 0) transact(game, 'military', -upkeep);
   m.lastUpkeep = upkeep;
+  revoltMonthly(game); // a gladiator revolt's end month (sim/revolt.js)
 
   if (!m.settings || m.nextRaidMonth === null) {
     // Raids switched off (only a debug flag can, mid-game): nothing is coming.
@@ -1323,13 +1473,15 @@ function raidWarning(game, left) {
     return;
   }
   if (!m.warned && left <= SCOUT_MONTHS) scoutRaid(game, left);
-  else if (m.warned && left <= 0) launchInvasion(game, m.warned.origin, m.warned.size, { sea: !!m.warned.sea });
+  else if (m.warned && left <= 0) launchInvasion(game, m.warned.origin, m.warned.size, { sea: !!m.warned.sea, people: m.warned.people });
   else if (m.warned && left <= DOOR_MONTHS && m.warnStage < 3) raidAtTheDoor(game);
   else if (!m.warned && left <= RUMOUR_MONTHS && m.warnStage < 1) {
     m.warnStage = 1;
     // Nothing is drawn yet (side, size and road are the scouts' to find), so
-    // the rumour gives only the time.
-    game.message(`Traders speak of a warband gathering beyond the frontier, about ${monthsAway(left)}. Scouts will learn its strength and its road nearer the time.`, 'warn', undefined, undefined, { empire: 'warband' });
+    // the rumour gives only the time, and who: the province's people are no secret.
+    const w = peopleWords(raidPeople(game, null));
+    const who = w.generic ? 'a warband' : `the ${w.many} gathering a warband`;
+    game.message(`Traders speak of ${who}${w.generic ? ' gathering' : ''} beyond the frontier, about ${monthsAway(left)}. Scouts will learn its strength and its road nearer the time.`, 'warn', undefined, undefined, { empire: 'warband' });
   }
 }
 
@@ -1350,16 +1502,18 @@ function monthsAway(n) {
 function scoutRaid(game, left) {
   const m = game.military;
   const sea = seaRaidPlan(game);
+  const people = raidPeople(game, null);
+  const many = peopleWords(people).many;
   if (sea) {
-    const size = raidSize(game);
+    const size = peopleSize(raidSize(game), people);
     const e = game.map.seaEntry;
     const when = left <= 0 ? 'any day now' : `in about ${left === 1 ? 'a month' : `${left} months`}`;
-    m.warned = { origin: { x: e.x, y: e.y }, size, dir: screenDirection(game.map, e.x, e.y), sea: true, landing: { x: sea.x, y: sea.y } };
-    game.message(`Scouts report about ${size} raiders taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} ${when}. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y, { empire: 'warband', kind: 'scouted' });
+    m.warned = { origin: { x: e.x, y: e.y }, size, dir: screenDirection(game.map, e.x, e.y), sea: true, landing: { x: sea.x, y: sea.y }, people: m.people };
+    game.message(`Scouts report about ${size} ${many} taking to their ships, by sea, from the ${m.warned.dir}. They will come ashore near ${sea.x}, ${sea.y} ${when}. Man the shore, and send the fleet if you have one!`, 'warn', sea.x, sea.y, { empire: 'warband', kind: 'scouted' });
   } else {
     const origin = pickRaidOrigin(game);
-    m.warned = { origin, size: raidSize(game), dir: screenDirection(game.map, origin.x, origin.y) };
-    game.message(`Scouts report a warband of about ${m.warned.size} raiders gathering to the ${m.warned.dir}, ${monthsAway(left)}. Train soldiers and man your towers!`, 'warn', origin.x, origin.y, { empire: 'warband', kind: 'scouted' });
+    m.warned = { origin, size: peopleSize(raidSize(game), people), dir: screenDirection(game.map, origin.x, origin.y), people: m.people };
+    game.message(`Scouts report a warband of about ${m.warned.size} ${many} gathering to the ${m.warned.dir}, ${monthsAway(left)}. Train soldiers and man your towers!`, 'warn', origin.x, origin.y, { empire: 'warband', kind: 'scouted' });
   }
   m.warnStage = 2;
   game.events.emit('sound', { name: 'horn' });
@@ -1378,29 +1532,89 @@ function raidAtTheDoor(game) {
   const m = game.military;
   const w = m.warned;
   m.warnStage = 3;
+  const many = peopleWords(peopleById(w.people || m.people)).many;
   if (!w.sea) {
-    game.message(`The warband of about ${w.size} raiders is a month away and will come in from the ${w.dir}. Man the walls and towers!`, 'warn', w.origin.x, w.origin.y);
+    game.message(`The warband of about ${w.size} ${many} is a month away and will come in from the ${w.dir}. Man the walls and towers!`, 'warn', w.origin.x, w.origin.y);
     return;
   }
   const landing = seaLandingNow(game);
   if (!landing) {
     w.noShore = true;
-    game.message(`Raider ships are a month off the coast, about ${w.size} raiders, but they can find no shore to land on. Expect them overland, from a side the scouts cannot yet tell.`, 'warn', undefined, undefined, { empire: 'warband' });
+    game.message(`Raider ships are a month off the coast, about ${w.size} ${many}, but they can find no shore to land on. Expect them overland, from a side the scouts cannot yet tell.`, 'warn', undefined, undefined, { empire: 'warband' });
     return;
   }
   const moved = !w.landing || w.landing.x !== landing.x || w.landing.y !== landing.y;
   w.landing = { x: landing.x, y: landing.y };
   delete w.noShore;
-  game.message(`Raider ships are a month off the coast: about ${w.size} raiders, making for the shore near ${landing.x}, ${landing.y}${moved ? ' (not where the scouts first thought)' : ''}. Man the shore and send out the fleet!`, 'warn', landing.x, landing.y);
+  game.message(`Raider ships are a month off the coast: about ${w.size} ${many}, making for the shore near ${landing.x}, ${landing.y}${moved ? ' (not where the scouts first thought)' : ''}. Man the shore and send out the fleet!`, 'warn', landing.x, landing.y);
 }
 
-/** One warrior of a warband, one roll: horsemen from 1,200 people, slingers from 700. */
-export function warbandType(game) {
-  const pop = game.city.population;
+/**
+ * One warrior of a warband, one roll. The generic band: horsemen from 1,200
+ * people, slingers from 700. A people with a mix (data/peoples.js): its own
+ * kinds in its own shares, whatever the city's size.
+ */
+export function warbandType(game, people = raidPeople(game)) {
   const roll = game.rng.next();
+  if (people.mix) {
+    let sum = 0;
+    for (const share of Object.values(people.mix)) sum += share;
+    let acc = 0;
+    for (const [type, share] of Object.entries(people.mix)) {
+      acc += share / sum;
+      if (roll < acc) return type;
+    }
+    return Object.keys(people.mix)[0];
+  }
+  const pop = game.city.population;
   if (pop >= 1200 && roll < 0.22) return 'horseman';
   if (pop >= 700 && roll > 0.8) return 'slinger';
   return 'raider';
+}
+
+/** Health x attack of one man, the yardstick of a warband's strength. */
+function manStrength(type) {
+  const d = UNIT_TYPES[type];
+  return d.hp * d.attack;
+}
+
+/** A people's average strength per man (the generic band: a raider's). */
+export function peopleStrength(people) {
+  if (!people.mix) return manStrength('raider');
+  let sum = 0;
+  let w = 0;
+  for (const [type, share] of Object.entries(people.mix)) { sum += manStrength(type) * share; w += share; }
+  return sum / w;
+}
+
+/**
+ * Men in a warband of a people, for `size` men of the generic band: as many
+ * as make the same strength (health x attack summed over the band). A people
+ * of fewer, harder men sends fewer of them; the generic band, `size` itself.
+ * At least 2: the generic band's smallest (3 raiders) weighs as much as 2
+ * Gauls, not 3.
+ */
+export function peopleSize(size, people) {
+  if (!people.mix) return size;
+  return Math.max(2, Math.round((size * peopleStrength(PEOPLES[GENERIC_PEOPLE])) / peopleStrength(people)));
+}
+
+/**
+ * Stamp a new raid with its people, and with what it makes for: the
+ * people's target, or for a people that picks its own prey ('random'), one
+ * of the four drawn now (on the game's stream; only such peoples draw).
+ */
+function stampRaid(game, inv, people) {
+  inv.people = Object.hasOwn(PEOPLES, people) ? people : GENERIC_PEOPLE;
+  const p = PEOPLES[inv.people];
+  inv.target = p.target === 'random' ? RANDOM_TARGETS[game.rng.int(RANDOM_TARGETS.length)] : p.target;
+}
+const RANDOM_TARGETS = ['food', 'homes', 'troops', 'stores'];
+
+/** Count a raid's warrior by kind (the Military advisor's record). */
+function countWarrior(m, type) {
+  const w = (m.stats.warriors ||= {});
+  w[type] = (w[type] || 0) + 1;
 }
 
 /**
@@ -1408,23 +1622,34 @@ export function warbandType(game) {
  * (raider ships from the sea entry, sim/navy.js), if the switch is still on
  * and a landing can still be found; else by land from a map edge (a sea
  * entry is no place to walk in from, so the edge is picked again).
+ * `people`: who it is (the scouts' report keeps it), else the province's.
+ * With no `size`, a warband of the people as strong as raidSize's generic one.
  */
-export function launchInvasion(game, origin, size, { sea = false } = {}) {
+export function launchInvasion(game, origin, size, { sea = false, people = null } = {}) {
   const m = game.military;
   const map = game.map;
+  const folkId = people || m.people || GENERIC_PEOPLE;
+  const folk = peopleById(folkId);
   if (sea && m.seaRaids) {
-    const inv = launchSeaInvasion(game, Math.max(1, size || raidSize(game)));
-    if (inv) return inv;
+    // (Its crews are rolled in sim/navy.js from the province's people.)
+    const inv = launchSeaInvasion(game, Math.max(1, size || peopleSize(raidSize(game), folk)));
+    if (inv) {
+      stampRaid(game, inv, folkId);
+      for (const u of game.units.values()) if (u.invasion === inv.id) for (const t of u.crew || []) countWarrior(m, t);
+      computeRaidField(game);
+      return inv;
+    }
   }
   if (!origin || sea) origin = pickRaidOrigin(game);
-  size = Math.max(1, size || raidSize(game));
+  size = Math.max(1, size || peopleSize(raidSize(game), folk));
   const inv = { id: m.nextInvasionId++, origin, size, killed: 0, buildingsLost: 0, startDay: game.time.totalDays, fleeing: false, reached: false };
+  stampRaid(game, inv, folkId);
   m.active = inv;
   m.warned = null;
   m.warnStage = 0; // (a raid from the console too: the next date is drawn when it ends, its warnings from nothing)
   m.stats.raids++;
   for (let k = 0; k < size; k++) {
-    const type = warbandType(game);
+    const type = warbandType(game, folk);
     // Scatter around the origin on land.
     let x = origin.x;
     let y = origin.y;
@@ -1434,9 +1659,10 @@ export function launchInvasion(game, origin, size, { sea = false } = {}) {
       if (map.inBounds(tx, ty) && passable(game, 'enemy', map.idx(tx, ty))) { x = tx; y = ty; break; }
     }
     spawnUnit(game, type, x + 0.5, y + 0.5, { invasion: inv.id, state: 'advance' });
+    countWarrior(m, type);
   }
   computeField(game);
-  game.message(`Raiders are attacking from the ${screenDirection(map, origin.x, origin.y)}! (${size} warriors)`, 'bad', origin.x, origin.y, { kind: 'raid' });
+  game.message(`${peopleWords(folk).Many} are attacking from the ${screenDirection(map, origin.x, origin.y)}! (${size} warriors)`, 'bad', origin.x, origin.y, { kind: 'raid' });
   game.events.emit('sound', { name: 'horn' });
   game.events.emit('invasion', inv);
   return inv;
@@ -1447,6 +1673,7 @@ export function militaryDaily(game) {
   const m = game.military;
   updateDemand(game);
   updateDrill(game); // new ships on their way to the Portus, or training there: called home by a raid (sim/training.js)
+  revoltDaily(game); // gladiators setting out during a revolt turn on the city (sim/revolt.js)
   const inv = m.active;
   if (inv) {
     // Alive: raiders ashore, and those still aboard their ships (a raid by
@@ -1465,13 +1692,17 @@ export function militaryDaily(game) {
     inv.campDays = ashore > 0 && camped === alive ? (inv.campDays || 0) + 1 : 0;
     // A raid by sea counts its days from the landing (sim/navy.js).
     const days = inv.sea ? seaRaidDays(game, inv) : game.time.totalDays - inv.startDay;
+    const people = raidPeople(game, inv);
+    const words = peopleWords(people);
     if (alive === 0) {
       endInvasion(game, inv);
     } else if (!inv.fleeing) {
-      if (inv.killed > 0 && alive <= Math.ceil(inv.size * 0.3)) {
+      // A warband breaks at its people's losses (data/peoples.js `breaks`:
+      // the generic band once 70% have fallen, a Gaulish mob sooner).
+      if (inv.killed > 0 && alive <= Math.ceil(inv.size * people.breaks)) {
         inv.fleeing = true;
         inv.repelled = true;
-        game.message(inv.sea && !inv.landed ? 'The raider ships are turning back! Your fleet has broken them at sea.' : 'The raiders are fleeing! Your soldiers have broken the warband.', 'good');
+        game.message(inv.sea && !inv.landed ? 'The raider ships are turning back! Your fleet has broken them at sea.' : `The ${words.many} are fleeing! Your soldiers have broken the warband.`, 'good');
       } else if (inv.sea && !inv.landed && game.time.totalDays - inv.startDay > CONFIG.SEA_SAIL_MAX_DAYS) {
         inv.fleeing = true; // they never got ashore: no plunder
         game.message('The raider ships found no way ashore and sail away.', 'info');
@@ -1482,8 +1713,8 @@ export function militaryDaily(game) {
         const loot = inv.reached ? Math.min(Math.max(0, Math.round(game.city.treasury * 0.15)), alive * 60) : 0;
         if (loot > 0) transact(game, 'plunder', -loot);
         inv.plundered = loot;
-        if (loot > 0) game.message(`The raiders withdraw with ${loot} Dn of plunder. Build forts and towers before they return.`, 'bad');
-        else game.message('The raiders give up and withdraw.', 'info');
+        if (loot > 0) game.message(`The ${words.many} withdraw with ${loot} Dn of plunder. Build forts and towers before they return.`, 'bad');
+        else game.message(`The ${words.many} give up and withdraw.`, 'info');
       }
     }
   }
@@ -1500,11 +1731,12 @@ export function militaryDaily(game) {
 function endInvasion(game, inv) {
   const m = game.military;
   const r = game.city.ratings;
-  if (inv.repelled || inv.killed >= inv.size * 0.7) {
+  const people = raidPeople(game, inv);
+  if (inv.repelled || inv.killed >= inv.size * (1 - people.breaks)) {
     m.stats.repelled++;
     r.peace = Math.min(100, r.peace + 8);
     r.favor = Math.min(100, r.favor + 3);
-    game.message(`The warband is gone: ${inv.killed} raiders slain. The province is safe for now.`, 'good');
+    game.message(`The warband is gone: ${inv.killed} ${peopleWords(people).many} slain. The province is safe for now.`, 'good');
     game.events.emit('sound', { name: 'fanfare' });
   } else if (inv.buildingsLost >= 5) {
     r.peace = Math.max(0, r.peace - 5);
@@ -1531,12 +1763,14 @@ export function threatSummary(game) {
   const enemies = enemyCount(game);
   const ships = raiderShipCount(game);
   const legion = legionCount(game); // Caesar's men (sim/legion.js)
-  const raiders = enemies - legion;
+  const rebels = m.revolt ? rebelCount(game) : 0; // gladiators in revolt (sim/revolt.js)
+  const raiders = enemies - legion - rebels;
   const caesar = legionSummary(game);
   // Caesar's legions on the road, as a second line to whatever else is going on.
   const marching = caesar.state === 'marching' ? `Caesar's legions (${caesar.size} men) arrive in ~${caesar.months} month${caesar.months === 1 ? '' : 's'}` : '';
   if (enemies > 0) {
-    const who = [legion ? `${legion} of Caesar's legionaries` : '', raiders ? `${raiders} raiders` : ''].filter(Boolean).join(' and ');
+    const many = m.active ? peopleWords(raidPeople(game)).many : 'raiders';
+    const who = [legion ? `${legion} of Caesar's legionaries` : '', raiders ? `${raiders} ${many}` : '', rebels ? `${rebels} gladiator${rebels === 1 ? '' : 's'} in revolt` : ''].filter(Boolean).join(' and ');
     return { level: 'attack', text: `${who} in the province${ships ? ` (${ships} raider ship${ships === 1 ? '' : 's'} offshore)` : ''}${marching ? `. ${marching}` : ''}`, enemies, ships, legion, label: `⚔ ${enemies}` };
   }
   const months = Math.max(0, (m.nextRaidMonth ?? 0) - game.time.totalMonths);
@@ -1544,7 +1778,7 @@ export function threatSummary(game) {
   if (m.warned) {
     // Raider ships that found no shore a month out (raidAtTheDoor) come overland, from a side not known yet.
     const from = m.warned.noShore ? 'overland (their ships found no shore)' : `${m.warned.sea ? 'by sea ' : ''}from the ${m.warned.dir}`;
-    return { level: 'warned', text: `About ${m.warned.size} raiders expected ${from} in ~${inMonths}${marching ? `. ${marching}` : ''}`, enemies: 0, sea: !!m.warned.sea, label: '⚠ Raid' };
+    return { level: 'warned', text: `About ${m.warned.size} ${peopleWords(peopleById(m.warned.people || m.people)).many} expected ${from} in ~${inMonths}${marching ? `. ${marching}` : ''}`, enemies: 0, sea: !!m.warned.sea, label: '⚠ Raid' };
   }
   if (m.warnStage > 0 && !m.active) {
     // Only the traders' word so far (militaryMonthly): no side or size yet.

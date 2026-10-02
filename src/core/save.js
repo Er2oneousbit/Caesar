@@ -9,8 +9,15 @@
  *     meta:   { city, scenarioId, date, population, treasury, difficulty, savedAt },
  *     scenario (sandbox: in full; campaign: { id }), flags, difficulty,
  *     rng, time, seed, map (base64 layers), buildings[], walkers[], fires[],
- *     ruins[], units[], military, wallHp[], city, messages[], nextIds, camera
+ *     ruins[], units[], military, wildlife, wallHp[], city, messages[], nextIds, camera
  *   }
+ *
+ * Raiders' peoples and wolves (data/peoples.js, sim/wildlife.js) need no
+ * upgrade step: `military.people` missing is the scenario's people from
+ * then on, and a raid such a save had scouted or under way is marked the
+ * generic band it was (core/game.js); a save without `wildlife` has no
+ * packs. Wolves
+ * are units like any other (type 'wolf', side 'wild', with `pack`).
  *
  * Version history:
  *   1  first release
@@ -185,6 +192,7 @@ import { isStable, stableRoom } from '../sim/storage.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
+import { emptyWildlife } from '../sim/wildlife.js';
 import { log } from './debug.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
@@ -356,6 +364,7 @@ export function serializeGame(game, extra = {}) {
     ruins: serializeRuins(game),
     units,
     military: game.military,
+    wildlife: game.wildlife,
     wallHp: [...game.wallHp],
     city: game.city,
     messages: game.messages.slice(0, 60),
@@ -414,6 +423,8 @@ export function deserializeGame(data, flags = {}) {
   };
   // Military state: Game fills in a fresh one if a save lacks it.
   if (data.military && typeof data.military === 'object') restore.military = data.military;
+  // Wolf packs (sim/wildlife.js): a save from before them has none, never new ones.
+  restore.wildlife = data.wildlife && typeof data.wildlife === 'object' && Array.isArray(data.wildlife.packs) ? data.wildlife : emptyWildlife();
   const game = new Game({ scenario, flags: { ...data.flags, ...flags }, restore });
   if (data.cheats) Object.assign(game.cheats, data.cheats);
 

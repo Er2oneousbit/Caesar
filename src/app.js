@@ -248,6 +248,11 @@ export class App {
       rank: opts.rank,
       site: opts.site,
     });
+    // The setup's raiders and wolves (data/peoples.js, sim/wildlife.js), kept
+    // with the scenario, which a sandbox save stores whole. Left out, the
+    // sandbox plays as before them: the generic band, no wolves.
+    if (opts.raiders === 'site') scenario.raiders = 'site';
+    if (opts.wolves) scenario.wolves = true;
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
     farmSeasonNotice(this.game, true); // Insane: the city is founded in winter, when nothing grows

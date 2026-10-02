@@ -31,6 +31,10 @@
  *                    (December to Februarius): 2 = half as many visits (sim/trade.js)
  *   loanInterest     what a loan from Rome costs, over its whole term (0.2: 20%;
  *                    sim/loans.js)
+ *   wolfBite         a wolf's bite against a walker's 20 health (sim/wildlife.js;
+ *                    in points, not a multiplier): a walker dies in 5 bites on
+ *                    Easy, 4 on Normal, 3 on Hard and Insane (the original's
+ *                    4, 6, 8 and 8)
  *   legionHalt,      favor bands for Caesar's legions on the map (sim/legion.js,
  *   legionHome       in points, not multipliers): at legionHome or more they
  *                    march home, at legionHalt or more (in the siege's first
@@ -80,6 +84,7 @@ export const DIFFICULTY = Object.freeze({
     loanInterest: 0.1,
     legionHalt: 17, legionHome: 22,
     winterTrade: 1,
+    wolfBite: 4,
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -94,6 +99,7 @@ export const DIFFICULTY = Object.freeze({
     loanInterest: 0.2,
     legionHalt: 18, legionHome: 24,
     winterTrade: 1,
+    wolfBite: 6,
   }),
   hard: Object.freeze({
     name: 'Hard',
@@ -108,6 +114,7 @@ export const DIFFICULTY = Object.freeze({
     loanInterest: 0.3,
     legionHalt: 20, legionHome: 27,
     winterTrade: 1,
+    wolfBite: 8,
   }),
   insane: Object.freeze({
     name: 'Insane',
@@ -124,6 +131,7 @@ export const DIFFICULTY = Object.freeze({
     loanInterest: 0.4,
     legionHalt: 22, legionHome: 30,
     winterTrade: 2, // winter roads and seas halve trade
+    wolfBite: 8,
   }),
 });
 

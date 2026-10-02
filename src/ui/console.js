@@ -16,6 +16,9 @@ import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed, isStable, stableRoom } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
+import { PEOPLES } from '../data/peoples.js';
+import { addPackAt, packSummary } from '../sim/wildlife.js';
+import { startRevolt } from '../sim/revolt.js';
 import { squadronCounts, shipStatus } from '../sim/navy.js';
 import { startMarch, launchLegion, legionCount, siegeOrder } from '../sim/legion.js';
 import { requestTroops, fightBattle, archesToBuild } from '../sim/battle.js';
@@ -55,8 +58,10 @@ export const CONSOLE_HELP = [
   ['cloth', 'Build the cloth industry beside the city: a Linarium, a Textrinum, a Taberna Vestiaria and a Horreum'],
   ['navy', 'Build a naval station and a navalia on the shore, stocked for a squadron of liburnians (river/coast maps)'],
   ['academy', 'Build a Campus (military academy) near the city, and a Portus by the first Statio if there is one (they train only at full staff)'],
-  ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
+  ['invade [n] [people]', 'Launch a raid of n warriors right now (default: normal size), of the province\'s people or of one named: gauls, boii, ligurians, carthaginians, lusitanians, cimbri, barbarians...'],
   ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
+  ['wolves [here]', 'List the wolf packs; "here" sets a new pack down near the middle of the view'],
+  ['revolt', 'The gladiators revolt now, for 3 months (needs a working gladiator school)'],
   ['legion', 'Caesar\'s legions set out from Rome now (they arrive in 12 months)'],
   ['legion now [n]', 'Caesar\'s legions (n men; default: the next attack\'s size) arrive at the map entrance now'],
   ['battle [city] [n]', `Caesar calls for troops now: city ${Object.keys(THREATENED_CITIES).join(' | ')}, enemy strength n`],
@@ -325,13 +330,36 @@ export class DebugConsole {
       case 'searaid': {
         need();
         if (g.military.active) return 'A raid is already under way.';
-        const n = args[0] ? Math.max(1, Math.min(60, Number(args[0]) || 0)) : 0;
+        // A people may come first or second ("invade gauls", "invade 12 gauls").
+        const folk = args.find((a) => Object.hasOwn(PEOPLES, a)) || null;
+        const num = args.find((a) => /^\d+$/.test(a));
+        const n = num ? Math.max(1, Math.min(60, Number(num) || 0)) : 0;
         const sea = cmd.toLowerCase() === 'searaid';
         if (sea && !g.military.seaRaids) return 'Sea raids are off in this city (Settings).';
-        const inv = launchInvasion(g, null, n || undefined, { sea });
+        const inv = launchInvasion(g, null, n || undefined, { sea, people: folk });
         app.renderer.camera.centerOnTile(inv.origin.x, inv.origin.y);
         if (sea && !inv.sea) return `No landing could be found, so a raid of ${inv.size} came by land from ${inv.origin.x},${inv.origin.y}.`;
-        return inv.sea ? `Raid of ${inv.size} by sea in ${inv.ships} ship${inv.ships === 1 ? '' : 's'}, landing at ${inv.origin.x},${inv.origin.y}.` : `Raid of ${inv.size} launched from ${inv.origin.x},${inv.origin.y}.`;
+        const who = PEOPLES[inv.people]?.mix ? ` ${PEOPLES[inv.people].name}` : '';
+        return inv.sea ? `Raid of ${inv.size}${who} by sea in ${inv.ships} ship${inv.ships === 1 ? '' : 's'}, landing at ${inv.origin.x},${inv.origin.y}.` : `Raid of ${inv.size}${who} launched from ${inv.origin.x},${inv.origin.y}.`;
+      }
+      case 'wolves': {
+        // Wolf packs (sim/wildlife.js): list them, or set one down here.
+        need();
+        if (args[0] === 'here') {
+          const cam = app.renderer.camera;
+          const c = cam.screenToTile(cam.viewW / cam.dpr / 2, cam.viewH / cam.dpr / 2);
+          const pack = addPackAt(g, c.x, c.y);
+          return pack ? `A pack of ${pack.size} wolves near ${pack.spot.x},${pack.spot.y}.` : 'No open land near the middle of the view for a pack.';
+        }
+        const wl = g.wildlife;
+        if (!wl || !wl.packs.length) return wl && wl.nextPackId > 1 ? 'Every pack has been cleared.' : 'No wolves in this province. "wolves here" sets a pack down.';
+        return [...wl.packs.map((p) => `Pack ${p.id}: ${packSummary(g, p)} (den ${p.den.x},${p.den.y})`),
+          `Killed ${wl.stats.wolvesKilled} wolves; wolves have killed ${wl.stats.walkersKilled} people.`].join('\n');
+      }
+      case 'revolt': {
+        need();
+        if (!startRevolt(g)) return 'No revolt: one is on already, or no gladiator school is working (staffed, with a road).';
+        return `The gladiators revolt until month ${g.military.revolt.endMonth}: ${g.military.revolt.turned} turned at once.`;
       }
       case 'legion': {
         // Caesar's legions (sim/legion.js): set them marching, or bring them now.

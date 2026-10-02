@@ -5,8 +5,10 @@
  *
  *   wallSpec()        cached sprite for a wall or gate tile (connects to
  *                     neighboring walls, gates and watchtowers)
- *   drawUnit()        soldiers and raiders, drawn live every frame like walkers
- *                     (ships of war: shipArt.js)
+ *   drawUnit()        soldiers, raiders of every people (data/peoples.js: from
+ *                     swordsmen and axemen to war chariots and elephants),
+ *                     gladiators in revolt and wolves, drawn live every frame
+ *                     like walkers (ships of war: shipArt.js)
  *   drawProjectile()  arrows, sling stones and raider ships' fire pots in flight
  *   drawRallyFlag()   the standard planted where a fort's troops are deployed
  *
@@ -152,9 +154,13 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
     ctx.strokeStyle = 'rgba(255,230,120,0.9)';
     ctx.lineWidth = 1.2 * k;
     ctx.beginPath();
-    ctx.ellipse(sx, sy, 7 * k, 3 * k, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, (u.type === 'elephant' || u.type === 'chariot' ? 11 : 7) * k, 3 * k, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
+  // Beasts and cars have shapes of their own.
+  if (u.type === 'wolf') { drawWolf(ctx, u, sx, sy, k, face, stride, striking, tick); return; }
+  if (u.type === 'elephant') { drawElephant(ctx, u, def, sx, sy, k, face, stride, striking, tick); return; }
+  if (u.type === 'chariot') { drawChariot(ctx, u, def, sx, sy, k, face, stride, striking, tick); return; }
   // shadow (tinted red under raiders so they read as hostile at a glance)
   ctx.fillStyle = enemy ? 'rgba(120,0,0,0.35)' : 'rgba(0,0,0,0.25)';
   ctx.beginPath();
@@ -195,6 +201,32 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
   ctx.lineTo(sx - 3.3 * k, bottom);
   ctx.closePath();
   ctx.fill();
+  // Bare-chested fighters: the axeman under a fur over one shoulder, the
+  // gladiator with a broad belt and an arm guard. (The tunic shows below as a kilt.)
+  if (u.type === 'axeman' || u.type === 'gladiator') {
+    ctx.fillStyle = skin;
+    ctx.fillRect(sx - 2.5 * k, top, 5 * k, 4.6 * k);
+    if (u.type === 'axeman') {
+      ctx.fillStyle = '#6a5440';
+      ctx.beginPath();
+      ctx.moveTo(sx - face * 2.6 * k, top);
+      ctx.lineTo(sx + face * 0.6 * k, top);
+      ctx.lineTo(sx - face * 2.6 * k, top + 4.6 * k);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#c9a24a';
+      ctx.fillRect(sx - 2.7 * k, top + 4.2 * k, 5.4 * k, 1.2 * k);
+      ctx.fillStyle = '#b8bec6';
+      ctx.fillRect(sx + face * 2.4 * k - 0.7 * k, top + 0.6 * k, 1.4 * k, 3.4 * k);
+    }
+  }
+  // A hoplite's bronze greaves.
+  if (u.type === 'hoplite') {
+    ctx.fillStyle = '#b8873a';
+    ctx.fillRect(sx - 1.8 * k, sy - 4 * k, 1.3 * k, 3 * k);
+    ctx.fillRect(sx + 0.5 * k, sy - 4 * k, 1.3 * k, 3 * k);
+  }
   // Caesar's own legionaries (sim/legion.js) are Romans too: armor and helmet, not a barbarian's hair.
   const imperial = u.type === 'imperial';
   if (u.type === 'legionary' || u.type === 'cavalry' || imperial) {
@@ -204,8 +236,10 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
     ctx.fillStyle = 'rgba(40,40,50,0.4)';
     ctx.fillRect(sx - 2.5 * k, top + 2.2 * k, 5 * k, 0.6 * k);
   }
-  if (enemy && !def.mounted && !imperial) {
-    // checked trousers
+  // Checked trousers: the northern peoples (not the Greek-armed, the
+  // Numidians or a gladiator).
+  const helmeted = u.type === 'hoplite' || u.type === 'gladiator';
+  if (enemy && !def.mounted && !imperial && !helmeted && u.type !== 'javelineer') {
     ctx.fillStyle = 'rgba(40,60,90,0.35)';
     ctx.fillRect(sx - 3 * k, bottom - 2 * k, 6 * k, 2 * k);
   }
@@ -216,7 +250,37 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
   ctx.beginPath();
   ctx.arc(sx, hy, 2.4 * k, 0, Math.PI * 2);
   ctx.fill();
-  if (enemy && !imperial) {
+  if (u.type === 'hoplite') {
+    // A bronze helmet with cheek guards and a tall crest across it.
+    ctx.fillStyle = '#b8873a';
+    ctx.beginPath();
+    ctx.arc(sx, hy - 0.3 * k, 2.8 * k, Math.PI * 0.85, Math.PI * 2.15);
+    ctx.fill();
+    ctx.fillRect(sx - face * 0.6 * k - 1 * k, hy - 0.3 * k, 2 * k, 2.6 * k);
+    ctx.fillStyle = '#2a2420';
+    ctx.beginPath();
+    ctx.ellipse(sx - face * 0.4 * k, hy - 4.2 * k, 3.6 * k, 1.4 * k, 0, Math.PI, 0);
+    ctx.fill();
+  } else if (u.type === 'gladiator') {
+    // A broad-brimmed helmet with a grille over the face and a crest.
+    ctx.fillStyle = '#a9afb8';
+    ctx.beginPath();
+    ctx.arc(sx, hy - 0.2 * k, 2.9 * k, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(sx - 3.8 * k, hy - 0.4 * k, 7.6 * k, 0.9 * k);
+    ctx.fillStyle = 'rgba(30,30,36,0.75)';
+    ctx.fillRect(sx + face * 0.5 * k - 1.1 * k, hy + 0.5 * k, 2.2 * k, 1.8 * k);
+    ctx.fillStyle = '#b8322a';
+    ctx.fillRect(sx - 0.7 * k, hy - 5.4 * k, 1.4 * k, 2.6 * k);
+  } else if (u.type === 'javelineer') {
+    // Close dark curls under a headband.
+    ctx.fillStyle = '#2a201a';
+    ctx.beginPath();
+    ctx.arc(sx, hy - 0.7 * k, 2.6 * k, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#e8dcc0';
+    ctx.fillRect(sx - 2.6 * k, hy - 1 * k, 5.2 * k, 0.7 * k);
+  } else if (enemy && !imperial) {
     // wild hair and a beard
     ctx.fillStyle = BARB_HAIR[u.id % BARB_HAIR.length];
     ctx.beginPath();
@@ -224,6 +288,14 @@ export function drawUnit(ctx, u, sx, sy, k, t, tick, highlight = false, stride =
     ctx.fill();
     ctx.fillRect(sx - face * 3 * k - 0.8 * k, hy - 1 * k, 1.6 * k, 4.5 * k);
     ctx.fillRect(sx + face * 0.4 * k - 1.2 * k, hy + 1 * k, 2.4 * k, 1.6 * k);
+    if (u.type === 'swordsman') {
+      // A Celtic iron cap with a knob on top, over the hair.
+      ctx.fillStyle = '#8f969e';
+      ctx.beginPath();
+      ctx.arc(sx, hy - 1 * k, 2.6 * k, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(sx - 0.6 * k, hy - 4.6 * k, 1.2 * k, 1.2 * k);
+    }
   } else if (u.type === 'archer') {
     ctx.fillStyle = '#7a5a3a'; // leather cap
     ctx.beginPath();
@@ -341,9 +413,294 @@ function drawWeapon(ctx, u, def, sx, top, k, face, striking, t) {
       ctx.stroke();
       break;
     }
+    case 'swordsman': {
+      // A tall narrow oval shield with a spine and boss, and a long sword.
+      const shx = sx + face * 2.4 * k;
+      ctx.fillStyle = '#4f7a52';
+      ctx.beginPath();
+      ctx.ellipse(shx, top + 4 * k, 1.9 * k, 5 * k, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#2f4a32';
+      ctx.lineWidth = 0.6 * k;
+      ctx.beginPath(); ctx.moveTo(shx, top - 0.6 * k); ctx.lineTo(shx, top + 8.6 * k); ctx.stroke();
+      ctx.fillStyle = '#b9bec4';
+      ctx.beginPath(); ctx.arc(shx, top + 4 * k, 0.8 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c9ced6';
+      ctx.lineWidth = 1 * k;
+      ctx.beginPath();
+      ctx.moveTo(sx - face * 1.5 * k, hy + 1 * k);
+      if (striking) ctx.lineTo(sx + face * 8 * k, hy + 0.5 * k);
+      else ctx.lineTo(sx - face * 2.5 * k, hy - 7 * k);
+      ctx.stroke();
+      break;
+    }
+    case 'axeman': {
+      // A long-hafted axe in both hands: over the head, then down.
+      const ax = striking ? sx + face * 6 * k : sx - face * 1 * k;
+      const ay = striking ? hy + 1 * k : hy - 9 * k;
+      ctx.strokeStyle = '#5a3c22';
+      ctx.lineWidth = 1.1 * k;
+      ctx.beginPath(); ctx.moveTo(sx + face * 0.5 * k, hy + 2 * k); ctx.lineTo(ax, ay); ctx.stroke();
+      ctx.fillStyle = '#9aa1aa';
+      ctx.beginPath();
+      ctx.moveTo(ax, ay - 1.8 * k);
+      ctx.lineTo(ax + face * 2.6 * k, ay - 2.6 * k);
+      ctx.lineTo(ax + face * 2.6 * k, ay + 2.6 * k);
+      ctx.lineTo(ax, ay + 1.8 * k);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'javelineer': {
+      // A small round shield and a few javelins; one thrown forward when striking.
+      ctx.fillStyle = '#9a7a4a';
+      ctx.beginPath(); ctx.arc(sx - face * 2.4 * k, top + 3.5 * k, 2.2 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7a5a34';
+      ctx.lineWidth = 0.6 * k;
+      ctx.beginPath();
+      for (const d of [-0.8, 0, 0.8]) {
+        ctx.moveTo(hx + d * k, hy + 3 * k);
+        ctx.lineTo(hx + (d + face * 1.5) * k, hy - 8 * k);
+      }
+      ctx.stroke();
+      if (striking) {
+        ctx.beginPath(); ctx.moveTo(hx, hy - 2 * k); ctx.lineTo(hx + face * 9 * k, hy - 4 * k); ctx.stroke();
+      }
+      break;
+    }
+    case 'hoplite': {
+      // A great round bronze shield in front and a long spear, overhand when striking.
+      ctx.strokeStyle = '#6b4a2a';
+      ctx.lineWidth = 0.9 * k;
+      ctx.beginPath();
+      if (striking) { ctx.moveTo(sx - face * 5 * k, hy - 1 * k); ctx.lineTo(sx + face * 11 * k, hy + 1.5 * k); }
+      else { ctx.moveTo(hx, hy + 5 * k); ctx.lineTo(hx + face * 1 * k, hy - 13 * k); }
+      ctx.stroke();
+      ctx.fillStyle = '#c4923e';
+      ctx.beginPath(); ctx.arc(sx + face * 2.2 * k, top + 4 * k, 4 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#8a6224';
+      ctx.lineWidth = 0.7 * k;
+      ctx.beginPath(); ctx.arc(sx + face * 2.2 * k, top + 4 * k, 3.3 * k, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#3a2a1e'; // the shield's painted device
+      ctx.beginPath(); ctx.arc(sx + face * 2.2 * k, top + 4 * k, 1.1 * k, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'gladiator': {
+      // A short curved shield and a gladius.
+      ctx.fillStyle = '#8a2a24';
+      ctx.fillRect(sx + face * 1.8 * k - (face < 0 ? 3 * k : 0), top + 0.5 * k, 3 * k, 7 * k);
+      ctx.strokeStyle = '#d6ab3c';
+      ctx.lineWidth = 0.5 * k;
+      ctx.strokeRect(sx + face * 1.8 * k - (face < 0 ? 3 * k : 0), top + 0.5 * k, 3 * k, 7 * k);
+      ctx.strokeStyle = '#d0d5dc';
+      ctx.lineWidth = 1 * k;
+      ctx.beginPath();
+      ctx.moveTo(sx - face * 1.5 * k, hy + 2 * k);
+      ctx.lineTo(sx - face * 1.5 * k + face * (striking ? 9 : 3) * k, hy + (striking ? 1 : -3) * k);
+      ctx.stroke();
+      break;
+    }
     default:
       break;
   }
+}
+
+/**
+ * A grey wolf, side on: a low body, four legs at a trot, the tail out
+ * behind and the head forward, lowered and jaws open when it bites.
+ */
+function drawWolf(ctx, u, sx, sy, k, face, stride, striking, tick) {
+  const fur = u.id % 3 === 0 ? '#8a8172' : u.id % 3 === 1 ? '#6f685d' : '#7d7568';
+  const phase = u.moving ? Math.sin(stride * HOOF_RAD * 1.4 + u.id) : 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, 5 * k, 1.6 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // legs
+  ctx.strokeStyle = shade(fur, -0.3);
+  ctx.lineWidth = 1 * k;
+  ctx.beginPath();
+  for (const [lx, sw] of [[-2.8, 1], [-1.8, -1], [2, -1], [3, 1]]) {
+    ctx.moveTo(sx + face * lx * k, sy - 3.6 * k);
+    ctx.lineTo(sx + face * (lx + phase * sw * 1.1) * k, sy);
+  }
+  ctx.stroke();
+  // tail
+  ctx.strokeStyle = fur;
+  ctx.lineWidth = 1.4 * k;
+  ctx.beginPath();
+  ctx.moveTo(sx - face * 3.8 * k, sy - 4.6 * k);
+  ctx.quadraticCurveTo(sx - face * 6.4 * k, sy - 4.4 * k, sx - face * 6.6 * k, sy - 2.2 * k);
+  ctx.stroke();
+  // body, with a paler belly
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - 4.6 * k, 4.4 * k, 1.9 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = shade(fur, 0.25);
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - 3.7 * k, 3 * k, 0.8 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // head: neck, skull, snout, ears
+  const low = striking ? 1.6 : 0;
+  const hx = sx + face * 4.6 * k;
+  const hy = sy - (6.4 - low) * k;
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(hx, hy, 1.7 * k, 1.4 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(hx + face * 0.8 * k, hy - 0.6 * k);
+  ctx.lineTo(hx + face * 3.4 * k, hy + 0.2 * k);
+  ctx.lineTo(hx + face * 0.8 * k, hy + 1 * k);
+  ctx.closePath();
+  ctx.fill();
+  if (striking) {
+    ctx.strokeStyle = '#a8322b';
+    ctx.lineWidth = 0.6 * k;
+    ctx.beginPath(); ctx.moveTo(hx + face * 1 * k, hy + 0.6 * k); ctx.lineTo(hx + face * 3.2 * k, hy + 1.4 * k); ctx.stroke();
+  }
+  ctx.fillStyle = shade(fur, -0.25);
+  ctx.beginPath();
+  ctx.moveTo(hx - face * 0.6 * k, hy - 1 * k);
+  ctx.lineTo(hx - face * 0.1 * k, hy - 2.8 * k);
+  ctx.lineTo(hx + face * 0.5 * k, hy - 1.1 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#e8d070';
+  ctx.fillRect(hx + face * 0.7 * k - 0.3 * k, hy - 0.5 * k, 0.6 * k, 0.5 * k);
+  if (u.hp < u.maxHp) drawHealth(ctx, u, sx, sy - 11 * k, k, tick);
+}
+
+/**
+ * A war elephant: a grey hulk on four pillar legs, trunk and tusks forward,
+ * a wooden tower on its back with a spearman in it. Drawn about twice a
+ * man's size, so it reads at a glance among the warband.
+ */
+function drawElephant(ctx, u, def, sx, sy, k, face, stride, striking, tick) {
+  const hide = def.color;
+  const phase = u.moving ? Math.sin(stride * STEP_RAD * 0.7 + u.id) : 0;
+  ctx.fillStyle = 'rgba(120,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, 10 * k, 3 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // legs: far pair darker, then near pair
+  for (const [lx, sw, dark] of [[-4.6, -1, 0.3], [3.6, 1, 0.3], [-3.2, 1, 0.12], [5, -1, 0.12]]) {
+    ctx.fillStyle = shade(hide, -dark);
+    ctx.fillRect(sx + face * (lx + phase * sw * 0.8) * k - 1.3 * k, sy - 7 * k, 2.6 * k, 7 * k);
+  }
+  // body
+  ctx.fillStyle = hide;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - 10 * k, 8.4 * k, 5.4 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // head, ear, trunk (swung forward when it strikes) and a tusk
+  const hx = sx + face * 7.4 * k;
+  const hy = sy - 12.6 * k;
+  ctx.beginPath();
+  ctx.arc(hx, hy, 3.6 * k, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = shade(hide, -0.15);
+  ctx.beginPath();
+  ctx.ellipse(hx - face * 1.6 * k, hy + 0.4 * k, 2 * k, 3 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = hide;
+  ctx.lineWidth = 2 * k;
+  ctx.beginPath();
+  ctx.moveTo(hx + face * 2.6 * k, hy + 1 * k);
+  if (striking) ctx.quadraticCurveTo(hx + face * 7 * k, hy - 1 * k, hx + face * 7.6 * k, hy - 5 * k);
+  else ctx.quadraticCurveTo(hx + face * 4.6 * k, hy + 6 * k, hx + face * 3.4 * k, sy - 1.5 * k);
+  ctx.stroke();
+  ctx.strokeStyle = '#f2ece0';
+  ctx.lineWidth = 0.9 * k;
+  ctx.beginPath();
+  ctx.moveTo(hx + face * 2 * k, hy + 2 * k);
+  ctx.quadraticCurveTo(hx + face * 4.6 * k, hy + 3 * k, hx + face * 5.4 * k, hy + 0.8 * k);
+  ctx.stroke();
+  ctx.fillStyle = '#1a1612';
+  ctx.fillRect(hx + face * 1.2 * k - 0.4 * k, hy - 1.2 * k, 0.8 * k, 0.8 * k);
+  // the tower, a red cloth under it, and its spearman
+  ctx.fillStyle = '#9a2a24';
+  ctx.fillRect(sx - 5 * k, sy - 15.4 * k, 9 * k, 3 * k);
+  ctx.fillStyle = '#8a6a3a';
+  ctx.fillRect(sx - 4 * k, sy - 20.5 * k, 7 * k, 5.4 * k);
+  ctx.strokeStyle = '#5a4426';
+  ctx.lineWidth = 0.6 * k;
+  ctx.strokeRect(sx - 4 * k, sy - 20.5 * k, 7 * k, 5.4 * k);
+  ctx.fillStyle = SKIN[u.id % SKIN.length];
+  ctx.beginPath(); ctx.arc(sx - 0.5 * k, sy - 22.4 * k, 1.8 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#b8873a';
+  ctx.beginPath(); ctx.arc(sx - 0.5 * k, sy - 22.8 * k, 1.9 * k, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = '#6b4a2a';
+  ctx.lineWidth = 0.8 * k;
+  ctx.beginPath();
+  ctx.moveTo(sx + face * 1 * k, sy - 19 * k);
+  ctx.lineTo(sx + face * (striking ? 9 : 2.5) * k, sy - (striking ? 18 : 28) * k);
+  ctx.stroke();
+  if (u.hp < u.maxHp) drawHealth(ctx, u, sx, sy - 27 * k, k, tick);
+}
+
+/**
+ * A war chariot: two ponies yoked to a light car on a big spoked wheel, a
+ * driver at the reins and a spearman behind him.
+ */
+function drawChariot(ctx, u, def, sx, sy, k, face, stride, striking, tick) {
+  const phase = u.moving ? Math.sin(stride * HOOF_RAD + u.id) : 0;
+  ctx.fillStyle = 'rgba(120,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, 10 * k, 2.4 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // the far pony a little behind the near one
+  horse(ctx, sx + face * 5.6 * k, sy - 0.8 * k, k * 0.8, '#5a4030', face, -phase, '#1a120c');
+  horse(ctx, sx + face * 4.4 * k, sy, k * 0.85, '#7a5436', face, phase, '#2a1a10');
+  // pole from the car to the yoke
+  ctx.strokeStyle = '#5a3c22';
+  ctx.lineWidth = 0.8 * k;
+  ctx.beginPath(); ctx.moveTo(sx - face * 2 * k, sy - 4 * k); ctx.lineTo(sx + face * 8 * k, sy - 9 * k); ctx.stroke();
+  // the car: a wicker box over the axle
+  const cx = sx - face * 5 * k;
+  ctx.fillStyle = '#9a7a44';
+  ctx.fillRect(cx - 3.4 * k, sy - 7.6 * k, 6.8 * k, 4 * k);
+  ctx.strokeStyle = '#6a5228';
+  ctx.lineWidth = 0.5 * k;
+  ctx.strokeRect(cx - 3.4 * k, sy - 7.6 * k, 6.8 * k, 4 * k);
+  // the wheel, its spokes turning with the ground covered
+  const wr = 3.2 * k;
+  const wy = sy - wr;
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 0.9 * k;
+  ctx.beginPath(); ctx.arc(cx, wy, wr, 0, Math.PI * 2); ctx.stroke();
+  const a0 = -face * stride * 1.3;
+  ctx.lineWidth = 0.5 * k;
+  ctx.beginPath();
+  for (let s = 0; s < 4; s++) {
+    const a = a0 + (s * Math.PI) / 4;
+    ctx.moveTo(cx - Math.cos(a) * wr, wy - Math.sin(a) * wr);
+    ctx.lineTo(cx + Math.cos(a) * wr, wy + Math.sin(a) * wr);
+  }
+  ctx.stroke();
+  // crew: the driver forward, the spearman behind
+  for (const [dx, spear] of [[1.4, false], [-1.6, true]]) {
+    const x = cx + face * dx * k;
+    ctx.fillStyle = def.color;
+    ctx.fillRect(x - 1.4 * k, sy - 12.6 * k, 2.8 * k, 5.4 * k);
+    ctx.fillStyle = SKIN[(u.id + (spear ? 1 : 0)) % SKIN.length];
+    ctx.beginPath(); ctx.arc(x, sy - 14.2 * k, 1.7 * k, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = BARB_HAIR[(u.id + (spear ? 2 : 0)) % BARB_HAIR.length];
+    ctx.beginPath(); ctx.arc(x, sy - 14.8 * k, 1.9 * k, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = spear ? '#6b4a2a' : '#3a2a1a';
+    ctx.lineWidth = (spear ? 0.8 : 0.4) * k;
+    ctx.beginPath();
+    if (spear) {
+      ctx.moveTo(x, sy - 11 * k);
+      ctx.lineTo(x + face * (striking ? 12 : 2) * k, sy - (striking ? 11 : 21) * k);
+    } else {
+      ctx.moveTo(x + face * 1 * k, sy - 10 * k);
+      ctx.lineTo(sx + face * 9 * k, sy - 10.5 * k); // the reins
+    }
+    ctx.stroke();
+  }
+  if (u.hp < u.maxHp) drawHealth(ctx, u, sx, sy - 22 * k, k, tick);
 }
 
 /** Health bar over a wounded unit; flashes white for a moment after a hit. */

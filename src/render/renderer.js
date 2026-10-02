@@ -1205,7 +1205,7 @@ export class Renderer {
           L.glow(sx + 3 * k, sy - (ship ? 22 : 11) * k, 3.5 * k, 0.8 * lamps);
         } else if (it.kind === K_UNIT) {
           const u = it.u;
-          if (u.side === 'enemy' ? u.id % 2 : u.id % 4) continue;
+          if (u.side === 'wild' || (u.side === 'enemy' ? u.id % 2 : u.id % 4)) continue; // (wolves carry no torch)
           const sx = (it.wx - cam.x) * k;
           const sy = (it.wy - cam.y) * k;
           const f = flick(u.id);

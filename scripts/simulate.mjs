@@ -59,6 +59,7 @@ import { CONFIG } from '../src/config.js';
 import { goalStatus } from '../src/sim/ratings.js';
 import { setTradeMode } from '../src/sim/trade.js';
 import { spareBoat, hasBoatTimber } from '../src/sim/fishing.js';
+import { PEOPLES } from '../src/data/peoples.js';
 
 const HELP = `
 Headless balance simulation
@@ -105,6 +106,11 @@ Options:
                     money and favor reported are the city's own)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --sea-raids <s>   on | off: the Sea raids switch (default on: some raids come by sea where ships can sail)
+  --people <p>      who raids: site (the province's own people) or a people of src/data/peoples.js
+                    (gauls, boii, ligurians, carthaginians, lusitanians, cimbri...). Default: a
+                    mission's own people, the sandbox's generic band
+  --wolves [on|off] wolf packs on the map (default: a mission's own, none in the sandbox).
+                    Reports the packs, wolves killed and walkers lost to them
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
   --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
   --legion <m>      Caesar's legions arrive at the start of month m (the size of a first attack, or
@@ -119,7 +125,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0 };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0, people: null, wolves: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -145,6 +151,8 @@ function parse(argv) {
     else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--sea-raids') o.seaRaids = next();
+    else if (a === '--people') o.people = next();
+    else if (a === '--wolves') o.wolves = /^(on|off)$/.test(argv[i + 1] || '') ? next() : 'on';
     else if (a === '--navy') o.navy = true;
     else if (a === '--salary') o.salary = true;
     else if (a === '--academy') o.academy = true;
@@ -206,7 +214,8 @@ if (!scenario) { console.error(`Unknown scenario ${opts.scenario}`); process.exi
 const SIM_MONEY = 20000 * Math.max(1, opts.blocks + opts.villas);
 if (opts.seaRaids !== null && !['on', 'off'].includes(opts.seaRaids)) { console.error(`--sea-raids takes on or off
 ${HELP}`); process.exit(2); }
-const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids } });
+if (opts.people !== null && opts.people !== 'site' && !PEOPLES[opts.people]) { console.error(`--people takes site or one of ${Object.keys(PEOPLES).join(', ')}\n${HELP}`); process.exit(2); }
+const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids, people: opts.people, wolves: opts.wolves } });
 // The governor's salary (sim/governor.js) is his own, not the city's: it goes
 // into savings he can give back (donations) or spend on gifts. Unless asked,
 // the demo governor draws none and Rome judges none (he is a Citizen, whose
@@ -401,6 +410,22 @@ console.log(`\nSimulated ${opts.years} years in ${Date.now() - t0} ms. Fires ${c
 console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math.floor(c.ratings.prosperity)} peace ${Math.floor(c.ratings.peace)} favor ${Math.floor(c.ratings.favor)}`);
 const ms = game.military.stats;
 console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}${ms.raids || ms.prefectsLost ? `, prefects lost ${ms.prefectsLost || 0}` : ''}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
+{
+  // A people's raids (data/peoples.js): who, what came, and the city's people they struck down.
+  const people = PEOPLES[game.military.people];
+  if (people && people.mix) {
+    const came = Object.entries(ms.warriors || {}).map(([t, n]) => `${t} ${n}`).join(', ') || 'none yet';
+    console.log(`Raiders: ${people.name} (${people.target}, break at ${Math.round((1 - people.breaks) * 100)}% lost); warriors came: ${came}; walkers struck down ${ms.walkersKilled || 0}`);
+  }
+}
+{
+  // Wolf packs (sim/wildlife.js): only on a map that had any.
+  const wl = game.wildlife;
+  if (wl && wl.nextPackId > 1) {
+    const left = [...game.units.values()].filter((u) => u.type === 'wolf').length;
+    console.log(`Wolves: packs ${wl.nextPackId - 1} (${wl.packs.length} left, ${wl.stats.packsCleared} cleared), wolves now ${left}, killed ${wl.stats.wolvesKilled}, walkers killed by wolves ${wl.stats.walkersKilled}`);
+  }
+}
 if (ms.seaRaids || opts.navy) console.log(`Sea: raids by sea ${ms.seaRaids || 0}, raider ships sunk ${ms.shipsSunk || 0}, liburnians built ${ms.shipsBuilt || 0}, lost ${ms.shipsLost || 0}, afloat ${[...game.units.values()].filter((u) => u.type === 'liburnian').length}, fishing boats sunk ${ms.boatsSunk || 0}`);
 if (opts.legion) {
   const cs = game.military.caesar;

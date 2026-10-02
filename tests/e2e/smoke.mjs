@@ -881,7 +881,7 @@ try {
     const b = [...window.colonia.game.buildings.values()].find((x) => x.def.kind === 'residence');
     return b ? { type: b.type, x: b.x, y: b.y } : null;
   });
-  check('the Governor\'s House is in the build menu and can be placed with no road', govListed && govTool === 'governor_house' && govPlaced && govPlaced.x === govAt.x && govPlaced.y === govAt.y && errors.length === 0, JSON.stringify({ govListed, govTool, govAt, govPlaced }));
+  check('the Governor\'s House is in the build menu and can be placed', govListed && govTool === 'governor_house' && govPlaced && govPlaced.x === govAt.x && govPlaced.y === govAt.y && errors.length === 0, JSON.stringify({ govListed, govTool, govAt, govPlaced }));
   // Its panel's title: the Latin name with the English after it.
   const govHead = await page.evaluate(() => {
     const app = window.colonia;

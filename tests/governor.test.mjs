@@ -23,6 +23,7 @@ import { checkBuilding } from '../src/sim/construction.js';
 import { updateDesirability } from '../src/sim/desirability.js';
 import { pickRiotTarget, riotRank } from '../src/sim/crime.js';
 import { ledgerNet } from '../src/sim/economy.js';
+import { updateLabor } from '../src/sim/labor.js';
 import {
   newGovernorState, salaryOf, rankForYearPay, salaryFavor, setSalary, paySalary, salaryNewYear,
   salaryOutlook, donate, residenceOf, storeCampaignSavings, campaignSavings, salaryAtVictory, salaryMonthsSoFar, savingsRecord,
@@ -358,11 +359,13 @@ test('savings carry from mission to mission (worked example 5); replaying a miss
 // The residence
 // ---------------------------------------------------------------------------
 
-test('residences: house 3x3, villa 4x4, palace 5x5 at the original\'s prices and desirability; no workers, no road', () => {
-  const want = { governor_house: [3, 150, [12, 2, -2, 3]], governor_villa: [4, 400, [20, 2, -3, 4]], governor_palace: [5, 750, [28, 2, -4, 5]] };
-  for (const [k, [size, cost, des]] of Object.entries(want)) {
+test('residences: house 3x3, villa 4x4, palace 5x5 at the original\'s prices and desirability; 4, 8 and 12 servants, and a road', () => {
+  // The servants are Colonia's own (the original's residences had no
+  // workers): an unstaffed residence adds no desirability (next tests).
+  const want = { governor_house: [3, 150, [12, 2, -2, 3], 4], governor_villa: [4, 400, [20, 2, -3, 4], 8], governor_palace: [5, 750, [28, 2, -4, 5], 12] };
+  for (const [k, [size, cost, des, workers]] of Object.entries(want)) {
     const d = BUILDINGS[k];
-    assert.deepEqual([d.size, d.cost, d.des, d.workers, d.needsRoad, d.kind, d.category], [size, cost, des, 0, false, 'residence', 'government']);
+    assert.deepEqual([d.size, d.cost, d.des, d.workers, d.labor, d.needsRoad, d.kind, d.category], [size, cost, des, workers, 'govReligion', true, 'residence', 'government']);
     assert.ok(d.fire > 0 && d.damage > 0, 'none is fire-proof');
   }
   assert.equal(BUILDINGS.governor_house.name, 'Praetorium');
@@ -402,10 +405,42 @@ test('residences: desirability by the spec\'s rings', () => {
   const before = (dx) => game.map.desirability[(spot.y + 6) * game.map.w + spot.x + dx];
   updateDesirability(game);
   const base = [4, 3, 2, 1, 0].map((d) => before(d));
-  addBuilding(game, 'governor_palace', spot.x + 5, spot.y + 4);
+  const palace = addBuilding(game, 'governor_palace', spot.x + 5, spot.y + 4);
+  palace.efficiency = 1;
   updateDesirability(game);
-  // West of the palace: rings 1 to 5 get 28, 28, 24, 24, 20.
+  // West of the palace, fully staffed: rings 1 to 5 get 28, 28, 24, 24, 20.
   assert.deepEqual([4, 3, 2, 1, 0].map((d, k) => before(d) - base[k]), [28, 28, 24, 24, 20]);
+  // Half its servants: half of each ring; none: nothing (a shuttered house).
+  palace.efficiency = 0.5;
+  updateDesirability(game);
+  assert.deepEqual([4, 3, 2, 1, 0].map((d, k) => before(d) - base[k]), [14, 14, 12, 12, 10]);
+  palace.efficiency = 0;
+  updateDesirability(game);
+  assert.deepEqual([4, 3, 2, 1, 0].map((d, k) => before(d) - base[k]), [0, 0, 0, 0, 0]);
+});
+
+test('residences: a change in the servants works the desirability out again; other buildings do not ask for it', () => {
+  // Desirability is otherwise worked out again only when the map changes,
+  // so a residence that gained its staff would have stayed shuttered.
+  const game = newGame({ size: 64, seed: 'residence-staff' });
+  const spot = findFree(game, 6, 6);
+  const house = addBuilding(game, 'governor_house', spot.x + 1, spot.y + 1);
+  house.accessRoad = 0;
+  house.laborAccess = 99;
+  house.efficiency = 0;
+  // Plebeian homes to work there (a third of their people look for work).
+  for (let k = 0; k < 4; k++) addBuilding(game, 'house', spot.x + k, spot.y + 5, 1).house.pop = 20;
+  game.dirty.des = false;
+  updateLabor(game);
+  assert.ok(house.workers > 0, `staffed: ${house.workers}`);
+  assert.equal(game.dirty.des, true, 'staffing marks desirability');
+  game.dirty.des = false;
+  updateLabor(game);
+  assert.equal(game.dirty.des, false, 'no change, no new pass');
+  house.laborAccess = 0;
+  updateLabor(game);
+  assert.equal(house.efficiency, 0);
+  assert.equal(game.dirty.des, true, 'losing them marks it too');
 });
 
 test('residences: rioters go for the governor\'s residence before anything else', () => {

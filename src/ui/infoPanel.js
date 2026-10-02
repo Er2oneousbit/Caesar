@@ -687,7 +687,7 @@ export class InfoPanel {
           kv('Desirability', `+${v} fading over ${r} tiles`),
           kv('Governor', rankLine(g)),
           kv('Personal savings', `${fmt(g.city.governor.savings)} Dn`),
-          h('div', { class: 'muted' }, 'Only one residence may stand at a time. Rioters within 40 tiles go for it before anything else. Your salary and gifts are in the Imperial advisor.')));
+          h('div', { class: 'muted' }, 'Its desirability follows its servants: unstaffed, it adds nothing. Only one residence may stand at a time. Rioters within 40 tiles go for it before anything else. Your salary and gifts are in the Imperial advisor.')));
         break;
       }
       default:

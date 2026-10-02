@@ -36,6 +36,7 @@ export function updateLabor(game) {
     if (b.laborAccess > 0) b.laborAccess--;
     const roadOk = !def.needsRoad || b.accessRoad >= 0;
     if (!roadOk || b.laborAccess <= 0) {
+      if (def.kind === 'residence' && b.efficiency !== 0) game.dirty.des = true; // see below
       b.workers = 0;
       b.efficiency = 0;
       continue;
@@ -80,7 +81,13 @@ export function updateLabor(game) {
       if (left <= 0) break;
       if (b.workers < b.def.workers) { b.workers++; left--; }
     }
-    for (const b of e.list) b.efficiency = b.workers / b.def.workers;
+    for (const b of e.list) {
+      const was = b.efficiency;
+      b.efficiency = b.workers / b.def.workers;
+      // A residence's desirability follows its staff (sim/desirability.js);
+      // the layer is otherwise worked out again only when the map changes.
+      if (b.def.kind === 'residence' && b.efficiency !== was) game.dirty.des = true;
+    }
     const catEmployed = e.list.reduce((s, b) => s + b.workers, 0);
     employed += catEmployed;
     c.laborByCat[cat] = { demand: e.demand, employed: catEmployed, buildings: e.list.length };

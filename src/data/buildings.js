@@ -329,20 +329,24 @@ export const BUILDINGS = Object.freeze({
   // what rioters (and Caesar's legions) go for first. The original's costs
   // and desirability; no workers, no road. Stone and well kept, so slower to
   // burn or crack than a temple, but not immune as statues are.
+  // The residences need servants (Colonia's own: the original's needed no
+  // workers): unstaffed, a residence is a shuttered house and adds nothing to
+  // the land around it (sim/desirability.js), so it needs a road like any
+  // building with workers.
   governor_house: B({
-    name: 'Praetorium', en: 'Governor\'s House', category: 'government', kind: 'residence', cost: 150, size: 3, needsRoad: false,
+    name: 'Praetorium', en: 'Governor\'s House', category: 'government', kind: 'residence', cost: 150, size: 3, workers: 4, labor: 'govReligion',
     des: [12, 2, -2, 3], fire: 0.5, damage: 0.5,
-    desc: 'Your own home in the province. Raises desirability nearby. Only one residence may stand at a time.',
+    desc: 'Your own home in the province, kept by 4 servants. Raises desirability nearby, as far as it is staffed. Only one residence may stand at a time.',
   }),
   governor_villa: B({
-    name: 'Praetorium Maius', en: 'Governor\'s Villa', category: 'government', kind: 'residence', cost: 400, size: 4, needsRoad: false,
+    name: 'Praetorium Maius', en: 'Governor\'s Villa', category: 'government', kind: 'residence', cost: 400, size: 4, workers: 8, labor: 'govReligion',
     des: [20, 2, -3, 4], fire: 0.5, damage: 0.5,
-    desc: 'A villa befitting a governor, with a colonnaded garden. Raises desirability over a wide area. Only one residence may stand at a time.',
+    desc: 'A villa befitting a governor, with a colonnaded garden, kept by 8 servants. Raises desirability over a wide area, as far as it is staffed. Only one residence may stand at a time.',
   }),
   governor_palace: B({
-    name: 'Regia', en: 'Governor\'s Palace', category: 'government', kind: 'residence', cost: 750, size: 5, needsRoad: false,
+    name: 'Regia', en: 'Governor\'s Palace', category: 'government', kind: 'residence', cost: 750, size: 5, workers: 12, labor: 'govReligion',
     des: [28, 2, -4, 5], fire: 0.5, damage: 0.5,
-    desc: 'A marble palace, among the most desirable buildings in the province. Only one residence may stand at a time.',
+    desc: 'A marble palace kept by 12 servants, among the most desirable buildings in the province as far as it is staffed. Only one residence may stand at a time.',
   }),
   garden: B({
     name: 'Viridarium', en: 'Garden', category: 'government', kind: 'decor', cost: 12, size: 1, needsRoad: false,

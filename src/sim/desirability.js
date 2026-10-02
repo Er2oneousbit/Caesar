@@ -16,10 +16,10 @@ import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain } from '../world/map.js';
 
-/** Add one source's contribution to the desirability layer. */
-function radiate(map, x, y, size, des) {
+/** Add one source's contribution to the desirability layer, times `scale` (0..1). */
+function radiate(map, x, y, size, des, scale = 1) {
   const [value, step, stepSize, range] = des;
-  if (!value || range <= 0) return;
+  if (!value || range <= 0 || scale <= 0) return;
   const x0 = Math.max(0, x - range);
   const y0 = Math.max(0, y - range);
   const x1 = Math.min(map.w - 1, x + size - 1 + range);
@@ -32,12 +32,22 @@ function radiate(map, x, y, size, des) {
       if (d === 0 || d > range) continue;
       let v = value + Math.floor((d - 1) / Math.max(1, step)) * stepSize;
       if ((value > 0 && v < 0) || (value < 0 && v > 0)) v = 0;
-      map.desirability[ty * map.w + tx] += v;
+      map.desirability[ty * map.w + tx] += scale === 1 ? v : Math.round(v * scale);
     }
   }
 }
 
 const PLAZA_DES = [4, 1, -1, 3];
+
+/**
+ * How much of its desirability a building gives: all of it, except a
+ * governor's residence, which gives it as far as it is staffed (an empty
+ * residence is a shuttered house). Labor marks desirability for a new pass
+ * when a residence's staffing changes (sim/labor.js).
+ */
+export function desScale(b) {
+  return b.def.kind === 'residence' ? b.efficiency : 1;
+}
 const RUBBLE_DES = [-2, 1, 1, 1];
 
 export function updateDesirability(game) {
@@ -62,7 +72,7 @@ export function updateDesirability(game) {
   }
   for (const b of game.buildings.values()) {
     const src = b.house ? HOUSE_TIERS[b.house.tier].desOut : b.def.des;
-    radiate(map, b.x, b.y, b.size, src);
+    radiate(map, b.x, b.y, b.size, src, desScale(b));
   }
   for (let i = 0; i < map.size; i++) {
     if (des[i] < CONFIG.DES_MIN) des[i] = CONFIG.DES_MIN;

@@ -16,6 +16,11 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.15.3)
+
+* **The governor's residence needs servants** (Colonia's own; the original's needed no workers): the Praetorium 4, the Praetorium Maius 8 and the Regia 12, Government labor like the Forum, so it needs a road like any building with workers. It gives its desirability only as far as it is staffed: an unstaffed residence is a shuttered house that adds nothing. Its staffing changing works the desirability out again at once (it is otherwise worked out only when the map changes)
+* 551 unit tests
+
 ## Done (v0.15.2)
 
 * **Lighter snowfall**: about a quarter fewer flakes (one per 4,000 px of screen at full snow, from 3,000) and a little see-through, so falling snow no longer reads as a blizzard over the city. The snow on the ground is unchanged

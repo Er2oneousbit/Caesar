@@ -149,8 +149,10 @@ test('unlocks: the academy with the first forts, the Portus with the fleet, larg
   const firstFort = SCENARIOS.findIndex((s) => ['fort_legion', 'fort_archer', 'fort_cavalry'].some((k) => has(s, k)));
   const firstAcademy = SCENARIOS.findIndex((s) => has(s, 'military_academy'));
   assert.equal(firstAcademy, firstFort, 'from the first mission that has forts');
-  assert.equal(SCENARIOS[firstAcademy].id, 'c4');
+  assert.equal(SCENARIOS[firstAcademy].id, 'c3m', 'Firmum, the military province of step 3, a step sooner than mission 4');
   for (const s of SCENARIOS) {
+    const forts = ['fort_legion', 'fort_archer', 'fort_cavalry'].some((k) => has(s, k));
+    assert.equal(has(s, 'military_academy'), forts, `${s.id}: the Campus wherever there are forts, and only there`);
     assert.equal(has(s, 'portus'), has(s, 'navalia'), `${s.id}: the Portus wherever the Navalia is`);
     for (const k of LARGE_TEMPLE_KEYS) assert.equal(has(s, k), !['c1', 'c2'].includes(s.id), `${s.id}: ${k}`);
   }

@@ -373,13 +373,17 @@ test('uber: settlers with a long walk ride in faster, with a pack mule', () => {
   }
 });
 
-test('raids leave time to build: no first raid inside 3 years on Normal, sandbox or campaign', () => {
+test('raids leave time to build: no first raid inside 3 years on Normal, sandbox or campaign (2 in a province chosen for war)', () => {
   const firsts = [
     ...Object.entries(INVASION_PRESETS).filter(([, p]) => p).map(([k, p]) => [k, p.first]),
-    ...SCENARIOS.filter((s) => s.military).map((s) => [s.id, s.military.first]),
+    ...SCENARIOS.filter((s) => s.military && s.id !== 'c3m').map((s) => [s.id, s.military.first]),
   ];
   assert.ok(firsts.length >= 6);
   for (const [name, first] of firsts) assert.ok(first >= 36, `${name}: first raid after ${first} months`);
+  // Firmum alone, the military province picked over Figlina at step 3, comes
+  // sooner, but not inside 2 years: time for an iron mine, a weaponsmith, a
+  // barracks and a fort.
+  assert.equal(findScenario('c3m').military.first, 24);
   assert.equal(INVASION_PRESETS.occasional.first, 96, 'occasional: 8 years (was 5: the owner still had barely a city)');
   assert.equal(INVASION_PRESETS.frequent.first, 60, 'frequent: 5 years (was 3)');
   // The sandbox default (occasional) on Normal: no warning before year 8 (7 years 9 months).

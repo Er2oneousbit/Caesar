@@ -365,13 +365,16 @@ test('guard: the Emperor asks for flax, linen or clothing only while a building 
 
 test('unlocks: the chain comes with mission 4\'s industry; every mission whose homes reach the Insula can clothe them', () => {
   const has = (s) => CLOTH.every((k) => unlockedBuildings(s).has(k));
-  assert.deepEqual(SCENARIOS.map(has), [false, false, false, true, true, true, true]);
+  // By id: Firmum (step 3) has mission 3's industry, the peaceful siblings mission 4's and 5's.
+  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, has(s)])),
+    { c1: false, c2: false, c3: false, c3m: false, c4: true, c4p: true, c5: true, c5p: true, c6: true, c7: true });
   for (const s of SCENARIOS) {
     const { top } = topLevels(s);
     if (top >= INSULA) assert.ok(goodsAvailable(s).all.has('clothing'), `${s.id}: homes reach level ${top}, and clothing can be had`);
   }
   // The ladder through the campaign is as before: mission 4 still reaches Villas.
-  assert.deepEqual(SCENARIOS.map((s) => topLevels(s).top), [4, 7, 9, 13, 19, 19, 20]);
+  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, topLevels(s).top])),
+    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c7: 20 });
   // Without the chain and with no partner selling linen or clothing, mission 4's homes would stop at Tenements.
   const c4 = findScenario('c4');
   const bare = { ...c4, unlocks: c4.unlocks.filter((k) => !CLOTH.includes(k)) };

@@ -322,9 +322,10 @@ export class App {
     const best = this.progress.best || (this.progress.best = {});
     const rank = (k) => DIFFICULTY_ORDER.indexOf(k);
     if (rank(this.game.difficultyKey) > rank(best[id] ?? '')) best[id] = this.game.difficultyKey;
-    // The governor's savings go with him to the next mission (sim/governor.js).
-    // Each mission keeps what it was started with, so replaying it later
-    // starts from the same savings, as the original's career did.
+    // The governor's savings go with him to the next step, stored for both
+    // of its missions where the campaign branches (sim/governor.js). Each
+    // mission keeps what it was started with, so replaying it later starts
+    // from the same savings, as the original's career did.
     storeCampaignSavings(savingsRecord(this.progress), id, this.game.city.governor.savings);
     writeJson(`${CONFIG.STORAGE_PREFIX}progress`, this.progress);
     this.sfx.play('victory');

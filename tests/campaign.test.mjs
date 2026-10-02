@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
-import { SCENARIOS, findScenario } from '../src/data/scenarios.js';
+import { SCENARIOS, findScenario, LAST_STEP, missionsAtStep } from '../src/data/scenarios.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { goalMonths, populationMonths, monthsToMinutes } from '../src/sim/pace.js';
 import { unlockedBuildings, topLevels, bestEntertainment, planCity, jobsFor, employmentCeiling, employsEnough, landCeiling, landOf, peoplePerTile, lowProduction, LEAN, SENSIBLE } from '../src/sim/capacity.js';
@@ -55,16 +55,22 @@ function bestProsperity(s) {
 
 // ---------------------------------------------------------------------------
 
-test('each mission keeps to its planned pace, and the missions get longer', () => {
-  let prev = 0;
+test('each mission keeps to its planned pace, and the missions get longer step by step', () => {
   const rows = [];
   for (const s of SCENARIOS) {
     assert.ok(s.paceYears > 0, `${s.id} has a planned pace`);
     const floor = goalMonths(s.goals).fastest / 12;
     rows.push(`${s.id} ${floor.toFixed(2)} years (${Math.round(monthsToMinutes(floor * 12))} min at 1x)`);
     assert.ok(Math.abs(floor - s.paceYears) <= s.paceYears * 0.05, `${s.id}: the goals take ${floor.toFixed(2)} years at the fastest, planned ${s.paceYears}`);
-    assert.ok(s.paceYears >= prev, `${s.id} is no shorter than the mission before it`);
-    prev = s.paceYears;
+  }
+  // By step: a mission is no shorter than the SHORTEST mission of the step
+  // before. Not the longest: the old missions 3 to 5 ask for more people
+  // than their jobs allow, so they run long, and a sibling that fits its
+  // jobs cannot match them (Paestum 3.75 years against Figlina's 3.6 and
+  // Pons Aelius's 5.7).
+  for (let n = 2; n <= LAST_STEP; n++) {
+    const before = Math.min(...missionsAtStep(n - 1).map((s) => s.paceYears));
+    for (const s of missionsAtStep(n)) assert.ok(s.paceYears >= before, `${s.id} (${s.paceYears} years) is no shorter than the shortest mission of step ${n - 1} (${before})`);
   }
   // The first mission a year or more (it took months), the last well over ten.
   assert.ok(SCENARIOS[0].paceYears >= 1, rows.join('; '));
@@ -75,8 +81,10 @@ test('each mission\'s goals are within reach of its buildings', () => {
   // The housing ladder through the campaign: Huts, Townhouses, Domus (the
   // amphitheater: a theater alone gives at most 16 entertainment, a Domus
   // needs 20), Villas, then Grand Palatia in missions 5 and 6 and every level
-  // in mission 7, whose hippodrome the Imperial Palatium (95) needs.
-  assert.deepEqual(SCENARIOS.map(topLevel), [4, 7, 9, 13, 19, 19, 20]);
+  // in mission 7, whose hippodrome the Imperial Palatium (95) needs. Siblings
+  // reach the same level as the mission beside them.
+  assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, topLevel(s)])),
+    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c7: 20 });
   for (const s of SCENARIOS) {
     const g = s.goals;
     const keys = unlockedBuildings(s);

@@ -33,7 +33,7 @@
 import { RANKS, TOP_RANK, SANDBOX_RANK, clampRank } from '../data/ranks.js';
 import { transact } from './economy.js';
 import { withArticle } from './risk.js';
-import { SCENARIOS } from '../data/scenarios.js';
+import { findScenario, nextMissions, siblingOf } from '../data/scenarios.js';
 
 /** The governor's state for a new game (city.governor). */
 export function newGovernorState(scenario, savings = 0) {
@@ -176,21 +176,30 @@ export function donate(game, amount) {
 /**
  * The campaign's record of savings (the app keeps it in its progress, with
  * the missions won): `record[id]` is what mission `id` starts with. Winning a
- * mission stores the governor's savings for the next one, so replaying a
- * mission later starts from what it started with the last time it was
- * reached. The last mission has no next one: nothing is stored.
+ * mission stores the governor's savings for every mission of the next step
+ * (both siblings where the campaign branches), as the original kept one
+ * figure per rank that both of its provinces read. So replaying a mission
+ * later starts from what its step was last entered with. The last mission
+ * has no next one: nothing is stored.
+ * @returns {string[]} the ids written (none after the last step)
  */
 export function storeCampaignSavings(record, missionId, savings) {
-  const k = SCENARIOS.findIndex((s) => s.id === missionId);
-  const next = k >= 0 ? SCENARIOS[k + 1] : null;
-  if (next) record[next.id] = Math.max(0, Math.floor(savings));
-  return next ? next.id : null;
+  const next = nextMissions(missionId).map((s) => s.id);
+  for (const id of next) record[id] = Math.max(0, Math.floor(savings));
+  return next;
 }
 
-/** The savings a mission starts with: 0 for the first, the sandbox, or a mission never reached. */
+/**
+ * The savings a mission starts with: 0 for the first, the sandbox, or a
+ * mission never reached. A mission with no entry of its own reads its
+ * sibling's: a record from before the campaign branched holds c4 but not
+ * Paestum beside it, and the same step means the same figure.
+ */
 export function campaignSavings(record, missionId) {
-  const v = record ? record[missionId] : 0;
-  return SCENARIOS.some((s) => s.id === missionId) && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+  if (!record || !findScenario(missionId)) return 0;
+  const sibling = siblingOf(missionId);
+  const v = record[missionId] === undefined && sibling ? record[sibling.id] : record[missionId];
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
 }
 
 /** The governor's residence standing in the city, or null. */

@@ -1591,6 +1591,47 @@ try {
   check('in-game briefing shows the difficulty being played', inGame);
   await page.click('.modal button:has-text("Close")');
 
+  // 6b2. Campaign branches: winning mission 2 offers step 3's two provinces
+  //      as two cards side by side; a card's Start opens its briefing, whose
+  //      Back returns to the choice, and Begin starts that province. The
+  //      campaign list then shows step 3's siblings side by side.
+  {
+    await page.evaluate(() => { const app = window.colonia; app.newScenario('c2'); app.onVictory(); });
+    await page.click('.modal button.choose-post');
+    const cards = await page.$$eval('.modal .post-card', (els) => els.map((e) => {
+      const r = e.getBoundingClientRect();
+      return { id: e.dataset.id, track: e.querySelector('.track')?.textContent, x: Math.round(r.left), y: Math.round(r.top), start: !!e.querySelector('button.post-start'), text: e.textContent };
+    }));
+    const sideBySide = cards.length === 2 && cards[0].y === cards[1].y && cards[0].x < cards[1].x;
+    check('victory at step 2 offers two provinces as cards side by side: Figlina (Peaceful) and Firmum (Military), each with Start',
+      sideBySide && cards[0].id === 'c3' && cards[0].track === 'Peaceful' && cards[1].id === 'c3m' && cards[1].track === 'Military' && cards.every((c) => c.start) && /First raid after about 2 years/.test(cards[1].text),
+      JSON.stringify(cards.map(({ text, ...c }) => c)));
+    await page.click('.modal .post-card[data-id="c3m"] button.post-start');
+    const brief = await page.textContent('.modal .modal-head h2');
+    // Escape must not drop the player into the city with no way back to the choice.
+    await page.keyboard.press('Escape');
+    const afterEsc = await page.evaluate(() => document.querySelector('.modal .modal-head h2')?.textContent || null);
+    if (afterEsc) await page.click('.modal .modal-foot button:has-text("Back")');
+    else { await page.evaluate(() => window.colonia.onVictory()); await page.click('.modal button.choose-post'); } // carry on after the failure
+    const backTo = await page.$$eval('.modal .post-card', (els) => els.map((e) => e.dataset.id));
+    check('a card opens its province\'s briefing, Escape keeps it open, and Back returns to the choice', /Firmum/.test(brief) && afterEsc === brief && backTo.join() === 'c3,c3m', JSON.stringify({ brief, afterEsc, backTo }));
+    await page.click('.modal .post-card[data-id="c3m"] button.post-start');
+    await page.click('.modal button:has-text("Begin")');
+    await page.waitForFunction(() => window.colonia.game && window.colonia.game.scenario.id === 'c3m', null, { timeout: 15000 });
+    const firmum = await page.evaluate(() => { const g = window.colonia.game; return { rank: g.city.governor.rank, raid: g.military.nextRaidMonth, done: window.colonia.progress.completed }; });
+    check('Begin starts Firmum at the Engineer\'s rank, raids due within two years', firmum.rank === 2 && firmum.raid >= 18 && firmum.raid <= 24 && firmum.done.includes('c2'), JSON.stringify(firmum));
+    await page.evaluate(() => window.colonia.toMainMenu());
+    await page.waitForSelector('.menu-card');
+    await page.click('.menu-card button:has-text("Campaign")');
+    const step3 = await page.$$eval('.scenario-step', (rows) => rows.map((r) => [...r.querySelectorAll('button.scenario')].map((b) => {
+      const box = b.getBoundingClientRect();
+      return { id: b.dataset.id, locked: b.classList.contains('locked'), y: Math.round(box.top) };
+    }))[2]);
+    check('the campaign list shows step 3\'s two provinces side by side, both open after mission 2',
+      step3?.length === 2 && step3[0].id === 'c3' && step3[1].id === 'c3m' && step3[0].y === step3[1].y && !step3[0].locked && !step3[1].locked, JSON.stringify(step3));
+    await page.click('.modal button:has-text("Back")');
+  }
+
   // 6c. Where autoplay is allowed the menu music starts with no gate at all.
   {
     const b2 = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });

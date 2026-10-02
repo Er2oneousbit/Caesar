@@ -63,7 +63,7 @@ Headless balance simulation
   node scripts/simulate.mjs [options]
 
 Options:
-  --scenario <id>   campaign scenario id (c1..c7) instead of a sandbox map
+  --scenario <id>   campaign scenario id (c1..c7, c3m, c4p, c5p) instead of a sandbox map
   --unlocks         build only what the mission unlocks (campaign runs build everything without it)
   --homes <n>       at most n housing plots, to size the town to its jobs (default: the whole site)
   --type <t>        sandbox landscape: river | coast | lakes | plains | desert (default river)

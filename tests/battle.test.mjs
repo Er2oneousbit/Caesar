@@ -16,6 +16,7 @@ import { CONFIG } from '../src/config.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { BUILDINGS } from '../src/data/buildings.js';
 import { SCENARIOS } from '../src/data/scenarios.js';
+import { unlockedBuildings } from '../src/sim/capacity.js';
 import { THREATENED_CITIES, THREATENED_IDS, marchLine, marchMonths, enemyWords } from '../src/data/battles.js';
 import { isLand } from '../src/data/empireGeo.js';
 import { addBuilding, removeBuilding } from '../src/sim/entities.js';
@@ -81,10 +82,11 @@ test('threatened cities: on land, their ways over land or sea, a few months\' ma
   assert.equal(enemyWords(16), 'a small army');
   assert.equal(enemyWords(28), 'a large army');
   assert.equal(enemyWords(52), 'a mighty host');
-  // From mission 4, which has forts; every city named exists.
+  // In every mission with forts (Firmum at step 3, the military and single
+  // missions from step 4), never in a peaceful province; every city named exists.
   for (const s of SCENARIOS) {
-    const n = Number(s.id.slice(1));
-    assert.equal(!!s.distantBattles, n >= 4, `${s.id}`);
+    const forts = [...unlockedBuildings(s)].some((k) => BUILDINGS[k].kind === 'fort');
+    assert.equal(!!s.distantBattles, forts, `${s.id}`);
     for (const e of s.distantBattles || []) assert.ok(THREATENED_CITIES[e.city] && e.enemy > 0 && e.year >= 1);
   }
 });

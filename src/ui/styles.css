@@ -446,9 +446,28 @@ input[type="range"] { width: 100%; accent-color: var(--bronze); }
 }
 .scenario:hover { border-color: var(--bronze); }
 .scenario.locked { opacity: 0.5; cursor: not-allowed; }
-.scenario .n { font-family: var(--font-title); font-weight: 700; font-size: 18px; width: 28px; color: var(--bronze); }
-.scenario .t { flex: 1; }
+/* One row per campaign step: its number, then its mission or both siblings side by side. */
+.scenario-step { display: flex; gap: 8px; align-items: center; }
+.scenario-step .n { flex: none; font-family: var(--font-title); font-weight: 700; font-size: 18px; width: 28px; text-align: center; color: var(--bronze); }
+.step-missions { flex: 1; min-width: 0; display: flex; gap: 6px; }
+.step-missions .scenario { flex: 1 1 0; min-width: 0; align-self: stretch; }
+.scenario .t { flex: 1; min-width: 0; }
 .scenario .t b { display: block; }
+/* A province's track at a step with two: in the campaign list and on the choice cards. */
+.track { display: inline-block; font-size: 11px; padding: 0 7px; margin: 2px 0; border-radius: 999px; border: 1px solid var(--good); color: var(--good); }
+.track.military { border-color: var(--bad); color: var(--bad); }
+.scenario .t .track { margin-right: 6px; }
+.post-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.post-card { display: flex; flex-direction: column; gap: 6px; }
+.post-card p { margin: 0; }
+.post-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.post-threat { font-weight: 600; }
+.post-card .post-start { margin-top: auto; align-self: flex-start; }
+@media (max-width: 760px) {
+  .scenario-list { gap: 12px; } /* siblings stacked 6px apart: the steps a little farther */
+  .step-missions { flex-direction: column; }
+  .post-choice { grid-template-columns: 1fr; }
+}
 /* "Completed on <difficulty>" badge in the campaign list */
 .scenario .best { font-size: 11px; padding: 1px 7px; border: 1px solid var(--bronze); border-radius: 999px; color: var(--bronze); white-space: nowrap; }
 .scenario .best.insane { border-color: var(--bad); color: var(--bad); font-weight: 700; }

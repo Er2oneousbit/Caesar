@@ -4,14 +4,22 @@
  * Campaign missions + the sandbox. Everything here is original text.
  *
  * Scenario fields:
- *   id, name, title, intro        display text
+ *   id, name, title, intro        display text (id: c1 to c7, and a step
+ *                                 number with a track letter for the
+ *                                 missions added beside them: c3m, c4p...)
+ *   step                          place in the campaign, 1 to 7. Winning any
+ *                                 mission of a step opens every mission of
+ *                                 the next (missionOpen, nextMissions)
+ *   track: 'peaceful'|'military'  at a step with two missions, which kind
+ *                                 this one is; missing at a single step
  *   map: { size, type, seed }     passed to world/mapgen.js
  *   funds                         starting treasury (Dn)
  *   startYear                     negative = BC
  *   goals: { population, culture, prosperity, peace, favor }  (0 = not required)
  *                                 population: no more than the mission's buildings
  *                                 can employ (sim/capacity.js; a test holds it
- *                                 there, missions 3 to 7 excepted for now)
+ *                                 there, missions 3 to 7 excepted for now;
+ *                                 never the missions added beside them)
  *   paceYears                     the planned floor: the fewest game years the
  *                                 goals allow (sim/pace.js; a test holds the
  *                                 goals to it). A year is 8 minutes at 1x
@@ -28,8 +36,9 @@
  *                                 The first two missions, as in the original,
  *                                 where a new player's one granary would burn
  *   military                      invasion settings (INVASION_PRESETS), or none
- *   distantBattles                Caesar's requests for troops (sim/battle.js), from
- *                                 mission 4, which has forts: each { year, city,
+ *   distantBattles                Caesar's requests for troops (sim/battle.js), in
+ *                                 the missions with forts (Firmum, then step 4
+ *                                 on, peaceful provinces aside): each { year, city,
  *                                 enemy } asks in the mission's year `year` (1 =
  *                                 its first), in a month from Martius to October
  *                                 drawn from the map's seed, for troops for `city`
@@ -38,8 +47,9 @@
  *   seaRaids: false               every raid comes by land (missing = some come
  *                                 by sea where ships can sail; sim/navy.js)
  *   rank                          the governor's rank (data/ranks.js): one per
- *                                 mission, Citizen in mission 1 and a step up
- *                                 each mission after; the sandbox's is picked in
+ *                                 step, Citizen at step 1 and one up each step
+ *                                 after (both missions of a step share it,
+ *                                 as in the original); the sandbox's is picked in
  *                                 its setup. Sets the salary (sim/governor.js)
  *   difficulty                    key of data/difficulty.js (missing = normal;
  *                                 campaign missions get it from withDifficulty)
@@ -138,6 +148,7 @@ export const INVASION_PRESETS = Object.freeze({
 /**
  * The fleet (sim/navy.js): the missions with raids and water ships can sail
  * (4, the river; 5, the coast; 7, a lake at the map's edge) and the sandbox.
+ * Firmum is raided but its lakes never reach the map's edge: no fleet there.
  */
 export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
 /*
@@ -165,9 +176,28 @@ const ALL_BUT_HIPPODROME = [...Object.keys(TOOLS), ...Object.keys(BUILDINGS)].fi
 /** Mission 6's desert has no water a ship can sail: no fleet there (a test holds every mission's fleet to its water). */
 const ALL_BUT_HIPPODROME_AND_NAVY = ALL_BUT_HIPPODROME.filter((k) => !NAVY_KEYS.includes(k));
 
+/*
+ * Campaign branches: from step 3 to step 5 each step offers two provinces at
+ * the same rank, one peaceful and one military, as the original's career
+ * did from its third rank. The military one has raids early, forts a step
+ * sooner and Caesar's calls for troops; the peaceful one has no raids, no
+ * army and higher culture, prosperity and favor goals. The iron mine, the
+ * weaponsmith and the fletcher are industry, not army: their goods sell, so
+ * the peaceful provinces keep them.
+ */
+/** The army's buildings: forts, their barracks and academy, towers and walls (the fleet is NAVY_KEYS). */
+export const ARMY_KEYS = Object.freeze(['barracks', 'fort_legion', 'fort_archer', 'fort_cavalry', 'military_academy', 'tower', 'wall']);
+const withoutArmy = (keys) => keys.filter((k) => !ARMY_KEYS.includes(k) && !NAVY_KEYS.includes(k));
+/**
+ * Firmum (step 3, military): mission 3's buildings and legionaries to hold
+ * the hill. Archers (timber and the fletcher), cavalry and the fleet wait for
+ * step 4; the Campus comes with the first forts, as it always has.
+ */
+const FIRMUM = [...TIER3, 'iron_mine', 'weapons_ws', 'barracks', 'fort_legion', 'military_academy', 'tower', 'wall'];
+
 export const SCENARIOS = Object.freeze([
   {
-    id: 'c1', name: 'Novum Castrum', title: 'First Foundations',
+    id: 'c1', step: 1, name: 'Novum Castrum', title: 'First Foundations',
     intro: 'The Senate has granted you a patch of riverside land and a handful of settlers. Lay out roads, give families a place to live, keep them fed and keep the fires down. Grow a town, bring the gods to its streets and keep the peace to prove you can govern.',
     map: { size: 64, type: 'river', seed: 'novum-castrum' },
     funds: 6000, startYear: -280,
@@ -187,7 +217,7 @@ export const SCENARIOS = Object.freeze([
     ],
   },
   {
-    id: 'c2', name: 'Aquae Clarae', title: 'Clear Waters',
+    id: 'c2', step: 2, name: 'Aquae Clarae', title: 'Clear Waters',
     intro: 'A lakeside town needs clean water and a little culture. Build reservoirs by the lakes, run aqueducts, and give citizens fountains, schools and a stage.',
     map: { size: 96, type: 'lakes', seed: 'aquae-clarae' },
     funds: 7000, startYear: -270,
@@ -204,7 +234,7 @@ export const SCENARIOS = Object.freeze([
     ],
   },
   {
-    id: 'c3', name: 'Figlina', title: 'Clay and Commerce',
+    id: 'c3', step: 3, track: 'peaceful', name: 'Figlina', title: 'Clay and Commerce',
     intro: 'The plains of Figlina are rich in clay. Build an industry, fill warehouses and open your first trade route. Prosperity is now expected of you.',
     map: { size: 112, type: 'plains', seed: 'figlina' },
     funds: 7000, startYear: -255,
@@ -221,7 +251,31 @@ export const SCENARIOS = Object.freeze([
     ],
   },
   {
-    id: 'c4', name: 'Pons Aelius', title: 'The River Crossing',
+    id: 'c3m', step: 3, track: 'military', name: 'Firmum', title: 'The Picene Frontier',
+    intro: 'Rome planted the Latin colony of Firmum on a hilltop above the Picene country in 264 BC, once the Picenes were beaten, and the tribes in the valleys have not forgotten the war. Dig iron from the hills, arm a legion and hold the town: whoever holds Firmum holds the road along the Adriatic.',
+    // A seed with no water reaching the map's edge: the Picenes come over
+    // the hills, never by ship, so the province needs no fleet.
+    map: { size: 112, type: 'lakes', seed: 'firmum-picenum' },
+    funds: 7000, startYear: -255,
+    goals: { population: 1100, culture: 35, prosperity: 20, peace: 48, favor: 0 },
+    paceYears: 2.3,
+    rank: 2, // Engineer, as Figlina (data/ranks.js)
+    unlocks: FIRMUM, partners: ['aquileia', 'capua'], requests: true,
+    // The earliest raids of the campaign, and the smallest: two years in
+    // (18 months on Insane), never before the town has 300 people. Time for
+    // an iron mine, a weaponsmith, a barracks and one fort.
+    military: { first: 24, interval: [16, 24], base: 3 },
+    distantBattles: [{ year: 2, city: 'ariminum', enemy: 12 }],
+    hints: [
+      'Raiders come down from the hills within two years. A Ferraria (Iron Mine) by the rocks and a Fabrica (Weaponsmith) arm the legionaries a Tirocinium (Barracks) trains for a Castra (Legion Fort).',
+      'Scouts warn you three months before a raid, and the Empire map shows the warband and the edge it will come in by. Build Turres (Towers) and a Murus (Wall) across that way in.',
+      'A Campus (Military Academy) trains your legionaries to fight harder.',
+      'Capua buys iron: what the mine digs beyond the weaponsmith\'s needs is trade, and work.',
+      'A Domus wants more shows than a theater gives: add an Amphitheatrum (Amphitheater), with gladiators from a Ludus Gladiatorius (Gladiator School).',
+    ],
+  },
+  {
+    id: 'c4', step: 4, track: 'military', name: 'Pons Aelius', title: 'The River Crossing',
     intro: 'A great river divides this province. Bridge it, harvest its forests and olive groves, and entertain a growing people with gladiatorial games.',
     map: { size: 128, type: 'river', seed: 'pons-aelius' },
     funds: 8000, startYear: -240,
@@ -240,7 +294,23 @@ export const SCENARIOS = Object.freeze([
     ],
   },
   {
-    id: 'c5', name: 'Portus Mercatorum', title: 'Merchant Shore',
+    id: 'c4p', step: 4, track: 'peaceful', name: 'Paestum', title: 'City of Temples',
+    intro: 'The Greeks of Poseidonia raised great temples on this shore long before Rome made their city the Latin colony of Paestum in 273 BC. Keep the gods content, fill the harbor with ships from Massilia and Corinthus, and make Paestum a city the Greeks would envy. No enemy threatens this shore: Rome will judge you by what you build.',
+    map: { size: 128, type: 'coast', seed: 'paestum' },
+    funds: 8000, startYear: -240,
+    goals: { population: 2700, culture: 60, prosperity: 50, peace: 65, favor: 40 },
+    paceYears: 3.75,
+    rank: 3, // Architect, as Pons Aelius (data/ranks.js)
+    unlocks: withoutArmy(TIER4), partners: ['capua', 'massilia', 'corinthus'], requests: true,
+    hints: [
+      'No raiders come to Paestum, and you may build no forts. Rome watches your favor instead: meet Caesar\'s requests and send gifts, for if his favor runs out his legions come, and there is no army here to meet them.',
+      'Culture is the measure of this city: a Templum (Grand Temple) counts as two temples to its god, and schools, a Bibliotheca (Library) and shows add the rest.',
+      'Corinthus sells marble and oil by sea and buys wheat, iron and clothing. Build an Emporium (Trade Dock) on the shore.',
+      'Apartment Houses need furniture (an Officina Lignaria, the carpenter, from timber); Tenements also need oil, a barber, and both a school and a library; Insulae need clothing too.',
+    ],
+  },
+  {
+    id: 'c5', step: 5, track: 'military', name: 'Portus Mercatorum', title: 'Merchant Shore',
     intro: 'A coastal province with iron in its hills and vines on its slopes. Grow a wealthy city worthy of villas, and keep the Emperor happy.',
     map: { size: 128, type: 'coast', seed: 'portus-mercatorum' },
     funds: 9000, startYear: -225,
@@ -258,7 +328,23 @@ export const SCENARIOS = Object.freeze([
     ],
   },
   {
-    id: 'c6', name: 'Oasis Aurea', title: 'Sands of Gold',
+    id: 'c5p', step: 5, track: 'peaceful', name: 'Beneventum', title: 'The Market on the Appian Way',
+    intro: 'The Samnite town of Maleventum became the Latin colony of Beneventum, the "good outcome", in 268 BC, and the Appian Way runs through it from Capua. Every caravan between Capua and the Adriatic passes here: build a market town worthy of the road, with rich homes, full warehouses and busy streets. The Samnite wars are over; the Senate expects prosperity, not victories.',
+    map: { size: 128, type: 'river', seed: 'beneventum' },
+    funds: 9000, startYear: -225,
+    goals: { population: 3000, culture: 65, prosperity: 60, peace: 70, favor: 65 },
+    paceYears: 4.2,
+    rank: 4, // Quaestor, as Portus Mercatorum (data/ranks.js)
+    // The river is navigable, but every partner comes by land: the colony lives by caravans.
+    unlocks: withoutArmy(ALL_BUT_HIPPODROME), partners: ['capua', 'tarraco', 'aquileia', 'lugdunum'], requests: true,
+    hints: [
+      'Beneventum trades only by land: four caravan routes meet here. Open them in the Trade advisor and let warehouses near the Imperial road do the business.',
+      'There is no army here and no raiders to fear, but Caesar\'s favor must stay high: his requests, the yearly tribute and gifts all count.',
+      'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity.',
+    ],
+  },
+  {
+    id: 'c6', step: 6, name: 'Oasis Aurea', title: 'Sands of Gold',
     intro: 'Water is life in the desert. Only the land around the oases can feed your people. Plan every aqueduct carefully.',
     map: { size: 128, type: 'desert', seed: 'oasis-aurea' },
     funds: 10000, startYear: -210,
@@ -271,7 +357,7 @@ export const SCENARIOS = Object.freeze([
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
   },
   {
-    id: 'c7', name: 'Urbs Magna', title: 'The Great City',
+    id: 'c7', step: 7, name: 'Urbs Magna', title: 'The Great City',
     intro: 'Your last and greatest charge: build a city to rival Rome itself.',
     map: { size: 160, type: 'lakes', seed: 'urbs-magna' },
     funds: 12000, startYear: -190,
@@ -319,4 +405,50 @@ export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', f
 
 export function findScenario(id) {
   return SCENARIOS.find((s) => s.id === id) || null;
+}
+
+// ---------------------------------------------------------------------------
+// The campaign's steps. A step holds one mission, or two siblings at the
+// same rank (one peaceful, one military). Code that walks the campaign asks
+// these instead of taking the next mission in the list, which is a sibling
+// at a split.
+// ---------------------------------------------------------------------------
+
+/** The last step of the campaign. */
+export const LAST_STEP = Math.max(...SCENARIOS.map((s) => s.step));
+
+/** The step of a campaign mission (1 to LAST_STEP), or 0 for the sandbox and unknown ids. */
+export function stepOf(id) {
+  return findScenario(id)?.step ?? 0;
+}
+
+/** Every mission at step `n`, in list order (the existing mission first). */
+export function missionsAtStep(n) {
+  return SCENARIOS.filter((s) => s.step === n);
+}
+
+/** The missions a win at `id` leads to: every mission of the next step (none after the last, or outside the campaign). */
+export function nextMissions(id) {
+  const n = stepOf(id);
+  return n ? missionsAtStep(n + 1) : [];
+}
+
+/** The other mission at the same step, or null at a step with one mission. */
+export function siblingOf(id) {
+  const n = stepOf(id);
+  return (n && missionsAtStep(n).find((s) => s.id !== id)) || null;
+}
+
+/**
+ * Whether the campaign list opens a mission: the first step always; any
+ * mission whose step before has a mission won (so both siblings open
+ * together, and the player may switch tracks at every step); and a mission
+ * already won. `completed` holds mission ids, so a record from before the
+ * branches (['c1', 'c2', 'c3']) needs no rewrite: it opens both missions of
+ * step 4, and Firmum too.
+ */
+export function missionOpen(s, completed = [], unlockAll = false) {
+  if (!s || !s.step) return false;
+  if (unlockAll || s.step === 1 || completed.includes(s.id)) return true;
+  return missionsAtStep(s.step - 1).some((m) => completed.includes(m.id));
 }

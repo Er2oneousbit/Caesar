@@ -9,7 +9,7 @@
  */
 
 import { RANKS } from '../data/ranks.js';
-import { SCENARIOS } from '../data/scenarios.js';
+import { nextMissions, stepOf } from '../data/scenarios.js';
 import { salaryOf, salaryOutlook } from '../sim/governor.js';
 import { GIFT_SIZES, GIFT_MEMORY_MONTHS, giftCost, giftFavor } from '../sim/emperor.js';
 import { withArticle } from '../sim/risk.js';
@@ -24,11 +24,11 @@ export function salaryOption(rank, ownRank) {
   return `${RANKS[rank].name}: ${dn(RANKS[rank].salary)} a month${rank === ownRank ? ' (your rank)' : ''}`;
 }
 
-/** "Clerk, the rank of mission 2" or "Procurator, chosen when the city was founded". */
+/** "Clerk, the rank of step 2 of the campaign" (both missions of a step share it) or "Procurator, chosen when the city was founded". */
 export function rankLine(game) {
   const rank = RANKS[game.city.governor.rank].name;
-  const k = SCENARIOS.findIndex((s) => s.id === game.scenario.id);
-  return k >= 0 ? `${rank}, the rank of mission ${k + 1}` : `${rank}, chosen when the city was founded`;
+  const step = stepOf(game.scenario.id);
+  return step ? `${rank}, the rank of step ${step} of the campaign` : `${rank}, chosen when the city was founded`;
 }
 
 /**
@@ -76,14 +76,18 @@ export function briefingGovernorLine(scenario, savings) {
   return `You govern as ${withArticle(r.name)}, with a salary of ${dn(r.salary)} a month${savings > 0 ? ` and ${dn(savings)} of savings from your last post` : ''}.`;
 }
 
-/** The victory screen's line: the promotion and the savings that go with it, or null outside the campaign. */
+/**
+ * The victory screen's line: the promotion and the savings that go with it,
+ * or null outside the campaign. Where the next step offers two provinces the
+ * line names neither: the player has yet to choose.
+ */
 export function victoryGovernorLine(game) {
-  const k = SCENARIOS.findIndex((s) => s.id === game.scenario.id);
-  if (k < 0) return null;
-  const next = SCENARIOS[k + 1];
+  if (!stepOf(game.scenario.id)) return null;
+  const next = nextMissions(game.scenario.id);
   const savings = dn(game.city.governor.savings);
-  if (!next) return `Your savings of ${savings} are yours to keep.`;
-  return `Rome promotes you to ${RANKS[next.rank].name}. Your savings of ${savings} go with you to ${next.name}.`;
+  if (!next.length) return `Your savings of ${savings} are yours to keep.`;
+  const where = next.length === 1 ? next[0].name : 'your next post';
+  return `Rome promotes you to ${RANKS[next[0].rank].name}. Your savings of ${savings} go with you to ${where}.`;
 }
 
 /** The salary drawn now, in a few words (Finance advisor). */

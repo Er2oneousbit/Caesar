@@ -11,7 +11,8 @@
 
 import { h, fmt } from './dom.js';
 import { CONFIG } from '../config.js';
-import { SCENARIOS, withDifficulty, INVASION_PRESETS } from '../data/scenarios.js';
+import { withDifficulty, INVASION_PRESETS, LAST_STEP, missionsAtStep, missionOpen, nextMissions, stepOf } from '../data/scenarios.js';
+import { trackName, goalsLine, postCard, choiceLine } from './campaignInfo.js';
 import { RAID_MIN_POP } from '../sim/military.js';
 import { MAP_SIZES, MAP_SIZE_NOTES, MAP_TYPES } from '../world/mapgen.js';
 import { DIFFICULTY } from '../data/difficulty.js';
@@ -79,24 +80,78 @@ export function titleGate(app) {
 // Campaign
 // ---------------------------------------------------------------------------
 
+/**
+ * The campaign list: one row per step, its number (a check once any mission
+ * of the step is won) and its mission, or both siblings side by side where
+ * the campaign branches, each with its track and its own difficulty badge.
+ */
 export function campaignMenu(app) {
   const done = app.progress.completed || [];
   const best = app.progress.best || {};
-  const list = SCENARIOS.map((s, i) => {
-    const unlocked = app.flags.unlockall || i === 0 || done.includes(SCENARIOS[i - 1].id) || done.includes(s.id);
-    const goals = Object.entries(s.goals).filter(([, v]) => v).map(([k, v]) => `${k} ${fmt(v)}`).join(', ');
+  const button = (s) => {
+    const unlocked = missionOpen(s, done, !!app.flags.unlockall);
     const beaten = DIFFICULTY[best[s.id]];
+    const track = trackName(s);
     return h('button', {
-      class: `scenario${unlocked ? '' : ' locked'}`,
-      title: unlocked ? s.intro : 'Complete the previous mission to unlock',
+      class: `scenario${unlocked ? '' : ' locked'}${s.track ? ` track-${s.track}` : ''}`,
+      'data-id': s.id,
+      title: unlocked ? s.intro : `Win a mission at step ${s.step - 1} to unlock`,
       onclick: () => { if (unlocked) app.ui.showModal(briefing(app, s, (d) => app.newScenario(s.id, d))); },
-    }, h('span', { class: 'n' }, done.includes(s.id) ? '✔' : String(i + 1)),
-    h('span', { class: 't' }, h('b', {}, `${s.name}: ${s.title}`), h('span', { class: 'muted' }, `${MAP_TYPES[s.map.type].name} · Goals: ${goals}`)),
+    },
+    h('span', { class: 't' },
+      h('b', {}, `${s.name}: ${s.title}`),
+      track ? h('span', { class: `track ${s.track}` }, track) : null,
+      h('span', { class: 'muted' }, `${MAP_TYPES[s.map.type].name} · Goals: ${goalsLine(s)}`)),
     beaten ? h('span', { class: `best ${best[s.id]}`, title: `Completed on ${beaten.name}` }, beaten.name) : null,
     unlocked ? null : h('span', {}, '🔒'));
-  });
-  return modal('Campaign', h('div', { class: 'scenario-list' }, list),
+  };
+  const rows = [];
+  for (let n = 1; n <= LAST_STEP; n++) {
+    const missions = missionsAtStep(n);
+    const won = missions.some((s) => done.includes(s.id));
+    rows.push(h('div', { class: `scenario-step${missions.length > 1 ? ' split' : ''}` },
+      h('span', { class: 'n', title: `Step ${n}` }, won ? '✔' : String(n)),
+      h('div', { class: 'step-missions' }, missions.map(button))));
+  }
+  return modal('Campaign', h('div', { class: 'scenario-list' }, rows),
     [h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back')], '', () => app.ui.closeModal());
+}
+
+/**
+ * The choice of province where a step has two (after a win, or after a city
+ * is overrun at a step with two): a card for each, side by side. Start opens
+ * that province's briefing, whose Back returns here, so the player can read
+ * both before choosing, as the original's choice screen allowed.
+ */
+export function choiceMenu(app, missions, onClose = null) {
+  const reopen = () => showChoice(app, missions, onClose);
+  const card = (s) => {
+    const c = postCard(s);
+    return h('div', { class: `post-card card track-${s.track || 'none'}`, 'data-id': s.id },
+      h('div', { class: 'post-head' }, h('b', {}, c.name), c.track ? h('span', { class: `track ${s.track}` }, c.track) : null),
+      h('p', {}, c.intro),
+      h('div', { class: 'post-threat' }, c.threat),
+      h('div', { class: 'muted' }, `${c.map} · Goals: ${c.goals}`),
+      // Shown like the choice: Escape and a click beside it do nothing, so
+      // the way out is Back to the choice (or Begin), never a bare city
+      // (after a defeat, the fallen one with no screen left to leave it by).
+      h('button', { class: 'btn primary post-start', onclick: () => app.ui.showModal(briefing(app, s, (d) => app.newScenario(s.id, d), reopen), { pause: true, kind: 'outcome' }) }, `Start ${s.name}`));
+  };
+  return modal('Choose your next post', [
+    h('p', {}, choiceLine(missions)),
+    h('div', { class: 'post-choice' }, missions.map(card)),
+  ], [
+    h('button', { class: 'btn', onclick: () => (onClose ? onClose() : app.ui.closeModal()) }, 'Back'),
+  ], '', () => (onClose ? onClose() : app.ui.closeModal()));
+}
+
+/**
+ * Open the choice of province over an outcome screen: like the victory and
+ * defeat screens it stays until a button is pressed, and Back (onClose)
+ * returns to the screen it came from.
+ */
+export function showChoice(app, missions, onClose = null) {
+  app.ui.showModal(choiceMenu(app, missions, onClose), { pause: true, kind: 'outcome' });
 }
 
 /**
@@ -117,9 +172,10 @@ function difficultyField(current, onChange) {
 /**
  * Scenario briefing. Before a mission (onBegin given) the player picks the
  * difficulty and onBegin(key) starts it; from the game menu (no onBegin) it
- * shows the difficulty being played.
+ * shows the difficulty being played. onBack, when given, is where Back goes
+ * (the choice of province it was opened from) instead of closing.
  */
-export function briefing(app, s, onBegin = null) {
+export function briefing(app, s, onBegin = null, onBack = null) {
   const goals = Object.entries(s.goals).filter(([, v]) => v);
   let diff = onBegin ? app.difficultyPref() : (app.game?.difficultyKey || 'normal');
   // In a game `s` is the running scenario (funds already scaled); before one, scale them here.
@@ -138,7 +194,7 @@ export function briefing(app, s, onBegin = null) {
       : h('div', { class: 'row muted' }, `Difficulty: ${DIFFICULTY[diff].name}`),
     s.hints && s.hints.length ? [h('h4', {}, 'Advice'), h('ul', {}, s.hints.map((t) => h('li', {}, t)))] : null,
   ], onBegin ? [
-    h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
+    h('button', { class: 'btn', onclick: () => (onBack ? onBack() : app.ui.closeModal()) }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(diff); onBegin(diff); } }, 'Begin'),
   ] : [
     h('button', { class: 'btn primary', onclick: () => app.ui.closeModal() }, 'Close'),
@@ -331,10 +387,25 @@ export function pauseMenu(app) {
 // Outcome screens
 // ---------------------------------------------------------------------------
 
+/**
+ * The way on from a won mission: none after the last step; "Next: <name>"
+ * where the next step has one mission; where it has two, a button to the
+ * choice of province (both open now, and the player may switch tracks).
+ */
+function nextStepButton(app) {
+  const next = nextMissions(app.game.scenario.id);
+  if (next.length === 1) {
+    const s = next[0];
+    return h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.ui.showModal(briefing(app, s, (d) => app.newScenario(s.id, d))); } }, `Next: ${s.name}`);
+  }
+  if (next.length > 1) {
+    return h('button', { class: 'btn primary choose-post', onclick: () => showChoice(app, next, () => app.ui.showModal(victoryMenu(app), { pause: true, kind: 'outcome' })) }, 'Choose your next post');
+  }
+  return null;
+}
+
 export function victoryMenu(app) {
   const g = app.game;
-  const idx = SCENARIOS.findIndex((s) => s.id === g.scenario.id);
-  const next = idx >= 0 ? SCENARIOS[idx + 1] : null;
   return modal('Victory!', [
     h('p', {}, `The Senate is delighted with ${g.city.name}. You have met every goal of this mission.`),
     h('table', { class: 'tbl' }, goalStatus(g).map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'r num ok' }, `${fmt(r.have)} / ${fmt(r.need)}`)))),
@@ -342,7 +413,7 @@ export function victoryMenu(app) {
     h('p', { class: 'muted' }, `Founded ${fmt(g.time.totalMonths / 12)} years ago · ${fmt(g.city.stats.fires)} fires · ${fmt(g.city.stats.collapses)} collapses`),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Keep building'),
-    next ? h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.ui.showModal(briefing(app, next, (d) => app.newScenario(next.id, d))); } }, `Next: ${next.name}`) : null,
+    nextStepButton(app),
     h('button', { class: 'btn', onclick: () => app.toMainMenu() }, 'Main menu'),
   ], 'narrow');
 }
@@ -353,13 +424,18 @@ export function defeatTip() {
 }
 
 export function defeatMenu(app, reason) {
-  // The only defeat is a city overrun (sim/legion.js checkOverrun).
+  // The only defeat is a city overrun (sim/legion.js checkOverrun). At a
+  // step with two provinces the fallen governor may take the other one, as
+  // the original sent him back to his rank's choice.
+  const step = stepOf(app.game?.scenario.id);
+  const choice = step ? missionsAtStep(step) : [];
   return modal('The city has fallen', [
     h('p', {}, reason || 'Your governorship has ended.'),
     h('p', { class: 'muted' }, defeatTip()),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.showModal(loadMenu(app)) }, 'Load a save'),
     h('button', { class: 'btn', onclick: () => app.restart() }, 'Try again'),
+    choice.length > 1 ? h('button', { class: 'btn choose-post', onclick: () => showChoice(app, choice, () => app.ui.showModal(defeatMenu(app, reason), { pause: true, kind: 'outcome' })) }, 'Choose a province again') : null,
     h('button', { class: 'btn primary', onclick: () => app.toMainMenu() }, 'Main menu'),
   ], 'narrow');
 }

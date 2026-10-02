@@ -9,7 +9,7 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 ## Next up (suggested order)
 
 1. **Campaign branches and more tiers** (parity #13): a peaceful and a military province at each step, in this order:
-   * Steps 3, 4 and 5 (in progress): Firmum beside Figlina, Paestum beside Pons Aelius, Beneventum beside Portus Mercatorum.
+   * Steps 3, 4 and 5 (done, for the next release): Firmum beside Figlina, Paestum beside Pons Aelius, Beneventum beside Portus Mercatorum.
    * Steps 6 and 7: a sibling for Oasis Aurea and one for Urbs Magna, each of the other kind.
    * Three more tiers, steps 8, 9 and 10, each with two paths, so the career reaches the top ranks (Colonia's 11 ranks: one per step, and the last rank for winning the last step, or as the ranks are mapped then).
    The last tiers reach populations in the tens of thousands and ratings in the 80s, with harder provinces (disease, crime, the Emperor's legions and requests for troops). Each new mission gets its `paceYears` from `npm run sim -- --pace`. **The rule: a mission's goals must fit its jobs.** Its population goal is at most what a sensibly built city of its buildings employs at 10% unemployment (`src/sim/capacity.js`, `npm run sim -- --capacity`), and its map must house and feed that many; `tests/campaign.test.mjs` holds every mission to it (missions 3 to 7 are listed exceptions until the late missions get their jobs). So the later tiers need the economy's jobs first: see "The late missions need more jobs" below.

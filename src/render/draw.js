@@ -16,6 +16,8 @@
  */
 
 import { HALF_W, HALF_H } from '../config.js';
+import { TS, turnUV, turnDir, turnRectNow, turnPointNow, mapping, unit, straight, boundsOfPoints, faceNormal } from './turn.js';
+
 
 /** Lit snow and the blue-grey of snow in shade. */
 export const SNOW = '#eef2f5';
@@ -43,9 +45,26 @@ function slopeSnow(ctx, r0, r1, e1, e0, color) {
   poly(ctx, [r0, r1, lerp2(r1, e1, f), lerp2(r0, e0, f)], color);
 }
 
-/** Local iso point. */
+/**
+ * Local iso point. While a turned sprite is drawn (turn.js) the point is
+ * turned inside the footprint first, and tagged with where it ended up so
+ * the recorder knows what the next paint call stands on.
+ */
 export function P(u, v, z = 0) {
-  return [(u - v) * HALF_W, (u + v) * HALF_H - z];
+  if (TS.t !== 0 || TS.ou !== 0 || TS.ov !== 0) [u, v] = turnUV(u + TS.ou, v + TS.ov, TS.S, TS.t);
+  const p = [(u - v) * HALF_W, (u + v) * HALF_H - z];
+  if (TS.rec) {
+    p.tu = u;
+    p.tv = v;
+    p.tz = z;
+    TS.rec.point(p);
+  }
+  return p;
+}
+
+/** Turned bounds of an iso box (corner u0, v0, size du x dv, heights z0..z1): [u0, u1, v0, v1, z0, z1]. */
+function boxBounds(u0, v0, du, dv, z0, z1) {
+  return [u0, u0 + du, v0, v0 + dv, z0, z1];
 }
 
 /** Parse "#rrggbb" into [r, g, b]. */
@@ -73,8 +92,24 @@ export function mix(a, b, t) {
   return `#${((1 << 24) | (c[0] << 16) | (c[1] << 8) | c[2]).toString(16).slice(1)}`;
 }
 
-/** Fill (and optionally stroke) a polygon given as [x, y] pairs. */
+/**
+ * Fill (and optionally stroke) a polygon given as [x, y] pairs. Recorded
+ * as a unit of its own when every point came from P().
+ */
 export function poly(ctx, pts, fill, stroke = null, lw = 1) {
+  const rec = TS.rec;
+  if (rec && !rec.depth) {
+    const b = boundsOfPoints(pts);
+    if (b) {
+      rec.forget(pts);
+      unit(b, () => polyRaw(ctx, pts, fill, stroke, lw), faceNormal(b));
+      return;
+    }
+  }
+  polyRaw(ctx, pts, fill, stroke, lw);
+}
+
+function polyRaw(ctx, pts, fill, stroke, lw) {
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -114,6 +149,16 @@ export function ground(ctx, S, fill, inset = 0.04, stroke = null) {
  * where a wall meets the ground. `plain: true` skips both.
  */
 export function box(ctx, u0, v0, du, dv, z0, h, color, o = {}) {
+  if (mapping() || TS.rec) {
+    // Turned: the same box, axis-aligned, its visible faces worked out after the turn.
+    const [a, b, da, db] = turnRectNow(u0, v0, du, dv);
+    unit(boxBounds(a, b, da, db, z0, z0 + h), () => straight(() => boxRaw(ctx, a, b, da, db, z0, h, color, o)));
+    return;
+  }
+  boxRaw(ctx, u0, v0, du, dv, z0, h, color, o);
+}
+
+function boxRaw(ctx, u0, v0, du, dv, z0, h, color, o) {
   const u1 = u0 + du;
   const v1 = v0 + dv;
   const top = o.top ?? shade(color, 0.18);
@@ -174,6 +219,18 @@ function eaveShadow(ctx, u0, v0, u1, v1, z) {
  * axis 'v': ridge runs along v
  */
 export function gableRoof(ctx, u0, v0, du, dv, z, rh, color, axis = 'u', overhang = 0.06) {
+  if (mapping() || TS.rec) {
+    // Turned: an odd turn swaps the ridge's axis.
+    const [a, b, da, db] = turnRectNow(u0, v0, du, dv);
+    const ax = TS.t % 2 ? (axis === 'u' ? 'v' : 'u') : axis;
+    const o = overhang;
+    unit([a - o, a + da + o, b - o, b + db + o, z, z + rh], () => straight(() => gableRoofRaw(ctx, a, b, da, db, z, rh, color, ax, overhang)));
+    return;
+  }
+  gableRoofRaw(ctx, u0, v0, du, dv, z, rh, color, axis, overhang);
+}
+
+function gableRoofRaw(ctx, u0, v0, du, dv, z, rh, color, axis, overhang) {
   const a = u0 - overhang;
   const b = v0 - overhang;
   const c = u0 + du + overhang;
@@ -263,6 +320,16 @@ function tileLines(ctx, u0, v0, u1, v1, z, rh, axis, color) {
 
 /** Four-sided pyramid (hip) roof. */
 export function hipRoof(ctx, u0, v0, du, dv, z, rh, color, overhang = 0.06) {
+  if (mapping() || TS.rec) {
+    const [a, b, da, db] = turnRectNow(u0, v0, du, dv);
+    const o = overhang;
+    unit([a - o, a + da + o, b - o, b + db + o, z, z + rh], () => straight(() => hipRoofRaw(ctx, a, b, da, db, z, rh, color, overhang)));
+    return;
+  }
+  hipRoofRaw(ctx, u0, v0, du, dv, z, rh, color, overhang);
+}
+
+function hipRoofRaw(ctx, u0, v0, du, dv, z, rh, color, overhang) {
   const a = u0 - overhang;
   const b = v0 - overhang;
   const c = u0 + du + overhang;
@@ -304,6 +371,11 @@ export function hipRoof(ctx, u0, v0, du, dv, z, rh, color, overhang = 0.06) {
 
 /** A column (cylinder-ish) standing at local (u, v). */
 export function column(ctx, u, v, z0, h, color = '#f1ede3', r = 2.2) {
+  if (TS.rec && !TS.rec.depth) {
+    const [a, b] = turnPointNow(u, v);
+    unit([a, a, b, b, z0, z0 + h + 1.5], () => straight(() => column(ctx, a, b, z0, h, color, r)));
+    return;
+  }
   const [x, y] = P(u, v, z0);
   ctx.fillStyle = shade(color, -0.12);
   ctx.fillRect(x - r, y - h, r * 2, h);
@@ -374,6 +446,22 @@ export function colonnade(ctx, u0, v0, u1, v1, count, z0, h, color, r) {
  * shutters (color: a painted shutter each side), flowers (a flower box below).
  */
 export function windows(ctx, face, u0, v0, u1, v1, z0, rows, cols, color = '#3a2f28', o = {}) {
+  if (mapping() || TS.rec) {
+    // Turned: a wall's windows run all round it, so they show on whichever
+    // face of the same axis looks at the viewer after the turn.
+    const [a, b, da, db] = turnRectNow(u0, v0, u1 - u0, v1 - v0);
+    const n = face === 'left' ? turnDir(0, 1, TS.t) : turnDir(1, 0, TS.t);
+    const f = n[1] !== 0 ? 'left' : 'right';
+    const zs = o.z ?? z0 + 4;
+    const zTop = zs + (rows - 1) * (o.gap ?? 9) + (o.h ?? 5) + 1;
+    const bounds = f === 'left' ? [a, a + da, b + db, b + db, zs - 2, zTop] : [a + da, a + da, b, b + db, zs - 2, zTop];
+    unit(bounds, () => straight(() => windowsRaw(ctx, f, a, b, a + da, b + db, z0, rows, cols, color, o)), f === 'left' ? [0, 1] : [1, 0]);
+    return;
+  }
+  windowsRaw(ctx, face, u0, v0, u1, v1, z0, rows, cols, color, o);
+}
+
+function windowsRaw(ctx, face, u0, v0, u1, v1, z0, rows, cols, color, o) {
   const ww = o.w ?? 0.12; // width in tiles
   const wh = o.h ?? 5; // height px
   const gap = o.gap ?? 9; // vertical spacing px
@@ -410,20 +498,35 @@ export function windows(ctx, face, u0, v0, u1, v1, z0, rows, cols, color = '#3a2
 
 /** A door on a face, centered at parameter t (0..1). */
 export function door(ctx, face, u0, v0, u1, v1, z0, t = 0.5, color = '#4a3222', w = 0.18, h = 8) {
-  let pts;
-  if (face === 'left') {
-    const u = u0 + (u1 - u0) * t;
-    pts = [P(u - w / 2, v1, z0), P(u + w / 2, v1, z0), P(u + w / 2, v1, z0 + h), P(u - w / 2, v1, z0 + h)];
-  } else {
-    const v = v0 + (v1 - v0) * t;
-    pts = [P(u1, v - w / 2, z0), P(u1, v + w / 2, z0), P(u1, v + w / 2, z0 + h), P(u1, v - w / 2, z0 + h)];
+  if (mapping() || TS.rec) {
+    // Turned: a door stays where it is on the building, so it may now be on
+    // a face turned away (drawn there, behind the walls, and given no light).
+    const [mu, mv] = face === 'left' ? turnPointNow(u0 + (u1 - u0) * t, v1) : turnPointNow(u1, v0 + (v1 - v0) * t);
+    const n = face === 'left' ? turnDir(0, 1, TS.t) : turnDir(1, 0, TS.t);
+    const seen = n[0] > 0 || n[1] > 0;
+    const bounds = n[1] !== 0 ? [mu - w / 2, mu + w / 2, mv, mv, z0, z0 + h] : [mu, mu, mv - w / 2, mv + w / 2, z0, z0 + h];
+    unit(bounds, () => straight(() => doorAt(ctx, n[1] !== 0 ? 'v' : 'u', n[1] !== 0 ? mv : mu, n[1] !== 0 ? mu : mv, z0, w, h, color, seen)), n);
+    return;
   }
+  doorAt(ctx, face === 'left' ? 'v' : 'u', face === 'left' ? v1 : u1, face === 'left' ? u0 + (u1 - u0) * t : v0 + (v1 - v0) * t, z0, w, h, color, true);
+}
+
+/** A door on the plane v = c (axis 'v', centered at u = m) or u = c (axis 'u', at v = m). */
+function doorAt(ctx, axis, c, m, z0, w, h, color, lit) {
+  const pts = axis === 'v'
+    ? [P(m - w / 2, c, z0), P(m + w / 2, c, z0), P(m + w / 2, c, z0 + h), P(m - w / 2, c, z0 + h)]
+    : [P(c, m - w / 2, z0), P(c, m + w / 2, z0), P(c, m + w / 2, z0 + h), P(c, m - w / 2, z0 + h)];
   poly(ctx, pts, color);
-  record(ctx, 'door', pts);
+  if (lit) record(ctx, 'door', pts);
 }
 
 /** Soft elliptical shadow on the ground. */
 export function shadowEllipse(ctx, u, v, rx, ry, alpha = 0.25) {
+  if (TS.rec && !TS.rec.depth) {
+    const [a, b] = turnPointNow(u, v);
+    unit([a, a, b, b, 0, 0], () => straight(() => shadowEllipse(ctx, a, b, rx, ry, alpha)));
+    return;
+  }
   const [x, y] = P(u, v, 0);
   ctx.fillStyle = `rgba(0,0,0,${alpha})`;
   ctx.beginPath();
@@ -439,6 +542,11 @@ export function shadowEllipse(ctx, u, v, rx, ry, alpha = 0.25) {
  * the snow of the building being drawn (garden trees), 0 elsewhere.
  */
 export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', seed = 0, sway = 0, blossom = 0, snow = roofSnow) {
+  if (TS.rec && !TS.rec.depth) {
+    const [a, b] = turnPointNow(u, v);
+    unit([a, a, b, b, 0, 24 * size], () => straight(() => tree(ctx, a, b, size, color, trunk, seed, sway, blossom, snow)));
+    return;
+  }
   const [x, y] = P(u, v, 0);
   const s = size;
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -505,6 +613,11 @@ export function tree(ctx, u, v, size = 1, color = '#3e7a34', trunk = '#6b4a2a', 
  * With `snow` the branches carry snow instead of leaves.
  */
 export function bareTree(ctx, u, v, size = 1, seed = 0, sway = 0, leaves = '#7b7452', snow = roofSnow) {
+  if (TS.rec && !TS.rec.depth) {
+    const [a, b] = turnPointNow(u, v);
+    unit([a, a, b, b, 0, 24 * size], () => straight(() => bareTree(ctx, a, b, size, seed, sway, leaves, snow)));
+    return;
+  }
   const [x, y] = P(u, v, 0);
   const s = size;
   ctx.fillStyle = 'rgba(0,0,0,0.16)';
@@ -579,6 +692,11 @@ export function bareTree(ctx, u, v, size = 1, seed = 0, sway = 0, leaves = '#7b7
 
 /** Tall narrow cypress tree; `sway` bends its tip (px), `snow` streaks its lit side. */
 export function cypress(ctx, u, v, size = 1, color = '#2f5a2a', sway = 0, snow = roofSnow) {
+  if (TS.rec && !TS.rec.depth) {
+    const [a, b] = turnPointNow(u, v);
+    unit([a, a, b, b, 0, 25 * size], () => straight(() => cypress(ctx, a, b, size, color, sway, snow)));
+    return;
+  }
   const [x, y] = P(u, v, 0);
   const s = size;
   const t = sway * 1.2; // the tall tip moves further than a round crown

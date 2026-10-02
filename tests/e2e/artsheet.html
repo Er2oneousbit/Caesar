@@ -23,6 +23,8 @@
   water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
   cloth=1 (the cloth industry only: the flax farm as it grows and rests, the two workshops, the carts)
   navy=1 (the fleet only: the navalia and naval station on each side, liburnians and raider ships)
+  turns=1 (turned art only: every building and home level at turns 0, 1, 2 and 3; turns=farm,temple
+           for the kinds whose key contains one of the words; snow=1 under snow)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
 -->
 <div id="sheet"></div>
@@ -43,7 +45,8 @@
   const cloth = !!q.get('cloth');
   const navy = !!q.get('navy');
   const governor = !!q.get('governor');
-  const only = q.get('carts') || water || cloth || navy || governor ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const turns = q.get('turns');
+  const only = q.get('carts') || water || cloth || navy || governor || turns ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -81,6 +84,34 @@
     const cells = [];
     for (let v = 0; v < 8; v++) cells.push([`look ${v}`, buildingSpec('house', S, v, tier)]);
     section(`Level ${tier}: ${HOUSE_TIERS[tier].name} (${S}x${S})`, cells);
+  }
+  if (turns) {
+    // Turned art (render/turn.js): every building and home level at the four
+    // turns, each turn a quarter turn clockwise (what R does while placing).
+    // A footprint diamond under each shows where the ground is.
+    const words = turns === '1' ? null : turns.split(',');
+    const snow = Number(q.get('snow') || 0);
+    const plate = (spec, S) => ({ ...spec, draw(ctx) {
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.beginPath();
+      for (const [u, v] of [[0, 0], [S, 0], [S, S], [0, S]]) ctx.lineTo((u - v) * 32, (u + v) * 16);
+      ctx.fill();
+      spec.draw(ctx);
+    } });
+    const row = (label, key, S, variant, state) => section(label, [0, 1, 2, 3].map((t) => [`turn ${t}`, plate(buildingSpec(key, S, variant, state, false, snow, false, t), S)]));
+    if (!words || words.includes('house')) {
+      for (let tier = 1; tier < HOUSE_TIERS.length; tier++) {
+        const S = HOUSE_TIERS[tier].size;
+        row(`Level ${tier}: ${HOUSE_TIERS[tier].name}`, 'house', S, tier % 8, tier);
+        if (S === 1 && tier % 3 === 1) row(`Level ${tier}: a 2x2 block`, 'house', 2, tier, tier);
+      }
+    }
+    for (const [key, def] of Object.entries(BUILDINGS)) {
+      if (!def.size || key === 'house') continue;
+      if (words && !words.some((w) => key.includes(w))) continue;
+      const states = key === 'hippodrome_part' ? [1, 2] : def.kind === 'farm' ? [2, 4] : [def.kind === 'reservoir' || def.kind === 'fountain' || def.needsPiped ? 1 : 0];
+      for (const st of states) row(`${key} (${def.size}x${def.size})${states.length > 1 ? ` state ${st}` : ''}`, key, def.size, 0, st);
+    }
   }
   if (!only || q.get('extras')) {
     // Four single-tile homes of one level that joined into a 2x2 block.

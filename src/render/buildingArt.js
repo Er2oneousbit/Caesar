@@ -24,6 +24,7 @@ import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { GODS } from '../data/gods.js';
 import { P, poly, quad, ground, box, gableRoof, hipRoof, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
+import { drawTurned, withOrigin, turnUV, unit, decal, TS } from './turn.js';
 import { shipyardArt, wharfArt } from './waterArt.js';
 import { navaliaArt, stationArt, portusArt } from './navyArt.js';
 import { hippodromeArt, chariotMakerArt } from './hippodromeArt.js';
@@ -104,13 +105,20 @@ function heightFor(key, size) {
 }
 
 /**
+ * Buildings that look the same from every side (round, or square and
+ * symmetric): drawn as written whatever their turn, which spares them the
+ * recorder and keeps arches drawn on their two front faces in front.
+ */
+const SAME_EVERY_WAY = new Set(['well', 'fountain', 'reservoir', 'amphitheater', 'colosseum', 'oracle', 'statue_small']);
+
+/**
  * Sprite spec for a building.
  * @param {string} key   building type
  * @param {number} S     footprint size
  * @param {number} variant 0..3
  * @param {*} state      extra art state (tier, stage, filled...)
  */
-export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow = 0, sick = false) {
+export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow = 0, sick = false, turn = 0) {
   const extra = heightFor(key, S);
   return {
     w: S * CONFIG.TILE_W,
@@ -122,8 +130,10 @@ export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow 
       liveFlags = live;
       setRoofSnow(snow);
       try {
-        fn(ctx, S, variant, state, key);
-        if (sick) sickSign(ctx, S, extra);
+        // Turned art (turn.js): the same drawing, turned in its footprint
+        // (round and square-symmetric buildings look the same from every side).
+        drawTurned(ctx, S, SAME_EVERY_WAY.has(key) ? 0 : turn, (c) => fn(c, S, variant, state, key));
+        if (sick) sickSign(ctx, S, extra); // (always at the front corner, whatever the turn)
       } finally {
         liveFlags = false;
         setRoofSnow(0);
@@ -195,14 +205,21 @@ const flagCache = new Map();
  * Flags of a building type: pole TOP in local px, cloth size and style.
  * @returns {Array<{x:number,y:number,h:number,w:number,ch:number,color:string,swallow:boolean}>}
  */
-export function flagsFor(key, S) {
-  const ck = `${key}:${S}`;
+export function flagsFor(key, S, turn = 0) {
+  const ck = `${key}:${S}:${turn & 3}`;
   let list = flagCache.get(ck);
   if (list) return list;
   const fn = FLAG_SPECS[key] || (key.startsWith('fort_') ? FLAG_SPECS.fort : null);
   list = (fn ? fn(S, key) : []).map((f) => {
-    const [x, y] = f.u !== undefined ? P(f.u, f.v, f.z) : [f.x, f.y];
-    return { x, y: y - f.h, h: f.h, w: f.w, ch: f.ch, color: f.color, swallow: !!f.swallow };
+    // A flag placed by footprint (u, v) turns with the building (pixel-placed
+    // ones are on round buildings, the same from every side).
+    let at = null;
+    if (f.u !== undefined) {
+      const [u, v] = turnUV(f.u, f.v, S, turn);
+      at = { u, v, z: f.z };
+    }
+    const [x, y] = at ? [(at.u - at.v) * HALF_W, (at.u + at.v) * (TH / 2) - at.z] : [f.x, f.y];
+    return { x, y: y - f.h, h: f.h, w: f.w, ch: f.ch, color: f.color, swallow: !!f.swallow, at };
   });
   flagCache.set(ck, list);
   return list;
@@ -221,18 +238,24 @@ function clothPath(ctx, x, y, f) {
 
 /** Draw a building's flag poles (and, for still pictures, their cloth). */
 function flagPoles(ctx, key, S) {
-  for (const f of flagsFor(key, S)) {
-    ctx.fillStyle = COL.woodDark;
-    ctx.fillRect(f.x - 0.6, f.y, 1.2, f.h);
-    if (f.swallow) {
-      ctx.fillStyle = COL.gold;
-      ctx.fillRect(f.x - 1.3, f.y - 2.4, 2.6, 2.4); // eagle-ish finial
-    }
-    if (!liveFlags) {
-      ctx.fillStyle = f.color;
-      clothPath(ctx, f.x, f.y, f);
-      ctx.fill();
-    }
+  for (const f of flagsFor(key, S, TS.t)) {
+    // (Its own unit when turned: the pole from its foot up, cloth and all.)
+    const b = f.at ? [f.at.u, f.at.u, f.at.v, f.at.v, f.at.z, f.at.z + f.h + f.ch] : null;
+    unit(b, () => flagPole(ctx, f));
+  }
+}
+
+function flagPole(ctx, f) {
+  ctx.fillStyle = COL.woodDark;
+  ctx.fillRect(f.x - 0.6, f.y, 1.2, f.h);
+  if (f.swallow) {
+    ctx.fillStyle = COL.gold;
+    ctx.fillRect(f.x - 1.3, f.y - 2.4, 2.6, 2.4); // eagle-ish finial
+  }
+  if (!liveFlags) {
+    ctx.fillStyle = f.color;
+    clothPath(ctx, f.x, f.y, f);
+    ctx.fill();
   }
 }
 
@@ -296,11 +319,8 @@ function houseArt(ctx, S, variant, tier) {
       for (let i = 0; i < S; i++) {
         const j = s - i;
         if (j < 0 || j >= S) continue;
-        const [x, y] = P(i, j);
-        ctx.save();
-        ctx.translate(x, y);
-        smallHouse(ctx, (variant + i * 3 + j * 5) % 8, tier);
-        ctx.restore();
+        // (Drawn in its own square of the footprint, so a turned block turns as one.)
+        withOrigin(i, j, () => smallHouse(ctx, (variant + i * 3 + j * 5) % 8, tier));
       }
     }
     return;
@@ -913,9 +933,11 @@ function templeArt(ctx, S, variant, state, key) {
   // roof with the pediment facing the viewer, in the god's colors
   gableRoof(ctx, 0.25, 0.2, S - 0.5, S - 0.4, 5 + top, 10, look.roof, 'v', 0.05);
   const z = 6 + top;
-  poly(ctx, [P(0.4, S - 0.2, z), P(S - 0.4, S - 0.2, z), P(S / 2, S - 0.2, z + 7)], look.field, shade(look.field, -0.4), 0.5);
-  const [ex, ey] = P(S / 2, S - 0.2, z + 2.4);
-  emblem(ctx, look.emblem, ex, ey);
+  decal(0, 1, () => { // the pediment and its emblem, on the front gable
+    poly(ctx, [P(0.4, S - 0.2, z), P(S - 0.4, S - 0.2, z), P(S / 2, S - 0.2, z + 7)], look.field, shade(look.field, -0.4), 0.5);
+    const [ex, ey] = P(S / 2, S - 0.2, z + 2.4);
+    emblem(ctx, look.emblem, ex, ey);
+  });
   // the god's piece at the front left, an altar with its fire at the front right
   frontPiece(ctx, look.front, 0.24, S - 0.1);
   altar(ctx, ...templeAltar(S));
@@ -952,22 +974,23 @@ function largeTempleArt(ctx, S, look) {
   gableRoof(ctx, 0.5, 0.45, S - 0.95, S - 0.9, z, 14, look.roof, 'v', 0.06);
   const fv = S - 0.45; // the roof's front edge
   const mid = 0.5 + (S - 0.95) / 2;
-  poly(ctx, [P(0.56, fv, z + 1), P(S - 0.51, fv, z + 1), P(mid, fv, z + 12)], look.field, shade(look.field, -0.4), 0.6);
-  // a gilded band under the pediment
-  ctx.strokeStyle = COL.gold;
-  ctx.lineWidth = 1;
-  const [b0x, b0y] = P(0.56, fv, z);
-  const [b1x, b1y] = P(S - 0.51, fv, z);
-  ctx.beginPath(); ctx.moveTo(b0x, b0y); ctx.lineTo(b1x, b1y); ctx.stroke();
-  const [ex, ey] = P(mid, fv, z + 4.6);
-  emblem(ctx, look.emblem, ex, ey);
-  // gilded figures on the pediment's peak and corners
-  ctx.fillStyle = COL.gold;
-  for (const [u, dz, r] of [[mid, 12, 1.8], [0.56, 1, 1.3], [S - 0.51, 1, 1.3]]) {
-    const [x, y] = P(u, fv, z + dz);
-    ctx.fillRect(x - r / 2, y - r * 2.2, r, r * 2.2);
-    ctx.beginPath(); ctx.arc(x, y - r * 2.6, r * 0.6, 0, Math.PI * 2); ctx.fill();
-  }
+  decal(0, 1, () => { // the pediment, its gilded band and the emblem, on the front gable
+    poly(ctx, [P(0.56, fv, z + 1), P(S - 0.51, fv, z + 1), P(mid, fv, z + 12)], look.field, shade(look.field, -0.4), 0.6);
+    ctx.strokeStyle = COL.gold;
+    ctx.lineWidth = 1;
+    const [b0x, b0y] = P(0.56, fv, z);
+    const [b1x, b1y] = P(S - 0.51, fv, z);
+    ctx.beginPath(); ctx.moveTo(b0x, b0y); ctx.lineTo(b1x, b1y); ctx.stroke();
+    const [ex, ey] = P(mid, fv, z + 4.6);
+    emblem(ctx, look.emblem, ex, ey);
+    // gilded figures on the pediment's peak and corners
+    ctx.fillStyle = COL.gold;
+    for (const [u, dz, r] of [[mid, 12, 1.8], [0.56, 1, 1.3], [S - 0.51, 1, 1.3]]) {
+      const [x, y] = P(u, fv, z + dz);
+      ctx.fillRect(x - r / 2, y - r * 2.2, r, r * 2.2);
+      ctx.beginPath(); ctx.arc(x, y - r * 2.6, r * 0.6, 0, Math.PI * 2); ctx.fill();
+    }
+  });
   // the god's piece at the front left, the altar with its fire at the front right
   frontPiece(ctx, look.front, 0.36, S - 0.12);
   altar(ctx, ...templeAltar(S));
@@ -1167,21 +1190,35 @@ function academyArt(ctx, S) {
 // Entertainment
 // ---------------------------------------------------------------------------
 
+/** The theater's bowl: its centre (u, v) and each row's radius (tiles), as liveArt.js seats its crowd. */
+export const THEATER_BOWL = (S) => [S * 0.45 + 0.12, S * 0.45 + 0.12];
+export const THEATER_ROW_R = (k) => (28 - k * 4) / 45.25;
+
+/**
+ * Points of a level circle's arc in the footprint (centre u, v, radius r
+ * tiles, height z): angles from a0 to a1, the back half by default (on the
+ * screen a circle of r tiles is an ellipse 45 r px across and half as tall).
+ */
+function bowlArc(u, v, r, z, a0 = Math.PI * 0.7, a1 = Math.PI * 1.8, n = 18) {
+  const out = [];
+  for (let k = 0; k <= n; k++) {
+    const a = a0 + ((a1 - a0) * k) / n;
+    out.push(P(u + Math.cos(a) * r, v + Math.sin(a) * r, z));
+  }
+  return out;
+}
+
 function theaterArt(ctx, S) {
   quad(ctx, 0.02, 0.02, S - 0.02, S - 0.02, 0, '#cbbf9f');
-  const [cx, cy] = P(S * 0.45, S * 0.45);
-  // stepped seating (semicircle opening toward the viewer's right)
+  // stepped seating: a half bowl at the back, open toward the stage (drawn
+  // through footprint points, so it turns with the stage)
+  const [cu, cv] = THEATER_BOWL(S);
   for (let k = 0; k < 5; k++) {
-    const rx = 28 - k * 4;
-    const ry = 14 - k * 2;
-    ctx.fillStyle = k % 2 ? '#d9cdb0' : '#cbbd9c';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + 4 - k * 2.5, rx, ry, 0, Math.PI * 0.95, Math.PI * 2.05);
-    ctx.lineTo(cx, cy + 4 - k * 2.5);
-    ctx.fill();
+    const pts = bowlArc(cu, cv, THEATER_ROW_R(k), 2.5 * k);
+    pts.push(P(cu, cv, 2.5 * k));
+    poly(ctx, pts, k % 2 ? '#d9cdb0' : '#cbbd9c');
   }
-  ctx.fillStyle = '#b8a582';
-  ctx.beginPath(); ctx.ellipse(cx, cy + 5, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  poly(ctx, bowlArc(cu + 0.03, cv + 0.03, 0.2, 0, 0, Math.PI * 2), '#b8a582'); // the orchestra
   // stage building in front
   box(ctx, 0.35, S - 0.55, S - 0.7, 0.3, 0, 14, COL.cream);
   colonnade(ctx, 0.45, S - 0.22, S - 0.45, S - 0.22, 5, 0, 10, COL.marble, 1.2);
@@ -1693,13 +1730,15 @@ function grandStatue(ctx, S) {
   box(ctx, c - 0.42, c - 0.42, 0.84, 0.84, 6, 20, COL.marble);
   box(ctx, c - 0.48, c - 0.48, 0.96, 0.96, 26, 2, shade(COL.marble, -0.06));
   // the inscription, on the front face
-  ctx.strokeStyle = 'rgba(70,60,50,0.55)';
-  ctx.lineWidth = 0.6;
-  for (let k = 0; k < 3; k++) {
-    const p = P(c - 0.26, c + 0.42, 20 - k * 3.2);
-    const q = P(c + 0.26, c + 0.42, 20 - k * 3.2);
-    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-  }
+  decal(0, 1, () => {
+    ctx.strokeStyle = 'rgba(70,60,50,0.55)';
+    ctx.lineWidth = 0.6;
+    for (let k = 0; k < 3; k++) {
+      const p = P(c - 0.26, c + 0.42, 20 - k * 3.2);
+      const q = P(c + 0.26, c + 0.42, 20 - k * 3.2);
+      ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+    }
+  });
   // the horseman, in bronze
   const [x, y] = P(c, c, 28);
   const s = 1.7;
@@ -1715,6 +1754,33 @@ function grandStatue(ctx, S) {
   ctx.beginPath(); ctx.moveTo(x + 0.8 * s, y - 15 * s); ctx.lineTo(x + 3.6 * s, y - 18.4 * s); ctx.stroke();
   ctx.lineCap = 'butt';
   cypress(ctx, S - 0.25, S - 0.25, 0.85);
+}
+
+/** The arch's face the road comes out of: the vault's curve, the keystone and the gilded inscription. */
+function archFace(ctx, pt, face, axis, H, A, S, marble) {
+  const face2 = axis === 0 ? shade(marble, -0.2) : marble; // that face's light (box: right faces are darker)
+  const curve = [pt(face, 1.0, H), pt(face, 2.0, H), pt(face, 2.0, H - 12)];
+  for (let k = 1; k < 12; k++) {
+    const t = k / 12; // across the opening, from its near side back to its far side
+    const c = 2.0 - t;
+    curve.push(pt(face, c, H - 12 + Math.sin(Math.PI * t) * 9));
+  }
+  curve.push(pt(face, 1.0, H - 12));
+  poly(ctx, curve, face2, shade(marble, -0.45), 0.6);
+  // the keystone, and the inscription on the attic in gold
+  {
+    const [x, y] = pt(face, 1.5, H - 2.5);
+    ctx.fillStyle = shade(COL.gold, -0.1);
+    ctx.fillRect(x - 1.4, y - 2.5, 2.8, 3);
+  }
+  ctx.strokeStyle = 'rgba(176,132,42,0.85)';
+  ctx.lineWidth = 0.8;
+  for (let k = 0; k < 3; k++) {
+    const z = H + 3 + A - 4 - k * 4;
+    const p = pt(face, 0.55 + k * 0.08, z);
+    const q = pt(face, S - 0.55 - k * 0.08, z);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
 }
 
 /**
@@ -1746,7 +1812,7 @@ function triumphalArchArt(ctx, S, variant, axis) {
     // two engaged columns on the face the road comes out of
     const p = a1 - 0.02;
     const cs = [c0 + 0.22, c1 - 0.18];
-    for (const c of cs) {
+    decal(axis === 0 ? 1 : 0, axis === 0 ? 0 : 1, () => cs.forEach((c) => {
       const [x, y] = pt(p, c, 3);
       ctx.fillStyle = shade(marble, axis === 0 ? -0.12 : 0.04);
       ctx.fillRect(x - 1.6, y - (H - 6), 3.2, H - 6);
@@ -1754,7 +1820,7 @@ function triumphalArchArt(ctx, S, variant, axis) {
       ctx.fillRect(x + 0.6, y - (H - 6), 1, H - 6);
       ctx.fillStyle = shade(COL.gold, -0.1);
       ctx.fillRect(x - 2.2, y - (H - 5), 4.4, 1.6); // capital
-    }
+    }));
   }
   // the entablature, the attic and its cornice, over both piers and the road
   bx(a0, a1, 0.15, S - 0.15, H, 3, stone, { plain: true });
@@ -1762,29 +1828,8 @@ function triumphalArchArt(ctx, S, variant, axis) {
   bx(a0, a1, 0.15, S - 0.15, H + 3 + A, 2.2, stone, { plain: true });
   // the vault: the arch's curve on the face the road comes out of
   const face = a1 - 0.05;
-  const face2 = axis === 0 ? shade(marble, -0.2) : marble; // that face's light (box: right faces are darker)
-  const curve = [pt(face, 1.0, H), pt(face, 2.0, H), pt(face, 2.0, H - 12)];
-  for (let k = 1; k < 12; k++) {
-    const t = k / 12; // across the opening, from its near side back to its far side
-    const c = 2.0 - t;
-    curve.push(pt(face, c, H - 12 + Math.sin(Math.PI * t) * 9));
-  }
-  curve.push(pt(face, 1.0, H - 12));
-  poly(ctx, curve, face2, shade(marble, -0.45), 0.6);
-  // the keystone, and the inscription on the attic in gold
-  {
-    const [x, y] = pt(face, 1.5, H - 2.5);
-    ctx.fillStyle = shade(COL.gold, -0.1);
-    ctx.fillRect(x - 1.4, y - 2.5, 2.8, 3);
-  }
-  ctx.strokeStyle = 'rgba(176,132,42,0.85)';
-  ctx.lineWidth = 0.8;
-  for (let k = 0; k < 3; k++) {
-    const z = H + 3 + A - 4 - k * 4;
-    const p = pt(face, 0.55 + k * 0.08, z);
-    const q = pt(face, S - 0.55 - k * 0.08, z);
-    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-  }
+  // (One face, as a whole: turned away, it goes behind the attic.)
+  decal(axis === 0 ? 1 : 0, axis === 0 ? 0 : 1, () => archFace(ctx, pt, face, axis, H, A, S, marble));
   // the gilded team on top, facing the way the road runs on
   const top = H + 3 + A + 2.2;
   const dir = axis === 0 ? 1 : -1;
@@ -1811,9 +1856,12 @@ function ironMineArt(ctx, S) {
   quad(ctx, 0.25, 1.1, S - 0.15, S - 0.1, 0, '#75685a'); // trodden ground in front
   // the hillside, rising to the back
   const R = S - 0.15;
+  // (Its far sides too, for a turned mine: as written they stay hidden behind the rest.)
+  decal(-1, 0, () => poly(ctx, [P(0.1, 0.1, 0), P(0.1, 0.1, 26), P(0.1, 0.55, 22), P(0.1, 1.2, 0)], '#7d7466', '#5d564b', 0.6));
+  decal(0, -1, () => poly(ctx, [P(0.1, 0.1, 0), P(R, 0.1, 0), P(R, 0.1, 18), P(0.1, 0.1, 26)], '#958b78', '#5d564b', 0.6));
   poly(ctx, [P(0.1, 0.1, 26), P(R, 0.1, 18), P(R, 0.45, 16), P(0.1, 0.55, 22)], '#a39985', '#5d564b', 0.6); // top
-  poly(ctx, [P(0.1, 0.55, 22), P(R, 0.45, 16), P(R, 0.9, 0), P(0.1, 1.2, 0)], '#8c8272', '#5d564b', 0.6); // front face
-  poly(ctx, [P(R, 0.1, 18), P(R, 0.45, 16), P(R, 0.9, 0), P(R, 0.1, 0)], '#6d6457', '#5d564b', 0.6); // side
+  decal(0, 1, () => poly(ctx, [P(0.1, 0.55, 22), P(R, 0.45, 16), P(R, 0.9, 0), P(0.1, 1.2, 0)], '#8c8272', '#5d564b', 0.6)); // front face
+  decal(1, 0, () => poly(ctx, [P(R, 0.1, 18), P(R, 0.45, 16), P(R, 0.9, 0), P(R, 0.1, 0)], '#6d6457', '#5d564b', 0.6)); // side
   // cracks and ledges in the rock
   ctx.strokeStyle = 'rgba(60,54,46,0.6)';
   ctx.lineWidth = 0.6;
@@ -2676,9 +2724,14 @@ function ranchArt(ctx, S, variant, herd) {
   const f = [[1.5, 0.15], [S - 0.12, 0.15], [S - 0.12, S - 0.12], [0.2, S - 0.12], [0.2, 1.6]];
   ctx.strokeStyle = '#f0e6d0';
   ctx.lineWidth = 0.8;
-  for (const z of [3, 6]) {
+  for (let k = 1; k < f.length; k++) {
+    // (Rail by rail, so a turned ranch can sort each against the stable.)
     ctx.beginPath();
-    f.forEach(([u, v], k) => { const [x, y] = P(u, v, z); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+    for (const z of [3, 6]) {
+      const a = P(...f[k - 1], z);
+      const b = P(...f[k], z);
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    }
     ctx.stroke();
   }
   ctx.fillStyle = '#d9ceb4';

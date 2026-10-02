@@ -50,7 +50,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 3. **Water:** a Puteus (Well) turns tents into family tents. Later, a Castellum Aquae (Reservoir) pipes water to a Lacus (Fountain) for better homes. With the Housing tool in hand, an outlined blue shows where homes would get water.
 4. **Safety:** an Excubitorium (Prefecture: against fire, and as police against thieves and rioters) and a Collegium Fabrum (Engineer's Post: against collapse) must send walkers past every building. Their walkers head for the streets closest to disaster, but each post looks after its own neighbourhood, so spread them out.
 5. **Food:** Seges (Wheat Farm) on meadow → Granarium (Granary) → Macellum (Market). Market vendors sell door to door. With a farm in hand the meadow is outlined in green-gold, even under snow.
-6. **Grow:** temples, schools, theaters, baths and a Forum (for taxes) let homes move up.
+6. **Grow:** temples, schools, theaters, baths and a Forum (for taxes) let homes move up. Their walkers head for the streets whose homes most need a visit, but each building serves its own neighbourhood.
 7. **Click everything.** Every building says what it is doing and what it lacks; walkers, soldiers, raiders and ships say who they are and what they are up to.
 
 ## Controls

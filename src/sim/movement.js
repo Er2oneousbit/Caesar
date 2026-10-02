@@ -15,6 +15,7 @@ import { CONFIG } from '../config.js';
 import { WALKER_TYPES, roadblockBit } from '../data/walkers.js';
 import { ROADBLOCK } from '../world/map.js';
 import { killWalker, mainOf } from './entities.js';
+import { vendorNeed } from './market.js';
 
 const DX = [0, 1, 0, -1];
 const DY = [-1, 0, 1, 0];
@@ -132,6 +133,30 @@ const EMPTY_STREET_WEIGHT = 0.2;
  * is already in every save, so the pull needs no new state.
  */
 const RISK_PULL = 10;
+/**
+ * Every other service roamer (priests, teachers, librarians, scholars,
+ * barbers, physicians, bath attendants, entertainers, market vendors, tax
+ * collectors) is drawn the same way to the way whose homes most need him
+ * (streetNeed): a way whose neediest home has lost his access weighs
+ * 1 + SERVICE_PULL times as much. They used to choose junctions by chance,
+ * and in a mission 2 playtest the Stone Cottages on a school's far street
+ * waited months for a teacher. Measured on that save over six seeds and two
+ * years (with the lookahead of streetNeed and the overlapping rounds of
+ * sim/services.js), the homes within ROAM_RADIUS of a service went 85,494
+ * home-days without it, the longest wait 505 days; with a pull of 10, 3,312
+ * days (longest wait 185), at 20, 137 (105), at 40 none (96: a visit lasts
+ * 96 days), at 80, 392 (125). The mission 4 save and the demo city gained
+ * little past 20. The pull is stronger than RISK_PULL because need, unlike
+ * risk, stops growing once the access has run out: homes that lost it long
+ * ago look no needier than homes that lost it yesterday.
+ */
+const SERVICE_PULL = 40;
+/**
+ * A home met k road steps down a way counts 1 - k * NEED_FADE of its need
+ * (see streetNeed): half at the end of the lookahead, so a needy home round
+ * the next corner draws less than one on the street itself.
+ */
+const NEED_FADE = 0.5 / ROAM_LOOKAHEAD;
 /** Which risk a roamer's visit clears (sim/services.js), by its effect. */
 const RISK_OF_EFFECT = { fire: 'fireRisk', damage: 'damageRisk' };
 
@@ -158,17 +183,8 @@ export function streetValue(map, w, x, y, dir) {
     n++;
     endServes = servesSomething(map, x, y);
     if (endServes) served++;
-    // On along the only way ahead; stop at a junction, a dead end or a roadblock.
-    let next = -1;
-    let ways = 0;
-    for (let e = 0; e < 4; e++) {
-      if (e === (dir + 2) % 4) continue;
-      const nx = x + DX[e];
-      const ny = y + DY[e];
-      if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) { ways++; next = e; }
-    }
-    if (ways !== 1 || roadblockStops(map, w, map.idx(x + DX[next], y + DY[next]))) break;
-    dir = next;
+    dir = wayOn(map, w, x, y, dir);
+    if (dir < 0) break;
     x += DX[dir];
     y += DY[dir];
   }
@@ -176,39 +192,166 @@ export function streetValue(map, w, x, y, dir) {
 }
 
 /**
- * The highest `risk` (0..1 of the disaster threshold) among the buildings a
- * walker would pass going `dir` from road tile (x, y): the same way, through
- * bends up to the next junction, that streetValue looks down.
+ * The way on along a street from road tile (x, y), arrived at heading `dir`:
+ * the direction of the only road ahead, or -1 at a junction, a dead end or a
+ * roadblock that stops roamer `w`.
  */
-export function streetRisk(game, w, x, y, dir, risk) {
+function wayOn(map, w, x, y, dir) {
+  let next = -1;
+  let ways = 0;
+  for (let e = 0; e < 4; e++) {
+    if (e === (dir + 2) % 4) continue;
+    const nx = x + DX[e];
+    const ny = y + DY[e];
+    if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) { ways++; next = e; }
+  }
+  if (ways !== 1 || roadblockStops(map, w, map.idx(x + DX[next], y + DY[next]))) return -1;
+  return next;
+}
+
+/**
+ * The highest `score(building)` among the buildings a walker would pass going
+ * `dir` from road tile (x, y): the same way, through bends up to the next
+ * junction, that streetValue looks down.
+ */
+function worstAlong(game, w, x, y, dir, score) {
   const { map, buildings } = game;
   const r = CONFIG.SERVICE_RADIUS;
-  const limit = risk === 'fireRisk' ? CONFIG.FIRE_THRESHOLD : CONFIG.DAMAGE_THRESHOLD;
   let worst = 0;
   for (let k = 0; k < ROAM_LOOKAHEAD; k++) {
     for (let ty = y - r; ty <= y + r; ty++) {
       for (let tx = x - r; tx <= x + r; tx++) {
         if (!map.inBounds(tx, ty)) continue;
-        // A hippodrome's risk is kept on its main section (sim/risk.js), and a
-        // walk past any section clears it (sim/services.js).
-        const b = mainOf(game, buildings.get(map.building[map.idx(tx, ty)]));
-        if (b && b[risk] > worst) worst = b[risk];
+        const id = map.building[map.idx(tx, ty)];
+        if (!id) continue;
+        const v = score(buildings.get(id));
+        if (v > worst) worst = v;
       }
     }
-    let next = -1;
-    let ways = 0;
-    for (let e = 0; e < 4; e++) {
-      if (e === (dir + 2) % 4) continue;
-      const nx = x + DX[e];
-      const ny = y + DY[e];
-      if (map.inBounds(nx, ny) && map.road[map.idx(nx, ny)]) { ways++; next = e; }
-    }
-    if (ways !== 1 || roadblockStops(map, w, map.idx(x + DX[next], y + DY[next]))) break;
-    dir = next;
+    dir = wayOn(map, w, x, y, dir);
+    if (dir < 0) break;
     x += DX[dir];
     y += DY[dir];
   }
+  return worst;
+}
+
+/**
+ * The highest `risk` (0..1 of the disaster threshold) among the buildings a
+ * walker would pass going `dir` from road tile (x, y).
+ */
+export function streetRisk(game, w, x, y, dir, risk) {
+  const limit = risk === 'fireRisk' ? CONFIG.FIRE_THRESHOLD : CONFIG.DAMAGE_THRESHOLD;
+  // A hippodrome's risk is kept on its main section (sim/risk.js), and a
+  // walk past any section clears it (sim/services.js).
+  const worst = worstAlong(game, w, x, y, dir, (b) => mainOf(game, b)?.[risk] || 0);
   return Math.min(1, worst / limit);
+}
+
+/** Effects whose visit sets the home timer of the same name (sim/services.js). */
+const TIMER_EFFECTS = new Set(['school', 'library', 'academy', 'barber', 'baths', 'clinic']);
+
+/** 0 for an access timer at full, 1 for one run out. */
+const lapsed = (left, full) => 1 - Math.min(1, Math.max(0, left || 0) / full);
+
+/**
+ * How badly home `b` needs a visit from service roamer `w` (0..1): how far
+ * the access his last visit gave it has run down (1 when it has none), or,
+ * for a market vendor, how short its pantry is of what he carries
+ * (vendorNeed). 0 for anything not a lived-in home, and for prefects and
+ * engineers, who go by risk instead (streetRisk).
+ */
+export function homeNeed(game, w, b) {
+  const h = b && b.house;
+  if (!h || h.pop <= 0) return 0;
+  const effect = WALKER_TYPES[w.type]?.effect;
+  const days = CONFIG.ACCESS_DAYS;
+  if (TIMER_EFFECTS.has(effect)) return lapsed(h[effect], days);
+  switch (effect) {
+    case 'religion': return w.god ? lapsed(h.religion[w.god], days) : 0;
+    case 'venue': return w.venue ? lapsed(h.ent[w.venue], days) : 0;
+    case 'tax': return lapsed(h.tax, CONFIG.TAX_ACCESS_DAYS);
+    case 'market': {
+      const market = w.origin ? game.buildings.get(w.origin) : null;
+      return market && market.stock ? vendorNeed(market, h) : 0;
+    }
+    default: return 0;
+  }
+}
+
+/**
+ * How badly the homes down a way need service roamer `w` (0..1): the
+ * neediest home (homeNeed) within reach of the roads he could walk from
+ * road tile (x, y), stepped onto heading `dir`, within ROAM_LOOKAHEAD steps,
+ * faded by NEED_FADE per step. Unlike streetRisk it looks past junctions
+ * (never back through the one he stands on, nor past a roadblock that stops
+ * him). Looking only to the next junction kept a temple's priests on the
+ * streets beside it: the way to the block behind began among homes they had
+ * just served, so it never drew them, and in the demo city the far rows went
+ * up to 500 days without Venus. Measured with a pull of 10 over six seeds,
+ * looking past junctions cut the demo city's home-days without a service in
+ * reach from 131,518 to 49,111 and the mission 4 save's from 308,462 to
+ * 267,369 (mission 2: 4,421 against 5,482, about even).
+ * Homes farther than ROAM_RADIUS from his building count nothing: the pull
+ * (up to 41 times) would otherwise outweigh the leash (a tenth) and draw him
+ * off after homes he cannot keep, past the edge of his neighbourhood. With
+ * this the mission 4 save's homes in reach went 178,495 home-days without a
+ * service against 208,365, and all of its homes 226,700 against 248,811
+ * (the demo city's 6,267 against 4,594, mission 2's none either way).
+ */
+export function streetNeed(game, w, x, y, dir) {
+  const { map, buildings } = game;
+  const r = CONFIG.SERVICE_RADIUS;
+  const origin = w.origin ? buildings.get(w.origin) : null;
+  const ox = origin ? origin.x + (origin.size - 1) / 2 : 0;
+  const oy = origin ? origin.y + (origin.size - 1) / 2 : 0;
+  const start = map.idx(x, y);
+  const seen = new Set([map.idx(x - DX[dir], y - DY[dir]), start]);
+  const needs = new Map(); // building id -> homeNeed, for homes beside several roads
+  let worst = 0;
+  let disc = 1;
+  // Each building within reach of a road tile, first met at step k, counts
+  // its need faded to `disc`; met again further on it can only count less.
+  const look = (tx, ty) => {
+    if (!map.inBounds(tx, ty)) return;
+    const id = map.building[map.idx(tx, ty)];
+    if (!id) return;
+    let n = needs.get(id);
+    if (n === undefined) {
+      const b = buildings.get(id);
+      const c = (b.size - 1) / 2; // from centre to centre, so a big home counts alike on every side
+      n = origin && Math.max(Math.abs(b.x + c - ox), Math.abs(b.y + c - oy)) > ROAM_RADIUS ? 0 : homeNeed(game, w, b);
+      needs.set(id, n);
+    }
+    if (n * disc > worst) worst = n * disc;
+  };
+  for (let ty = y - r; ty <= y + r; ty++) for (let tx = x - r; tx <= x + r; tx++) look(tx, ty);
+  // Breadth first along the roads: a tile and the way it was entered by.
+  // Everything within reach of a tile but the strip on its far side was
+  // already in reach of the tile before it, one step nearer.
+  let frontier = [start, dir];
+  for (let k = 1; k <= ROAM_LOOKAHEAD && frontier.length; k++) {
+    disc = 1 - k * NEED_FADE;
+    if (worst >= disc) break; // nothing further on can beat it
+    const next = [];
+    for (let f = 0; f < frontier.length; f += 2) {
+      const cx = map.xOf(frontier[f]);
+      const cy = map.yOf(frontier[f]);
+      for (let e = 0; e < 4; e++) {
+        const nx = cx + DX[e];
+        const ny = cy + DY[e];
+        if (!map.inBounds(nx, ny)) continue;
+        const j = map.idx(nx, ny);
+        if (!map.road[j] || seen.has(j) || roadblockStops(map, w, j)) continue;
+        seen.add(j);
+        if (DX[e]) for (let ty = ny - r; ty <= ny + r; ty++) look(nx + DX[e] * r, ty);
+        else for (let tx = nx - r; tx <= nx + r; tx++) look(tx, ny + DY[e] * r);
+        if (k < ROAM_LOOKAHEAD) next.push(j, e);
+      }
+    }
+    frontier = next;
+  }
+  return worst;
 }
 
 /**
@@ -227,8 +370,8 @@ export function pickRoamTile(game, w) {
   const ox = origin ? origin.x + (origin.size - 1) / 2 : w.x;
   const oy = origin ? origin.y + (origin.size - 1) / 2 : w.y;
   if (!w.memory) w.memory = [];
-  const risk = RISK_OF_EFFECT[WALKER_TYPES[w.type]?.effect];
-  let total = 0;
+  const def = WALKER_TYPES[w.type];
+  const risk = RISK_OF_EFFECT[def?.effect];
   const choices = [];
   for (let d = 0; d < 4; d++) {
     if (d === back) continue;
@@ -240,11 +383,22 @@ export function pickRoamTile(game, w) {
     let weight = d === w.lastDir ? 3 : 2;
     if (w.memory.includes(idx)) weight *= 0.25;
     if (Math.max(Math.abs(nx - ox), Math.abs(ny - oy)) > ROAM_RADIUS) weight *= 0.1;
-    weight *= EMPTY_STREET_WEIGHT + (1 - EMPTY_STREET_WEIGHT) * streetValue(map, w, nx, ny, d);
-    if (risk) weight *= 1 + RISK_PULL * streetRisk(game, w, nx, ny, d, risk);
     choices.push(d, weight);
-    total += weight;
   }
+  // Looking down each way only matters at a junction: with one way on, it is
+  // taken whatever it weighs (and the dice are thrown all the same).
+  if (choices.length > 2) {
+    for (let k = 0; k < choices.length; k += 2) {
+      const d = choices[k];
+      const nx = w.x + DX[d];
+      const ny = w.y + DY[d];
+      choices[k + 1] *= EMPTY_STREET_WEIGHT + (1 - EMPTY_STREET_WEIGHT) * streetValue(map, w, nx, ny, d);
+      if (risk) choices[k + 1] *= 1 + RISK_PULL * streetRisk(game, w, nx, ny, d, risk);
+      else if (def?.effect) choices[k + 1] *= 1 + SERVICE_PULL * streetNeed(game, w, nx, ny, d);
+    }
+  }
+  let total = 0;
+  for (let k = 1; k < choices.length; k += 2) total += choices[k];
   // Remember where we are now.
   w.memory.push(map.idx(w.x, w.y));
   if (w.memory.length > ROAM_MEMORY) w.memory.shift();

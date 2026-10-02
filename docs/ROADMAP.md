@@ -460,7 +460,6 @@ Seeing why:
 
 From playtesting (still to decide which to take):
 
-* **Every other roamer still picks its turns at random**: since v0.13.4 prefects and engineers head for the streets closest to burning or falling down, and set out as the last one turns for home, but priests, teachers, physicians, barbers, bath attendants, market vendors, entertainers and tax collectors still choose junctions by chance, one at a time. Found in a mission 2 save, where the Stone Cottages on a school's far street waited months for a teacher. The same pull could use each home's access timer (a street whose homes are about to lose their temple, school or market draws the walker), measured the same way: the longest gap between visits per home, over several seeds, before and after. Physicians matter most once disease is on.
 * **The new city's mood bonus ends as a 20-point cliff** at month 12; on Insane it lands just when the economy is weakest. A taper over several months would be kinder and easier to read.
 * **The early missions on Hard and Insane**: the sweep's demo city finds them harsh, partly because it builds what those missions do not unlock (`npm run sim -- --unlocks` builds only what they allow); measure again with it before changing anything.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.

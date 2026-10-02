@@ -97,8 +97,30 @@ function applyEffect(game, effect, w, origin, b) {
   }
 }
 
-/** Roamers whose next round starts as the last one heads home (see updateServiceSpawns). */
-const OVERLAP_ROUNDS = new Set(['prefect', 'engineer']);
+/**
+ * Roamers whose next round starts as the last one heads home (see
+ * updateServiceSpawns). Prefects and engineers first; then the services whose
+ * homes still went without them once the roamers were drawn to the homes
+ * that need them (sim/movement.js SERVICE_PULL), measured over six seeds and
+ * two years on the mission 2 and mission 4 playtest saves and the demo city
+ * (home-days without the service, for homes within reach of one).
+ * Tax collectors: a registration lasts half as long as any other visit; the
+ * mission 4 save's homes went 48,453 home-days unregistered without the
+ * overlap and 14,218 with it, the demo city's 8,867 and 2,916, mission 2's
+ * 2,156 and none. Priests, barbers, physicians and bath attendants: one
+ * temple, barber, clinic or bath serves a wide area; the demo city's homes
+ * went 10,041 home-days without Venus and 1,729 without a barber (1,833 and
+ * none with it), the mission 4 save's 4,481 without baths and 2,169 without
+ * a physician (720 and 960). Not teachers, librarians or scholars, whose
+ * homes were seldom without them already (the demo city's longest wait for
+ * a school 109 days), nor entertainers, who roam only while shows play and
+ * gained nothing clear (the mission 4 save's theater homes 4,401 home-days
+ * without, 8,978 with; its amphitheater's 5,736 and 2,249) for 60% more of
+ * them in the streets, nor market vendors: a market already keeps two out,
+ * the overlap made it three, and the mission 4 save's homes went 6,553
+ * home-days without one before and 7,379 after.
+ */
+const OVERLAP_ROUNDS = new Set(['prefect', 'engineer', 'taxman', 'priest', 'barber', 'physician', 'bather']);
 
 /** How many of the building's own roamers are out (`onlyRoaming`: not counting those walking home)? */
 function roamersOut(game, b, type, onlyRoaming = false) {
@@ -135,10 +157,11 @@ export function updateServiceSpawns(game, b) {
   b.spawnTimer -= b.efficiency;
   if (b.spawnTimer > 0) return;
   // Markets keep two vendors on the streets; everything else one walker.
-  // Prefects and engineers count only while on their rounds: the next one
-  // sets out as the last turns for home. Waiting for him to walk all the way
-  // back left a prefecture's streets unwatched for half of every round, and
-  // a round that wandered off up an empty road cost a whole month.
+  // The roamers in OVERLAP_ROUNDS (prefects, engineers, tax collectors,
+  // priests and the health services) count only while on their rounds: the
+  // next one sets out as the last turns for home. Waiting for him to walk
+  // all the way back left a prefecture's streets unwatched for half of every
+  // round, and a round that wandered off up an empty road cost a whole month.
   const maxOut = def.kind === 'market' ? 2 : 1;
   if (roamersOut(game, b, def.walker, OVERLAP_ROUNDS.has(def.walker)) >= maxOut) return;
   const init = {};

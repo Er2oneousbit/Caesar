@@ -22,7 +22,8 @@ import { ROADBLOCK_GROUPS, roadblockBit, WALKER_TYPES } from '../src/data/walker
 import { ROADBLOCK, Wall } from '../src/world/map.js';
 import { planAction, undoLast } from '../src/sim/construction.js';
 import { spawnWalker } from '../src/sim/entities.js';
-import { startRoaming, followPath, pickRoamTile, streetValue, streetRisk } from '../src/sim/movement.js';
+import { startRoaming, followPath, pickRoamTile, streetValue, streetRisk, streetNeed, homeNeed } from '../src/sim/movement.js';
+import { vendorNeed, vendorSupply } from '../src/sim/market.js';
 import { updateServiceSpawns } from '../src/sim/services.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
@@ -291,11 +292,180 @@ test('a prefect or engineer at a junction heads for the street closest to burnin
   assert.ok(priest > 0.35 && priest < 0.65, `a priest is not drawn by risk: east ${priest}`);
 });
 
-test('a prefecture sends its next prefect as the last one turns for home; a temple waits for its priest', () => {
+/**
+ * A T of roads with seven homes along each arm (Huts, 5 people): a walker at
+ * the junction heading north can turn east or west, and without a pull each
+ * turn weighs the same. Returns the homes of each arm and the share of 400
+ * walkers made by `make` that turn east.
+ */
+function serviceT(seed) {
+  const game = newGame({ size: 96, type: 'plains', seed });
+  const spot = findFree(game, 21, 8);
+  const jx = spot.x + 10;
+  const jy = spot.y + 3;
+  assert.ok(build(game, 'road', spot.x, jy, spot.x + 20, jy).ok);
+  assert.ok(build(game, 'road', jx, jy, jx, jy + 3).ok);
+  const home = (x) => {
+    const b = addBuilding(game, 'house', x, jy - 1, 1);
+    Object.assign(b.house, { pop: 5, tier: 4 });
+    return b;
+  };
+  const east = [];
+  const west = [];
+  for (let x = jx + 3; x <= jx + 9; x++) east.push(home(x));
+  for (let x = jx - 9; x <= jx - 3; x++) west.push(home(x));
+  const share = (make) => {
+    let n = 0;
+    for (let k = 0; k < 400; k++) {
+      const w = { ...make(), x: jx, y: jy, lastDir: 0, memory: [] }; // heading north, at the junction
+      if (game.map.xOf(pickRoamTile(game, w)) > jx) n++;
+    }
+    return n / 400;
+  };
+  return { game, jx, jy, east, west, share };
+}
+
+test('a priest, teacher, barber or tax collector at a junction heads for the street whose homes have lost his visit', () => {
+  // Every service roamer but prefects and engineers chose junctions by
+  // chance, and in a mission 2 playtest the Stone Cottages on a school's far
+  // street waited months for a teacher. East: homes whose access has run
+  // out; west: homes just visited.
+  const { east, west, share } = serviceT('roam-need');
+  const set = (homes, days, tax) => {
+    for (const b of homes) Object.assign(b.house, { school: days, barber: days, tax });
+    for (const b of homes) b.house.religion.ceres = days;
+  };
+  set(east, 0, 0);
+  set(west, 96, 48);
+  // A way whose neediest home has none of his access left weighs 41 times a
+  // way of homes he has just served (SERVICE_PULL 40, measured: see
+  // sim/movement.js): about 98% of turns. Half and half without the pull.
+  for (const w of [{ type: 'priest', god: 'ceres' }, { type: 'teacher' }, { type: 'barber' }, { type: 'taxman' }]) {
+    const s = share(() => w);
+    assert.ok(s > 0.9, `${w.type} east ${s}`);
+  }
+  // A priest of another god is not drawn by Ceres's homes.
+  const mars = share(() => ({ type: 'priest', god: 'mars' }));
+  assert.ok(mars > 0.35 && mars < 0.65, `a priest of Mars: east ${mars}`);
+  // Turned round: the pull goes with the need, not the side.
+  set(east, 96, 48);
+  set(west, 0, 0);
+  const t = share(() => ({ type: 'teacher' }));
+  assert.ok(t < 0.1, `teacher east ${t} once the west has lost its school`);
+  // Half run down weighs half: 1 + 40 * 0.5 against 1.
+  set(west, 48, 24);
+  const half = share(() => ({ type: 'teacher' }));
+  assert.ok(half > 0.01 && half < 0.12, `teacher east ${half} against a half-run-down west (21:1)`);
+});
+
+test('a market vendor at a junction heads for the street whose pantries are low in what his market has', () => {
+  const { game, jx, jy, east, west, share } = serviceT('roam-vendor');
+  const market = addBuilding(game, 'market', jx + 2, jy + 2, 2); // beside the road south, in reach of both arms
+  market.stock.wheat = 500;
+  for (const b of west) b.house.food.wheat = 10; // a Hut of 5 eats 1.25 a month: topped up past three months
+  for (const b of east) b.house.food.wheat = 0;
+  assert.equal(vendorNeed(market, east[0].house), 1, 'an empty pantry needs a full visit');
+  assert.equal(vendorNeed(market, west[0].house), 0, 'a full one none');
+  const s = share(() => ({ type: 'vendor', origin: market.id }));
+  assert.ok(s > 0.9, `vendor east ${s}`);
+  // The need is the share of the food the visit would hand over: an Insula
+  // keeps two kinds, each topped up to three months (15 for 40 people), the
+  // kinds it has first, then new ones the market has.
+  const stock = { wheat: 500, vegetables: 0, fruit: 500, meat: 0, fish: 500, pottery: 0, furniture: 0, oil: 0, wine: 0, clothing: 0 };
+  const pantries = [{}, { wheat: 5 }, { vegetables: 20, wheat: 2 }, { vegetables: 2 }, { fruit: 30, wheat: 30 }, { meat: 4, fish: 14 }];
+  for (const pantry of pantries) {
+    const h = { ...east[0].house, tier: 12, pop: 40, food: { wheat: 0, vegetables: 0, fruit: 0, meat: 0, fish: 0, ...pantry }, goods: { ...east[0].house.goods } };
+    const m = { stock: { ...stock } };
+    const need = vendorNeed(m, h);
+    const fake = { time: { totalDays: 0 }, city: { foodFlow: { sold: 0 } } };
+    const before = { ...h.food };
+    vendorSupply(fake, m, { house: h });
+    let given = 0;
+    for (const f in before) given += h.food[f] - before[f];
+    assert.ok(Math.abs(need - given / 30) < 1e-9, `${JSON.stringify(pantry)}: need ${need}, handed over ${given} of 30`);
+  }
+  // A market out of what the homes eat cannot help them: no pull.
+  market.stock.wheat = 0;
+  assert.equal(vendorNeed(market, east[0].house), 0, 'nothing to bring');
+  const none = share(() => ({ type: 'vendor', origin: market.id }));
+  assert.ok(none > 0.35 && none < 0.65, `vendor east ${none} with an empty market`);
+});
+
+test('a service roamer looks past the next junction for homes that need him, fading with distance, and not past a roadblock', () => {
+  // A way that starts among homes just served but leads round a corner to
+  // homes that lost their priest: looking only to the next junction kept a
+  // temple's priests on the streets beside it, and the demo city's far rows
+  // went up to 500 days without Venus.
+  const game = newGame({ size: 96, type: 'plains', seed: 'roam-ahead' });
+  const { map } = game;
+  const spot = findFree(game, 16, 12);
+  const jx = spot.x + 12;
+  const jy = spot.y + 9;
+  const W = 3;
+  assert.ok(build(game, 'road', spot.x + 1, jy, jx + 3, jy).ok, 'a street west from the junction');
+  assert.ok(build(game, 'road', jx - 3, jy - 6, jx - 3, jy - 1).ok, 'a turning north three tiles west of it');
+  const near = addBuilding(game, 'house', jx - 1, jy + 1, 1);
+  const far = addBuilding(game, 'house', jx - 4, jy - 5, 1); // beside the turning only, 5 steps on
+  for (const b of [near, far]) Object.assign(b.house, { pop: 5, tier: 4 });
+  near.house.religion.venus = 96;
+  const priest = { type: 'priest', god: 'venus' };
+  assert.equal(homeNeed(game, priest, near), 0, 'just served');
+  assert.equal(homeNeed(game, priest, far), 1, 'never served');
+  assert.equal(homeNeed(game, { type: 'prefect' }, far), 0, 'prefects go by risk instead');
+  // (jx-1) step 0, (jx-2) 1, (jx-3) 2: the junction, (jx-3, jy-1..-3) 3-5:
+  // the far home is in reach from step 5, half faded at step 8.
+  assert.equal(streetNeed(game, priest, jx - 1, jy, W), 1 - 5 * 0.5 / 8);
+  far.house.pop = 0;
+  assert.equal(streetNeed(game, priest, jx - 1, jy, W), 0, 'an empty home needs nobody');
+  far.house.pop = 5;
+  // A roadblock that stops priests at the turning hides the home beyond;
+  // one that lets them through does not.
+  const rb = map.idx(jx - 3, jy - 1);
+  map.roadblock[rb] = 128;
+  assert.equal(streetNeed(game, priest, jx - 1, jy, W), 0, 'behind a roadblock');
+  map.roadblock[rb] = 128 | 2; // priests through
+  assert.equal(streetNeed(game, priest, jx - 1, jy, W), 1 - 5 * 0.5 / 8);
+  map.roadblock[rb] = 0;
+  // Homes beyond the roam radius (13 tiles) of his own temple count nothing:
+  // the pull would otherwise outweigh the leash and draw him off after homes
+  // he cannot keep. The far home is 14.5 tiles from this temple, 4.5 from
+  // the other.
+  const away = addBuilding(game, 'temple_venus', jx + 10, jy + 2, 2);
+  const close = addBuilding(game, 'temple_venus', jx, jy - 4, 2);
+  assert.equal(streetNeed(game, { ...priest, origin: away.id }, jx - 1, jy, W), 0, 'out of his reach');
+  assert.equal(streetNeed(game, { ...priest, origin: close.id }, jx - 1, jy, W), 1 - 5 * 0.5 / 8, 'in reach');
+});
+
+test('the roam radius is measured from the centre of a big home, alike on every side', () => {
+  // Two 2x2 blocks 13 tiles either side of a temple, centre to centre.
+  // Measured from its top-left corner the western one was 13.5 tiles off
+  // and drew no priest, while its mirror image in the east did.
+  const game = newGame({ size: 128, type: 'plains', seed: 'roam-leash' });
+  const { x0, y } = straightRoad(game, 42);
+  const tx = x0 + 21;
+  const temple = addBuilding(game, 'temple_venus', tx, y + 1, 2); // centre tx + 0.5
+  const block = (x) => {
+    const b = addBuilding(game, 'house', x, y - 2, 2);
+    Object.assign(b.house, { pop: 20, tier: 4, merged: true });
+    return b;
+  };
+  block(tx - 13); // centre tx - 12.5
+  block(tx + 13); // centre tx + 13.5
+  const priest = { type: 'priest', god: 'venus', origin: temple.id };
+  assert.equal(streetNeed(game, priest, tx - 12, y, 3), 1, 'west');
+  assert.equal(streetNeed(game, priest, tx + 13, y, 1), 1, 'east');
+});
+
+test('a prefecture, temple, Forum or barber sends its next walker as the last one turns for home; a school waits for its teacher', () => {
+  // Measured (sim/services.js OVERLAP_ROUNDS): overlapping rounds cut the
+  // demo city's home-days without Venus from 12,184 to 1,063 and without a
+  // registration from 10,266 to 2,512; a school's homes were seldom without
+  // a teacher already, so it still waits.
   const game = newGame({ size: 96, type: 'plains', seed: 'roam-overlap' });
-  const { x0, y } = straightRoad(game, 20);
+  const { x0, y } = straightRoad(game, 30);
   const out = (b, type) => b.walkers.map((id) => game.walkers.get(id)).filter((w) => w && w.type === type);
-  for (const [type, walker, x] of [['prefecture', 'prefect', x0 + 2], ['temple_ceres', 'priest', x0 + 10]]) {
+  const overlaps = new Set(['prefect', 'priest', 'taxman', 'barber']);
+  for (const [type, walker, x] of [['prefecture', 'prefect', x0 + 2], ['temple_ceres', 'priest', x0 + 6], ['forum', 'taxman', x0 + 12], ['barber', 'barber', x0 + 17], ['school', 'teacher', x0 + 22]]) {
     assert.ok(build(game, type, x, y + 1).ok, `${type} built`);
     const b = [...game.buildings.values()].find((o) => o.type === type);
     b.efficiency = 1;
@@ -308,7 +478,7 @@ test('a prefecture sends its next prefect as the last one turns for home; a temp
     out(b, walker)[0].state = 'return';
     b.spawnTimer = 0;
     updateServiceSpawns(game, b);
-    assert.equal(out(b, walker).length, walker === 'prefect' ? 2 : 1, `${type}: the first heading home`);
+    assert.equal(out(b, walker).length, overlaps.has(walker) ? 2 : 1, `${type}: the first heading home`);
   }
 });
 

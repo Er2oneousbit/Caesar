@@ -88,7 +88,7 @@ test('each mission\'s goals are within reach of its buildings', () => {
   // from step 7, whose hippodrome the Imperial Palatium (95) needs. Siblings
   // reach the same level as the mission beside them.
   assert.deepEqual(Object.fromEntries(SCENARIOS.map((s) => [s.id, topLevel(s)])),
-    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c6p: 19, c7: 20, c7p: 20 });
+    { c1: 4, c2: 7, c3: 9, c3m: 9, c4: 13, c4p: 13, c5: 19, c5p: 19, c6: 19, c6p: 19, c7: 20, c7p: 20, c8m: 20, c8p: 20, c9m: 20, c9p: 20 });
   for (const s of SCENARIOS) {
     const g = s.goals;
     const keys = unlockedBuildings(s);

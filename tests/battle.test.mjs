@@ -17,7 +17,7 @@ import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { BUILDINGS } from '../src/data/buildings.js';
 import { SCENARIOS } from '../src/data/scenarios.js';
 import { unlockedBuildings } from '../src/sim/capacity.js';
-import { THREATENED_CITIES, THREATENED_IDS, marchLine, marchMonths, enemyWords } from '../src/data/battles.js';
+import { THREATENED_CITIES, THREATENED_IDS, SANDBOX_THREATENED_IDS, marchLine, marchMonths, enemyWords } from '../src/data/battles.js';
 import { isLand } from '../src/data/empireGeo.js';
 import { addBuilding, removeBuilding } from '../src/sim/entities.js';
 import { spawnUnit } from '../src/sim/military.js';
@@ -82,13 +82,19 @@ test('threatened cities: on land, their ways over land or sea, a few months\' ma
   assert.equal(enemyWords(16), 'a small army');
   assert.equal(enemyWords(28), 'a large army');
   assert.equal(enemyWords(52), 'a mighty host');
-  // In every mission with forts (Firmum at step 3, the military and single
-  // missions from step 4), never in a peaceful province; every city named exists.
+  // In every mission with forts (Firmum at step 3, the military missions
+  // from step 4), never in a peaceful province; every city named exists.
   for (const s of SCENARIOS) {
     const forts = [...unlockedBuildings(s)].some((k) => BUILDINGS[k].kind === 'fort');
     assert.equal(!!s.distantBattles, forts, `${s.id}`);
     for (const e of s.distantBattles || []) assert.ok(THREATENED_CITIES[e.city] && e.enemy > 0 && e.year >= 1);
   }
+  // The sandbox's random requests keep to the third century's four cities,
+  // so a sandbox city draws as it always did; the later towns come with the
+  // late campaign's provinces (Italica's way is the longest, 12 months by sea).
+  assert.deepEqual(SANDBOX_THREATENED_IDS, ['placentia', 'ariminum', 'saguntum', 'messana']);
+  assert.ok(SANDBOX_THREATENED_IDS.every((id) => THREATENED_CITIES[id]));
+  assert.deepEqual([THREATENED_CITIES.italica.route, marchMonths('italica')], ['sea', 12]);
 });
 
 test('a scheduled request comes in its year, in a month from Martius to October drawn from the seed; one in progress drops the next', () => {

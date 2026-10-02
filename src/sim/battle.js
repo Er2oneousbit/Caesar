@@ -78,7 +78,7 @@
 import { CONFIG } from '../config.js';
 import { RNG } from '../core/rng.js';
 import { UNIT_TYPES } from '../data/units.js';
-import { THREATENED_CITIES, THREATENED_IDS, marchMonths, enemyWords } from '../data/battles.js';
+import { THREATENED_CITIES, SANDBOX_THREATENED_IDS, marchMonths, enemyWords } from '../data/battles.js';
 import { Unit, removeUnit } from './military.js';
 import { battleStrength, endDrill } from './training.js';
 import { waterOf, shoreBerth } from './navy.js';
@@ -152,7 +152,7 @@ function dueRequest(game, now) {
   // Naval Station with ships and water to the sea. A city with no army never
   // hears of a war it could not join, nor pays 50 favor for it.
   const army = armyAtHome(game);
-  const cities = army.soldiers ? THREATENED_IDS : army.ships ? THREATENED_IDS.filter((id) => THREATENED_CITIES[id].route === 'sea') : [];
+  const cities = army.soldiers ? SANDBOX_THREATENED_IDS : army.ships ? SANDBOX_THREATENED_IDS.filter((id) => THREATENED_CITIES[id].route === 'sea') : [];
   if (!cities.length) return null;
   const rng = battleRng(game, now);
   if (!rng.chance(CONFIG.SANDBOX_BATTLE_CHANCE)) return null;

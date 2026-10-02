@@ -205,6 +205,8 @@ const ALL_KEYS = [...Object.keys(TOOLS), ...Object.keys(BUILDINGS)];
 const ALL_BUT_HIPPODROME = ALL_KEYS.filter((k) => !HIPPODROME_KEYS.includes(k));
 /** Mission 6's desert has no water a ship can sail: no fleet there (a test holds every mission's fleet to its water). */
 const ALL_BUT_HIPPODROME_AND_NAVY = ALL_BUT_HIPPODROME.filter((k) => !NAVY_KEYS.includes(k));
+/** A military province whose water never reaches the map's edge (Mutina's plain): everything but the fleet. */
+const ALL_BUT_NAVY = ALL_KEYS.filter((k) => !NAVY_KEYS.includes(k));
 
 /*
  * Campaign branches: from step 3 on each step offers two provinces at the
@@ -440,6 +442,93 @@ export const SCENARIOS = Object.freeze([
       'Traders take goods only from warehouses, and carts fill the granaries first: give a Horreum (Warehouse) by the fields a Get order for wheat.',
       'The Circus (Hippodrome, one per city) comes with this province: its charioteers bring entertainment to every home they pass, and the Imperial Palatium needs its races.',
       'No raiders come to Copia, and you may build no forts. Keep Caesar\'s favor high with his requests and gifts, for if it runs out his legions come.',
+    ],
+  },
+  {
+    id: 'c8m', step: 8, track: 'military', name: 'Mutina', title: 'The Ligurian Hills',
+    intro: 'Mutina, a citizen colony of 183 BC, guards the Via Aemilia where the plain of the Po meets the Apennines. In 177 BC the Ligurians came down from the hills and took it, and the consul Gaius Claudius had to win it back. Rebuild it to last: a city of the plain, fed by four caravan roads, with walls and forts for the next war band from the hills.',
+    // The Po plain: ponds, but no water reaches the map's edge, so no ship
+    // comes, every raid comes by land and there is no fleet.
+    map: { size: 176, type: 'plains', seed: 'mutina' },
+    funds: 14000, startYear: -177,
+    goals: { population: 6000, culture: 75, prosperity: 70, peace: 76, favor: 66 },
+    paceYears: 7.1,
+    rank: 7, // Praetor (data/ranks.js)
+    unlocks: ALL_BUT_NAVY, partners: ['aquileia', 'capua', 'lugdunum', 'tarraco'], requests: true,
+    // Four caravan routes on the original's tiers; Capua's furniture rises
+    // to 4,000 in the fifth year, more than its caravans carry at their usual
+    // pace, so they come more often (sim/tradeDemand.js).
+    demand: { lugdunum: { oil: 1500, wine: 2500 }, capua: { furniture: 2500, clothing: 1500, pottery: 1500 }, aquileia: { meat: 1500 }, tarraco: { pottery: 1500 } },
+    demandChanges: [{ year: 5, partner: 'capua', good: 'furniture', to: 4000 }],
+    military: { first: 36, interval: [14, 20], base: 10 },
+    distantBattles: [{ year: 3, city: 'placentia', enemy: 40 }, { year: 7, city: 'ariminum', enemy: 48 }],
+    hints: [
+      'The plain has few ponds: plan reservoirs and aqueducts before the homes need fountains.',
+      'Four caravan roads meet at Mutina and no ship comes: warehouses by the Imperial road do all the trade. A route that buys more than its caravans can carry sends them more often.',
+      'War bands come down from the hills within three years, every one by land: towers, walls with gates across the roads in, and a mixed army.',
+      'Caesar will call for troops for Placentia and Ariminum: keep forts ready for Empire service.',
+    ],
+  },
+  {
+    id: 'c8p', step: 8, track: 'peaceful', name: 'Luna', title: 'The White Mountains',
+    intro: 'Luna, a citizen colony of 177 BC at the mouth of the Macra, stands on land taken from the Ligurians, under mountains of white stone. Quarry the marble, fell the hill forests and ship both from the harbor: Carthago and Rhodus are building, and they pay well. No enemy reaches this shore; Rome will judge you by culture, prosperity and the Emperor\'s favor.',
+    map: { size: 176, type: 'coast', seed: 'luna' },
+    funds: 14000, startYear: -177,
+    goals: { population: 7000, culture: 78, prosperity: 75, peace: 80, favor: 75 },
+    paceYears: 8.5,
+    rank: 7, // Praetor, as Mutina (data/ranks.js)
+    unlocks: withoutArmy(ALL_KEYS), partners: ['tarraco', 'aquileia', 'massilia', 'carthago', 'corinthus', 'alexandria', 'rhodus'], requests: true,
+    // Marble and timber for builders overseas: Carthago's marble rises in the
+    // third year, Rhodus's timber in the sixth.
+    demand: { carthago: { marble: 2500, timber: 1500 }, massilia: { furniture: 1500 }, alexandria: { furniture: 1500 } },
+    demandChanges: [{ year: 3, partner: 'carthago', good: 'marble', to: 4000 }, { year: 6, partner: 'rhodus', good: 'timber', to: 2500 }],
+    hints: [
+      'A Lapicidina (Marble Quarry) cuts the white stone next to rock. Carthago buys it, and within a few years wants 4,000 a year: six or seven quarries\' worth.',
+      'Timber from a Silva Caedua (Timber Yard) sells to Carthago and Rhodus, and an Officina Lignaria (Carpenter) turns it into furniture for Massilia and Alexandria.',
+      'Rhodus, the trading republic of the east, opens to you: its ships bring wine and buy wheat, timber, iron and weapons.',
+      'No raiders come to Luna, and you may build no forts. Keep Caesar\'s favor high with his requests and gifts, for if it runs out his legions come.',
+    ],
+  },
+  {
+    id: 'c9m', step: 9, track: 'military', name: 'Corduba', title: 'Viriathus',
+    intro: 'Corduba, founded by Marcus Claudius Marcellus on the Baetis, is the chief town of Further Spain. The Lusitanians have raided the valley since 155 BC, and their war is far from over: from 147 a shepherd called Viriathus will beat army after army sent against him. Make weapons for the war, sell them down the river, hold the town against the raiders from the hills, and answer Caesar when Italica calls.',
+    // The Baetis carries ships to the sea: the fleet comes with the raids,
+    // though the Lusitanians themselves never come by water.
+    map: { size: 192, type: 'river', seed: 'corduba' },
+    funds: 16000, startYear: -150,
+    goals: { population: 8000, culture: 76, prosperity: 71, peace: 77, favor: 68 },
+    paceYears: 9.9,
+    rank: 8, // Consul (data/ranks.js)
+    unlocks: 'all', partners: ['tarraco', 'lugdunum', 'carthago', 'cirta', 'alexandria', 'gades', 'rhodus'], requests: true,
+    // Weapons for three buyers; Carthago's rise to 4,000 comes in the fourth year.
+    demand: { carthago: { weapons: 2500, marble: 1500 }, alexandria: { weapons: 1500 }, cirta: { weapons: 1500 } },
+    demandChanges: [{ year: 4, partner: 'carthago', good: 'weapons', to: 4000 }],
+    military: { first: 36, interval: [12, 18], base: 12 },
+    seaRaids: false,
+    distantBattles: [{ year: 3, city: 'italica', enemy: 48 }, { year: 8, city: 'italica', enemy: 60 }],
+    hints: [
+      'Weapons are Corduba\'s trade: a Ferraria (Iron Mine) by the rocks and a Fabrica (Weaponsmith). Carthago, Alexandria and Cirta buy them, Gades sells iron, and within a few years Carthago wants 4,000 a year.',
+      'The Lusitanians come over the hills, never by water: towers and walls with gates across the roads in, and a mixed army.',
+      'Twice Caesar will call for troops to save Italica, down the river and along the coast: soldiers sail, and Stationes (Naval Stations) can send their squadrons too.',
+      'Gades, beyond the Pillars of Hercules, and Rhodus trade by the river: build Emporia (Trade Docks) on its banks.',
+    ],
+  },
+  {
+    id: 'c9p', step: 9, track: 'peaceful', name: 'Carteia', title: 'The Colony of the Strait',
+    intro: 'Carteia, on the bay below the great Rock, became in 171 BC the first Latin colony outside Italy: a town for more than four thousand sons of Roman soldiers and Spanish women. Here two seas meet, and the ships of Gades, Delos and the whole sea put in. Make it a market for all of them. No enemy threatens the bay; Rome will judge you by culture, prosperity and the Emperor\'s favor.',
+    map: { size: 192, type: 'coast', seed: 'carteia' },
+    funds: 16000, startYear: -150,
+    goals: { population: 9500, culture: 79, prosperity: 76, peace: 82, favor: 80 },
+    paceYears: 11.95,
+    rank: 8, // Consul, as Corduba (data/ranks.js)
+    unlocks: withoutArmy(ALL_KEYS), partners: ['tarraco', 'massilia', 'carthago', 'cirta', 'corinthus', 'alexandria', 'gades', 'delos'], requests: true,
+    // Oil and clothing: Delos's oil rises to 4,000 in the second year, Gades's clothing in the sixth.
+    demand: { corinthus: { wine: 2500, clothing: 1500 }, alexandria: { oil: 1500, furniture: 1500 }, cirta: { oil: 1500, pottery: 1500 } },
+    demandChanges: [{ year: 2, partner: 'delos', good: 'oil', to: 4000 }, { year: 6, partner: 'gades', good: 'clothing', to: 2500 }],
+    hints: [
+      'Gades beyond the Pillars and Delos, the free port of the Aegean, open to you. Seven partners come by sea: build two or three Emporia (Trade Docks).',
+      'Oil and clothing are in demand: olive groves and a Trapetum (Oil Press), flax fields, a Textrinum (Linen Weaver) and a Taberna Vestiaria (Clothing Maker). Delos soon wants 4,000 oil a year, and Gades more clothing later.',
+      'No raiders come to Carteia, and you may build no forts. Favor is asked high here: meet Caesar\'s requests and send gifts, for if it runs out his legions come.',
     ],
   },
 ]);

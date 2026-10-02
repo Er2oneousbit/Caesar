@@ -56,7 +56,7 @@ import { farmDormant } from '../sim/production.js';
 import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
-import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
+import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, BRIDGE_DECK_Z, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor, templeAltar } from './buildingArt.js';
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
 import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
@@ -369,6 +369,24 @@ function coveredAt(boxes, p) {
   });
 }
 
+/** How far past its tile's depth a bridge deck is drawn: after a ship under it (+0.003, +0.004), before a walker on it. */
+const BRIDGE_DEPTH = 0.006;
+
+/**
+ * A figure on a bridge tile: a ship (or boat) passes under the deck, drawn
+ * just before it; anyone else walks on the deck, lifted to it and drawn
+ * after it. `d`: the draw depth to use (undefined: the figure's own),
+ * `lift`: world px up.
+ * @returns {{d:number|undefined, lift:number}}
+ */
+export function bridgeSpan(map, fx, fy, onWater) {
+  const tx = Math.floor(fx);
+  const ty = Math.floor(fy);
+  if (!map.inBounds(tx, ty) || map.road[map.idx(tx, ty)] !== Road.BRIDGE) return { d: undefined, lift: 0 };
+  const deck = tx + ty + 1 + BRIDGE_DEPTH;
+  return onWater ? { d: deck - 0.004, lift: 0 } : { d: deck + 0.004, lift: BRIDGE_DECK_Z };
+}
+
 export function cartReach(originDef) {
   return isWagon(originDef) ? 30 : 15;
 }
@@ -601,9 +619,6 @@ export class Renderer {
             drawSpr(this.sprites.get(`r${mask}.${variant}`, () => roadSpec(mask, variant)), wx, wy);
           } else if (road === Road.PLAZA) {
             drawSpr(this.sprites.get(`pz${variant & 1}`, () => plazaSpec(variant & 1)), wx, wy);
-          } else if (road === Road.BRIDGE) {
-            const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
-            drawSpr(this.sprites.get(`br${axis}`, () => bridgeSpec(axis)), wx, wy);
           }
           if (map.rubble[i] && !bid) drawSpr(this.sprites.get(`rb${variant}`, () => rubbleSpec(variant)), wx, wy);
           if (overlayOn && ov.tile) {
@@ -644,6 +659,13 @@ export class Renderer {
           const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
           items.push({ d: depth, kind: K_STRIP, spr: this.sprites.get(`rbk${axis}`, () => roadblockSpec(axis)), wx, wy, full: true });
         }
+        if (map.road[i] === Road.BRIDGE) {
+          // The deck is an object, not ground: drawn over a ship passing under
+          // it and under the people crossing it (bridgeDepth). On the ground
+          // it was drawn first, and ships sailed over the bridge (playtest).
+          const axis = map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v';
+          items.push({ d: depth + BRIDGE_DEPTH, kind: K_STRIP, spr: this.sprites.get(`br${axis}`, () => bridgeSpec(axis)), wx, wy, full: true });
+        }
         if (map.aqueduct[i]) {
           const mask = this.aqueductMask(x, y);
           const filled = map.aqueduct[i] === 2;
@@ -666,7 +688,9 @@ export class Renderer {
     this.walkerSpots = [];
     for (const w of game.walkers.values()) {
       if (overlayOn && ov.walkers && !ov.walkers.includes(w.type)) continue;
-      const { fx, fy, wx, wy } = walkerWorld(w, alpha);
+      const { fx, fy, wx, wy: groundY } = walkerWorld(w, alpha);
+      const span = bridgeSpan(map, fx, fy, w.kind === 'ship');
+      const wy = groundY - span.lift;
       if (wx < x0w || wx > x1w || wy < y0w || wy > vr.y + vr.h + 30) continue;
       const ddx = (w.tx - w.x) - (w.ty - w.y);
       const ddy = (w.tx - w.x) + (w.ty - w.y);
@@ -677,7 +701,7 @@ export class Renderer {
       // A carter's cart (and a wagon's ox) is drawn ahead of him and is most
       // of what the eye sees: clicks on it pick the carter (cartReach).
       this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
-      items.push({ d: fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
+      items.push({ d: span.d ?? fx + fy + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -688,14 +712,15 @@ export class Renderer {
     for (const u of game.units.values()) {
       const fx = u.px + (u.x - u.px) * alpha;
       const fy = u.py + (u.y - u.py) * alpha;
-      const wx = (fx - fy) * HALF_W;
-      const wy = (fx + fy) * HALF_H;
-      // u.walked already includes this tick's step; the drawing is (1 - alpha) of it behind.
-      const stride = u.walked - (1 - alpha) * Math.hypot(u.x - u.px, u.y - u.py);
       // (Ships are big: in view a little farther out, so their masts do not pop in.)
       const naval = UNIT_TYPES[u.type].naval;
+      const span = bridgeSpan(map, fx, fy, naval);
+      const wx = (fx - fy) * HALF_W;
+      const wy = (fx + fy) * HALF_H - span.lift;
+      // u.walked already includes this tick's step; the drawing is (1 - alpha) of it behind.
+      const stride = u.walked - (1 - alpha) * Math.hypot(u.x - u.px, u.y - u.py);
       if (!inView(wx, wy) && !(naval && inView(wx, wy - 60))) continue;
-      items.push({ d: fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
+      items.push({ d: span.d ?? fx + fy + 0.004, kind: K_UNIT, u, wx, wy, stride });
       if (naval) this.shipSpots.push({ id: u.id, wx, wy });
       else this.unitSpots.push({ id: u.id, wx, wy });
     }

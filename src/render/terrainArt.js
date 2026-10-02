@@ -526,50 +526,70 @@ export function plazaSpec(variant) {
   };
 }
 
-/** Bridge deck over water. axis 'u' runs along x, 'v' along y. */
+/** Height of a bridge's deck over the water (px at zoom 1): people on it are drawn this much higher (renderer.js bridgeSpan). */
+export const BRIDGE_DECK_Z = 10;
+
+/**
+ * Stone bridge over water, high enough for ships to pass under its arch: a
+ * pier in the middle of each tile, an arch either side, the deck on top
+ * with low parapets. axis 'u' runs along x, 'v' along y. Drawn as an object
+ * over a ship under it (renderer.js), not as ground.
+ */
 export function bridgeSpec(axis) {
+  const z = BRIDGE_DECK_Z;
+  const stone = '#b9ad94';
+  const dark = shade(stone, -0.35);
+  const deck = '#a89a80';
+  // Along the bridge (t, 0..1) and across it (s, 0..1), as tile (u, v).
+  const at = axis === 'u' ? (t, s, h) => P(t, s, h) : (t, s, h) => P(s, t, h);
   return {
     w: TW + 4,
-    h: TH + 16,
+    h: TH + 8 + z + 6,
     ax: HALF_W + 2,
-    ay: 12,
+    ay: z + 6,
     draw(ctx) {
-      const z = 6;
-      const deck = '#9a6a3c';
-      const rail = '#6b4526';
-      if (axis === 'u') {
-        // posts in the water
-        for (const u of [0.2, 0.8]) {
-          const [x, y] = P(u, 0.5, 0);
-          ctx.fillStyle = '#5a3c22';
-          ctx.fillRect(x - 1.5, y - z, 3, z + 2);
+      // The pier: a stone block in the water under the middle of the tile.
+      const [p0, p1] = [0.42, 0.58];
+      poly(ctx, [at(p0, 0.82, -2), at(p1, 0.82, -2), at(p1, 0.82, z), at(p0, 0.82, z)], shade(stone, -0.1), dark, 0.6);
+      poly(ctx, [at(p1, 0.18, -2), at(p1, 0.82, -2), at(p1, 0.82, z), at(p1, 0.18, z)], shade(stone, -0.25), dark, 0.6);
+      // The front face of the deck, with an arch either side of the pier.
+      const face = (s0) => {
+        ctx.beginPath();
+        const [ax0, ay0] = at(0, s0, z + 2);
+        ctx.moveTo(ax0, ay0);
+        const top = at(1, s0, z + 2);
+        ctx.lineTo(top[0], top[1]);
+        const end = at(1, s0, z - 4);
+        ctx.lineTo(end[0], end[1]);
+        // arches: from each end down to the pier, curving up between
+        for (const [t0, t1] of [[1, p1], [p0, 0]]) {
+          const a0 = at(t0, s0, z - 4);
+          const a1 = at(t1, s0, z - 4);
+          const mid = at((t0 + t1) / 2, s0, z - 1);
+          ctx.lineTo(a0[0], a0[1]);
+          ctx.quadraticCurveTo(mid[0] * 2 - (a0[0] + a1[0]) / 2, mid[1] * 2 - (a0[1] + a1[1]) / 2 + 6, a1[0], a1[1]);
+          if (t1 === p1) { const q = at(p0, s0, z - 4); ctx.lineTo(q[0], q[1]); }
         }
-        quad(ctx, -0.02, 0.18, 1.02, 0.82, z, deck, shade(deck, -0.4));
-        for (let k = 1; k < 8; k++) {
-          const p = P(k / 8, 0.18, z);
-          const q = P(k / 8, 0.82, z);
-          ctx.strokeStyle = shade(deck, -0.2);
-          ctx.lineWidth = 0.6;
-          ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-        }
-        poly(ctx, [P(0, 0.2, z), P(1, 0.2, z), P(1, 0.2, z + 4), P(0, 0.2, z + 4)], null, rail, 1);
-        poly(ctx, [P(0, 0.8, z), P(1, 0.8, z), P(1, 0.8, z + 4), P(0, 0.8, z + 4)], null, rail, 1);
-      } else {
-        for (const v of [0.2, 0.8]) {
-          const [x, y] = P(0.5, v, 0);
-          ctx.fillStyle = '#5a3c22';
-          ctx.fillRect(x - 1.5, y - z, 3, z + 2);
-        }
-        quad(ctx, 0.18, -0.02, 0.82, 1.02, z, deck, shade(deck, -0.4));
-        for (let k = 1; k < 8; k++) {
-          const p = P(0.18, k / 8, z);
-          const q = P(0.82, k / 8, z);
-          ctx.strokeStyle = shade(deck, -0.2);
-          ctx.lineWidth = 0.6;
-          ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-        }
-        poly(ctx, [P(0.2, 0, z), P(0.2, 1, z), P(0.2, 1, z + 4), P(0.2, 0, z + 4)], null, rail, 1);
-        poly(ctx, [P(0.8, 0, z), P(0.8, 1, z), P(0.8, 1, z + 4), P(0.8, 0, z + 4)], null, rail, 1);
+        ctx.closePath();
+        ctx.fillStyle = shade(stone, -0.05);
+        ctx.fill();
+        ctx.strokeStyle = dark;
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      };
+      face(0.82);
+      // The deck and its joints.
+      poly(ctx, [at(-0.02, 0.18, z + 2), at(1.02, 0.18, z + 2), at(1.02, 0.82, z + 2), at(-0.02, 0.82, z + 2)], deck, shade(deck, -0.35), 0.6);
+      for (let k = 1; k < 4; k++) {
+        const p = at(k / 4, 0.18, z + 2);
+        const q = at(k / 4, 0.82, z + 2);
+        ctx.strokeStyle = shade(deck, -0.18);
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      }
+      // Parapets.
+      for (const s0 of [0.18, 0.82]) {
+        poly(ctx, [at(0, s0, z + 2), at(1, s0, z + 2), at(1, s0, z + 5), at(0, s0, z + 5)], shade(stone, s0 > 0.5 ? -0.08 : 0.05), dark, 0.6);
       }
     },
   };

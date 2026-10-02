@@ -897,3 +897,19 @@ test('baths show their water: a full pool with piped water, a dry one without', 
   assert.equal(artState({ def: BUILDINGS.fountain, hasWater: false }), 0);
   assert.equal(artState({ def: BUILDINGS.school, hasWater: false }), 0, 'buildings that need no water: one look');
 });
+
+test('bridges: a ship passes under the deck, a walker crosses on it (playtest: ships sailed over bridges)', async () => {
+  const { bridgeSpan } = await import('../src/render/renderer.js');
+  const { BRIDGE_DECK_Z } = await import('../src/render/terrainArt.js');
+  const map = new GameMap(16, 16);
+  map.terrain.fill(Terrain.WATER);
+  map.road[map.idx(5, 5)] = 3; // Road.BRIDGE
+  const deck = 5 + 5 + 1 + 0.006; // the deck's draw depth (renderer.js)
+  const ship = bridgeSpan(map, 5.5, 5.5, true);
+  const walker = bridgeSpan(map, 5.5, 5.5, false);
+  assert.ok(ship.d < deck && ship.lift === 0, 'the ship is drawn before the deck, at the water');
+  assert.ok(walker.d > deck && walker.lift === BRIDGE_DECK_Z, 'the walker after it, up on the deck');
+  // Off the bridge nothing changes.
+  assert.deepEqual(bridgeSpan(map, 7.5, 5.5, true), { d: undefined, lift: 0 });
+  assert.ok(BRIDGE_DECK_Z >= 8, 'high enough to read as a bridge a ship goes under');
+});

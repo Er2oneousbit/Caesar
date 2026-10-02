@@ -343,6 +343,7 @@ Open items only; each keeps its number (#n) for good, so the release notes and t
 * **#13** **Campaign branches**: at points in the campaign, choose between a peaceful and a military province, as the original did.
 * **#19** **Wolves** on wild land that attack walkers until soldiers clear them.
 * **#20** **Native villages and missionary posts**, found in some of the original's provinces. Colonia could lean into diplomacy: a trading post, or tribute, turns would-be raiders into trade partners.
+* **#24** **Raid warnings as the enemy closes in**: today the scouts warn once, about 3 months ahead (size, direction, land or sea), the empire map shows the warband coming, and the next message is the landing. The original warned several times as an army drew near; match its stages (when the first sighting comes and how many reminders follow, from the reference), each saying how far off it is, how big, and from where, with a click to the empire map; the same for Caesar's legions on their 12-month march.
 * **#21** **Enemy armies by region**: the original's invaders differed by province and era; Colonia has three generic raider types.
 * **#22** **Hall of Fame** for the best career scores.
 * **#23** **City sounds**: the original played each building's sounds near the camera. Ours would be synthesized (market chatter, forge clanks, gulls at the docks) and change as you zoom.

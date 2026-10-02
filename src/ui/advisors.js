@@ -45,6 +45,7 @@ import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } 
 import { partnerBuys, routeInterval } from '../sim/tradeDemand.js';
 import { homeSiteId } from '../data/sites.js';
 import { tripDays } from '../data/empireRoutes.js';
+import { tradePrice, priceRange, rangeText, distanceNote, marketLine } from '../sim/prices.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
 import { festivalCost, holdFestival } from '../sim/religion.js';
@@ -99,7 +100,8 @@ const MOOD_LABELS = {
  * One trade partner's card: route kind, open or not (with the button to open
  * it), what it sells and buys with this year's amounts, and what the route
  * needs. Shared by the Trade advisor and the Empire map (ui/empire.js). What
- * it buys is this mission's demand in force (sim/tradeDemand.js).
+ * it buys is this mission's demand in force (sim/tradeDemand.js); each good
+ * shows this partner's price this year (sim/prices.js), per 100 units.
  * `onChange` runs after the player opened the route.
  */
 export function tradeRouteCard(app, g, id, onChange) {
@@ -109,7 +111,11 @@ export function tradeRouteCard(app, g, id, onChange) {
   const seaOk = !!g.map.seaEntry;
   const docks = [...g.buildings.values()].filter((b) => b.def.kind === 'dock');
   const staffedDock = docks.some((b) => b.efficiency > 0);
-  const list = (obj, used) => Object.entries(obj).map(([good, cap]) => h('span', { class: 'chip', title: `${fmt(used[good] || 0)} of ${fmt(cap)} this year` }, `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)}`));
+  // side: 'buy' for what it sells you (you pay), 'sell' for what it buys (you earn).
+  const list = (obj, used, side) => Object.entries(obj).map(([good, cap]) => {
+    const price = tradePrice(g, id, good, side);
+    return h('span', { class: 'chip trade-good', title: `${fmt(used[good] || 0)} of ${fmt(cap)} this year, at ${price} Dn per 100 units` }, `${GOODS[good].icon} ${GOODS[good].name} ${fmt(used[good] || 0)}/${fmt(cap)} · ${price} Dn`);
+  });
   let how;
   if (!sea) how = h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Caravans come along the Imperial road to a staffed warehouse.');
   else if (!seaOk) how = h('div', { class: 'status bad', style: { fontSize: '12px' } }, 'Unreachable: no river or coast connects this province to the sea.');
@@ -131,8 +137,9 @@ export function tradeRouteCard(app, g, id, onChange) {
       }, `Open route (${fmt(p.openCost)} Dn)`)),
     how,
     pace,
-    h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought)),
-    h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold)));
+    h('div', { class: 'muted route-prices', style: { fontSize: '12px' } }, distanceNote(g.scenario, id)),
+    h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought, 'buy')),
+    h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold, 'sell')));
 }
 
 export class Advisors {
@@ -434,8 +441,8 @@ export class Advisors {
         h('td', {}, h('select', {
           onchange: (e) => { setTradeMode(g, k, e.target.value); this.render(); },
         }, h('option', { value: 'none', selected: s.mode === 'none' }, 'No trade'),
-        canImport ? h('option', { value: 'import', selected: s.mode === 'import' }, `Import (buy ${GOODS[k].buy})`) : null,
-        canExport ? h('option', { value: 'export', selected: s.mode === 'export' }, `Export (sell ${GOODS[k].sell})`) : null)),
+        canImport ? h('option', { value: 'import', selected: s.mode === 'import' }, priceRange(g, k, 'buy') ? `Import (buy ${rangeText(priceRange(g, k, 'buy'))})` : 'Import') : null,
+        canExport ? h('option', { value: 'export', selected: s.mode === 'export' }, priceRange(g, k, 'sell') ? `Export (sell ${rangeText(priceRange(g, k, 'sell'))})` : 'Export') : null)),
         h('td', {}, s.mode === 'none' ? '' : h('input', {
           type: 'number', min: 0, max: 3200, step: 100, value: s.level, style: { width: '80px' },
           title: s.mode === 'export' ? 'Keep at least this much in storage' : 'Buy until storage holds this much',
@@ -452,7 +459,8 @@ export class Advisors {
         h('div', { class: 'row', style: { fontSize: '12px', marginTop: '4px' } },
           h('span', { class: 'muted', style: { flex: 1 } }, '╌ land route (caravans)   ··· sea route (ships)   solid = open. ', seaOk ? 'Ships can reach this province.' : 'No ships can reach this province: only land routes work here.'),
           h('button', { class: 'btn small', title: 'Who is on the way, and when (E)', onclick: () => this.app.ui.openEmpire() }, 'Empire map'))),
-      h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships wait at a staffed Emporium (Trade Dock) while its workers cart their imports to storage and fetch exports from warehouses near it (a stay of 2 to 7 weeks: several sea partners need more than one Emporium). Prices are per 100 units.'),
+      h('div', { class: 'muted', style: { marginTop: '8px' } }, 'Land routes: caravans trade with staffed warehouses on the Imperial road. Sea routes: ships wait at a staffed Emporium (Trade Dock) while its workers cart their imports to storage and fetch exports from warehouses near it (a stay of 2 to 7 weeks: several sea partners need more than one Emporium). Prices are per 100 units, each partner\'s own this year: dearer both ways the farther its route, and every price moves a little each New Year (a range: the cheapest partner to the dearest).'),
+      marketLine(g.scenario) ? h('div', { class: 'muted market-line', style: { marginTop: '4px' } }, `Local market: ${marketLine(g.scenario)}`) : null,
       shipsWaitingText(g) ? h('div', { class: 'status warn', style: { marginTop: '8px' } }, `⚓ ${shipsWaitingText(g)}`) : null,
       h('div', { class: 'grid2', style: { marginTop: '8px' } }, routeCards),
       h('h4', {}, 'Goods'),

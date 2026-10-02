@@ -1655,6 +1655,9 @@ try {
       JSON.stringify(cards.map(({ text, ...c }) => c)));
     await page.click('.modal .post-card[data-id="c3m"] button.post-start');
     const brief = await page.textContent('.modal .modal-head h2');
+    // The province's own market (sim/prices.js) is in its briefing.
+    const market = await page.evaluate(() => document.querySelector('.modal .market-line')?.textContent || '');
+    check('Firmum\'s briefing names its local market', market === 'Local market: Iron (-15%) and olives (-10%) are cheap here; wine (+15%) is dear, to buy and to sell.', market);
     // Escape must not drop the player into the city with no way back to the choice.
     await page.keyboard.press('Escape');
     const afterEsc = await page.evaluate(() => document.querySelector('.modal .modal-head h2')?.textContent || null);
@@ -1868,6 +1871,26 @@ try {
     await sp.click('.tab:has-text("Trade")');
     const pace = await sp.$$eval('.modal .route-pace', (els) => els.map((e) => e.textContent));
     check('sandbox at Puteoli: the setup\'s place reaches the game, and the Capua card says it is a day off', site === 'puteoli' && pace.includes('About 1 day on the road each way; a caravan every 32 to 56 days.') && serrors.length === 0, JSON.stringify({ site, pace: pace.slice(0, 4), serrors }));
+    // Prices per partner (sim/prices.js): Capua, the nearest, at base; Gades,
+    // the farthest, a quarter dearer both ways; each good on a card at that
+    // partner's price, and the Import and Export choices the range across partners.
+    const prices = await sp.evaluate(() => {
+      const cards = [...document.querySelectorAll('.modal .card')].filter((c) => c.querySelector('.route-prices'));
+      const card = (name) => cards.find((c) => c.querySelector('h4')?.textContent.includes(name));
+      const chips = (name) => [...(card(name)?.querySelectorAll('.trade-good') || [])].map((e) => e.textContent);
+      return {
+        capua: card('Capua')?.querySelector('.route-prices').textContent,
+        gades: card('Gades')?.querySelector('.route-prices').textContent,
+        capuaChips: chips('Capua'),
+        gadesChips: chips('Gades'),
+        options: [...document.querySelectorAll('.modal select option')].map((o) => o.textContent).filter((t) => /^(Import|Export)/.test(t)),
+      };
+    });
+    check('trade prices: Capua at base, Gades +25% both ways, each good at its partner\'s price, Import and Export as ranges',
+      prices.capua === 'Base prices: your nearest partner.' && prices.gades === 'Prices +25% for the distance, to buy and to sell.'
+        && prices.capuaChips.includes('🍷 Wine 0/600 · 215 Dn') && prices.gadesChips.includes('🫒 Olives 0/1,500 · 58 Dn')
+        && prices.options.some((t) => /^Import \(buy \d+ to \d+\)$/.test(t)) && prices.options.some((t) => /^Export \(sell \d+ to \d+\)$/.test(t)),
+      JSON.stringify(prices));
     await sp.close();
   }
 

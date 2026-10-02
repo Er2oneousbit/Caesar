@@ -41,6 +41,7 @@ import {
   setTradeMode, shipArrive, updateDock, dockWorkers, dockUsed, shipManifest, exportClaims, mooredShip, stayTicksLeft,
 } from '../src/sim/trade.js';
 import { dockRows, dockShipText, dockHint } from '../src/ui/dockInfo.js';
+import { tradePrice, distanceFactor } from '../src/sim/prices.js';
 import { walkerInfo, walkerDoing } from '../src/ui/walkerTalk.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { newGame, build, findFree } from './helpers.mjs';
@@ -203,8 +204,13 @@ test('a full exchange in odd lots needs a third round, and one dock worker still
 // Money
 // ---------------------------------------------------------------------------
 
-test('imports are paid as each lot lands on the quay, exports as each lot goes aboard', () => {
+test("imports are paid as each lot lands on the quay, exports as each lot goes aboard, at the partner's own prices", () => {
   const { game, dock, wh } = harbor();
+  // From the Etruscan coast Carthago is farther than the nearest partner: dearer both ways (sim/prices.js).
+  assert.ok(distanceFactor(game.scenario, PARTNER) > 1.05);
+  const buy = tradePrice(game, PARTNER, 'furniture', 'buy');
+  const sell = tradePrice(game, PARTNER, 'timber', 'sell');
+  assert.ok(buy > GOODS.furniture.buy && sell > GOODS.timber.sell, `furniture ${buy}, timber ${sell}`);
   const w = wh(10);
   w.stock.timber = 400;
   setTradeMode(game, 'timber', 'export', 0);
@@ -220,7 +226,7 @@ test('imports are paid as each lot lands on the quay, exports as each lot goes a
   tick(game, [dock]);
   assert.equal(ship.deal.bought.furniture, 400, 'a lot of 400 landed on day 3');
   assert.equal(dock.stock.furniture + carts(game).filter((c) => c.cargo?.good === 'furniture').reduce((n, c) => n + c.cargo.amount, 0), 400, 'on the quay, or already on a free worker\'s cart');
-  const furniture = (GOODS.furniture.buy * 400) / 100;
+  const furniture = Math.round((buy * 400) / 100);
   assert.equal(game.city.treasury, t0 - furniture, 'paid as it landed');
   assert.equal(route.bought.furniture, 400, 'the quota counts it');
   // The timber was picked up at the warehouse, but is not paid for until it is aboard.
@@ -232,8 +238,28 @@ test('imports are paid as each lot lands on the quay, exports as each lot goes a
   assert.equal(ship.deal.earned, 0);
   for (let t = 0; t < 30 * TPD && !fetcher.dead; t++) tick(game, [dock]);
   assert.equal(route.sold.timber, 400, 'sold as it went aboard');
-  assert.equal(ship.deal.earned, (GOODS.timber.sell * 400) / 100);
+  assert.equal(ship.deal.earned, Math.round((sell * 400) / 100));
   assert.equal(game.city.treasury, t0 - ship.deal.spent + ship.deal.earned);
+});
+
+test("the crane lands only what the city can pay for at the partner's own price, not the base price", () => {
+  const { game, dock } = harbor();
+  setTradeMode(game, 'furniture', 'import', 800);
+  const price = tradePrice(game, PARTNER, 'furniture', 'buy');
+  assert.ok(price > GOODS.furniture.buy);
+  // Enough for a lot of 100 at the base price, not at Carthago's.
+  game.city.treasury = price - 1;
+  const ship = moor(game, dock);
+  assert.ok(ship.unload.furniture > 0, 'it brings furniture');
+  for (let t = 0; t < 5 * TPD; t++) tick(game, [dock]);
+  assert.equal(ship.deal.bought.furniture, undefined, 'nothing landed');
+  assert.equal(game.city.treasury, price - 1, 'and nothing paid');
+  // With the money for one lot, one lot of 100 lands.
+  const ship2 = moor(game, dock);
+  game.city.treasury = price;
+  for (let t = 0; t < 5 * TPD && !ship2.deal.bought.furniture; t++) tick(game, [dock]);
+  assert.equal(ship2.deal.bought.furniture, 100);
+  assert.equal(game.city.treasury, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -501,6 +527,7 @@ test('the Dock and the ship say what is left to unload and load, the deal so far
   const rows = Object.fromEntries(dockRows(game, dock));
   assert.equal(rows['To unload'], 'furniture 500');
   assert.equal(rows['To load'], 'timber 1,000 (1,000 on the way)');
+  assert.equal(rows['Prices this year (per 100)'], `you pay furniture ${tradePrice(game, PARTNER, 'furniture', 'buy')}; you earn timber ${tradePrice(game, PARTNER, 'timber', 'sell')}`);
   assert.equal(rows['Dock workers'], '3 of 3 out (3 at full staff)');
   for (let t = 0; t < 3 * TPD + 10; t++) tick(game, [dock]); // the first lot (400) landed, the last 100 not yet
   assert.equal(dockShipText(game, dock), `Carthago ship, tied up 3 days (leaves by day ${CONFIG.SHIP_MAX_STAY_DAYS} at the latest)`);

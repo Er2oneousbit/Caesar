@@ -46,6 +46,11 @@
  *                                 to October drawn from the map's seed, the
  *                                 partner's yearly amount of `good` becomes `to`
  *                                 (0 stops it); the player is told
+ *   market                        optional { good: factor }: the province's own
+ *                                 market, what its land and history make cheap
+ *                                 (below 1) or dear (above 1) with every partner,
+ *                                 to buy and to sell (sim/prices.js); the sandbox
+ *                                 has none
  *   requests: boolean             Emperor makes requests
  *   crime, disease: false         none of it in this mission (the first two,
  *                                 which teach the basics); missing = on
@@ -285,6 +290,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 2.5,
     rank: 2, // Engineer (data/ranks.js)
     unlocks: TIER3, partners: ['tarraco', 'aquileia'], requests: true,
+    market: { clay: 0.85, timber: 1.15 }, // the potteries' own clay is cheap; the treeless plain pays for timber (sim/prices.js)
     hints: [
       'A Cretifodina (Clay Pit) must be near water. A Figlina (Potter) turns clay into pottery, which Merchant Houses and every home above them need, with Balneae (Baths) nearby.',
       'A Horreum (Warehouse) stores goods. Caravans only trade with warehouses.',
@@ -305,6 +311,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 2.3,
     rank: 2, // Engineer, as Figlina (data/ranks.js)
     unlocks: FIRMUM, partners: ['aquileia', 'capua'], requests: true,
+    market: { iron: 0.85, olives: 0.9, wine: 1.15 }, // iron from the hills and the famous Picene olives; wine comes from far off (sim/prices.js)
     // The earliest raids of the campaign, and the smallest: two years in
     // (18 months on Insane), never before the town has 300 people. Time for
     // an iron mine, a weaponsmith, a barracks and one fort.
@@ -328,6 +335,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 2.9,
     rank: 3, // Architect (data/ranks.js)
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
+    market: { timber: 0.85, olives: 0.9, iron: 1.1 }, // its forests and olive groves; no ore near the river (sim/prices.js)
     military: { first: 60, interval: [30, 40], base: 4 },
     distantBattles: [{ year: 3, city: 'placentia', enemy: 16 }],
     hints: [
@@ -348,6 +356,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 3.75,
     rank: 3, // Architect, as Pons Aelius (data/ranks.js)
     unlocks: withoutArmy(TIER4), partners: ['capua', 'massilia', 'corinthus'], requests: true,
+    market: { wine: 0.9, marble: 1.2 }, // Lucanian vines; every temple builder on the coast wants marble (sim/prices.js)
     hints: [
       'No raiders come to Paestum, and you may build no forts. Rome watches your favor instead: meet Caesar\'s requests and send gifts, for if his favor runs out his legions come, and there is no army here to meet them.',
       'Culture is the measure of this city: a Templum (Grand Temple) counts as two temples to its god, and schools, a Bibliotheca (Library) and shows add the rest.',
@@ -365,6 +374,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 5.1,
     rank: 4, // Quaestor (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME, partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
+    market: { iron: 0.85, wine: 0.9, marble: 1.15 }, // Elba's ore and the vines on the slopes; no quarry near (sim/prices.js)
     military: { first: 48, interval: [22, 32], base: 6 },
     distantBattles: [{ year: 3, city: 'saguntum', enemy: 28 }],
     hints: [
@@ -385,6 +395,7 @@ export const SCENARIOS = Object.freeze([
     rank: 4, // Quaestor, as Portus Mercatorum (data/ranks.js)
     // The river is navigable, but every partner comes by land: the colony lives by caravans.
     unlocks: withoutArmy(ALL_BUT_HIPPODROME), partners: ['capua', 'tarraco', 'aquileia', 'lugdunum'], requests: true,
+    market: { meat: 0.85, timber: 0.9, oil: 1.15 }, // Samnite herds on the drove roads and Apennine woods; no olives in the hills (sim/prices.js)
     hints: [
       'Beneventum trades only by land: four caravan routes meet here. Open them in the Trade advisor and let warehouses near the Imperial road do the business.',
       'There is no army here and no raiders to fear, but Caesar\'s favor must stay high: his requests, the yearly tribute and gifts all count.',
@@ -401,6 +412,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 4.2,
     rank: 5, // Procurator (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME_AND_NAVY, partners: ['capua', 'aquileia', 'lugdunum', 'tarraco'], requests: true,
+    market: { olives: 0.9, wheat: 1.15, vegetables: 1.15, timber: 1.25 }, // Apulia's olives; in the dry country food is dear and timber dearer (sim/prices.js)
     military: { first: 42, interval: [20, 30], base: 6 },
     distantBattles: [{ year: 4, city: 'ariminum', enemy: 32 }],
     hints: ['No ship can reach the desert, but caravans can: import wheat from Capua if the oases cannot feed everyone.', 'Desert raiders ride fast: towers and cavalry help.'],
@@ -416,6 +428,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 6.5,
     rank: 5, // Procurator, as Oasis Aurea (data/ranks.js)
     unlocks: withoutArmy(ALL_BUT_HIPPODROME), partners: ['lugdunum', 'capua', 'massilia', 'corinthus', 'alexandria'], requests: true,
+    market: { wine: 0.9, pottery: 0.9, iron: 1.1 }, // the colony's vines and amphora kilns; iron comes by sea (sim/prices.js)
     // Wine on the original's tiers: Corinthus's thirst grows in the third year.
     demand: { corinthus: { wine: 2500 }, alexandria: { wine: 1500 }, lugdunum: { wine: 1500 } },
     demandChanges: [{ year: 3, partner: 'corinthus', good: 'wine', to: 4000 }],
@@ -436,6 +449,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 6.8,
     rank: 6, // Aedile (data/ranks.js)
     unlocks: 'all', partners: FIRST_NINE, requests: true,
+    market: { clay: 0.9, wheat: 1.1, marble: 1.15 }, // lake clay is plentiful; a city to rival Rome bids up grain and marble (sim/prices.js)
     military: { first: 36, interval: [14, 22], base: 8 },
     distantBattles: [{ year: 3, city: 'messana', enemy: 40 }, { year: 9, city: 'placentia', enemy: 52 }],
     hints: [
@@ -454,6 +468,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 7.1,
     rank: 6, // Aedile, as Urbs Magna (data/ranks.js)
     unlocks: withoutArmy(ALL_KEYS), partners: ['tarraco', 'lugdunum', 'aquileia', 'capua', 'massilia', 'corinthus'], requests: true,
+    market: { wheat: 0.9, vegetables: 0.9, timber: 1.15 }, // the plain of plenty sells its food cheap; it has no forests (sim/prices.js)
     // Food by the shipload and the caravan, Tarraco's wheat rising in the fourth year.
     demand: { corinthus: { wheat: 4000 }, tarraco: { wheat: 2500 }, massilia: { vegetables: 2500 }, lugdunum: { fruit: 1500 }, aquileia: { meat: 1500 } },
     demandChanges: [{ year: 4, partner: 'tarraco', good: 'wheat', to: 4000 }],
@@ -476,6 +491,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 7.1,
     rank: 7, // Praetor (data/ranks.js)
     unlocks: ALL_BUT_NAVY, partners: ['aquileia', 'capua', 'lugdunum', 'tarraco'], requests: true,
+    market: { wheat: 0.9, pottery: 0.9, iron: 1.15 }, // the Po plain's grain and Mutina's kilns; ore comes from far off (sim/prices.js)
     // Four caravan routes on the original's tiers; Capua's furniture rises
     // to 4,000 in the fifth year, more than its caravans carry at their usual
     // pace, so they come more often (sim/tradeDemand.js).
@@ -500,6 +516,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 8.5,
     rank: 7, // Praetor, as Mutina (data/ranks.js)
     unlocks: withoutArmy(ALL_KEYS), partners: ['tarraco', 'aquileia', 'massilia', 'carthago', 'corinthus', 'alexandria', 'rhodus'], requests: true,
+    market: { marble: 0.85, timber: 0.9, wheat: 1.15 }, // the white mountains and their forests; little farmland under them (sim/prices.js)
     // Marble and timber for builders overseas: Carthago's marble rises in the
     // third year, Rhodus's timber in the sixth.
     demand: { carthago: { marble: 2500, timber: 1500 }, massilia: { furniture: 1500 }, alexandria: { furniture: 1500 } },
@@ -523,6 +540,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 9.9,
     rank: 8, // Consul (data/ranks.js)
     unlocks: 'all', partners: ['tarraco', 'lugdunum', 'carthago', 'cirta', 'alexandria', 'gades', 'rhodus'], requests: true,
+    market: { iron: 0.85, olives: 0.9, weapons: 1.15 }, // Hispania's mines and the groves of the Baetis; the war bids up weapons (sim/prices.js)
     // Weapons for three buyers; Carthago's rise to 4,000 comes in the fourth year.
     demand: { carthago: { weapons: 2500, marble: 1500 }, alexandria: { weapons: 1500 }, cirta: { weapons: 1500 } },
     demandChanges: [{ year: 4, partner: 'carthago', good: 'weapons', to: 4000 }],
@@ -546,6 +564,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 11.95,
     rank: 8, // Consul, as Corduba (data/ranks.js)
     unlocks: withoutArmy(ALL_KEYS), partners: ['tarraco', 'massilia', 'carthago', 'cirta', 'corinthus', 'alexandria', 'gades', 'delos'], requests: true,
+    market: { olives: 0.9, linen: 1.15 }, // the groves of Baetica; the bay's purple dyers want cloth (sim/prices.js)
     // Oil and clothing: Delos's oil rises to 4,000 in the second year, Gades's clothing in the sixth.
     demand: { corinthus: { wine: 2500, clothing: 1500 }, alexandria: { oil: 1500, furniture: 1500 }, cirta: { oil: 1500, pottery: 1500 } },
     demandChanges: [{ year: 2, partner: 'delos', good: 'oil', to: 4000 }, { year: 6, partner: 'gades', good: 'clothing', to: 2500 }],
@@ -569,6 +588,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 12.65,
     rank: 9, // Proconsul (data/ranks.js); winning the last step makes the governor Caesar
     unlocks: 'all', partners: ['tarraco', 'massilia', 'lugdunum', 'aquileia', 'capua', 'carthago', 'corinthus', 'alexandria', 'gades'], requests: true,
+    market: { wheat: 0.9, wine: 1.1, weapons: 1.15 }, // the plain of the Atax; Gaul's thirst for wine passes through, and whole peoples on the move bid up weapons (sim/prices.js)
     // Wine for Gaul and Gades, weapons for Africa, rising: Lugdunum's wine in
     // the fourth year, Carthago's weapons in the seventh.
     demand: { lugdunum: { wine: 2500, oil: 1500 }, gades: { wine: 2500 }, massilia: { furniture: 1500, pottery: 1500 }, carthago: { weapons: 2500 }, alexandria: { weapons: 1500 } },
@@ -594,6 +614,7 @@ export const SCENARIOS = Object.freeze([
     paceYears: 15.4,
     rank: 9, // Proconsul, as Narbo Martius (data/ranks.js)
     unlocks: withoutArmy(ALL_KEYS), partners: Object.keys(TRADE_PARTNERS), requests: true,
+    market: { iron: 0.9, linen: 0.9, furniture: 1.1, marble: 1.1 }, // its forges work Elba's ore and Egypt's linen lands here; the villas on the bay want fine furniture and marble (sim/prices.js)
     // The greatest market of the career: Rhodus's wheat rises in the third
     // year and Alexandria's wine in the sixth, and Corinthus's wine falls in
     // the ninth, a change to plan around.

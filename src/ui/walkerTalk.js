@@ -24,6 +24,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { PERFORMER_NAMES } from '../data/buildings.js';
 import { daysMoored } from '../sim/trade.js';
 import { partnerBuys } from '../sim/tradeDemand.js';
+import { dealPricesText } from '../sim/prices.js';
 import { trainsNow } from '../sim/training.js';
 import { prefectFoe, foeLabel } from '../sim/prefectFight.js';
 
@@ -294,12 +295,20 @@ export function walkerDoing(game, w) {
  * in: what it comes for, from the partner's wants and your export and import
  * settings (it may still find nothing to spare, or no room or money). A ship
  * at the dock: what it still has to unload and to buy, the deal so far, and
- * its days there.
+ * its days there. Each with its partner's prices this year for those goods
+ * (sim/prices.js).
  * @returns {[string, string][]}
  */
 export function tradeRows(game, w) {
   const list = (goods) => goods.map((g) => GOODS[g].name.toLowerCase()).join(', ');
   const items = (o) => Object.entries(o).filter(([, n]) => n > 0).map(([g, n]) => amountText(g, n)).join(', ');
+  const keys = (o) => Object.keys(o || {}).filter((g) => o[g] > 0);
+  // "you pay wine 230; you earn pottery 160", for the goods named above it:
+  // this year's, which after a New Year may differ from what a past deal paid.
+  const prices = (imports, exports) => {
+    const text = TRADE_PARTNERS[w.partner] ? dealPricesText(game, w.partner, imports, exports) : '';
+    return text ? [['Prices this year (per 100)', text]] : [];
+  };
   if (w.type === 'ship' && w.state === 'docked' && w.deal) {
     const d = w.deal;
     const days = daysMoored(game, w);
@@ -309,6 +318,7 @@ export function tradeRows(game, w) {
       ['Bought here so far', Object.keys(d.sold).length ? `${items(d.sold)} (you earned ${d.earned} Dn)` : 'Nothing yet'],
       ['Sold here so far', Object.keys(d.bought).length ? `${items(d.bought)} (you paid ${d.spent} Dn)` : 'Nothing yet'],
       ['Days at the dock', `${days} (sails by day ${CONFIG.SHIP_MAX_STAY_DAYS} at the latest)`],
+      ...prices([...new Set([...keys(w.unload), ...keys(d.bought)])], [...new Set([...keys(w.wants), ...keys(d.sold)])]),
     ];
   }
   if (w.deal) {
@@ -316,6 +326,7 @@ export function tradeRows(game, w) {
     return [
       ['Bought here', Object.keys(d.sold).length ? `${items(d.sold)} (you earned ${d.earned} Dn)` : 'Nothing'],
       ['Sold here', Object.keys(d.bought).length ? `${items(d.bought)} (you paid ${d.spent} Dn)` : 'Nothing'],
+      ...prices(keys(d.bought), keys(d.sold)),
     ];
   }
   const p = TRADE_PARTNERS[w.partner];
@@ -325,6 +336,7 @@ export function tradeRows(game, w) {
   return [
     ['Comes to buy', buys.length ? list(buys) : 'Nothing you export'],
     ['Comes to sell', sells.length ? list(sells) : 'Nothing you import'],
+    ...prices(sells, buys),
   ];
 }
 

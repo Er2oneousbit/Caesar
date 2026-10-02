@@ -36,6 +36,10 @@
  *     dock workers fetch exports from staffed ranches within DOCK_REACH and
  *     cart imports to a barracks that needs them or a ranch with room. With
  *     no ranch, no horses are imported (importBlockedText says so).
+ *   - Prices are each partner's own this year (sim/prices.js tradePrice: the
+ *     base price, the province's market, the year's drift and the route's
+ *     length), paid as goods change hands: a caravan's at the warehouse, a
+ *     ship's as each lot lands and as each goes aboard.
  * ----------------------------------------------------------------------------
  */
 
@@ -53,6 +57,7 @@ import { logGoods } from './goodsLedger.js';
 import { partnerBuys, routeInterval, buysInForce, demandChangeAt } from './tradeDemand.js';
 import { homeSiteId } from '../data/sites.js';
 import { tripDays } from '../data/empireRoutes.js';
+import { tradePrice } from './prices.js';
 
 /** 'land' or 'sea' */
 export function routeKind(partnerId) {
@@ -654,7 +659,7 @@ function landable(game, w, dock, good, level = false) {
   if (quota < CONFIG.CART_CAPACITY) return -1;
   const kept = !!GOODS[good].keptAt;
   if (kept && !stablesOf(game, good).length) return -1; // the last ranch is gone: no horses can come in
-  const afford = game.cheats.freeBuild ? Infinity : Math.floor(Math.max(0, game.city.treasury) / GOODS[good].buy) * 100;
+  const afford = game.cheats.freeBuild ? Infinity : Math.floor(Math.max(0, game.city.treasury) / tradePrice(game, w.partner, good, 'buy')) * 100;
   const short = level ? s.level - cityStock(game, good) - importsComing(game, good, 0, false) : Infinity;
   const room = level && kept ? keptImportRoom(game, good, 0, false) : Infinity;
   return lots(Math.min(CONFIG.DOCK_LOAD, w.unload[good], CONFIG.DOCK_CAPACITY - dockUsed(dock), quota, afford, short, room));
@@ -695,7 +700,7 @@ function runCrane(game, w, dock) {
 /** A lot lands on the quay: the city pays for it now, and the partner's quota counts it. */
 function land(game, w, dock, good, n) {
   const route = game.city.trade.routes[w.partner];
-  const money = Math.round((GOODS[good].buy * n) / 100);
+  const money = Math.round((tradePrice(game, w.partner, good, 'buy') * n) / 100);
   dock.stock[good] += n;
   w.unload[good] -= n;
   if (w.unload[good] <= 0) delete w.unload[good];
@@ -723,7 +728,7 @@ function handOver(game, w, good, n) {
   if (quota < CONFIG.CART_CAPACITY) delete w.wants[good];
   const take = lots(Math.min(n, w.wants[good] || 0, quota));
   if (take <= 0) return 0;
-  const money = Math.round((GOODS[good].sell * take) / 100);
+  const money = Math.round((tradePrice(game, w.partner, good, 'sell') * take) / 100);
   w.wants[good] -= take;
   if (w.wants[good] <= 0) delete w.wants[good];
   transact(game, 'exports', money);
@@ -988,7 +993,7 @@ function sellExports(game, partnerId, sourcesFor, budget, out) {
       n += take;
     }
     if (n <= 0) continue;
-    const money = Math.round((GOODS[good].sell * n) / 100);
+    const money = Math.round((tradePrice(game, partnerId, good, 'sell') * n) / 100);
     transact(game, 'exports', money);
     route.sold[good] = (route.sold[good] || 0) + n;
     budget -= n;
@@ -1012,7 +1017,7 @@ function buyImports(game, partnerId, budget, out, spaceFor, put) {
     const quota = cap - (route.bought[good] || 0);
     // Imports a moored ship still has aboard, or dock workers are carting, count as on their way.
     const shortfall = s.level - cityStock(game, good) - importsComing(game, good);
-    const price = GOODS[good].buy;
+    const price = tradePrice(game, partnerId, good, 'buy');
     const affordable = game.cheats.freeBuild ? 1e9 : Math.floor(Math.max(0, game.city.treasury) / price) * 100;
     let n = Math.min(quota, shortfall, budget, affordable, spaceFor(good));
     n = Math.floor(n / 100) * 100;

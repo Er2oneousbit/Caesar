@@ -362,6 +362,19 @@ function stationsWithRoom(game, body, { staffed = true, except = 0, newShips = f
 }
 
 /**
+ * Where a station's squadron would go for a click on tile (tx, ty): the
+ * middle of the nearest tile of its own water within 2 tiles, or null. Also
+ * the deploy ghost's and a dragged flag's preview (render/renderer.js), so
+ * what the player sees is where the ships go.
+ */
+export function stationRallyAt(game, st, tx, ty) {
+  const body = waterOf(game, st);
+  if (!body) return null;
+  const i = nearestWater(game.map, tx, ty, body, 2);
+  return i < 0 ? null : { x: game.map.xOf(i) + 0.5, y: game.map.yOf(i) + 0.5 };
+}
+
+/**
  * Send a station's squadron to a spot on its water (the player's click):
  * the nearest tile of that water within 2 tiles of it.
  * @returns {boolean} false when there is no such water there
@@ -369,11 +382,9 @@ function stationsWithRoom(game, body, { staffed = true, except = 0, newShips = f
 export function deployStation(game, stationId, tx, ty) {
   const st = game.buildings.get(stationId);
   if (!st || st.def.kind !== 'station') return false;
-  const body = waterOf(game, st);
-  if (!body) return false;
-  const i = nearestWater(game.map, tx, ty, body, 2);
-  if (i < 0) return false;
-  st.rally = { x: game.map.xOf(i) + 0.5, y: game.map.yOf(i) + 0.5 };
+  const at = stationRallyAt(game, st, tx, ty);
+  if (!at) return false;
+  st.rally = at;
   for (const u of squadron(game, stationId)) { endDrill(u); u.target = 0; u.state = 'sail'; } // (a ship on its way to the Portus comes too)
   return true;
 }

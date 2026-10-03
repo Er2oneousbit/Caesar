@@ -20,6 +20,7 @@ import { startRoaming } from './movement.js';
 import { vendorSupply } from './market.js';
 import { cureHome } from './disease.js';
 import { missionaryVisit } from './natives.js';
+import { tendDecoration } from './gardens.js';
 
 /** Apply a roamer's effect to every building within reach of its tile. */
 export function roamerVisit(game, w) {
@@ -95,6 +96,9 @@ function applyEffect(game, effect, w, origin, b) {
     case 'market':
       if (h && origin) vendorSupply(game, origin, b);
       break;
+    case 'tend':
+      tendDecoration(game, b); // a garden or statue back to full care (sim/gardens.js)
+      break;
     default:
       break;
   }
@@ -122,8 +126,12 @@ function applyEffect(game, effect, w, origin, b) {
  * them in the streets, nor market vendors: a market already keeps two out,
  * the overlap made it three, and the mission 4 save's homes went 6,553
  * home-days without one before and 7,379 after.
+ * Gardeners too, upkeep like the engineers: a garden or statue starts to
+ * fade a month (16 days) after a visit, sooner than a gardener's round out
+ * (15 days for his 30 tiles) and home again takes, so a yard that waited for
+ * him to walk back would leave its streets to fade between rounds.
  */
-const OVERLAP_ROUNDS = new Set(['prefect', 'engineer', 'taxman', 'priest', 'barber', 'physician', 'bather']);
+const OVERLAP_ROUNDS = new Set(['prefect', 'engineer', 'gardener', 'taxman', 'priest', 'barber', 'physician', 'bather']);
 
 /** How many of the building's own roamers are out (`onlyRoaming`: not counting those walking home)? */
 function roamersOut(game, b, type, onlyRoaming = false) {

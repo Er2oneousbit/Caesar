@@ -1291,6 +1291,54 @@ try {
   await page.evaluate(() => window.colonia.ui.info.close());
   if (shownType.modal) await page.keyboard.press('Escape'); // the click closed the advisors (Escape on the map opens the game menu)
 
+  // 5a4b. Festivals (sim/religion.js): the Religion advisor's table shows
+  //       each size's money, food and wine and what the city has; with no
+  //       wine in the warehouses the large and grand festivals are greyed
+  //       out with the reason; a small one, clicked, takes its food from the
+  //       granaries and the god's last festival reads "this month". The city
+  //       is put back as it was, for the steps that follow.
+  await page.evaluate(() => window.colonia.ui.openAdvisors('religion'));
+  const fest = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const c = g.city;
+    const gran = [...g.buildings.values()].find((b) => b.def.kind === 'granary');
+    if (!gran) return { granary: false };
+    const was = { stock: { ...gran.stock }, wine: new Map(), cooldown: c.festivalCooldown, boost: c.festivalBoost, treasury: c.treasury, ceres: { ...c.gods.ceres } };
+    for (const b of g.buildings.values()) if (b.def.kind === 'warehouse') { was.wine.set(b.id, b.stock.wine); b.stock.wine = 0; }
+    gran.stock.wheat += 800;
+    c.festivalCooldown = 0;
+    c.treasury = Math.max(c.treasury, 5000);
+    app.ui.openAdvisors('religion');
+    const body = () => document.querySelector('.modal-body');
+    const rows = [...body().querySelectorAll('.festivals tr[data-size]')].map((tr) => [...tr.children].map((td) => td.textContent));
+    const btn = (size) => body().querySelector(`[data-god="ceres"] button[data-size="${size}"]`);
+    const shown = { grandOff: !!btn('grand')?.disabled, largeOff: !!btn('large')?.disabled, smallOn: btn('small') && !btn('small').disabled, title: btn('grand')?.title || '', short: body().querySelector('.festivals [data-short="grand"]')?.textContent || '' };
+    const food = () => { let n = 0; for (const b of g.buildings.values()) if (b.def.kind === 'granary') for (const k in b.stock) n += b.stock[k]; return n; };
+    const before = food();
+    btn('small').click();
+    const after = food();
+    const last = body().querySelector('[data-god="ceres"]')?.textContent || '';
+    // Festival music for some days after it, not for as long as the mood boost lasts.
+    const music = app.musicMood();
+    app.festivalDay = null;
+    c.festivalBoost = 10;
+    const musicLater = app.musicMood();
+    const out = { granary: true, rows, ...shown, taken: Math.round(before - after), last: /Last festival\s*this month/.test(last), cooldown: c.festivalCooldown, afterOff: !!btn('small')?.disabled, music, musicLater };
+    // Back as it was.
+    Object.assign(gran.stock, was.stock);
+    for (const [id, n] of was.wine) g.buildings.get(id).stock.wine = n;
+    Object.assign(c, { festivalCooldown: was.cooldown, festivalBoost: was.boost, treasury: was.treasury });
+    Object.assign(c.gods.ceres, was.ceres);
+    return out;
+  });
+  await page.keyboard.press('Escape');
+  check('the Religion advisor shows each festival\'s money, food and wine; without wine the large and grand ones are greyed out with the reason; a small one takes its food from the granaries, and festival music follows it for some days',
+    fest.granary && fest.rows.length === 3 && fest.rows.every((r) => /\d/.test(r[1]) && /\d/.test(r[2])) && fest.rows[0][3] === '-' && /\d/.test(fest.rows[2][3])
+      && fest.grandOff && fest.largeOff && fest.smallOn && /Needs \d+ wine in the warehouses, 0 stored/.test(fest.title) && /Grand: Needs \d+ wine/.test(fest.short)
+      && fest.taken >= 100 && fest.last && fest.cooldown === 2 && fest.afterOff && fest.music === 'festival' && fest.musicLater !== 'festival' && errors.length === 0,
+    JSON.stringify({ ...fest, errors }));
+
   // 5a5. Auto-pause (ui/autoPause.js): Settings turns on "a fire breaks out";
   //      a fire in the running game then pauses it, with a note that goes
   //      there on a click, outlasts other toasts and leaves when the game
@@ -1508,6 +1556,137 @@ try {
     } else check('clicking the map deploys the soldiers there', false, 'no free tile on screen near the fort');
     // Never leave deploy mode on for the steps that follow.
     await page.evaluate(() => { if (window.colonia.deploying) window.colonia.cancelDeploy(); });
+
+    // 5b1. Numbered forts: Shift+1 glides to fort I and opens it; the
+    //      deployed fort's standard is a click target and can be dragged
+    //      (sim/fortNumbers.js, input.js), at any view turn.
+    const far = await page.evaluate(() => {
+      const app = window.colonia;
+      app.ui.info.close();
+      const f = [...app.game.buildings.values()].find((b) => b.def.kind === 'fort' && b.number === 1);
+      if (!f) return null;
+      const m = app.game.map;
+      // Look away first: the far side of the map from the fort.
+      app.renderer.camera.centerOnTile(f.x < m.w / 2 ? m.w - 12 : 12, f.y < m.h / 2 ? m.h - 12 : 12);
+      return { id: f.id, x: f.x + 1, y: f.y + 1 };
+    });
+    await page.mouse.move(400, 300); // (the pointer over the map, not a button the press could land on)
+    await page.keyboard.press('Shift+Digit1');
+    await page.waitForTimeout(1500); // the glide
+    const one = await page.evaluate((f) => {
+      const app = window.colonia;
+      const r = app.canvas.getBoundingClientRect();
+      const cam = app.renderer.camera;
+      const at = cam.screenToTile(r.width / 2, r.height / 2);
+      // The fort in the middle of the view (a fort by the map's edge sits off
+      // center: the camera stops at the edge).
+      const w = f ? app.renderer.worldAt(f.x + 0.5, f.y + 0.5) : { x: 0, y: 0 };
+      const sx = ((w.x - cam.x) * cam.scale) / cam.dpr / r.width;
+      const sy = ((w.y - cam.y) * cam.scale) / cam.dpr / r.height;
+      return { at, mid: sx > 0.2 && sx < 0.8 && sy > 0.2 && sy < 0.8, target: app.ui.info.target, head: document.querySelector('#info-panel h3')?.textContent || '', text: document.getElementById('info-panel').textContent };
+    }, far);
+    check('Shift+1 glides to fort I and opens its panel, titled with its number and key', !!far && one.target?.id === far.id && one.mid && / I \(/.test(one.head) && /Shift\+1/.test(one.text), JSON.stringify({ far, at: one.at, mid: one.mid, target: one.target, head: one.head }));
+
+    /** CSS px of the middle of a rally flag's cloth, from where the renderer drew it, or null. */
+    const flagPoint = (id) => page.evaluate((fid) => {
+      const app = window.colonia;
+      const r = app.renderer;
+      const s = r.flagSpots.find((o) => o.id === fid);
+      if (!s) return null;
+      const cam = r.camera;
+      const rect = app.canvas.getBoundingClientRect();
+      return { x: rect.left + ((s.wx + 4 - cam.x) * cam.scale) / cam.dpr, y: rect.top + ((s.wy - 20 - cam.y) * cam.scale) / cam.dpr };
+    }, id);
+    /** A tile `r0` or more tiles from the fort's flag whose spot on screen shows the map, in CSS px. */
+    const openTileNear = (id, r0) => page.evaluate(([fid, rmin]) => {
+      const app = window.colonia;
+      const f = app.game.buildings.get(fid);
+      const m = app.game.map;
+      const cam = app.renderer.camera;
+      const rect = app.canvas.getBoundingClientRect();
+      const fx = Math.floor(f.rally.x);
+      const fy = Math.floor(f.rally.y);
+      for (let r = rmin; r < rmin + 6; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r], [r, r], [-r, -r]]) {
+        const x = fx + dx;
+        const y = fy + dy;
+        if (!m.inBounds(x, y)) continue;
+        const w = app.renderer.worldAt(x + 0.5, y + 0.5); // (the view turn's own projection)
+        const sx = rect.left + ((w.x - cam.x) * cam.scale) / cam.dpr;
+        const sy = rect.top + ((w.y - cam.y) * cam.scale) / cam.dpr;
+        if (document.elementFromPoint(sx, sy) === app.canvas) return { x, y, sx, sy };
+      }
+      return null;
+    }, [id, r0]);
+    const lookAtFlag = (id) => page.evaluate((fid) => {
+      const app = window.colonia;
+      const f = app.game.buildings.get(fid);
+      app.ui.info.close();
+      app.renderer.camera.centerOnTile(Math.floor(f.rally.x), Math.floor(f.rally.y));
+    }, id);
+    const rallyOf = (id) => page.evaluate((fid) => window.colonia.game.buildings.get(fid).rally, id);
+    const camAt = () => page.evaluate(() => ({ x: window.colonia.renderer.camera.x, y: window.colonia.renderer.camera.y }));
+
+    if (await rallyOf(gar.fortId)) {
+      await lookAtFlag(gar.fortId);
+      await page.waitForTimeout(200);
+      const fp = await flagPoint(gar.fortId);
+      if (fp) await page.mouse.click(fp.x, fp.y);
+      await page.waitForTimeout(100);
+      const clicked = await page.evaluate(() => ({ target: window.colonia.ui.info.target, recall: [...document.querySelectorAll('#info-panel button')].some((b) => /Recall/.test(b.textContent) && !b.disabled) }));
+      check('clicking a deployed fort\'s standard opens the fort, with Recall', !!fp && clicked.target?.kind === 'building' && clicked.target.id === gar.fortId && clicked.recall, JSON.stringify({ fp, clicked }));
+
+      // Drag the standard to a tile a few tiles off: the soldiers' rally moves there, and the map does not pan.
+      await lookAtFlag(gar.fortId);
+      await page.waitForTimeout(200);
+      const from = await flagPoint(gar.fortId);
+      const to = await openTileNear(gar.fortId, 4);
+      const cam0 = await camAt();
+      if (from && to) {
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(to.sx, to.sy, { steps: 8 });
+        const mid = await page.evaluate(() => window.colonia.renderer.flagDrag);
+        await page.mouse.up();
+        const rally = await rallyOf(gar.fortId);
+        const cam1 = await camAt();
+        check('dragging a standard redeploys the fort where it is dropped, without panning the map', !!rally && Math.floor(rally.x) === to.x && Math.floor(rally.y) === to.y && mid && mid.x === to.x && mid.y === to.y && cam0.x === cam1.x && cam0.y === cam1.y, JSON.stringify({ to, rally, mid, cam0, cam1 }));
+      } else check('dragging a standard redeploys the fort where it is dropped, without panning the map', false, JSON.stringify({ from, to }));
+
+      // Dropped on a panel (not on the map): the standard stays where it was.
+      await page.evaluate((id) => window.colonia.ui.info.showBuilding(id), gar.fortId);
+      await page.waitForTimeout(100);
+      const before = await rallyOf(gar.fortId);
+      const from2 = await flagPoint(gar.fortId);
+      // (Its title: plain text, no button a stray click could press.)
+      const panelAt = await page.evaluate(() => { const r = document.querySelector('#info-panel h3').getBoundingClientRect(); return { x: r.left + Math.min(40, r.width / 2), y: r.top + r.height / 2 }; });
+      if (from2) {
+        await page.mouse.move(from2.x, from2.y);
+        await page.mouse.down();
+        await page.mouse.move(panelAt.x, panelAt.y, { steps: 8 });
+      }
+      const held = await page.evaluate(() => window.colonia.renderer.flagDrag); // (the drag really started: no ghost over the panel)
+      if (from2) await page.mouse.up();
+      const after = await rallyOf(gar.fortId);
+      check('a standard dropped on a panel, off the map, stays where it was', !!from2 && !!held && held.x === -1 && JSON.stringify(after) === JSON.stringify(before), JSON.stringify({ from2, held, before, after }));
+
+      // A turned view: the standard is found and dragged by the turned projection.
+      await page.evaluate(() => window.colonia.turnView(1));
+      await lookAtFlag(gar.fortId);
+      await page.waitForTimeout(200);
+      const from3 = await flagPoint(gar.fortId);
+      const to3 = await openTileNear(gar.fortId, 3);
+      if (from3 && to3) {
+        await page.mouse.move(from3.x, from3.y);
+        await page.mouse.down();
+        await page.mouse.move(to3.sx, to3.sy, { steps: 8 });
+        await page.mouse.up();
+      }
+      const rally3 = await rallyOf(gar.fortId);
+      const turn = await page.evaluate(() => window.colonia.renderer.viewTurn);
+      check('at a turned view a standard is still grabbed and dropped on the tile under the pointer', turn === 1 && !!to3 && !!rally3 && Math.floor(rally3.x) === to3.x && Math.floor(rally3.y) === to3.y, JSON.stringify({ turn, from3, to3, rally3 }));
+      await page.evaluate(() => window.colonia.turnView(-window.colonia.renderer.viewTurn));
+    } else check('clicking a deployed fort\'s standard opens the fort, with Recall', false, 'the fort was not deployed');
+    await page.evaluate(() => window.colonia.ui.info.close());
   }
   // 5b2. The Empire map: E opens it and it draws (a scouted warband and a
   //      caravan on the way included), clicking the warband closes it and
@@ -1623,15 +1802,12 @@ try {
   const sent = await page.evaluate(() => {
     const g = window.colonia.game;
     const b = g.military.battle;
-    return { sent: !!(b && b.sent), away: [...g.units.values()].filter((u) => u.away).length, strength: b && b.sent ? b.sent.strength : 0, kind: window.colonia.ui.modalKind, card: document.querySelector('.battle-card')?.textContent || '' };
+    return { sent: !!(b && b.sent), gone: b && b.sent ? b.sent.men.length : 0, onMap: [...g.units.values()].filter((u) => u.away).length, strength: b && b.sent ? b.sent.strength : 0, kind: window.colonia.ui.modalKind, card: document.querySelector('.battle-card')?.textContent || '' };
   });
-  check('the Imperial advisor shows Caesar\'s call for troops and sends the forts switched to Empire service', /Placentia/.test(callText) && sent.sent && sent.away > 0 && sent.strength > 0 && sent.kind === 'advisors' && /strength/.test(sent.card) && errors.length === 0, JSON.stringify({ call: callText.slice(0, 90), ...sent, card: sent.card.slice(0, 120) }));
-  // The recall: once they have left the province, a rider goes after one fort's men (they still count until he reaches them).
+  check('the Imperial advisor shows Caesar\'s call for troops and sends the forts switched to Empire service', /Placentia/.test(callText) && sent.sent && sent.gone > 0 && sent.onMap === 0 && sent.strength > 0 && sent.kind === 'advisors' && /strength/.test(sent.card) && errors.length === 0, JSON.stringify({ call: callText.slice(0, 90), ...sent, card: sent.card.slice(0, 120) }));
+  // The recall: they left the province the moment they were sent, so a rider goes after one fort's men (they still count until he reaches them).
   const recall = await page.evaluate(() => {
     const g = window.colonia.game;
-    // (Set down at the map exit, they leave within a day: the clock barely moves for the steps that follow.)
-    for (const u of g.units.values()) if (u.away) { u.x = u.px = g.map.exit.x + 0.5; u.y = u.py = g.map.exit.y + 0.5; u.path = null; }
-    g.runDays(1);
     window.colonia.ui.openAdvisors('imperial');
     const btn = document.querySelector('.battle-card .recall-battle');
     if (!btn) return { btn: false };
@@ -2230,6 +2406,53 @@ try {
       }
       const rally = await np.evaluate((id) => window.colonia.game.buildings.get(id).rally, fleet.st.id);
       check('fleet: Deploy and a click on the water send the squadron there', !!water && !!rally && Math.abs(Math.floor(rally.x) - water.x) <= 2 && Math.abs(Math.floor(rally.y) - water.y) <= 2, JSON.stringify({ water, rally }));
+      // The squadron's flag dragged onto dry land (no water of its own within
+      // 2 tiles): it stays on the water where it was.
+      if (rally) {
+        const drag = await np.evaluate((sid) => {
+          const app = window.colonia;
+          const g = app.game;
+          const m = g.map;
+          const st = g.buildings.get(sid);
+          const body = m.navBody[st.berth];
+          app.ui.info.close();
+          app.renderer.camera.centerOnTile(Math.floor(st.rally.x), Math.floor(st.rally.y));
+          return { body, rx: Math.floor(st.rally.x), ry: Math.floor(st.rally.y) };
+        }, fleet.st.id);
+        await np.waitForTimeout(250);
+        const pts = await np.evaluate(([sid, d]) => {
+          const app = window.colonia;
+          const m = app.game.map;
+          const r = app.renderer;
+          const cam = r.camera;
+          const rect = app.canvas.getBoundingClientRect();
+          const css = (wx, wy) => ({ x: rect.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: rect.top + ((wy - cam.y) * cam.scale) / cam.dpr });
+          const s = r.flagSpots.find((o) => o.id === sid);
+          const dryAround = (x, y) => {
+            for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (m.inBounds(x + dx, y + dy) && m.navBody[m.idx(x + dx, y + dy)] === d.body) return false;
+            return true;
+          };
+          let land = null;
+          for (let rr = 4; rr < 16 && !land; rr++) for (const [dx, dy] of [[rr, 0], [0, rr], [-rr, 0], [0, -rr], [rr, rr], [-rr, -rr], [rr, -rr], [-rr, rr]]) {
+            const x = d.rx + dx;
+            const y = d.ry + dy;
+            if (!m.inBounds(x, y) || !dryAround(x, y)) continue;
+            const w = r.worldAt(x + 0.5, y + 0.5);
+            const p = css(w.x, w.y);
+            if (document.elementFromPoint(p.x, p.y) === app.canvas) { land = { tx: x, ty: y, x: p.x, y: p.y }; break; }
+          }
+          return { flag: s ? css(s.wx + 4, s.wy - 20) : null, land };
+        }, [fleet.st.id, drag]);
+        if (pts.flag && pts.land) {
+          await np.mouse.move(pts.flag.x, pts.flag.y);
+          await np.mouse.down();
+          await np.mouse.move(pts.land.x, pts.land.y, { steps: 8 });
+          const ghost = await np.evaluate(() => window.colonia.renderer.flagDrag);
+          await np.mouse.up();
+          const after = await np.evaluate((id) => window.colonia.game.buildings.get(id).rally, fleet.st.id);
+          check('fleet: the squadron\'s flag dragged onto dry land stays on the water where it was', !!ghost && ghost.x === pts.land.tx && ghost.y === pts.land.ty && JSON.stringify(after) === JSON.stringify(rally), JSON.stringify({ pts, ghost, rally, after }));
+        } else check('fleet: the squadron\'s flag dragged onto dry land stays on the water where it was', false, JSON.stringify(pts));
+      }
       await np.evaluate(() => { window.colonia.paused = false; window.colonia.ui.console.run('days 8'); window.colonia.paused = true; });
       // Click a liburnian: its panel.
       await np.evaluate(() => { const u = [...window.colonia.game.units.values()].find((v) => v.type === 'liburnian'); window.colonia.renderer.camera.centerOnTile(Math.floor(u.x), Math.floor(u.y)); });
@@ -2469,6 +2692,107 @@ try {
       check('the low bridge draws at every view turn without an error', berrors.length === 0, berrors.join(' | '));
     }
     await bp.close();
+  }
+
+  // 6e2. Gardens fade untended (sim/gardens.js), on a page of its own so
+  //      the main game's map and days stay as they were (the garrison
+  //      check needs its room): on the demo city, a Topiaria (Gardeners'
+  //      Yard) and a garden picked from the build menu and placed with the
+  //      mouse beside a street of homes; the yard sends out its gardener; a
+  //      garden left untended says so in its panel, and the Gardens and
+  //      statues overlay opens with its legend.
+  {
+    const gp = await ctx.newPage();
+    const gerrors = [];
+    gp.on('pageerror', (e) => gerrors.push(`pageerror: ${e.message}`));
+    gp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) gerrors.push(m.text()); });
+    await gp.goto(`${url}?skipmenu=1&map=small&seed=demo&mute=1&money=90000`);
+    await gp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const yardAt = await gp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      app.renderer.camera.zoomIndex = 2;
+      app.ui.console.run('demo 2');
+      const g = app.game;
+      g.runDays(60); // people in the homes, for the yard's workers
+      const m = g.map;
+      const free = (x, y) => m.inBounds(x, y) && m.isFree(x, y) && m.terrain[m.idx(x, y)] !== 2;
+      for (const h of g.buildings.values()) {
+        if (!h.house || !(h.house.pop > 0) || h.accessRoad < 0) continue;
+        const rx = m.xOf(h.accessRoad);
+        const ry = m.yOf(h.accessRoad);
+        // A free tile beside the home's street for the yard, and another
+        // within 2 tiles of that street for the garden.
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const yard = { x: rx + dx, y: ry + dy };
+          if (!free(yard.x, yard.y)) continue;
+          for (let gy = ry - 2; gy <= ry + 2; gy++) {
+            for (let gx = rx - 2; gx <= rx + 2; gx++) {
+              if ((gx === yard.x && gy === yard.y) || !free(gx, gy)) continue;
+              app.renderer.camera.centerOnTile(rx, ry);
+              app.renderer.render(0, 0.016);
+              return { yard, garden: { x: gx, y: gy } };
+            }
+          }
+        }
+      }
+      return null;
+    });
+    check('the demo city has a street of homes with room for a gardeners\' yard and a garden', !!yardAt);
+    if (yardAt) {
+      await gp.waitForTimeout(300);
+      const gScreen = (tx, ty) => gp.evaluate(([x, y]) => {
+        const cam = window.colonia.renderer.camera;
+        const wx = (x + 0.5 - (y + 0.5)) * 32;
+        const wy = (x + 0.5 + (y + 0.5)) * 16;
+        const r = window.colonia.canvas.getBoundingClientRect();
+        return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+      }, [tx, ty]);
+      const placed = {};
+      for (const key of ['gardener_yard', 'garden']) {
+        await gp.click('.cat-btn[title^="Government"]');
+        const listed = await gp.isVisible(`.build-item[data-key="${key}"]`);
+        if (listed) await gp.click(`.build-item[data-key="${key}"]`);
+        const tool = await gp.evaluate(() => window.colonia.input.tool);
+        const at = key === 'garden' ? yardAt.garden : yardAt.yard;
+        if (tool === key) {
+          const p = await gScreen(at.x, at.y);
+          await gp.mouse.move(p.x - 4, p.y);
+          await gp.mouse.move(p.x, p.y);
+          await gp.waitForTimeout(100);
+          await gp.mouse.click(p.x, p.y);
+        }
+        if (await gp.evaluate(() => window.colonia.input.tool)) await gp.keyboard.press('Escape');
+        placed[key] = { listed, tool, placed: await gp.evaluate(({ x, y, k }) => window.colonia.game.buildings.get(window.colonia.game.map.building[window.colonia.game.map.idx(x, y)])?.type === k, { ...at, k: key }) };
+      }
+      const tending = await gp.evaluate(({ yard, garden }) => {
+        const app = window.colonia;
+        const g = app.game;
+        const y = g.buildings.get(g.map.building[g.map.idx(yard.x, yard.y)]);
+        const b = g.buildings.get(g.map.building[g.map.idx(garden.x, garden.y)]);
+        if (!y || !b) return null;
+        let walker = false;
+        for (let d = 0; d < 24 && !walker; d++) {
+          g.runDays(1);
+          walker = [...g.walkers.values()].some((w) => w.type === 'gardener' && w.origin === y.id);
+        }
+        // Left untended for 100 days: down to its floor.
+        b.tendedDay = g.time.totalDays - 100;
+        g.updateBuilding(b);
+        app.ui.info.showBuilding(b.id);
+        const text = document.querySelector('#info-panel')?.textContent || '';
+        app.ui.info.close();
+        return { walker, staff: y.workers, step: b.careStep, untended: /Care\s*Untended: bonus at 25%/.test(text), note: /Last tended 100 days ago/.test(text) };
+      }, yardAt);
+      await gp.selectOption('.hud-select', 'gardens');
+      await gp.waitForTimeout(150);
+      const legend = await gp.isVisible('#overlay-legend:has-text("Tended: its full desirability")');
+      await gp.selectOption('.hud-select', 'none');
+      check('a Topiaria and a garden are placed from the build menu; its gardener walks out; an untended garden says so; the Gardens overlay opens',
+        placed.gardener_yard?.placed && placed.garden?.placed && tending?.walker && tending.step === 4 && tending.untended && tending.note && legend && gerrors.length === 0,
+        JSON.stringify({ yardAt, placed, tending, legend, gerrors }));
+    }
+    await gp.close();
   }
 
   // 6d2. Peoples and wolves (data/peoples.js, sim/wildlife.js): a sandbox at

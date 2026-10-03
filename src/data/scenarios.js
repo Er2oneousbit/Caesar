@@ -175,10 +175,12 @@ export const INVASION_PRESETS = Object.freeze({
  * it within Oasis Aurea's pace, so that Beneventum beside it can ask for
  * more. The peaceful provinces ask for more people than their military
  * partner at every step (about a fifth more at steps 3 to 5), and from
- * step 3 for 85 to 90% of the model's sensible ceiling, villas counted
- * (never more than 92%: the villa quarter is the model's riskiest
- * assumption), with demand of their own on the original's tiers to give
- * them the work. The last step is the longest.
+ * step 3 for 83 to 90% of the model's sensible ceiling (85 to 90% at
+ * steps 3 to 5; the gardeners' yards lifted the late ceilings), villas
+ * counted (never more than 92%: the villa quarter is the model's riskiest
+ * assumption), with demand of their own on the original's tiers where
+ * their buildings alone do not give the work (Figlina, Beneventum and each
+ * province from step 6). The last step is the longest.
  *
  * Favor: Caesar watches from step 3. Favor starts at 50 and drifts back
  * toward it, so a goal below 50 (30 at step 3, 35 at Pons Aelius, 40 at
@@ -211,8 +213,11 @@ export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
  * ones came with later missions: the house from the first mission, the
  * villa from the third, the palace from the fifth (every building is open
  * from there). No rank is asked for: the mission decides.
+ * The gardeners' yard comes with the garden, from the first mission: its
+ * gardens and statues fade untended only where a yard can be built
+ * (sim/gardens.js careApplies).
  */
-const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum', 'governor_house'];
+const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'gardener_yard', 'forum', 'governor_house'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
 /** The large temples (one per god) come with the third mission, the first to ask for Domus and bigger homes. */
 export const LARGE_TEMPLE_KEYS = Object.freeze(GOD_KEYS.map((g) => `temple_large_${g}`));
@@ -378,13 +383,10 @@ export const SCENARIOS = Object.freeze([
     rank: 3, // Architect, as Pons Aelius (data/ranks.js)
     unlocks: withoutArmy(TIER4), partners: ['capua', 'massilia', 'corinthus'], requests: true,
     market: { wine: 0.9, marble: 1.2 }, // Lucanian vines; every temple builder on the coast wants marble (sim/prices.js)
-    // Corinthus buys clothing on the first tier: the cloth trade is the work
-    // that lets the peaceful province grow past Pons Aelius (sim/capacity.js).
-    demand: { corinthus: { clothing: 1500 } },
     hints: [
       'No raiders come to Paestum, and you may build no forts. Rome watches your favor instead: meet Caesar\'s requests and send gifts, for if his favor runs out his legions come, and there is no army here to meet them.',
       'Culture is the measure of this city: a Templum (Grand Temple) counts as two temples to its god, and schools, a Bibliotheca (Library) and shows add the rest.',
-      'Corinthus sells marble and oil by sea and buys wheat, iron and clothing (1,500 a year). Build an Emporium (Trade Dock) on the shore.',
+      'Corinthus sells marble and oil by sea and buys wheat, iron and clothing. Build an Emporium (Trade Dock) on the shore.',
       'Apartment Houses need furniture (an Officina Lignaria, the carpenter, from timber); Tenements also need oil, a barber, and both a school and a library; Insulae need clothing too.',
     ],
   },
@@ -418,8 +420,8 @@ export const SCENARIOS = Object.freeze([
     map: { size: 128, type: 'river', seed: 'beneventum' },
     site: 'beneventum', // where it is on the empire map (data/sites.js)
     funds: 9000, startYear: -225,
-    goals: { population: 4700, culture: 65, prosperity: 60, peace: 70, favor: 65 },
-    paceYears: 5.3,
+    goals: { population: 4800, culture: 65, prosperity: 60, peace: 70, favor: 65 },
+    paceYears: 5.4,
     rank: 4, // Quaestor, as Portus Mercatorum (data/ranks.js)
     // The river is navigable, but every partner comes by land: the colony lives by caravans.
     unlocks: withoutArmy(ALL_BUT_HIPPODROME), partners: ['capua', 'tarraco', 'aquileia', 'lugdunum'], requests: true,

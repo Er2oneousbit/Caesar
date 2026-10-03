@@ -8,8 +8,8 @@
  * busier than its traders carry at the usual pace sends them more often
  * (sim/tradeDemand.js). None of it is saved: it is worked out from the
  * scenario and the date. The first two missions, the military provinces of
- * steps 3 to 5, Oasis Aurea and Urbs Magna set none of it, so their trade is
- * what it always was.
+ * steps 3 to 5, Paestum, Oasis Aurea and Urbs Magna set none of it, so their
+ * trade is what it always was.
  * ----------------------------------------------------------------------------
  */
 
@@ -43,12 +43,11 @@ function demandGame({ demand, demandChanges, seed = 'demand-test', type = 'coast
 }
 
 test('demand: the missions with no demand of their own buy what the partners\' tables say, all mission long, at the usual pace', () => {
-  // The late siblings (Cosa, Copia and on) and the peaceful provinces of
-  // steps 3 to 5 (Figlina, Paestum, Beneventum: their trade is the work
-  // that lets them grow past their military partner) set demand of their
-  // own; the other missions keep their partners' tables.
+  // The late siblings (Cosa, Copia and on), Figlina and Beneventum (their
+  // trade is the work that lets them grow past their military partner) set
+  // demand of their own; the other missions keep their partners' tables.
   const plain = SCENARIOS.filter((s) => !s.demand && !s.demandChanges);
-  assert.deepEqual(plain.map((s) => s.id), ['c1', 'c2', 'c3m', 'c4', 'c5', 'c6', 'c7']);
+  assert.deepEqual(plain.map((s) => s.id), ['c1', 'c2', 'c3m', 'c4', 'c4p', 'c5', 'c6', 'c7']);
   for (const s of plain) {
     for (const id of s.partners) {
       for (let month = 0; month <= (s.paceYears + 3) * 12; month += 5) {

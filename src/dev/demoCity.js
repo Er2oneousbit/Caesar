@@ -28,6 +28,9 @@ import { CONFIG } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { deployFort, recallFort } from '../sim/military.js';
+import { holdFestival, festivalBlocked, festivalMeans, festivalNeeds, SMALL_TOWN } from '../sim/religion.js';
+import { GOD_KEYS } from '../data/gods.js';
+import { FOOD_TYPES } from '../data/goods.js';
 
 /** Undo records of the builds made inside the current attempt() (null outside one). */
 let recording = null;
@@ -277,6 +280,37 @@ export function buildDemoCity(game, opts = {}) {
 }
 
 /**
+ * The demo city's festivals, as a sensible player holds them (simulate.mjs
+ * calls it at the start of every month): a small festival whenever the
+ * cooldown allows, for the god longest without one (of those the city can
+ * worship; ties in the gods' order), so that all five come round inside
+ * their year (sim/religion.js). Only where the gods mind (SMALL_TOWN people
+ * or more): a smaller town's gods never strike or count the months against
+ * it, and a festival every 2 months cost the balance sweep's towns of 300
+ * to 700 people 60 to 110 Dn a month, more than most of them earned. Only
+ * once the granaries hold its food and the city keeps a month's food after
+ * it (granaries and markets), so the festivals never leave the homes
+ * hungry; and never a large or grand one, whose wine the city's best homes
+ * need more. Draws no random numbers.
+ * @returns {string|null} the god honored, or null
+ */
+export function holdDemoFestival(game) {
+  const c = game.city;
+  if (c.festivalCooldown > 0 || c.population < SMALL_TOWN) return null;
+  let god = null;
+  for (const g of GOD_KEYS) {
+    if (!game.isUnlocked(`temple_${g}`)) continue;
+    if (!god || c.gods[g].monthsSinceFestival > c.gods[god].monthsSinceFestival) god = g;
+  }
+  if (!god || festivalBlocked(game, 0)) return null;
+  let market = 0;
+  for (const b of game.buildings.values()) if (b.def.kind === 'market') for (const f of FOOD_TYPES) market += b.stock[f] || 0;
+  const after = festivalMeans(game).food - festivalNeeds(game, 0).food + market;
+  if (after < c.population * CONFIG.FOOD_PER_PERSON_MONTH) return null;
+  return holdFestival(game, god, 0).ok ? god : null;
+}
+
+/**
  * A villa block's services (buildDemoCity `villa`), all in the outer bands
  * (rows 0-1 by the Imperial road, 9-10 at the back): one of each walker
  * service a Villa needs (two prefects and engineers, one for each side),
@@ -463,6 +497,22 @@ function pipeWater(game, center) {
       return null;
     });
     if (ok) { keepUp(near); return true; }
+  }
+  return false;
+}
+
+/**
+ * A statue no farther than this from a gardeners' yard shares it; the demo
+ * uptown builds one by each other statue (a gardener keeps within about 13
+ * tiles of his yard, sim/movement.js ROAM_RADIUS, and is drawn to the
+ * statues longest untended, so a yard serves a few nearby).
+ */
+const YARD_NEAR = 8;
+
+/** Is there a road within `r` tiles of a size x size footprint at (x, y)? */
+function roadWithin(map, x, y, size, r) {
+  for (let ty = y - r; ty < y + size + r; ty++) {
+    for (let tx = x - r; tx < x + size + r; tx++) if (map.inBounds(tx, ty) && map.road[map.idx(tx, ty)]) return true;
   }
   return false;
 }
@@ -919,7 +969,7 @@ export const UPTOWN_GOODS = Object.freeze(['pottery', 'furniture', 'oil']);
 /**
  * Lift the level 3 demo city's homes toward the Insula, as a player
  * building for them would, all but the clothing: plazas on its streets and
- * statues by it for desirability, a library and three baths (school, barber
+ * statues by it for desirability (and gardeners' yards to keep them), a library and three baths (school, barber
  * and medicus it has), a third market, the amphitheater and colosseum with
  * their schools for entertainment, and three vegetable farms for a second
  * food (and more of it: the town's four wheat farms feed it as Huts).
@@ -932,6 +982,7 @@ export const UPTOWN_GOODS = Object.freeze(['pottery', 'furniture', 'oil']);
  */
 export function buildDemoUptown(game, res, { villa = false } = {}) {
   const { center, bounds } = res;
+  const { map } = game;
   const built = {};
   if (bounds && game.isUnlocked('plaza')) built.plaza = build(game, 'plaza', bounds.x0, bounds.y0, bounds.x1, bounds.y1);
   // Second rounds of the walkers that cover the most demanding needs, from
@@ -940,7 +991,6 @@ export function buildDemoUptown(game, res, { villa = false } = {}) {
     if (game.isUnlocked(type)) built[type] = (built[type] || 0) + (placeNear(game, type, size, center, minD, maxD) ? 1 : 0);
   }
   // The baths inside a reservoir's piped area (they run on piped water).
-  const { map } = game;
   const piped = (x, y) => (map.water[map.idx(x, y)] & WaterBits.PIPED) !== 0 && (map.water[map.idx(x + 1, y + 1)] & WaterBits.PIPED) !== 0;
   built.baths = 0;
   for (let k = 0; k < 3 && game.isUnlocked('baths'); k++) if (placeJoined(game, 'baths', 2, center, 16, piped)) built.baths++;
@@ -948,14 +998,26 @@ export function buildDemoUptown(game, res, { villa = false } = {}) {
   built.farm_veg = 0;
   for (let k = 0; k < (villa ? 0 : 3) && game.isUnlocked('farm_veg'); k++) if (placeNear(game, 'farm_veg', 3, center, 8, 34, true)) built.farm_veg++;
   // Statues around the town, the grand ones first (each lifts every home
-  // within its reach).
+  // within its reach), and where the mission has gardeners (sim/gardens.js:
+  // untended, a statue's desirability fades to a quarter) a gardeners' yard
+  // by each that has none within YARD_NEAR tiles. Then a statue goes only
+  // where a gardener can reach it, within SERVICE_RADIUS of a road.
+  const gardeners = game.isUnlocked('gardener_yard');
+  const yards = [];
   let statues = 0;
   for (const [type, size] of [['statue_large', 3], ['statue_large', 3], ['statue_medium', 2], ['statue_medium', 2], ['statue_medium', 2], ['statue_medium', 2]]) {
     if (!game.isUnlocked(type)) continue;
-    const s = findSpot(game, size, center, 5, 12).find((p) => place(game, type, p.x, p.y, size));
-    if (s) statues++;
+    const s = findSpot(game, size, center, 5, gardeners ? 14 : 12).find((p) => (!gardeners || roadWithin(map, p.x, p.y, size, CONFIG.SERVICE_RADIUS)) && place(game, type, p.x, p.y, size));
+    if (!s) continue;
+    statues++;
+    const mid = { x: s.x + (size - 1) / 2, y: s.y + (size - 1) / 2 };
+    if (!gardeners || yards.some((y) => Math.hypot(y.x - mid.x, y.y - mid.y) <= YARD_NEAR)) continue;
+    // On a street of its own town, with homes in reach for its workers.
+    const yard = placeJoined(game, 'gardener_yard', 1, mid, 6, (x, y) => roadWithin(map, x, y, 1, 1) && !map.road[map.idx(x, y)]);
+    if (yard) yards.push(yard);
   }
   built.statues = statues;
+  built.gardener_yard = yards.length;
   const monthly = () => {
     for (const b of game.buildings.values()) {
       if (b.def.kind !== 'market') continue;

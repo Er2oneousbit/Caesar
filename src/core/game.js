@@ -10,7 +10,8 @@
  *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
  *      (spreads work evenly across the day instead of spiking at midnight;
- *      a home's disease risk comes after its fire risk), then an
+ *      a home's disease risk comes after its fire risk; a garden's or
+ *      statue's care steps down untended), then an
  *      earthquake's cracks (sim/events.js)
  *      then criminals: prefects and soldiers catch them, prefects hunt
  *   4. on a new day:   labor, no-road notices, water, desirability, city
@@ -78,6 +79,7 @@ import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../si
 import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear, refreshDiseaseGate } from '../sim/disease.js';
 import { foundVillages, nativesDaily } from '../sim/natives.js';
 import { newEventState, eventStateOf, eventsMonthly, updateQuake } from '../sim/events.js';
+import { updateCare } from '../sim/gardens.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -337,6 +339,7 @@ export class Game {
         case 'dock': updateDock(this, b); break;
         case 'shipyard': updateShipyard(this, b); break;
         case 'wharf': updateWharf(this, b); break;
+        case 'decor': updateCare(this, b); break; // gardens and statues fade untended (sim/gardens.js)
         default: break;
       }
       if (!this.buildings.has(b.id)) return;

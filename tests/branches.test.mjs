@@ -168,18 +168,19 @@ test('the new missions fit their jobs and keep to their pace', () => {
       // (set so before the model counted a villa quarter); peace sets its
       // pace, a point a month from 20.
       const working = employmentCeiling(s, { ...SENSIBLE, villas: 0 });
-      assert.ok(s.goals.population <= working && s.goals.population >= working * 0.9, `${id}: a goal a little under the ceiling of working homes (${s.goals.population} of ${working})`);
+      assert.ok(s.goals.population <= working && s.goals.population >= working * 0.85, `${id}: a goal a little under the ceiling of working homes (${s.goals.population} of ${working})`);
       assert.equal(m.fastest, m.peace, `${id}: peace sets the pace`);
       assert.equal(m.peace, s.goals.peace - 20);
     } else {
       // Paestum and Beneventum, as the late peaceful provinces: 85 to 90% of
-      // the sensible ceiling, villas counted, with demand of their own on the
-      // original's tiers for the work.
+      // the sensible ceiling, villas counted; Beneventum with demand of its
+      // own on the original's tiers for the work (Paestum's buildings, the
+      // gardeners' yards among them, employ enough without).
       assert.ok(s.goals.population >= ceiling * 0.85 && s.goals.population <= ceiling * 0.9, `${id}: ${s.goals.population} people of a ceiling of ${ceiling}`);
-      for (const goods of Object.values(s.demand)) for (const v of Object.values(goods)) assert.ok([1500, 2500, 4000].includes(v), `${id}: ${v}`);
+      for (const goods of Object.values(s.demand || {})) for (const v of Object.values(goods)) assert.ok([1500, 2500, 4000].includes(v), `${id}: ${v}`);
     }
   }
-  // Paestum's culture and peace still take longer than its people; Beneventum's 4,700 people set its pace.
+  // Paestum's culture and peace still take longer than its people; Beneventum's 4,800 people set its pace.
   assert.equal(goalMonths(findScenario('c4p').goals).fastest, 45);
   const benev = goalMonths(findScenario('c5p').goals);
   assert.equal(benev.fastest, benev.population);

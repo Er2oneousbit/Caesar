@@ -38,8 +38,10 @@ import { farmSeasonNotice } from './sim/production.js';
 import { campaignSavings, storeCampaignSavings, savingsRecord } from './sim/governor.js';
 import { MAP_SIZES } from './world/mapgen.js';
 import { buildDemoCity } from './dev/demoCity.js';
-import { deployFort, enemyCount } from './sim/military.js';
-import { deployStation } from './sim/navy.js';
+import { enemyCount, garrisonCounts } from './sim/military.js';
+import { squadronCounts } from './sim/navy.js';
+import { deployTo, hasRally } from './sim/rallyPoints.js';
+import { fortByNumber, roman } from './sim/fortNumbers.js';
 import { AUTO_PAUSE_DEFAULTS, autoPauseFor, autoPauseText } from './ui/autoPause.js';
 import { stepOfKind, nextIdleFrom, cyclable, kindPosition } from './ui/cycle.js';
 import { newFame, cleanFame, winOf, recordWin } from './sim/fame.js';
@@ -77,6 +79,14 @@ const MENU_ORBIT_SPEED = 0.04;
 /** The menu backdrop's map: room around its town so the view stays on land. */
 const MENU_MAP_SIZE = 96;
 const MENU_ZOOM = 2; // CONFIG.ZOOM_LEVELS index: 1x
+/**
+ * Days of festival music after a festival (about a minute at 1x). It used to
+ * play while the festival's mood boost lasted, but small festivals for each
+ * god in turn (every 2 months) keep that boost up for good, and the music
+ * with it; this way a festival every 2 months still leaves some days of
+ * ordinary music between them.
+ */
+const FESTIVAL_MUSIC_DAYS = 24;
 
 export class App {
   /**
@@ -117,6 +127,7 @@ export class App {
     this.errorCount = 0;
     this.gameUnsub = [];
     this.deploying = 0; // fort id while the player picks where to deploy its soldiers
+    this.fortHop = null; // { id, flag }: where Shift+N last took the view, so the next press goes to the other end
     this.ticking = false; // inside the main loop's sim ticks (only their events may auto-pause)
     this.pauseToast = null; // the auto-pause's "Paused: ..." toast, until the game runs again
     this.lastIdle = 0; // the idle building the I key showed last, to go on from
@@ -286,9 +297,11 @@ export class App {
     for (const u of this.gameUnsub) u();
     this.gameUnsub = [];
     this.cancelDeploy();
+    this.input?.cancelFlag(); // a flag held while a save loads must not land in the new city
     this.menuGame = null;
     this.game = game;
     this.musicOverride = null;
+    this.festivalDay = null; // the game day of the last festival held this session (not saved: music only)
     this.acc = 0;
     this.renderer.attach(game);
     if (cameraState) this.renderer.camera.restore(cameraState);
@@ -296,7 +309,10 @@ export class App {
     const ev = game.events;
     this.gameUnsub.push(
       ev.on('message', (m) => this.onGameMessage(m)),
-      ev.on('sound', ({ name }) => this.sfx.play(name)),
+      ev.on('sound', ({ name }) => {
+        this.sfx.play(name);
+        if (name === 'festival') this.festivalDay = game.time.totalDays; // (musicMood)
+      }),
       ev.on('victory', () => this.onVictory()),
       ev.on('defeat', ({ reason }) => this.onDefeat(reason)),
       ev.on('month', () => this.onMonth()),
@@ -454,7 +470,7 @@ export class App {
     if (!g) return 'menu';
     if (this.musicOverride) return this.musicOverride;
     if (g.military && (g.military.active || enemyCount(g) > 0)) return 'danger';
-    if (g.city.festivalBoost >= 2.5) return 'festival';
+    if (this.festivalDay !== null && g.time.totalDays - this.festivalDay < FESTIVAL_MUSIC_DAYS) return 'festival';
     if (this.renderer.sky.lamps >= 0.6) return 'night';
     return 'day';
   }
@@ -709,6 +725,100 @@ export class App {
     this.renderer.deployFort = 0;
   }
 
+  /**
+   * Send fort or station `id` to tile (x, y): the Deploy click and a dropped
+   * rally flag (sim/rallyPoints.js holds the rule for both). Says so, and
+   * opens its panel. @returns false where it cannot go (nothing changes).
+   */
+  sendForce(id, x, y) {
+    const g = this.game;
+    const b = g?.buildings.get(id);
+    if (!b) return false;
+    const naval = b.def.kind === 'station';
+    const ok = deployTo(g, id, x, y);
+    if (ok) {
+      this.sfx.play('horn');
+      this.ui.messages.push({ text: naval ? `The squadron is rowing to ${x}, ${y}.` : `Soldiers are marching to ${x}, ${y}.`, level: 'info', date: '' });
+    } else if (naval) {
+      this.ui.toastError('Liburnians sail only on the water by their station: click the river or sea there.');
+    }
+    if (g.buildings.has(id)) this.ui.info.showBuilding(id);
+    return ok;
+  }
+
+  /**
+   * The F key: deploy the fort or naval station whose panel is open, as its
+   * Deploy button does (F again, or Esc, cancels). Says why not when it has
+   * nobody to send, or when no fort or station is open.
+   */
+  deployKey() {
+    const g = this.game;
+    if (!g) return;
+    if (this.deploying) { this.cancelDeploy(); return; }
+    // Over the Advisors or the Empire map the map is hidden: close it first,
+    // as the advisor's own Deploy button does, so the pick is seen.
+    if (this.ui.hasModal() && this.ui.modalKind !== 'outcome') this.ui.closeModal();
+    const t = this.ui.info.open ? this.ui.info.target : null;
+    const b = t && t.kind === 'building' ? g.buildings.get(t.id) : null;
+    if (!hasRally(b)) {
+      this.ui.messages.push({ text: 'Open a fort or a naval station first (Shift+1 to 9 shows a fort): F sends its men out.', level: 'info', date: '' });
+      return;
+    }
+    const naval = b.def.kind === 'station';
+    const n = (naval ? squadronCounts(g) : garrisonCounts(g)).get(b.id) || 0;
+    if (!n) { this.ui.toastError(naval ? 'This station has no liburnians to send yet.' : 'This fort has no soldiers to send yet.'); return; }
+    this.startDeploy(b.id);
+  }
+
+  /**
+   * Shift+1..9: show fort `n` (sim/fortNumbers.js): glide to it and open its
+   * panel. Pressed again while its panel is open, the view goes to its rally
+   * flag if it is deployed, and back to the fort the time after.
+   */
+  showFort(n) {
+    const g = this.game;
+    if (!g) return;
+    const f = fortByNumber(g, n);
+    if (!f) {
+      this.ui.messages.push({ text: `No fort holds the number ${roman(n)} (Shift+${n}). Each new fort takes the lowest free number.`, level: 'info', date: '' });
+      return;
+    }
+    if (this.deploying && this.deploying !== f.id) this.cancelDeploy();
+    // A panel hidden behind the Advisors or the Empire map does not count as
+    // open: the modal closes (as goToBuilding closes it) and the fort shows first.
+    const hidden = this.ui.hasModal() && this.ui.modalKind !== 'outcome';
+    if (hidden) this.ui.closeModal();
+    const open = !hidden && this.ui.info.open && this.ui.info.target?.kind === 'building' && this.ui.info.target.id === f.id;
+    const toFlag = open && !!f.rally && !(this.fortHop && this.fortHop.id === f.id && this.fortHop.flag);
+    if (toFlag) {
+      this.renderer.camera.glideToTile(Math.floor(f.rally.x), Math.floor(f.rally.y));
+      this.fortHop = { id: f.id, flag: true };
+      return;
+    }
+    this.fortHop = { id: f.id, flag: false };
+    this.goToBuilding(f.id);
+  }
+
+  /** A click on a rally flag (input.js): its fort's or station's panel, with Recall. */
+  clickFlag(id) {
+    if (!this.game?.buildings.has(id)) return;
+    this.sfx.play('click');
+    this.ui.info.showBuilding(id);
+  }
+
+  /**
+   * A rally flag dragged and let go over tile (x, y) (input.js): the fort or
+   * station is sent there, as by Deploy and a click; where it cannot go the
+   * flag stays where it was.
+   */
+  dropFlag(id, x, y) {
+    const b = this.game?.buildings.get(id);
+    if (!b) return false;
+    const r = b.rally;
+    if (r && Math.floor(r.x) === x && Math.floor(r.y) === y) { this.ui.info.showBuilding(id); return false; } // dropped where it stood
+    return this.sendForce(id, x, y);
+  }
+
   // ------------------------------------------------- building to building
   /** Glide to building `id` and open its panel. */
   goToBuilding(id) {
@@ -791,14 +901,7 @@ export class App {
     if (this.deploying && g) {
       const id = this.deploying;
       this.cancelDeploy();
-      const naval = g.buildings.get(id)?.def.kind === 'station';
-      if (g.map.inBounds(x, y) && (naval ? deployStation(g, id, x, y) : deployFort(g, id, x, y))) {
-        this.sfx.play('horn');
-        this.ui.messages.push({ text: naval ? `The squadron is rowing to ${x}, ${y}.` : `Soldiers are marching to ${x}, ${y}.`, level: 'info', date: '' });
-      } else if (naval) {
-        this.ui.toastError('Liburnians sail only on the water by their station: click the river or sea there.');
-      }
-      if (g.buildings.has(id)) this.ui.info.showBuilding(id);
+      this.sendForce(id, x, y);
       return;
     }
     if (!g || !g.map.inBounds(x, y)) { this.ui.info.close(); return; }

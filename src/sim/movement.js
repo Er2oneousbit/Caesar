@@ -16,6 +16,7 @@ import { WALKER_TYPES, roadblockBit } from '../data/walkers.js';
 import { ROADBLOCK } from '../world/map.js';
 import { killWalker, mainOf } from './entities.js';
 import { vendorNeed } from './market.js';
+import { careNeed } from './gardens.js';
 
 const DX = [0, 1, 0, -1];
 const DY = [-1, 0, 1, 0];
@@ -292,6 +293,8 @@ export function homeNeed(game, w, b) {
  * looking past junctions cut the demo city's home-days without a service in
  * reach from 131,518 to 49,111 and the mission 4 save's from 308,462 to
  * 267,369 (mission 2: 4,421 against 5,482, about even).
+ * A gardener weighs the gardens and statues down a way the same way, by how
+ * near each is to fading (sim/gardens.js careNeed), not the homes.
  * Homes farther than ROAM_RADIUS from his building count nothing: the pull
  * (up to 41 times) would otherwise outweigh the leash (a tenth) and draw him
  * off after homes he cannot keep, past the edge of his neighbourhood. With
@@ -305,6 +308,7 @@ export function streetNeed(game, w, x, y, dir) {
   const origin = w.origin ? buildings.get(w.origin) : null;
   const ox = origin ? origin.x + (origin.size - 1) / 2 : 0;
   const oy = origin ? origin.y + (origin.size - 1) / 2 : 0;
+  const need = WALKER_TYPES[w.type]?.effect === 'tend' ? (b) => careNeed(game, b) : (b) => homeNeed(game, w, b);
   const start = map.idx(x, y);
   const seen = new Set([map.idx(x - DX[dir], y - DY[dir]), start]);
   const needs = new Map(); // building id -> homeNeed, for homes beside several roads
@@ -320,7 +324,7 @@ export function streetNeed(game, w, x, y, dir) {
     if (n === undefined) {
       const b = buildings.get(id);
       const c = (b.size - 1) / 2; // from centre to centre, so a big home counts alike on every side
-      n = origin && Math.max(Math.abs(b.x + c - ox), Math.abs(b.y + c - oy)) > ROAM_RADIUS ? 0 : homeNeed(game, w, b);
+      n = origin && Math.max(Math.abs(b.x + c - ox), Math.abs(b.y + c - oy)) > ROAM_RADIUS ? 0 : need(b);
       needs.set(id, n);
     }
     if (n * disc > worst) worst = n * disc;

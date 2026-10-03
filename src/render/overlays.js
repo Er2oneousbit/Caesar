@@ -30,6 +30,8 @@ import { healthColumn, healthTip } from '../ui/healthInfo.js';
 import { SICK_COLOR } from '../data/disease.js';
 import { riskRates } from '../sim/risk.js';
 import { landLayer } from '../sim/natives.js';
+import { careScale } from '../sim/gardens.js';
+import { careTip } from '../ui/gardenInfo.js';
 
 const is = (...types) => (b) => types.includes(b.type);
 
@@ -87,6 +89,25 @@ export const OVERLAYS = [
     show: is('engineer_post'),
     value: (b) => (riskRates(b).damage > 0 ? Math.min(1, b.damageRisk / 100) : null),
     walkers: ['engineer'],
+  },
+  {
+    // Gardens and statues by the share of their desirability their care
+    // leaves them (sim/gardens.js): a full column while tended, down to a
+    // quarter. The yards stand as they are, and their gardeners walk.
+    key: 'gardens', name: 'Gardens and statues',
+    show: is('gardener_yard'),
+    column: (b) => {
+      if (!b.def.tended) return null;
+      const v = careScale(b);
+      return { v, color: columnColor(v, false) };
+    },
+    tip: careTip,
+    legend: [
+      [columnColor(1, false), 'Tended: its full desirability'],
+      [columnColor(0.6, false), 'Fading untended'],
+      [columnColor(0.25, false), 'Untended: down to a quarter'],
+    ],
+    walkers: ['gardener'],
   },
   {
     // The native villages' land (sim/natives.js): red where an angry village

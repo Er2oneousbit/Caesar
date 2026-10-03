@@ -10,6 +10,15 @@
  * passed. Festivals and oracles lift every mood.
  * Very happy gods bless the city; angry gods punish it.
  *
+ * Festivals cost money, food from the granaries and, large or grand, wine
+ * from the warehouses, all or nothing. A god whose last festival is more
+ * than a year past is neglected: its mood target falls a point a month, 28
+ * at most (the original's rule; not in towns under 800 people). A
+ * city-wide cooldown (2, 4 or 8 months) still spaces them, short enough
+ * for small festivals in turn to keep all five gods inside their year; one
+ * held within 3 months of the last lifts the people's mood less, so the
+ * turns do not lift the city mood above what festivals did before.
+ *
  * Two levels of wrath (the original's minor and major curse): a god that
  * strikes is "angered" until its mood climbs back above GOD_CALM_MOOD. If it
  * strikes again before then, Mercury and Venus strike harder, except in a
@@ -48,9 +57,50 @@ import { logGoods } from './goodsLedger.js';
 import { sinkFishingBoats } from './fishing.js';
 import { neptuneStorms } from './events.js';
 
-/** One god's fresh state. angered: it struck and has not calmed since (see the header). */
+/** Towns smaller than this do not bother the gods much (flat mood targets, no wrath, no neglect). */
+export const SMALL_TOWN = 800;
+
+/**
+ * One god's fresh state. angered: it struck and has not calmed since (see
+ * the header). monthsSinceFestival: month turns since its last festival
+ * (0 in a new game, as in the original); festivalsHeld: festivals held for
+ * it this game, so the advisor can tell "none yet" from "this month".
+ */
 export function newGodMood() {
-  return { mood: CONFIG.GOD_MOOD_START, festival: 0, cooldown: 6, temples: 0, angered: false };
+  return { mood: CONFIG.GOD_MOOD_START, festival: 0, cooldown: 6, temples: 0, angered: false, monthsSinceFestival: 0, festivalsHeld: 0 };
+}
+
+/**
+ * What a god's mood target loses after `months` without a festival: nothing
+ * for FESTIVAL_FREE_MONTHS, then a point a month, FESTIVAL_NEGLECT_MAX at
+ * most (the original's target fell from +12 to -28 over 40 months).
+ */
+export function festivalNeglect(months) {
+  return Math.min(CONFIG.FESTIVAL_NEGLECT_MAX, Math.max(0, (months || 0) - CONFIG.FESTIVAL_FREE_MONTHS));
+}
+
+/**
+ * Month turns since the city's last festival, for any god (Infinity when
+ * none has been held this game, as in a new game or a save from before the
+ * count).
+ */
+export function monthsSinceAnyFestival(game) {
+  let months = Infinity;
+  for (const g of GOD_KEYS) {
+    const s = game.city.gods[g];
+    if (s && s.festivalsHeld > 0) months = Math.min(months, s.monthsSinceFestival || 0);
+  }
+  return months;
+}
+
+/**
+ * The neglect a god's mood target takes this month: none where its temple
+ * is not unlocked (it stays neutral at 50) or in a town under SMALL_TOWN
+ * people, whose gods have flat targets and never strike.
+ */
+export function neglectPenalty(game, god) {
+  if (!game.isUnlocked(`temple_${god}`) || game.city.population < SMALL_TOWN) return 0;
+  return festivalNeglect(game.city.gods[god].monthsSinceFestival);
 }
 
 export function newGodState() {
@@ -74,11 +124,15 @@ export function updateReligion(game) {
   for (const g of GOD_KEYS) {
     const s = c.gods[g];
     s.temples = temples[g];
+    // Another month without a festival (the original counted at the turn of
+    // the month too): a festival held mid-month is a whole year free.
+    s.monthsSinceFestival = (s.monthsSinceFestival || 0) + 1;
     let target;
     if (!game.isUnlocked(`temple_${g}`)) target = 50; // cannot be worshipped here: stays neutral
-    else if (pop < 800) target = temples[g] > 0 ? 70 : 55; // small towns do not bother the gods much
+    else if (pop < SMALL_TOWN) target = temples[g] > 0 ? 70 : 55; // small towns do not bother the gods much
     else if (temples[g] === 0) target = 5; // big cities that ignore a god anger it
     else target = 20 + 60 * Math.min(1, (temples[g] * CONFIG.PEOPLE_PER_TEMPLE) / wanted);
+    target -= neglectPenalty(game, g); // a year without a festival in its honor
     // Blessings (mood 92+) need festivals or oracles on top of good temple coverage.
     target += Math.min(20, oracles * 6) + s.festival;
     target = Math.max(0, Math.min(100, target));
@@ -90,7 +144,7 @@ export function updateReligion(game) {
     if (s.mood >= CONFIG.GOD_BLESS_MOOD && s.cooldown <= 0) {
       bless(game, g);
       s.cooldown = 14;
-    } else if (s.mood <= CONFIG.GOD_WRATH_MOOD && s.cooldown <= 0 && pop >= 800) {
+    } else if (s.mood <= CONFIG.GOD_WRATH_MOOD && s.cooldown <= 0 && pop >= SMALL_TOWN) {
       wrath(game, g, s);
       s.cooldown = 8;
       s.mood = Math.min(100, s.mood + 12);
@@ -328,6 +382,13 @@ function wrath(game, god, s) {
   game.events.emit('sound', { name: 'wrath' });
 }
 
+// ---------------------------------------------------------------------------
+// Festivals
+// ---------------------------------------------------------------------------
+
+/** Festival sizes by index (0 small, 1 large, 2 grand). */
+export const FESTIVAL_SIZES = Object.freeze(['small', 'large', 'grand']);
+
 /** Festival cost for the current population. size: 0 small, 1 large, 2 grand */
 export function festivalCost(game, size) {
   const base = [60, 150, 400][size];
@@ -335,21 +396,165 @@ export function festivalCost(game, size) {
 }
 
 /**
- * Hold a festival for a god.
+ * Units of food a festival takes from the granaries: FESTIVAL_FOOD_SHARE of
+ * a month of the city's food, a load (CART_CAPACITY) at least.
+ */
+export function festivalFood(game, size) {
+  const month = game.city.population * CONFIG.FOOD_PER_PERSON_MONTH;
+  return Math.max(CONFIG.CART_CAPACITY, Math.ceil(month * CONFIG.FESTIVAL_FOOD_SHARE[size]));
+}
+
+/**
+ * Units of wine a festival takes from the warehouses: a grand one the
+ * original's population / FESTIVAL_WINE_PEOPLE + 1 loads, a large one half
+ * of that rounded up, a small one none.
+ */
+export function festivalWine(game, size) {
+  if (size === 0) return 0;
+  const grand = Math.floor(game.city.population / CONFIG.FESTIVAL_WINE_PEOPLE) + 1;
+  return (size === 2 ? grand : Math.ceil(grand / 2)) * CONFIG.CART_CAPACITY;
+}
+
+/** Everything a festival of this size costs now: { money (Dn), food, wine (units) }. */
+export function festivalNeeds(game, size) {
+  return { money: festivalCost(game, size), food: festivalFood(game, size), wine: festivalWine(game, size) };
+}
+
+/**
+ * What the city has toward a festival: its treasury, the food in its
+ * granaries and the wine in its warehouses (staffed or not: nobody needs to
+ * carry it, as for the Emperor's requests). Food a market already bought is
+ * the people's, and food in a warehouse is not counted: a festival is fed
+ * from the granaries.
+ */
+export function festivalMeans(game) {
+  let food = 0;
+  let wine = 0;
+  for (const b of game.buildings.values()) {
+    if (b.def.kind === 'granary') for (const f of FOOD_TYPES) food += b.stock[f] || 0;
+    else if (b.def.kind === 'warehouse') wine += b.stock.wine || 0;
+  }
+  return { money: game.city.treasury, food, wine };
+}
+
+/**
+ * Why a festival of this size cannot be held now, or null when it can: the
+ * cooldown, else every part of its cost the city is short of ("Needs 200
+ * wine in the warehouses, 100 stored.").
+ */
+export function festivalBlocked(game, size) {
+  const c = game.city;
+  if (c.festivalCooldown > 0) return `Citizens are still recovering from the last festival (${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}).`;
+  const need = festivalNeeds(game, size);
+  const have = festivalMeans(game);
+  const short = [];
+  if (need.money > have.money && !game.cheats.freeBuild) short.push(`Needs ${need.money} Dn, ${Math.floor(have.money)} in the treasury.`);
+  if (need.food > have.food) short.push(`Needs ${need.food} food in the granaries, ${Math.floor(have.food)} stored.`);
+  if (need.wine > have.wine) short.push(`Needs ${need.wine} wine in the warehouses, ${Math.floor(have.wine)} stored.`);
+  return short.length ? short.join(' ') : null;
+}
+
+/**
+ * How much of each stock to take so that `amount` comes from the largest
+ * first and they end as level as can be: the largest is drawn down to the
+ * next, then both to the third, and so on. `stocks` is [{ key, n }] in a
+ * fixed order, which breaks ties. Whole units when the stocks and the
+ * amount are whole (the first in order give the odd unit); a market buyer
+ * may have left a fraction, and then the shares are exact.
+ * @returns {Map<string, number>} key -> units to take (only keys that give)
+ */
+export function levelTakes(stocks, amount) {
+  const rest = stocks.map((s) => ({ key: s.key, left: s.n || 0, take: 0 }));
+  let need = amount;
+  while (need > 1e-9) {
+    const live = rest.filter((s) => s.left > 1e-9);
+    if (!live.length) break;
+    const top = Math.max(...live.map((s) => s.left));
+    const group = live.filter((s) => s.left >= top - 1e-9);
+    const next = Math.max(0, ...live.filter((s) => s.left < top - 1e-9).map((s) => s.left));
+    const step = top - next;
+    if (need >= step * group.length) {
+      for (const s of group) { s.take += s.left - next; s.left = next; }
+      need -= step * group.length;
+      continue;
+    }
+    // The last step: the group shares what is left, level with each other.
+    const whole = Number.isInteger(need) && group.every((s) => Number.isInteger(s.left));
+    const per = whole ? Math.floor(need / group.length) : need / group.length;
+    let odd = whole ? need - per * group.length : 0;
+    for (const s of group) {
+      const n = per + (odd > 0 ? 1 : 0);
+      if (odd > 0) odd--;
+      s.take += n;
+      s.left -= n;
+    }
+    need = 0;
+  }
+  return new Map(rest.filter((s) => s.take > 0).map((s) => [s.key, s.take]));
+}
+
+/**
+ * Take `amount` of a good from the storehouses of a kind ('granary' or
+ * 'warehouse'): the one holding the most of it first, the lowest id on a
+ * tie, each as far as it goes; but a store set to Get that good last, as
+ * the Emperor's requests do (storage.js takeFromCity): the player wants it
+ * kept there. Logged as used in the goods book.
+ * @returns {number} units taken
+ */
+function takeFromStores(game, kind, good, amount) {
+  const getting = (b) => (b.orders?.[good] === 'get' ? 1 : 0);
+  const stores = [...game.buildings.values()]
+    .filter((b) => b.def.kind === kind && (b.stock[good] || 0) > 0)
+    .sort((a, b) => getting(a) - getting(b) || b.stock[good] - a.stock[good] || a.id - b.id);
+  let left = amount;
+  for (const b of stores) if (left > 1e-9) left -= takeGoods(b, good, left);
+  const taken = amount - left;
+  logGoods(game, good, 'used', taken);
+  return taken;
+}
+
+/**
+ * Take a festival's goods: its food spread over the foods the granaries
+ * hold (the largest stocks first, levelled; ties in FOOD_TYPES order), and
+ * its wine from the warehouses. The caller has checked that it is all there
+ * (festivalBlocked), so nothing is taken from a city that cannot pay in full.
+ */
+export function spendFestivalGoods(game, need) {
+  const stocks = FOOD_TYPES.map((f) => {
+    let n = 0;
+    for (const b of game.buildings.values()) if (b.def.kind === 'granary') n += b.stock[f] || 0;
+    return { key: f, n };
+  });
+  for (const [f, n] of levelTakes(stocks, need.food)) takeFromStores(game, 'granary', f, n);
+  if (need.wine > 0) takeFromStores(game, 'warehouse', 'wine', need.wine);
+}
+
+/**
+ * Hold a festival for a god, paid in full (money, food and, for a large or
+ * grand one, wine) or not at all. Whatever its size, the god's months since
+ * its last festival go back to 0 (the original's rule).
  * @returns {{ok:boolean, reason?:string}}
  */
 export function holdFestival(game, god, size) {
   const c = game.city;
   if (!GODS[god]) return { ok: false, reason: 'Unknown god' };
-  if (c.festivalCooldown > 0) return { ok: false, reason: `Citizens are still recovering from the last festival (${c.festivalCooldown} months).` };
-  const cost = festivalCost(game, size);
-  if (c.treasury < cost && !game.cheats.freeBuild) return { ok: false, reason: 'Not enough money.' };
-  transact(game, 'festivals', -cost);
-  c.gods[god].festival += [15, 30, 50][size];
-  c.gods[god].mood = Math.min(100, c.gods[god].mood + [5, 10, 18][size]);
-  c.festivalBoost += [4, 8, 14][size];
-  c.festivalCooldown = [3, 5, 8][size];
-  game.message(`A ${['small', 'large', 'grand'][size]} festival is held in honor of ${GODS[god].name}.`, 'good');
+  if (!FESTIVAL_SIZES[size]) return { ok: false, reason: 'Unknown festival size' };
+  const why = festivalBlocked(game, size);
+  if (why) return { ok: false, reason: why };
+  const need = festivalNeeds(game, size);
+  transact(game, 'festivals', -need.money);
+  spendFestivalGoods(game, need);
+  const s = c.gods[god];
+  // (Read before this god's count is reset.)
+  const cityShare = Math.min(1, monthsSinceAnyFestival(game) / CONFIG.FESTIVAL_CITY_FULL_MONTHS);
+  s.festival += [15, 30, 50][size];
+  s.mood = Math.min(100, s.mood + [5, 10, 18][size]);
+  s.monthsSinceFestival = 0;
+  s.festivalsHeld = (s.festivalsHeld || 0) + 1;
+  c.festivalBoost += [4, 8, 14][size] * cityShare;
+  c.festivalCooldown = CONFIG.FESTIVAL_COOLDOWN[size];
+  const goods = need.wine > 0 ? `${need.food} food and ${need.wine} wine` : `${need.food} food`;
+  game.message(`A ${FESTIVAL_SIZES[size]} festival is held in honor of ${GODS[god].name}: the people feast on ${goods} from the city's stores.`, 'good');
   game.events.emit('sound', { name: 'festival' });
   return { ok: true };
 }

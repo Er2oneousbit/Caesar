@@ -3166,6 +3166,48 @@ try {
     await mp.close();
   }
 
+  // 6g. Forts full of untrained men, then an academy (a playtester's city):
+  //     the men at rest go to train, one man of a fort at a time, and the
+  //     fort's panel says who is at the Campus.
+  {
+    const tp = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+    const terrors = [];
+    tp.on('pageerror', (e) => terrors.push(`pageerror: ${e.message}`));
+    tp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) terrors.push(m.text()); });
+    await tp.goto(`${url}?skipmenu=1&seed=fp1&mute=1&raids=off`);
+    await tp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const trips = await tp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      const c = app.ui.console;
+      const g = app.game;
+      const inside = (u) => { const f = g.buildings.get(u.fort); return !!f && u.x >= f.x && u.y >= f.y && u.x < f.x + f.size && u.y < f.y + f.size; };
+      const resting = () => [...g.units.values()].filter((u) => u.fort && !u.trained && u.state === 'idle' && inside(u));
+      c.run('demo 2');
+      c.run('garrison');
+      let day = 0;
+      for (; day < 200 && resting().length < 4; day++) c.run('days 1');
+      const before = resting().length;
+      c.run('academy');
+      let most = 0;
+      let first = null;
+      for (let d = 0; d < 120 && !first; d++) {
+        c.run('days 1');
+        const out = new Map();
+        for (const u of g.units.values()) if (u.fort && u.drill) out.set(u.fort, (out.get(u.fort) || 0) + 1);
+        most = Math.max(most, ...out.values(), 0);
+        first = [...g.units.values()].find((u) => u.fort && u.drill && u.state === 'training') || null;
+      }
+      if (!first) return { before, day, most };
+      app.ui.info.showBuilding(first.fort);
+      const fortText = document.querySelector('#info-panel')?.textContent || '';
+      return { before, day, most, state: first.state, fortText: fortText.slice(fortText.indexOf('Training'), fortText.indexOf('Training') + 80) };
+    });
+    check('forts of untrained men and a new academy: one man of a fort at a time goes to train, and its panel says so', trips.before >= 4 && trips.state === 'training' && trips.most === 1 && /trained, 1 at the Campus/.test(trips.fortText || '') && terrors.length === 0,
+      JSON.stringify({ ...trips, terrors }));
+    await tp.close();
+  }
+
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet
   const phone =await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const perrors = [];

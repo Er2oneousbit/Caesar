@@ -19,7 +19,7 @@ import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { Terrain, Wall } from '../src/world/map.js';
-import { addBuilding, removeBuilding, inOwnFort } from '../src/sim/entities.js';
+import { addBuilding, removeBuilding, inOwnFort, spawnWalker } from '../src/sim/entities.js';
 import { updateWorkshop, updateProducer } from '../src/sim/production.js';
 import { planAction, applyPlan, undoLast } from '../src/sim/construction.js';
 import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts, fortPost, fillField, fortGate, yardSpot } from '../src/sim/military.js';
@@ -547,6 +547,74 @@ test('a man inside never strands: the gate built over, the men use the post; eve
   for (let t = 0; t < 300; t++) tick(game);
   assert.ok(men.every((u) => inOwnFort(game, u) && game.units.has(u.id)), 'they stay in their yard');
   assert.ok(men.every((u) => Number.isFinite(u.x) && Number.isFinite(u.y)));
+});
+
+/** Units standing on a building's tiles (a man in his own fort's yard aside). */
+function builtOver(game) {
+  const map = game.map;
+  return [...game.units.values()].filter((u) => {
+    const b = map.building[map.idx(Math.floor(u.x), Math.floor(u.y))];
+    return b && b !== u.fort;
+  });
+}
+
+test('review: a building placed over men standing in the field moves them off, and they still reach their spots by it', () => {
+  const { game, fort, men } = restingFort('fort_legion', 6);
+  walkLog(game, fort, men);
+  const rally = findFree(game, 1, 1, { x: fort.x + 9, y: fort.y + 1 });
+  assert.ok(deployFort(game, fort.id, rally.x, rally.y));
+  walkLog(game, fort, men);
+  assert.ok(men.every((u) => u.state === 'idle' && Math.hypot(u.x - rally.x - 0.5, u.y - rally.y - 0.5) < 3), 'standing at the rally point');
+  // (Playtest: troops were found under a new academy when it was cleared.)
+  const placed = build(game, 'military_academy', rally.x - 1, rally.y - 1);
+  assert.ok(placed.ok, placed.reason);
+  assert.deepEqual(builtOver(game).map((u) => u.slot), [], 'nobody left inside the new building');
+  const out = walkLog(game, fort, men);
+  assert.deepEqual(out.bad, []);
+  assert.ok(men.every((u) => u.state === 'idle'), 'every man at a spot');
+  assert.deepEqual(builtOver(game).map((u) => u.slot), [], 'his spot is never inside it either');
+  assert.ok(men.every((u) => Math.hypot(u.x - rally.x - 0.5, u.y - rally.y - 0.5) < 5), 'around the rally point still');
+  // Recalled, they get home into the yard.
+  recallFort(game, fort.id);
+  walkLog(game, fort, men);
+  assert.ok(men.every((u) => inOwnFort(game, u) && u.state === 'idle'), 'home in the yard');
+});
+
+test('review: raiders, a wolf, a villager and a rioter standing where a building or a wall goes up step aside to open ground', () => {
+  const game = newGame({ type: 'plains' });
+  const s = clearedLand(game, 16, 10);
+  assert.ok(s, 'open land');
+  const map = game.map;
+  // Two raiders, a wolf and a villager on the four middle tiles of a 3x3 lot, a rioter on the fifth.
+  const units = [
+    spawnUnit(game, 'raider', s.x + 4.5, s.y + 4.5, { state: 'advance' }),
+    spawnUnit(game, 'slinger', s.x + 5.9, s.y + 5.1, { state: 'advance' }),
+    spawnUnit(game, 'wolf', s.x + 4.2, s.y + 5.8, { pack: 1, state: 'rest' }),
+    spawnUnit(game, 'villager', s.x + 5.5, s.y + 4.5, { state: 'home' }),
+  ];
+  const rioter = spawnWalker(game, 'rioter', map.idx(s.x + 5, s.y + 3), null, { offRoad: true, state: 'riot' });
+  const placed = build(game, 'granary', s.x + 3, s.y + 3);
+  assert.ok(placed.ok, placed.reason);
+  assert.deepEqual(builtOver(game).map((u) => u.type), [], 'nobody inside it');
+  for (const u of units) {
+    const i = map.idx(Math.floor(u.x), Math.floor(u.y));
+    assert.ok(!map.building[i] && !map.wall[i], `${u.type} on open ground`);
+    assert.ok(Math.max(Math.abs(Math.floor(u.x) - (s.x + 4)), Math.abs(Math.floor(u.y) - (s.y + 4))) <= 2, `${u.type} just outside it, not thrown far`);
+    assert.equal(u.path, null, 'a fresh route from where he now stands');
+  }
+  assert.ok(!map.building[map.idx(rioter.x, rioter.y)], 'the rioter too');
+  assert.equal(map.idx(rioter.tx, rioter.ty), map.idx(rioter.x, rioter.y), 'stepping nowhere into it');
+  // A wall dragged through a raider: he stands beside it, not in it.
+  const r = spawnUnit(game, 'raider', s.x + 12.5, s.y + 2.5, { state: 'advance' });
+  assert.ok(build(game, 'wall', s.x + 12, s.y + 1, s.x + 12, s.y + 4).ok);
+  assert.equal(map.wall[map.idx(Math.floor(r.x), Math.floor(r.y))], Wall.NONE, 'out of the wall');
+  assert.ok(Math.abs(Math.floor(r.x) - (s.x + 12)) === 1, 'beside it');
+  // A man of Rome on a road where a wall crosses it: a gate, his to pass, so he stays.
+  build(game, 'road', s.x + 1, s.y + 8, s.x + 8, s.y + 8);
+  const legionary = spawnUnit(game, 'legionary', s.x + 3.5, s.y + 8.5, { fort: 999, state: 'idle' });
+  assert.ok(build(game, 'wall', s.x + 3, s.y + 7, s.x + 3, s.y + 9).ok);
+  assert.equal(map.wall[map.idx(s.x + 3, s.y + 8)], Wall.GATE);
+  assert.deepEqual([legionary.x, legionary.y], [s.x + 3.5, s.y + 8.5], 'a gate does not move him');
 });
 
 test('a gateway opening into a walled pocket is no gate: the men go out by the post, and get to their rally point', () => {

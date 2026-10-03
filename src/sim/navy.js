@@ -50,7 +50,7 @@ import { GOODS } from '../data/goods.js';
 import { Terrain } from '../world/map.js';
 import { RNG } from '../core/rng.js';
 import { spawnUnit, removeUnit, passable, fillField, computeField, damageBuilding, enemyPower, rollDamage, hurt, screenDirection, warbandType, unitDefense } from './military.js';
-import { portusFor, startDrill, endDrill, drilled, trainsNow } from './training.js';
+import { portusFor, startDrill, endDrill, trainAt, trainsNow } from './training.js';
 import { awayCounts, awayOf, leaveForBattle, dropAway, postsAway, takesNewMen, AWAY_MAX_TICKS } from './battle.js';
 import { dockBerth } from './trade.js';
 import { killWalker, STRIDE_WRAP } from './entities.js';
@@ -871,7 +871,7 @@ export function ramOf(u, def = UNIT_TYPES[u.type]) {
 }
 
 /**
- * A new liburnian sent to the Portus (sim/training.js) rows to its berth and
+ * A liburnian sent to the Portus (new, or at rest taking its turn: sim/training.js) rows to its berth and
  * moors there PORTUS_TRAIN_DAYS (`trainLeft`, counted only while the Portus
  * is fully staffed, but kept waiting no more than TRAIN_WAIT_MAX_DAYS in
  * all), then, trained, rows on to its station. A Portus gone, or
@@ -883,22 +883,7 @@ function rowToPortus(game, u, def) {
   const berth = p && p.def.kind === 'portus' ? shoreBerth(game, p) : -1;
   if (berth < 0 || game.map.navBody[berth] !== u.body) { endDrill(u); return false; }
   const spot = { x: game.map.xOf(berth) + 0.5, y: game.map.yOf(berth) + 0.5 };
-  if (dist(u, spot) < 0.3) {
-    u.state = 'training';
-    u.moving = false;
-    if (!(u.trainLeft > 0)) u.trainLeft = CONFIG.PORTUS_TRAIN_DAYS * CONFIG.TICKS_PER_DAY;
-    if (!trainsNow(game, p)) {
-      // Short of staff: the drill waits, but not for ever (TRAIN_WAIT_MAX_DAYS): then on, untrained.
-      u.trainWait = (u.trainWait || 0) + 1;
-      if (u.trainWait <= CONFIG.TRAIN_WAIT_MAX_DAYS * CONFIG.TICKS_PER_DAY) return true;
-      endDrill(u);
-      return false;
-    }
-    u.trainLeft--;
-    if (u.trainLeft > 0) return true;
-    drilled(game, u, p);
-    return false;
-  }
+  if (dist(u, spot) < 0.3) return trainAt(game, u, p, CONFIG.PORTUS_TRAIN_DAYS);
   u.state = 'drill';
   steer(game, u, spot.x, spot.y, shipSpeed(u, def));
   return true;

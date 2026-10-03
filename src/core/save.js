@@ -133,7 +133,8 @@
  *      too. Soldiers at rest no longer go to the
  *      academy. Older saves need nothing: nobody in them is mid-training
  *      (a recruit or ship still on its way trains on arrival), and a soldier
- *      caught on a trip to the academy comes straight home (updateRoman).
+ *      caught on a trip to the academy comes straight home (updateRoman
+ *      did it then; upgradeSoldierTripsV28 since version 29).
  *  17  shipyards need timber (sim/fishing.js; Colonia's own rule): a
  *      shipyard holds `stock.timber` and `incoming.timber`, and a boat takes
  *      100, used at launch. Older saves load with
@@ -206,6 +207,13 @@
  *      together; a prefect at a fire holds it in fireTile, waiting with
  *      afterWait 'douse'. Older saves tie burning tiles together by the
  *      ruin they share, see upgradeFireGroupsV27().
+ *  29  soldiers at rest go to train (sim/training.js): a soldier on a trip
+ *      from his fort to the Campus holds `drill` (its id), `drillDay` and
+ *      `drillDays`, and there `trainLeft` and `trainWait`, as a ship on its
+ *      way to the Portus does; a fort or station may hold `drillWait` (no
+ *      trip before that day). In an older save a soldier could hold a trip
+ *      only from before version 16, when it meant something else: he comes
+ *      straight home, untrained, see upgradeSoldierTripsV28().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -245,6 +253,7 @@ import { sandboxEventSwitches } from '../data/events.js';
 import { log } from './debug.js';
 import { NATIVE_ID_BASE } from '../data/natives.js';
 import { isFort, numberForts } from '../sim/fortNumbers.js';
+import { endDrill } from '../sim/training.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
 export const MIN_SAVE_VERSION = 4;
@@ -555,6 +564,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 26) upgradeGardensV25(game);
   if (data.version < 27) upgradeFestivalsV26(game);
   if (data.version < 28) upgradeFireGroupsV27(game);
+  if (data.version < 29) upgradeSoldierTripsV28(game);
   addNewPartners(game);
   // A salary above the governor's rank, which saves made before the rate was
   // held to the rank may draw, comes down to the rank now (sim/governor.js).
@@ -974,6 +984,17 @@ export function upgradeFireGroupsV27(game) {
     if (!keyOf.has(rec)) keyOf.set(rec, -(i + 1));
     game.fireGroups.set(i, keyOf.get(rec));
   }
+}
+
+/**
+ * A save before version 29 (before soldiers at rest went to train): a
+ * soldier caught on a trip, which only a save from before version 16 could
+ * hold, comes straight home untrained, as the versions between had him do,
+ * rather than train by the new rules on an old trip's numbers. Ships keep
+ * theirs: a ship's trip still means what it meant.
+ */
+export function upgradeSoldierTripsV28(game) {
+  for (const u of game.units.values()) if (u.side === 'rome' && !UNIT_TYPES[u.type].naval && u.drill) endDrill(u);
 }
 
 /**

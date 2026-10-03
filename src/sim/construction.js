@@ -41,6 +41,7 @@ import { residenceOf } from './governor.js';
 import { archesToBuild, postsAway } from './battle.js';
 import { boatTiles, lowBridgeCuts, refreshWaterways } from './bridges.js';
 import { nativeLandWarning } from './natives.js';
+import { makeRoom } from './makeRoom.js';
 
 const UNDO_WINDOW_DAYS = 10;
 const MAX_BRIDGE = 16;
@@ -975,6 +976,8 @@ export function applyPlan(game, plan) {
       done++;
     }
   }
+  // Anyone standing where a building or wall now stands steps aside (sim/makeRoom.js).
+  makeRoom(game, undo.ops.flatMap((op) => (op.op === 'wall' ? [op.i] : op.op === 'building' ? op.tiles.map((t) => t.i) : [])));
   if (spent > 0) transact(game, 'construction', -spent);
   if (lowChanged) refreshWaterways(game);
   undo.cost = spent;

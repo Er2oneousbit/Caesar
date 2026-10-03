@@ -7,6 +7,7 @@
  * ----------------------------------------------------------------------------
  */
 
+import { CONFIG } from '../config.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { trainsNow, trainedOf, academyFor, portusFor, inTraining } from '../sim/training.js';
 import { waterOf } from '../sim/navy.js';
@@ -25,10 +26,20 @@ export function inTrainingText(game, b) {
   return `${list.length} (${said} day${days.length === 1 && days[0] === 1 ? '' : 's'} left${paused})`;
 }
 
-/** "5 of 8 trained" for a fort or station (its men or ships now). */
+/**
+ * "5 of 8 trained" for a fort or station (its men or ships now), and ", 1 at
+ * the Campus" (or the Portus) while any of them are on a trip there.
+ */
 export function trainedText(game, post) {
-  const { trained, all } = trainedOf(game, post.id);
-  return `${trained} of ${all} trained`;
+  const { trained, all, trips } = trainedOf(game, post.id);
+  const school = post.def.kind === 'station' ? 'Portus' : BUILDINGS.military_academy.name;
+  return `${trained} of ${all} trained${trips ? `, ${trips} at the ${school}` : ''}`;
+}
+
+/** How many at a time a fort or station sends to train (CONFIG.TRIPS_AT_ONCE), in words. */
+export function atATime() {
+  const n = CONFIG.TRIPS_AT_ONCE;
+  return n === 1 ? 'one at a time' : `${n} at a time`;
 }
 
 /**
@@ -41,8 +52,8 @@ export function trainingNote(game, post) {
   const name = BUILDINGS[fort ? 'military_academy' : 'portus'].name;
   if (school) {
     return fort
-      ? `Recruits train at the ${name} at ${school.x}, ${school.y} on their way here; men already in the fort stay at their posts.`
-      : `New ships row past the ${name} at ${school.x}, ${school.y} first; ships at their berths stay there.`;
+      ? `Recruits train at the ${name} at ${school.x}, ${school.y} on their way here; untrained men in the fort go there ${atATime()} while the fort is at rest.`
+      : `New ships row past the ${name} at ${school.x}, ${school.y} first; untrained ships at their berths go there ${atATime()} while the station is at rest.`;
   }
   const kind = fort ? 'military_academy' : 'portus';
   const any = [...game.buildings.values()].some((b) => b.def.kind === kind && (fort || waterOf(game, b) === waterOf(game, post)));

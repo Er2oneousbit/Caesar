@@ -46,7 +46,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, buildDemoQuarters, holdDemoFestival, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, buildDemoAcademy, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, buildDemoQuarters, holdDemoFestival, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
 import { launchLegion, legionCount, soldierCount, isOverrun } from '../src/sim/legion.js';
 import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
@@ -135,6 +135,10 @@ Options:
                     reports the gods' moods, blessings, wraths and festivals
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
   --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
+  --academy-late <m>  with --garrison, a Military Academy built at the start of month m instead, once
+                    the forts are full of untrained men, and military labor put first so it is
+                    fully staffed: the men at rest go to train (sim/training.js), one fort's man at
+                    a time. The Training: line says when it was built
   --legion <m>      Caesar's legions arrive at the start of month m (the size of a first attack, or
                     --legion-size n), with favor held at 5 so they attack; a Governor's House goes up
                     with the city. Reports the fight: men killed, soldiers lost, buildings lost, the
@@ -147,7 +151,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, events: 'on', navy: false, salary: false, academy: false, legion: 0, legionSize: 0, people: null, wolves: null, lowBridge: false, natives: false, festivals: true };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, events: 'on', navy: false, salary: false, academy: false, academyLate: null, legion: 0, legionSize: 0, people: null, wolves: null, lowBridge: false, natives: false, festivals: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -182,6 +186,7 @@ function parse(argv) {
     else if (a === '--navy') o.navy = true;
     else if (a === '--salary') o.salary = true;
     else if (a === '--academy') o.academy = true;
+    else if (a === '--academy-late') o.academyLate = Number(next());
     else if (a === '--legion') o.legion = Number(next());
     else if (a === '--legion-size') o.legionSize = Number(next());
     else if (a === '--verbose') o.verbose = true;
@@ -414,6 +419,15 @@ function advanceDays(n) {
     harborTick();
   }
 }
+// --academy-late: an academy built once the forts hold untrained men, with
+// military labor first so all of its 20 workers come (in the small demo
+// city they never all do otherwise), to watch the men at rest go to train.
+const lateAcademy = { month: null, academy: null };
+function buildLateAcademy(m) {
+  lateAcademy.month = m;
+  lateAcademy.academy = buildDemoAcademy(game, res.center);
+  if (!game.city.laborPriority.includes('military')) game.city.laborPriority.unshift('military');
+}
 const runMonth = () => {
   // From 800 people, a small festival for the god longest without one, when
   // the cooldown, the money and the food allow (holdDemoFestival): all five
@@ -461,6 +475,7 @@ for (let m = 0; m < opts.years * 12; m++) {
   }
   if (legion.arrived !== null && legion.endedMonth === null && !game.military.caesar.army) legion.endedMonth = m;
   if (opts.harbor && m === 6) buildHarbor();
+  if (opts.garrison && opts.academyLate !== null && m === opts.academyLate) buildLateAcademy(m);
   if (cloth && opts.clothOff && m === opts.clothOff) clothOff();
   runMonth();
   if (opts.uptown || opts.cloth) clothMonth(m + 1);
@@ -508,9 +523,10 @@ if (opts.legion) {
   const left = cs.army ? `${legionCount(game)} of ${cs.army.size} still in the province (${cs.army.retreating ? 'leaving' : cs.army.halted ? 'halted' : 'attacking'})` : `gone by month ${legion.endedMonth ?? '-'}`;
   console.log(`Legion: ${legion.arrived === null ? 'could not get in' : `${legion.size} arrived in month ${legion.arrived} against ${legion.soldiersBefore} soldiers`}; ${left}; attacks ${cs.stats.attacks}, destroyed ${cs.stats.beaten}, marched home ${cs.stats.withdrew}, legionaries slain ${cs.stats.slain}; soldiers lost ${ms.soldiersLost}; buildings lost to them ${cs.stats.buildingsLost || 0}; residence ${res2}; overrun ${legion.overrunMonth === null ? (isOverrun(game) ? 'now (no goals in a sandbox: not a loss)' : 'never') : `in month ${legion.overrunMonth} (mission lost)`}; peak population ${c.stats.peakPopulation}, now ${c.population}`);
 }
-if (opts.academy) {
+if (opts.academy || lateAcademy.month !== null) {
   const t = trainedTotals(game);
-  console.log(`Training: soldiers trained ${t.soldiersTrained} of ${t.soldiers} (${ms.soldiersTrained || 0} at the academy so far), crews trained ${t.shipsTrained} of ${t.ships} (${ms.crewsTrained || 0} at the Portus so far)`);
+  const late = lateAcademy.month === null ? '' : `; academy built in month ${lateAcademy.month}${lateAcademy.academy ? '' : ' (no room: not built)'}`;
+  console.log(`Training: soldiers trained ${t.soldiersTrained} of ${t.soldiers} (${ms.soldiersTrained || 0} at the academy so far), crews trained ${t.shipsTrained} of ${t.ships} (${ms.crewsTrained || 0} at the Portus so far)${late}`);
 }
 const cr = c.crime.total;
 const nat = c.natives; // (native villages: sim/natives.js)

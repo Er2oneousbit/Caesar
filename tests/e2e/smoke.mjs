@@ -1837,6 +1837,11 @@ try {
     const app = window.colonia;
     const m = app.game.map;
     app.ui.console.run('arch');
+    // By now this city is often in debt (-150 to -300 Dn around day 140,
+    // more or less as the steps before ran fast or slow), and the road
+    // dragged under the arch failed for want of money: this step is about
+    // the arch, so the treasury is topped up first.
+    if (app.game.city.treasury < 2000) app.ui.console.run(`money ${Math.ceil(2000 - app.game.city.treasury)}`);
     // A 5 x 3 patch of open land near the middle: a road along its middle row, the arch over it.
     const c = { x: Math.floor(m.w / 2), y: Math.floor(m.h / 2) };
     for (let r = 0; r < 30; r++) {
@@ -2864,6 +2869,99 @@ try {
     const raider = await clickUnit('enemy');
     check('clicking a raiding warrior opens his panel, naming his people and what the warband is after', !!raider.at && raider.target?.kind === 'unit' && raider.chip === 'Cimbri and Teutones' && /Warband/.test(raider.text) && serrors.length === 0, JSON.stringify({ ...raider, text: (raider.text || '').slice(0, 200) }));
     await sp.close();
+  }
+
+  // 6f. Clicks on figures by buildings: a recruit training at the Military
+  //     Academy, standing in plain view by its corner, could not be clicked
+  //     (a building hid whatever stood within a box as tall as its sprite).
+  //     Then forts at rest: their men stand in the yard, inside the walls,
+  //     and a click on one there opens his panel.
+  {
+    const mp = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+    const merrors = [];
+    mp.on('pageerror', (e) => merrors.push(`pageerror: ${e.message}`));
+    mp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) merrors.push(m.text()); });
+    await mp.goto(`${url}?skipmenu=1&seed=fp1&mute=1`);
+    await mp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const rec = await mp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      const c = app.ui.console;
+      c.run('demo 2');
+      c.run('garrison');
+      c.run('academy');
+      let w = null;
+      for (let d = 0; d < 160 && !w; d++) {
+        c.run('days 1');
+        w = [...app.game.walkers.values()].find((v) => v.type === 'recruit' && v.state === 'training');
+      }
+      if (w) app.renderer.camera.centerOnTile(w.x, w.y);
+      return w ? { id: w.id, x: w.x, y: w.y } : null;
+    });
+    // A click on his body, a few pixels above his feet, after a frame has drawn him.
+    const figureAt = (id, kind) => mp.evaluate(([id, kind]) => {
+      const app = window.colonia;
+      const r = app.renderer;
+      const cam = r.camera;
+      const s = (kind === 'unit' ? r.unitSpots : r.walkerSpots).find((v) => v.id === id);
+      if (!s) return null;
+      const q = cam.toScreen(s.wx, s.wy - 8);
+      const rect = app.canvas.getBoundingClientRect();
+      return { x: rect.left + q.x / cam.dpr, y: rect.top + q.y / cam.dpr };
+    }, [id, kind]);
+    const panelOf = () => mp.evaluate(() => ({ target: window.colonia.ui.info.target, text: document.querySelector('#info-panel')?.textContent || '' }));
+    let recClick = null;
+    if (rec) {
+      await mp.waitForTimeout(300);
+      const p = await figureAt(rec.id, 'walker');
+      if (p) {
+        await mp.mouse.click(p.x, p.y);
+        await mp.waitForTimeout(150);
+        recClick = await panelOf();
+      }
+    }
+    check('a recruit training at the Military Academy, beside its corner, opens his panel when clicked', !!rec && recClick?.target?.kind === 'walker' && recClick.target.id === rec.id && /Recruit/i.test(recClick.text) && merrors.length === 0,
+      JSON.stringify({ rec, target: recClick?.target, text: (recClick?.text || '').slice(0, 120), merrors }));
+    // The forts' men at rest: in their yards, and clickable there.
+    const yard = await mp.evaluate(() => {
+      const app = window.colonia;
+      app.ui.info.close();
+      app.ui.console.run('days 90');
+      const g = app.game;
+      const inside = (u) => { const f = g.buildings.get(u.fort); return !!f && u.x >= f.x && u.y >= f.y && u.x < f.x + f.size && u.y < f.y + f.size; };
+      const idle = [...g.units.values()].filter((u) => u.side === 'rome' && u.fort && u.state === 'idle');
+      const man = idle.find(inside);
+      if (man) { const f = g.buildings.get(man.fort); app.renderer.camera.centerOnTile(f.x + 1, f.y + 1); }
+      return { idle: idle.length, inside: idle.filter(inside).length, id: man ? man.id : 0 };
+    });
+    check('forts at rest: every idle soldier stands in his fort\'s yard, inside its walls', yard.idle > 0 && yard.inside === yard.idle, JSON.stringify(yard));
+    let manClick = null;
+    if (yard.id) {
+      await mp.waitForTimeout(300);
+      // A man the pointer picks on his own body (in a tight yard a neighbour's box may be nearer).
+      const pick = await mp.evaluate((fortOf) => {
+        const app = window.colonia;
+        const r = app.renderer;
+        const cam = r.camera;
+        const rect = app.canvas.getBoundingClientRect();
+        for (const s of r.unitSpots) {
+          const u = app.game.units.get(s.id);
+          if (!u || u.fort !== fortOf) continue;
+          const q = cam.toScreen(s.wx, s.wy - 8);
+          if (r.pickUnit(q.x / cam.dpr, q.y / cam.dpr) === s.id) return { id: s.id, x: rect.left + q.x / cam.dpr, y: rect.top + q.y / cam.dpr };
+        }
+        return null;
+      }, await mp.evaluate((id) => window.colonia.game.units.get(id).fort, yard.id));
+      if (pick) {
+        await mp.mouse.click(pick.x, pick.y);
+        await mp.waitForTimeout(150);
+        manClick = { id: pick.id, ...(await panelOf()) };
+      }
+      if (shots) await mp.screenshot({ path: path.join(shots, 'smoke-fort-yard.png') });
+    }
+    check('a click on a soldier in his fort\'s yard opens his panel', !!manClick && manClick.target?.kind === 'unit' && manClick.target.id === manClick.id && merrors.length === 0,
+      JSON.stringify({ id: manClick?.id, target: manClick?.target, text: (manClick?.text || '').slice(0, 120), merrors }));
+    await mp.close();
   }
 
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet

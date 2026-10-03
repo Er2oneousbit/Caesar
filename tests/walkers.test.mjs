@@ -32,7 +32,7 @@ import { Renderer, walkerWorld } from '../src/render/renderer.js';
 import { Camera } from '../src/render/camera.js';
 import { roadblockSpec } from '../src/render/terrainArt.js';
 import { recordingContext } from '../src/render/draw.js';
-import { newGame, build, findFree } from './helpers.mjs';
+import { newGame, build, findFree, blockSprite } from './helpers.mjs';
 
 log.setLevel('error');
 
@@ -167,22 +167,30 @@ test('clicking picks the walker figure under the pointer', () => {
   const s = screenOf(walkers[0]);
   assert.equal(pick(s.x + 40, s.y), 0, 'nothing 40 px to the side');
   assert.equal(pick(s.x, s.y - 60), 0, 'nothing well above its head');
-  // A tall building just in front of a walker hides it: the click is the building's.
+  // A tall building drawn after a walker hides him where its art covers the
+  // click: the click is the building's. (Its strip as the frame drew it: a
+  // block 40 px tall on tile 21, 21, drawn at that tile's depth.)
   const behind = { id: 11, x: 20, y: 20, tx: 20, ty: 20, progress: 0, moving: false, speed: 0.1, kind: 'roamer' };
   const inFront = { id: 12, x: 22, y: 22, tx: 22, ty: 22, progress: 0, moving: false, speed: 0.1, kind: 'roamer' };
   r.walkerSpots = [behind, inFront].map((w) => ({ id: w.id, ...walkerWorld(w, 0), ship: false }));
-  r.buildingBoxes = [{ x: 21, y: 21, S: 1, H: 40 }];
+  const block = { d: 21 + 21 + 1, spr: blockSprite(1, 40), wx: 0, wy: (21 + 21) * 16, full: true };
+  r.coverStrips = [block];
   cam.centerOnTile(21, 21);
   const b1 = screenOf(behind);
   assert.equal(pick(b1.x, b1.y), 0, 'the walker behind the building is hidden');
-  r.buildingBoxes = [];
+  r.coverStrips = [];
   assert.equal(pick(b1.x, b1.y), 11, 'with nothing in front it can be clicked');
-  r.buildingBoxes = [{ x: 21, y: 21, S: 1, H: 40 }];
+  r.coverStrips = [block];
   const f1 = screenOf(inFront);
   assert.equal(pick(f1.x, f1.y), 12, 'a walker in front of the building is clicked');
+  // Only what the art covers hides him: a low block leaves his head free.
+  r.coverStrips = [{ ...block, spr: blockSprite(1, 20) }];
+  assert.equal(pick(b1.x, b1.y), 11, 'over a low wall his head is clicked');
+  const feet = screenOf(behind, 1);
+  assert.equal(pick(feet.x, feet.y), 0, 'his feet behind it are not');
   // Zoomed out a figure is a few pixels wide; its target stays about 22 x 36
   // CSS px, so a click a little beside or above it still finds it.
-  r.buildingBoxes = [];
+  r.coverStrips = [];
   r.walkerSpots = walkers.map((w) => ({ id: w.id, ...walkerWorld(w, 0), ship: false }));
   cam.zoomIndex = 0;
   cam.centerOnTile(32, 32);
@@ -541,18 +549,24 @@ test('soldiers, raiders and imperial legionaries are picked by a click on their 
   cam.resize(800, 600, 1);
   cam.centerOnTile(32, 32);
   const at = { wx: (32 - 32) * 32, wy: (32 + 32) * 16 };
-  const r = { camera: cam, buildingBoxes: [], unitSpots: [{ id: 9, ...at }] };
+  const r = { camera: cam, coverStrips: [], unitSpots: [{ id: 9, ...at, d: 64.004 }] };
   const pick = (sx, sy) => Renderer.prototype.pickUnit.call(r, sx, sy);
   const screenOf = (dx, up) => { const s = cam.toScreen(at.wx + dx, at.wy - up); return { x: s.x / cam.dpr, y: s.y / cam.dpr }; };
   const body = screenOf(0, 12);
   assert.equal(pick(body.x, body.y), 9, 'a click on his body');
   const off = screenOf(40, 12);
   assert.equal(pick(off.x, off.y), 0, 'not beside him');
-  // Behind a building he is the building's.
-  r.buildingBoxes = [{ x: 32, y: 33, S: 3, H: 200 }];
+  // Behind a building he is the building's: a tall 3 x 3 block at 32, 33,
+  // its strip over him drawn at depth 69, after him.
+  const block = { d: 69, spr: blockSprite(3, 200), wx: (32 - 33) * 32, wy: (32 + 33) * 16, full: true };
+  r.coverStrips = [block];
   assert.equal(pick(body.x, body.y), 0, 'hidden behind a tall building in front of him');
+  // The same art drawn before him (he stands in front of it) hides nothing.
+  r.coverStrips = [{ ...block, d: 60 }];
+  assert.equal(pick(body.x, body.y), 9, 'in front of a building he is his own');
   // What his panel says he is doing.
-  assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: null }), 'At his post by the fort');
+  assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: null }), 'Standing to by the fort');
+  assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: null }, true), 'Resting in the fort', 'in his fort\'s yard');
   assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: { x: 1, y: 1 } }), 'Holding the deployment point');
   assert.equal(soldierDoing({ side: 'enemy', state: 'siege' }), 'Attacking buildings');
   assert.equal(soldierDoing({ side: 'enemy', state: 'advance' }), 'Advancing on the city');

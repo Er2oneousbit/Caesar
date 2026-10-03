@@ -35,7 +35,7 @@ import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat, hasBoatTi
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
 import { trainedText, trainingNote, schoolStatus, inTrainingText } from './trainingInfo.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
-import { removeBuilding, footprintRect } from '../sim/entities.js';
+import { removeBuilding, footprintRect, inOwnFort } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
 import { farmDormant, daysToNextMare, stablesFull } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
@@ -266,12 +266,13 @@ export function buildingStatus(game, b) {
  */
 /**
  * What a soldier, raider or imperial legionary is doing, in a few words,
- * from his state (sim/military.js, sim/legion.js, sim/battle.js).
+ * from his state (sim/military.js, sim/legion.js, sim/battle.js). inYard:
+ * a soldier in his fort's yard (inOwnFort).
  */
-export function soldierDoing(u, fort = null) {
+export function soldierDoing(u, fort = null, inYard = false) {
   const ours = u.side === 'rome';
   switch (u.state) {
-    case 'idle': return ours ? (fort && fort.rally ? 'Holding the deployment point' : 'At his post by the fort') : 'Waiting';
+    case 'idle': return ours ? (fort && fort.rally ? 'Holding the deployment point' : inYard ? 'Resting in the fort' : 'Standing to by the fort') : 'Waiting';
     case 'march': return ours ? (fort && fort.rally ? 'Marching to the deployment point' : 'Marching back to his post') : 'Marching';
     case 'engage':
     case 'fight': return 'Fighting';
@@ -937,7 +938,7 @@ export class InfoPanel {
       this.head(def.name, side),
       h('div', { class: 'muted' }, def.desc),
       kv('Health', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
-      kv('Doing', soldierDoing(u, fort)),
+      kv('Doing', soldierDoing(u, fort, ours && inOwnFort(g, u))),
       ours ? kv('Fort', fort ? `${fortTitle(fort)} at ${fort.x}, ${fort.y}${fort.rally ? ' (deployed)' : ''}` : 'None') : null,
       ours ? kv('Training', u.trained ? 'Trained at the Campus' : 'Untrained') : null,
       pack ? kv('Pack', packSummary(g, pack)) : null,

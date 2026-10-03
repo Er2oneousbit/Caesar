@@ -55,3 +55,24 @@ export function unitCounts(game) {
   for (const u of game.units.values()) out[u.type] = (out[u.type] || 0) + 1;
   return out;
 }
+
+/**
+ * A stand-in for a building's cached sprite (render/sprites.js) whose pixels
+ * a click can read: an S x S footprint drawn as a solid block `H` world px
+ * tall over its diamond, nothing above it (as if a flag pole's air), made at
+ * scale `s`. Its anchor is the footprint's top corner, `top` world px below
+ * the sprite's top edge. `reads` counts the pixels read.
+ */
+export function blockSprite(S, H, s = 1, top = 60) {
+  const w = 64 * S * s;
+  const h = (32 * S + top) * s;
+  const spr = { w, h, ax: 32 * S * s, ay: top * s, s, reads: 0 };
+  const solid = (x, y) => {
+    const dx = (x + 0.5) / s - 32 * S; // world px from the top corner
+    const dy = (y + 0.5) / s - top;
+    for (let z = 0; z <= H; z++) if (Math.abs(dx) / (32 * S) + Math.abs(dy + z - 16 * S) / (16 * S) <= 1) return true;
+    return false;
+  };
+  spr.canvas = { getContext: () => ({ getImageData: (x, y) => { spr.reads++; return { data: [0, 0, 0, solid(x, y) ? 255 : 0] }; } }) };
+  return spr;
+}

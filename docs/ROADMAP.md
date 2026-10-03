@@ -13,6 +13,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.7)
+
+* **Fires are fought one building at a time**: a prefect stands at one burning building for half a day, throwing water, then takes the next within 4 tiles that nobody fights, or runs to the nearest within 24; the fire keeps spreading from every building still burning meanwhile. One prefect is called per burning building, and a prefecture with 3 of its own on fire duty sends no more (the next in reach does). A burning ruin's panel says when a prefect is putting it out
+* Saves: version 28 (an older save's fires are grouped by the ruin they share)
+* Headless sim: every level identical to v0.18.6 (0 or 1 fire in those runs); across the sweep fires went from 584 to 530, and with frequent raids more prefects die answering the fires raiders set (21, was 15) with the same buildings lost
+* 973 unit tests, 202 browser checks
+
 ## Done (v0.18.6)
 
 * **Salary up to your rank**: ranks above the governor's are shown greyed out and cannot be picked; a lower salary still earns favor at New Year. An older save paying above its rank drops to it on load, and what was drawn above it since New Year goes back to the treasury

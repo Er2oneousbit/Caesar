@@ -28,7 +28,7 @@ import { CONFIG } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { deployFort, recallFort } from '../sim/military.js';
-import { holdFestival, festivalBlocked, festivalMeans, festivalNeeds, SMALL_TOWN } from '../sim/religion.js';
+import { holdFestival, festivalBlocked, festivalTempleBlocked, festivalMeans, festivalNeeds, SMALL_TOWN } from '../sim/religion.js';
 import { GOD_KEYS } from '../data/gods.js';
 import { FOOD_TYPES } from '../data/goods.js';
 
@@ -282,8 +282,9 @@ export function buildDemoCity(game, opts = {}) {
 /**
  * The demo city's festivals, as a sensible player holds them (simulate.mjs
  * calls it at the start of every month): a small festival whenever the
- * cooldown allows, for the god longest without one (of those the city can
- * worship; ties in the gods' order), so that all five come round inside
+ * cooldown allows, for the god longest without one (of those with a
+ * staffed temple to hold it at, festivalTempleBlocked; ties in the gods'
+ * order), so that all five come round inside
  * their year (sim/religion.js). Only where the gods mind (SMALL_TOWN people
  * or more): a smaller town's gods never strike or count the months against
  * it, and a festival every 2 months cost the balance sweep's towns of 300
@@ -299,10 +300,10 @@ export function holdDemoFestival(game) {
   if (c.festivalCooldown > 0 || c.population < SMALL_TOWN) return null;
   let god = null;
   for (const g of GOD_KEYS) {
-    if (!game.isUnlocked(`temple_${g}`)) continue;
+    if (festivalTempleBlocked(game, g, 0)) continue;
     if (!god || c.gods[g].monthsSinceFestival > c.gods[god].monthsSinceFestival) god = g;
   }
-  if (!god || festivalBlocked(game, 0)) return null;
+  if (!god || festivalBlocked(game, 0, god)) return null;
   let market = 0;
   for (const b of game.buildings.values()) if (b.def.kind === 'market') for (const f of FOOD_TYPES) market += b.stock[f] || 0;
   const after = festivalMeans(game).food - festivalNeeds(game, 0).food + market;

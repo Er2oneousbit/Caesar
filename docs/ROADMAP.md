@@ -14,6 +14,20 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.1)
+
+* **Events** (parity #9): each month one draw from the original's table, by each mission's switches (missions 1 and 2 have none; the sandbox has them all, with a switch): Rome raises or cuts its wage (the wage your mood and prosperity are measured against), land or sea trade stops for 48 days, bad water, the oldest iron mine or clay pit is lost. Scheduled in some missions: an earthquake whose cracks turn tiles to rock over days (the Imperial road always holds), a new Caesar (favor back to 50), price changes, and a gladiator revolt in Urbs Magna and Puteoli where a gladiator school works. Neptune's wrath also sinks merchant ships under sail. Half as often on Easy, half again on Insane
+* **Enemies by region** (parity #21): raids come from the province's own people, by mission or by its place on the empire map: Gauls, Boii with war chariots, three Ligurian peoples, Carthaginians with elephants that shrug off missiles, Lusitanians, the Cimbri and Teutones; each with its own warriors, target and breaking point, and their slingers and javelin men strike walkers while the city has fewer than 4 soldiers. The sandbox keeps the generic warband unless its setup picks the province's people
+* **Wolves** (parity #19): packs of 6 to 8 from dens in the woods in Firmum, Pons Aelius, Mutina and Narbo Martius (and the sandbox by switch) hunt walkers nearby, grow back while any survive, and are cleared by soldiers, towers and prefects
+* **Two kinds of bridge** (parity #25): the Pons stays the ship bridge (100 Dn a tile, at least 3); the Pons Sublicius is a low bridge (40 Dn, 1 to 16 tiles) that stops every boat; placing one names what it cuts off, and ships and liburnians on the far side go to their own water's station or are laid up
+* **Native villages** (parity #20): in Mutina and Luna (and the sandbox by switch), angry until calmed: a building on their land sets off an attack. A missionary from a Sacellum Pacis calms the villages in reach for 100 days, and calmed villages send a trader every 9 days to buy exports
+* **Hall of Fame** (parity #22): a score for every won mission (ratings, people against the goal and the pace, by difficulty, with battles won and raids repelled), the best ten and the career, kept in the browser, from the main menu, the campaign and the victory screen
+* **Prefects fight wolves and attacking villagers** as they fight raiders
+* Fixed: the menu's city opened at night every time (80 days ended at nightfall); it opens in the morning
+* Saves: version 23 (older saves load with none of the new state)
+* Headless sim: with events off (`--events off`) every level is identical to v0.18.0. With the sandbox's events on, each 3-year run draws one to three events, always a rise in Rome's wage, which the demo city never matches, so its prosperity ends 8 lower (a player raises the wage)
+* 867 unit tests, 182 browser checks
+
 ## Done (v0.18.0)
 
 * **Rotate buildings**: R (or the turn button) turns the building in hand; every building's art is drawn turned whole (temples, the theater, the arch and others fixed by hand), the hippodrome can run north-south, and the turn is saved with the building, kept for Rebuild and remembered per kind for the session. Waterside buildings and the triumphal arch face their water or road and do not turn. Saves: version 22 (older saves load unturned)

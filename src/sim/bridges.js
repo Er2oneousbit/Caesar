@@ -27,7 +27,7 @@
  */
 
 import { UNIT_TYPES } from '../data/units.js';
-import { killWalker } from './entities.js';
+import { killWalker, shoreWaterAt } from './entities.js';
 import { followPath } from './movement.js';
 import { dockBerth, shipLeave, shipPath } from './trade.js';
 import { fishingBoatBlocked } from './fishing.js';
@@ -88,12 +88,12 @@ export function refreshWaterways(game) {
 
 /** A waterside building's berth as it stands, or where it would be found (read only). */
 function berthNow(map, b) {
-  return b.berth >= 0 && map.navigable[b.berth] && !map.bridgeLow[b.berth] ? b.berth : map.navigableBeside(b.x, b.y, b.size);
+  return b.berth >= 0 && map.navigable[b.berth] && !map.bridgeLow[b.berth] ? b.berth : shoreWaterAt(map, b.def, b.x, b.y, b.size);
 }
 
 /** A wharf's mooring as it stands, or where it would be found (read only). */
 function mooringNow(map, b) {
-  return b.mooring >= 0 && map.fishBody[b.mooring] ? b.mooring : map.fishWaterBeside(b.x, b.y, b.size);
+  return b.mooring >= 0 && map.fishBody[b.mooring] ? b.mooring : shoreWaterAt(map, b.def, b.x, b.y, b.size);
 }
 
 /** Tiles reachable from `start` stepping side to side over tiles `ok` passes. */
@@ -144,7 +144,7 @@ export function lowBridgeCuts(game, span) {
     const cut = [];
     for (const b of game.buildings.values()) {
       if (b.def.placement !== 'shore') continue;
-      const berth = b.berth >= 0 && !planned.has(b.berth) ? b.berth : map.navigableBeside(b.x, b.y, b.size);
+      const berth = b.berth >= 0 && !planned.has(b.berth) ? b.berth : shoreWaterAt(map, b.def, b.x, b.y, b.size);
       if (berth >= 0 && now[berth] && !then[berth]) cut.push(named(b));
     }
     if (cut.length) out.push(`This low bridge cuts ${listOf(cut)} off from the sea: no ship will get past it.`);

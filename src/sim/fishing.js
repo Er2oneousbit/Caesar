@@ -49,7 +49,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { spawnWalker, killWalker } from './entities.js';
+import { spawnWalker, killWalker, shoreWaterAt } from './entities.js';
 import { followPath } from './movement.js';
 import { shipOutput } from './production.js';
 import { logGoods } from './goodsLedger.js';
@@ -64,7 +64,7 @@ const TPD = CONFIG.TICKS_PER_DAY;
 export function waterBeside(game, b) {
   const map = game.map;
   if (b.mooring === undefined || b.mooring < 0 || !map.fishBody[b.mooring]) {
-    b.mooring = map.fishWaterBeside(b.x, b.y, b.size);
+    b.mooring = shoreWaterAt(map, b.def, b.x, b.y, b.size); // (its side right at the water's edge)
     if (b.mooring >= 0) {
       const mx = map.xOf(b.mooring);
       const my = map.yOf(b.mooring);

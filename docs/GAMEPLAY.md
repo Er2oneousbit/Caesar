@@ -566,7 +566,7 @@ Venus's part of the city mood shows in the Overview's mood breakdown as "Venus's
 
 The province has its own fortunes, as in the original: random events drawn each month, and events a mission schedules. Each comes with a message; a click on one that happens at a place goes there.
 
-**Random events.** At the start of each month one draw is made against the original's table: about one month in five names an event on Normal (half as often on Easy, a quarter more on Hard, half again on Insane). It happens only if the mission allows it (the sandbox: all of them, unless its setup's **Events** switch is off), if it can (below), and if the same event has not come within the last 24 months (36 on Easy, 18 on Hard, 12 on Insane; Rome's wages 12 on every level). So at most one a month.
+**Random events.** At the start of each month one draw is made against the original's table: about one month in five names an event on Normal (half as often on Easy, a quarter more on Hard, half again on Insane). It happens only if the mission allows it (the sandbox: those ticked in its setup, below), if it can (below), and if the same event has not come within the last 24 months (36 on Easy, 18 on Hard, 12 on Insane; Rome's wages 12 on every level). So at most one a month.
 
 | Event | Chance a month (Normal) | Needs | What happens |
 |---|---|---|---|
@@ -577,6 +577,8 @@ The province has its own fortunes, as in the original: random events drawn each 
 | Bad water | 1.6% | 200 people or more (and disease, from mission 3) | city health falls 50 from over 80, 40 from over 60, else 25 (never under 0), then climbs back 2 a month toward the homes' average |
 | An iron mine collapses | 3.1% | an iron mine | the oldest one becomes rubble |
 | A clay pit floods | 3.9% | a clay pit | the oldest one becomes rubble |
+
+**The sandbox's switches.** The sandbox setup lists every random event the sandbox can draw, each with its own switch, all ticked to begin with: Rome's wage (one switch for the rise and the cut, which share a cooldown), land trade stopped, sea trade stopped, bad water, a mine collapse and a clay pit flood. An event unticked never comes; the others come exactly as often as with every switch on (the draw is the same, and a month that draws an unticked event brings nothing). The **Events** box above the list ticks or clears them all at once, and shows a mix as half-ticked. The choice is kept with the city in its saves; a sandbox saved by an earlier version keeps what its one Events switch said (all on or all off). The scheduled events below are a mission's alone, so the setup has no switch for them, and a campaign mission always has the events it was made with.
 
 While trade is stopped, each route card (Trade advisor, Empire map) says until when, and the Empire map shows no trader on the road. Neptune's wrath stops ships for 5 months the same way (see *Gods*).
 
@@ -589,7 +591,7 @@ While trade is stopped, each route card (Trade advisor, Empire map) says until w
 
 Which missions have which random events: Figlina the clay pit; Firmum wages and landslides; Pons Aelius landslides and storms; Paestum storms; Portus Mercatorum the iron mine and storms; Beneventum landslides on the Appian Way; Oasis Aurea sandstorms and bad water; Urbs Magna wages; Mutina the iron mine; Luna storms; Corduba wages and the iron mine; Carteia storms in the strait; Narbo Martius wages and landslides. The first two missions have none.
 
-The console's `event` command reports Rome's wage, trade stopped and a quake shaking, and `event <kind>` makes one happen now (for testing); the URL flag `events=off` turns every event off. The balance simulator: `npm run sim -- --events off` (no events) or `--scenario c10p --years 9` (Puteoli's earthquake).
+The console's `event` command reports Rome's wage, trade stopped and a quake shaking, and `event <kind>` makes one happen now (for testing); the URL flag `events=off` turns every event off, and `events=wages,sea` starts the sandbox setup (and a `skipmenu=1` sandbox) with only those switches ticked. The balance simulator: `npm run sim -- --events off` (no events), `--events wages,clay` (the sandbox with only those switches on) or `--scenario c10p --years 9` (Puteoli's earthquake).
 
 ## Ratings and winning
 

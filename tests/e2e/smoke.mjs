@@ -168,8 +168,23 @@ try {
   // The province's place on the empire map: six choices, the Etruscan coast first and picked.
   const sites = await page.$$eval('select.site-select option', (os) => os.map((o) => [o.value, o.selected]));
   check('sandbox menu offers six places for the province, the Etruscan coast by default', sites.length === 6 && sites[0][0] === 'etruria' && sites[0][1] && sites.filter((s) => s[1]).length === 1, JSON.stringify(sites));
-  // The Events switch (sim/events.js): on unless unticked.
-  check('sandbox menu has an Events switch, ticked', await page.isChecked('input.events-switch'));
+  // The events (sim/events.js): a master switch over one switch per event, all ticked.
+  const evState = () => page.evaluate(() => {
+    const master = document.querySelector('input.events-switch');
+    const boxes = [...document.querySelectorAll('input.event-switch')];
+    return { master: master.checked, half: master.indeterminate, n: boxes.length, on: boxes.filter((b) => b.checked).map((b) => b.dataset.event) };
+  });
+  const ev0 = await evState();
+  check('sandbox menu has an Events switch over one switch per event, all ticked', ev0.master && !ev0.half && ev0.n === 6 && ev0.on.length === 6, JSON.stringify(ev0));
+  await page.uncheck('input.events-switch');
+  const ev1 = await evState();
+  await page.check('input.events-switch');
+  const ev2 = await evState();
+  check('the Events switch clears every event, then ticks them all again', !ev1.master && !ev1.half && ev1.on.length === 0 && ev2.master && ev2.on.length === 6, JSON.stringify([ev1, ev2]));
+  // One event unticked: the master shows a mix, and the city founded below has it off.
+  await page.uncheck('input.event-switch[data-event="mine"]');
+  const ev3 = await evState();
+  check('unticking one event (the mine collapse) leaves the Events switch half-ticked', ev3.half && !ev3.master && ev3.on.length === 5 && !ev3.on.includes('mine'), JSON.stringify(ev3));
   // Watch the first frames of the new game: its look (a winter month) must
   // replace the menu city's summer look at once, not piece by piece.
   await page.evaluate(() => {
@@ -186,7 +201,8 @@ try {
   await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   check('sandbox starts from the menu', true);
   check('the sandbox from the menu is on the Etruscan coast', await page.evaluate(() => window.colonia.game.scenario.site) === 'etruria');
-  check('the sandbox from the menu has its events on', await page.evaluate(() => window.colonia.game.scenario.events) === true);
+  const founded = await page.evaluate(() => window.colonia.game.scenario.events);
+  check('the sandbox from the menu has every event on but the one unticked', JSON.stringify(founded) === JSON.stringify(['wages', 'land', 'sea', 'water', 'clay']), JSON.stringify(founded));
   await page.waitForFunction(() => window.__look.length >= 3, null, { timeout: 5000 }).catch(() => {});
   const look = await page.evaluate(() => { window.__unhookRender(); return window.__look; });
   check('a new game shows its own season from the first frame (no old-look patchwork)', look.length > 0 && look.every((f) => f.prev === null && !f.pending), JSON.stringify(look));

@@ -9,10 +9,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { log } from '../src/core/debug.js';
+import { log, parseFlags } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/core/game.js';
-import { serializeGame, deserializeGame, upgradeEventsV22 } from '../src/core/save.js';
+import { serializeGame, deserializeGame, upgradeEventsV22, upgradeEventSwitchesV23 } from '../src/core/save.js';
 import { Terrain, Road } from '../src/world/map.js';
 import { SCENARIOS, findScenario, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { GOODS } from '../src/data/goods.js';
@@ -20,6 +20,7 @@ import { DIFFICULTY } from '../src/data/difficulty.js';
 import {
   RANDOM_EVENTS, EVENT_TABLE_SIZE, EVENT_SWITCHES, EVENTS_BY_MISSION, QUAKE_SIZES, ROME_WAGE_MIN, ROME_WAGE_MAX,
   TRADE_HALT_DAYS, NEPTUNE_HALT_DAYS, WAGE_COOLDOWN, missionEvents, eventMonth, EVENT_MONTHS,
+  EVENT_SWITCH_INFO, sandboxEventSwitches, parseEventsOption, WAGE_STEP, BAD_WATER_MIN_POP,
 } from '../src/data/events.js';
 import {
   eventDraw, applyEvent, eventCondition, randomEventMonth, eventsMonthly, scheduledEventsMonth, tradeHalted, tradeHaltText,
@@ -666,6 +667,7 @@ test('a sandbox with its Events switch off plays exactly as one before events: t
   const off = run(false);
   const flagged = run(undefined, { events: 'off' });
   assert.deepEqual(flagged, off, 'the URL flag and the setup switch are the same');
+  assert.deepEqual(run([]), off, 'and every switch unticked');
   assert.deepEqual(off.events, {});
   assert.equal(off.wage, CONFIG.BASE_WAGE);
   const on = run(true);
@@ -682,4 +684,151 @@ test('the sandbox setup\'s switch is kept in the scenario a sandbox save holds',
   // Campaign missions are unchanged by the difficulty copy.
   assert.deepEqual(missionEvents(withDifficulty(findScenario('c7p'), 'hard')).quake, { year: 4, size: 'medium' });
   assert.ok(SCENARIOS.length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// The sandbox's switches, one per event
+// ---------------------------------------------------------------------------
+
+/** Keep one building of a type standing: one an event took is put up again elsewhere. */
+function keepOne(game, type) {
+  for (const b of game.buildings.values()) if (b.type === type) return;
+  const s = findFree(game, 2, 2);
+  addBuilding(game, type, s.x, s.y);
+}
+
+/**
+ * What the monthly draw makes happen in `months` months when Rome's wage,
+ * the iron mine and the clay pit can always move or fall and nothing cools
+ * down: the draw itself, switch by switch. @returns {object} counts by event
+ */
+function drawsOver(game, months) {
+  const n = {};
+  for (let m = 0; m < months; m++) {
+    keepOne(game, 'iron_mine');
+    keepOne(game, 'clay_pit');
+    game.city.events.cooldowns = {};
+    game.city.romeWage = CONFIG.BASE_WAGE; // (room to rise and to fall)
+    game.time.totalMonths = m;
+    const k = randomEventMonth(game);
+    if (k) n[k] = (n[k] || 0) + 1;
+  }
+  return n;
+}
+
+test('sandbox switches: one per event it can draw, named, read from a list, the URL flag and the sim option', () => {
+  assert.deepEqual(Object.keys(EVENT_SWITCH_INFO), [...EVENT_SWITCHES]);
+  for (const k of EVENT_SWITCHES) assert.ok(EVENT_SWITCH_INFO[k].name && EVENT_SWITCH_INFO[k].desc, k);
+  // The setup's texts say the game's own numbers.
+  assert.ok(EVENT_SWITCH_INFO.wages.desc.includes(`by ${WAGE_STEP[0]} to ${WAGE_STEP[1]} Dn`));
+  for (const k of ['land', 'sea']) assert.ok(EVENT_SWITCH_INFO[k].desc.includes(`${TRADE_HALT_DAYS} days`), k);
+  assert.ok(EVENT_SWITCH_INFO.water.desc.includes(`from ${BAD_WATER_MIN_POP} people`));
+  assert.deepEqual(sandboxEventSwitches(false), []);
+  assert.deepEqual(sandboxEventSwitches(true), [...EVENT_SWITCHES]);
+  assert.deepEqual(sandboxEventSwitches(undefined), [...EVENT_SWITCHES], 'a scenario built in code without the field: all');
+  assert.deepEqual(sandboxEventSwitches(['clay', 'quake', 'wages']), ['wages', 'clay'], 'table order, nothing unknown');
+  // A new sandbox lists them all unless told otherwise.
+  assert.deepEqual(sandboxScenario({}).events, [...EVENT_SWITCHES]);
+  assert.deepEqual(sandboxScenario({ events: ['sea'] }).events, ['sea']);
+  const sb = sandboxScenario({ events: ['mine'] });
+  assert.deepEqual([...missionEvents(sb).random], ['mine']);
+  assert.equal(missionEvents(sb).quake, null, 'and still nothing scheduled');
+  // A mission keeps its own events, whatever its scenario says.
+  assert.deepEqual([...missionEvents({ ...findScenario('c3'), events: [] }).random], ['clay']);
+  // The option of the URL flag and of npm run sim.
+  assert.equal(parseEventsOption('off'), 'off');
+  assert.deepEqual(parseEventsOption('on'), [...EVENT_SWITCHES]);
+  assert.deepEqual(parseEventsOption('none'), []);
+  assert.deepEqual(parseEventsOption(' Clay, wages '), ['wages', 'clay']);
+  for (const bad of ['', 'quake', 'wages,quake', ',', undefined]) assert.equal(parseEventsOption(bad), null, String(bad));
+  assert.deepEqual(parseFlags({ events: 'wages,sea' }).events, ['wages', 'sea']);
+  assert.equal(parseFlags({ events: 'off' }).events, 'off');
+  assert.equal(parseFlags({ events: 'nonsense' }).events, null);
+  assert.equal(parseFlags({}).events, null);
+});
+
+test('sandbox switches: an event switched off is never drawn, and the others come exactly as often as with all on', () => {
+  const months = 1500;
+  const on = drawsOver(newGame({ size: 96, events: true }), months);
+  assert.ok(on.clay > 10 && on.mine > 10 && on.wageUp > 10 && on.wageDown > 10, JSON.stringify(on));
+  const noClay = newGame({ size: 96, events: EVENT_SWITCHES.filter((k) => k !== 'clay') });
+  assert.equal(eventSwitchedOn(noClay, 'clay'), false);
+  assert.equal(eventSwitchedOn(noClay, 'mine'), true);
+  const { clay, ...rest } = on;
+  assert.ok(clay > 0);
+  assert.deepEqual(drawsOver(noClay, months), rest, 'no clay pit flooded; the mine and Rome\'s wage as before');
+  // Rome's wage is one switch: off, neither wage event comes.
+  const noWage = drawsOver(newGame({ size: 96, events: ['mine', 'clay'] }), months);
+  assert.deepEqual(noWage, { mine: on.mine, clay: on.clay });
+});
+
+test('sandbox switches: all off, nothing is ever drawn; the events=off flag still stops everything', () => {
+  const none = newGame({ size: 96, events: [] });
+  for (const e of RANDOM_EVENTS) assert.equal(eventSwitchedOn(none, e.key), false, e.key);
+  assert.deepEqual(drawsOver(none, 1500), {});
+  const flagged = newGame({ size: 96, events: true });
+  flagged.flags.events = 'off';
+  assert.deepEqual(drawsOver(flagged, 300), {});
+});
+
+test('sandbox switches: with every one on, a city sees the very events it saw before the switches', () => {
+  // Captured from v0.18.1 (one Events switch, on): four years of the demo city.
+  const run = (events) => {
+    const s = sandboxScenario({ size: 64, seed: 'golden-3', invasions: 'none' });
+    if (events !== undefined) s.events = events;
+    else delete s.events;
+    const game = new Game({ scenario: s, flags: { unlockall: true, money: 50000 } });
+    buildDemoCity(game, { level: 2 });
+    game.runDays(DPM * 48);
+    return { pop: game.city.population, counts: game.city.events.counts, wage: game.city.romeWage, cooldowns: game.city.events.cooldowns, rng: JSON.stringify(game.rng.getState()) };
+  };
+  const all = run([...EVENT_SWITCHES]);
+  assert.deepEqual({ ...all, rng: undefined }, { pop: 399, counts: { clay: 1, water: 1, wageDown: 1, wageUp: 1 }, wage: 25, cooldowns: { clay: 6, water: 11, wages: 43 }, rng: undefined });
+  assert.deepEqual(run(true), all, 'the old one switch, on');
+  assert.deepEqual(run(undefined), all, 'a scenario without the field');
+});
+
+test('sandbox switches: saved with the sandbox and loaded, a switch off stays off', () => {
+  const s = sandboxScenario({ size: 64, seed: 'kept-list', events: ['wages', 'sea'] });
+  const game = new Game({ scenario: s, flags: { unlockall: true } });
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  assert.equal(data.version, CONFIG.SAVE_VERSION);
+  assert.ok(CONFIG.SAVE_VERSION >= 24, 'the switch per event came with version 24');
+  assert.deepEqual(data.scenario.events, ['wages', 'sea']);
+  const copy = deserializeGame(data);
+  assert.deepEqual(copy.scenario.events, ['wages', 'sea']);
+  assert.equal(eventSwitchedOn(copy, 'wageUp'), true);
+  assert.equal(eventSwitchedOn(copy, 'clay'), false);
+  // Saved again from the loaded game, the list is the same.
+  const again = deserializeGame(JSON.parse(JSON.stringify(serializeGame(copy))));
+  assert.deepEqual(again.scenario.events, ['wages', 'sea']);
+});
+
+test('sandbox switches: a save from before them gets every switch on if its events were on, none if off', () => {
+  const s = sandboxScenario({ size: 64, seed: 'old-switch' });
+  const data = JSON.parse(JSON.stringify(serializeGame(new Game({ scenario: s, flags: { unlockall: true } }))));
+  const asV23 = (events) => {
+    const d = JSON.parse(JSON.stringify(data));
+    d.version = 23;
+    if (events === undefined) delete d.scenario.events;
+    else d.scenario.events = events;
+    return d;
+  };
+  assert.deepEqual(deserializeGame(asV23(true)).scenario.events, [...EVENT_SWITCHES]);
+  assert.deepEqual(deserializeGame(asV23(undefined)).scenario.events, [...EVENT_SWITCHES], 'a sandbox from before events played with them all');
+  const off = deserializeGame(asV23(false));
+  assert.deepEqual(off.scenario.events, []);
+  for (const e of RANDOM_EVENTS) assert.equal(eventSwitchedOn(off, e.key), false, e.key);
+  // The upgrade copies: the caller's data is left as it was.
+  const raw = asV23(false);
+  const up = upgradeEventSwitchesV23(raw);
+  assert.equal(raw.scenario.events, false);
+  assert.deepEqual(up.scenario.events, []);
+  // A campaign save holds only the mission id: untouched, its events its own.
+  const c3 = { version: 23, scenario: { id: 'c3' } };
+  assert.equal(upgradeEventSwitchesV23(c3), c3);
+  const mission = new Game({ scenario: findScenario('c3'), flags: { unlockall: true } });
+  const md = JSON.parse(JSON.stringify(serializeGame(mission)));
+  md.version = 23;
+  assert.equal(eventSwitchedOn(deserializeGame(md), 'clay'), true);
 });

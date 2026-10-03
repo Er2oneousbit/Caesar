@@ -40,9 +40,14 @@
  *                 no gladiator school at work that month it is called off
  *                 for good, without a word, as in the original
  *
- * The sandbox has every random event, switched on or off in its setup
- * (scenario `events`), and nothing scheduled. Missions 1 and 2 teach the
- * basics and have none. The choices follow the places: the peaceful track
+ * The sandbox has every random event, each switched on or off in its setup
+ * (scenario `events`: the switches left on, sandboxEventSwitches), and
+ * nothing scheduled: an earthquake, a new Caesar, a price change and the
+ * gladiators' revolt belong to a mission's story, so the setup has no
+ * switch for them, and a mission keeps the events it was designed with.
+ * A switch that is off leaves its table entries in place, drawing nothing,
+ * so the other events come exactly as often as with every switch on.
+ * Missions 1 and 2 teach the basics and have none. The choices follow the places: the peaceful track
  * gets the hazards (earthquakes in the south, bad water in the desert), the
  * military one wages and roads cut in war.
  * ----------------------------------------------------------------------------
@@ -71,6 +76,37 @@ export const RANDOM_EVENTS = Object.freeze([
 /** Every switch a mission (or the sandbox) can turn on. */
 export const EVENT_SWITCHES = Object.freeze(['wages', 'land', 'sea', 'water', 'mine', 'clay']);
 
+/**
+ * The sandbox's switches left on, from its scenario's `events`: a list of
+ * switch keys (the setup's, saved with the game), put in EVENT_SWITCHES
+ * order with anything unknown dropped. `false` is none and anything else
+ * (true, or a scenario built in code without the field) is all of them,
+ * so a test or tool can still say on or off in one word.
+ */
+export function sandboxEventSwitches(events) {
+  if (events === false) return [];
+  if (Array.isArray(events)) return EVENT_SWITCHES.filter((k) => events.includes(k));
+  return [...EVENT_SWITCHES];
+}
+
+/**
+ * The events option of the URL flag and the balance simulator: 'on' (every
+ * switch), 'off' (no event at all, a mission's scheduled ones too), 'none'
+ * (no sandbox switch on) or a comma list of the switches to leave on
+ * ('wages,sea').
+ * @returns {'off'|string[]|null} 'off', the switches on, or null when it
+ *   names something that is not a switch
+ */
+export function parseEventsOption(text) {
+  const s = String(text ?? '').trim().toLowerCase();
+  if (s === 'off') return 'off';
+  if (s === 'on') return [...EVENT_SWITCHES];
+  if (s === 'none') return [];
+  const keys = s.split(',').map((k) => k.trim()).filter(Boolean);
+  if (!keys.length || keys.some((k) => !EVENT_SWITCHES.includes(k))) return null;
+  return sandboxEventSwitches(keys);
+}
+
 /** Months before Rome moves wages again, on every difficulty. */
 export const WAGE_COOLDOWN = 12;
 
@@ -82,12 +118,31 @@ export const WAGE_COOLDOWN = 12;
 export const ROME_WAGE_MIN = 12;
 export const ROME_WAGE_MAX = 36;
 
+/** Dn Rome's wage moves by in one event, fewest and most (drawn on the month's stream). */
+export const WAGE_STEP = Object.freeze([1, 4]);
+
 /** Days a trade disruption lasts (the original's 3 months), and Neptune's storms. */
 export const TRADE_HALT_DAYS = 48;
 export const NEPTUNE_HALT_DAYS = 80;
 
 /** Bad water needs this many people (the original's 200; disease's own floor too). */
 export const BAD_WATER_MIN_POP = 200;
+
+/**
+ * What each switch is called in the sandbox setup, and what it allows.
+ * Rome's two wage events are one switch, as they are for a mission: they
+ * share a cooldown, and a wage that could only rise (or only fall) would
+ * drift to its bound and stay there. The numbers come from the tables
+ * above, so the setup says what the game does.
+ */
+export const EVENT_SWITCH_INFO = Object.freeze({
+  wages: Object.freeze({ name: 'Rome\'s wage', desc: `Rome raises or cuts the wage your workers measure theirs against, by ${WAGE_STEP[0]} to ${WAGE_STEP[1]} Dn.` }),
+  land: Object.freeze({ name: 'Land trade stopped', desc: `Landslides (sandstorms in the desert) stop every caravan for ${TRADE_HALT_DAYS} days.` }),
+  sea: Object.freeze({ name: 'Sea trade stopped', desc: `Storms keep every merchant ship in port for ${TRADE_HALT_DAYS} days.` }),
+  water: Object.freeze({ name: 'Bad water', desc: `The wells and fountains are fouled and city health falls (from ${BAD_WATER_MIN_POP} people).` }),
+  mine: Object.freeze({ name: 'Mine collapse', desc: 'The oldest iron mine caves in.' }),
+  clay: Object.freeze({ name: 'Clay pit flood', desc: 'The oldest clay pit floods and caves in.' }),
+});
 
 /**
  * Earthquakes. `tries`: [fewest, most] steps the four cracks try in all;
@@ -129,12 +184,12 @@ const NO_EVENTS = Object.freeze({ random: Object.freeze([]), quake: null, empero
 
 /**
  * A scenario's events: its mission's entry, filled out (a mission without
- * one has none); the sandbox has every random event unless its setup
- * switched them off (scenario `events: false`), and nothing scheduled.
+ * one has none); the sandbox has the random events its setup left switched
+ * on (scenario `events`, sandboxEventSwitches), and nothing scheduled.
  */
 export function missionEvents(scenario) {
   if (!scenario) return NO_EVENTS;
-  if (scenario.id === 'sandbox') return scenario.events === false ? NO_EVENTS : { ...NO_EVENTS, random: EVENT_SWITCHES };
+  if (scenario.id === 'sandbox') return { ...NO_EVENTS, random: sandboxEventSwitches(scenario.events) };
   const e = Object.hasOwn(EVENTS_BY_MISSION, scenario.id) ? EVENTS_BY_MISSION[scenario.id] : null;
   if (!e) return NO_EVENTS;
   return { random: e.random || [], quake: e.quake || null, emperor: e.emperor || [], priceChanges: e.priceChanges || [], revolt: e.revolt || [] };

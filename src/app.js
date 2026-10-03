@@ -160,7 +160,7 @@ export class App {
       log.warn(`Unknown scenario "${this.flags.scenario}"`);
     }
     if (this.flags.skipmenu) {
-      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: this.flags.difficulty || 'normal', funds: 8000, natives: this.flags.natives });
+      this.newSandbox({ size: this.flags.map || 'medium', type: this.flags.maptype || 'river', seed: this.flags.seed ?? 'quickstart', difficulty: this.flags.difficulty || 'normal', funds: 8000, natives: this.flags.natives, events: Array.isArray(this.flags.events) ? this.flags.events : true });
       return;
     }
     this.toMainMenu();
@@ -254,15 +254,16 @@ export class App {
       seaRaids: opts.seaRaids !== false,
       rank: opts.rank,
       site: opts.site,
+      // The setup's event switches (data/events.js sandboxEventSwitches): a
+      // list of those left on, or true or false for all or none. Kept in the
+      // scenario, which a sandbox save holds in full.
+      events: opts.events ?? true,
     });
     // The setup's raiders and wolves (data/peoples.js, sim/wildlife.js), kept
     // with the scenario, which a sandbox save stores whole. Left out, the
     // sandbox plays as before them: the generic band, no wolves.
     if (opts.raiders === 'site') scenario.raiders = 'site';
     if (opts.wolves) scenario.wolves = true;
-    // The setup's Events switch (on unless unticked), kept in the scenario,
-    // which a sandbox save holds in full (data/events.js missionEvents).
-    scenario.events = opts.events !== false;
     if (opts.natives) scenario.natives = true; // native villages, asked for in the setup (data/natives.js nativesFor)
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');

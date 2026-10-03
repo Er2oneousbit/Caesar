@@ -169,7 +169,7 @@ test('save files are named after the slot, the city and the year', () => {
 
 test('save: a version 22 save (before events, peoples, wolves, low bridges and native villages) loads with none of them', async () => {
   const { CONFIG } = await import('../src/config.js');
-  assert.equal(CONFIG.SAVE_VERSION, 23);
+  assert.ok(CONFIG.SAVE_VERSION >= 23);
   const { newGame: fresh } = await import('./helpers.mjs');
   const { serializeGame: ser, deserializeGame: des } = await import('../src/core/save.js');
   const game = fresh({ seed: 'v22' });

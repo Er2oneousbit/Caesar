@@ -25,6 +25,7 @@ import { marketLine } from '../sim/prices.js';
 import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
 import { AUTO_PAUSE, autoPauseSwitches } from './autoPause.js';
 import { hallOfFameBody, fameVictoryLines } from './hallOfFame.js';
+import { EVENT_SWITCHES, EVENT_SWITCH_INFO } from '../data/events.js';
 
 export const SAVE_SLOTS = ['auto', 'quick', 'slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
 const SLOT_NAMES = { auto: 'Autosave', quick: 'Quicksave', slot1: 'Slot 1', slot2: 'Slot 2', slot3: 'Slot 3', slot4: 'Slot 4', slot5: 'Slot 5' };
@@ -232,8 +233,44 @@ const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${M
 
 /** What the Wolves switch does (sandbox setup). */
 const WOLVES_HELP = 'Wolf packs in the woods (none on the desert map). They keep away from the city but fall on anyone who walks near: cart pushers, traders, settlers. Soldiers and towers can kill them; a pack with one wolf left grows back.';
-/** What the sandbox's Events switch does. */
-const EVENTS_HELP = 'Now and then Rome raises or cuts wages, landslides or storms stop caravans or ships for 3 months, bad water lowers city health, or a mine or clay pit caves in (less often on Easy, more on Hard and Insane). Off: none of these.';
+/** What the sandbox's Events switches do. */
+const EVENTS_HELP = 'Now and then fortune strikes the province, each event at its own odds (less often on Easy, more on Hard and Insane). An event unticked never comes; the others come as often as before. This box ticks or clears them all.';
+
+/** Muted help text under a switch's name. */
+const helpText = (text) => h('div', { class: 'muted', style: { fontSize: '12px' } }, text);
+
+/**
+ * The setup's events: a master switch above one switch per event the
+ * sandbox can draw (data/events.js EVENT_SWITCH_INFO). `state.events` is
+ * the list of switches on. The master is ticked with every switch on, clear
+ * with none and half-ticked between; a click on it ticks them all (or, when
+ * all were on, clears them).
+ */
+function eventsField(state) {
+  const boxes = {};
+  const master = h('input', { type: 'checkbox', class: 'events-switch', onchange: (e) => { state.events = e.target.checked ? [...EVENT_SWITCHES] : []; show(); } });
+  const show = () => {
+    const n = state.events.length;
+    master.checked = n === EVENT_SWITCHES.length;
+    master.indeterminate = n > 0 && n < EVENT_SWITCHES.length;
+    for (const k of EVENT_SWITCHES) boxes[k].checked = state.events.includes(k);
+  };
+  const flip = (k, on) => {
+    const set = new Set(state.events);
+    if (on) set.add(k);
+    else set.delete(k);
+    state.events = EVENT_SWITCHES.filter((x) => set.has(x)); // (kept in table order)
+    show();
+  };
+  const rows = EVENT_SWITCHES.map((k) => {
+    boxes[k] = h('input', { type: 'checkbox', class: 'event-switch', dataset: { event: k }, onchange: (e) => flip(k, e.target.checked) });
+    return h('label', { class: 'check-row' }, boxes[k], h('span', {}, EVENT_SWITCH_INFO[k].name, helpText(EVENT_SWITCH_INFO[k].desc)));
+  });
+  show();
+  return h('div', { class: 'events-field' },
+    h('label', { class: 'check-row' }, master, h('span', {}, 'Events', helpText(EVENTS_HELP))),
+    h('div', { class: 'grid2 events-list' }, rows));
+}
 
 export function sandboxMenu(app) {
   const state = {
@@ -244,7 +281,8 @@ export function sandboxMenu(app) {
     funds: 8000,
     invasions: 'occasional',
     seaRaids: app.settings.seaRaids !== false,
-    events: true,
+    // The events switched on: all, or the events=wages,sea URL flag's (core/debug.js).
+    events: Array.isArray(app.flags.events) ? [...app.flags.events] : [...EVENT_SWITCHES],
     rank: SANDBOX_RANK,
     site: HOME_SITE,
     natives: false, // native villages (sim/natives.js): off by default
@@ -301,10 +339,8 @@ export function sandboxMenu(app) {
         h('span', {}, 'Native villages', h('div', { class: 'muted', style: { fontSize: '12px' } }, 'One to three villages of the land\'s own people, away from the road. They attack what you build on their land until a missionary from a Sacellum Pacis (Mission Post) calms them; calmed, they come to buy your exports.'))),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', class: 'wolves-check', checked: state.wolves, onchange: (e) => { state.wolves = e.target.checked; } }),
-        h('span', {}, 'Wolves', h('div', { class: 'muted', style: { fontSize: '12px' } }, WOLVES_HELP))),
-      h('label', { class: 'check-row' },
-        h('input', { type: 'checkbox', class: 'events-switch', checked: state.events, onchange: (e) => { state.events = e.target.checked; } }),
-        h('span', {}, 'Events', h('div', { class: 'muted', style: { fontSize: '12px' } }, EVENTS_HELP)))),
+        h('span', {}, 'Wolves', h('div', { class: 'muted', style: { fontSize: '12px' } }, WOLVES_HELP)))),
+    eventsField(state),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),

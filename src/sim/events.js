@@ -65,7 +65,7 @@ import { Terrain, DIRS4 } from '../world/map.js';
 import { GOODS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import {
-  RANDOM_EVENTS, EVENT_TABLE_SIZE, WAGE_COOLDOWN, ROME_WAGE_MIN, ROME_WAGE_MAX, TRADE_HALT_DAYS, NEPTUNE_HALT_DAYS,
+  RANDOM_EVENTS, EVENT_TABLE_SIZE, WAGE_COOLDOWN, WAGE_STEP, ROME_WAGE_MIN, ROME_WAGE_MAX, TRADE_HALT_DAYS, NEPTUNE_HALT_DAYS,
   BAD_WATER_MIN_POP, QUAKE_SIZES, QUAKE_JITTER, missionEvents, eventMonth,
 } from '../data/events.js';
 import { MONTH_NAMES, formatYear } from './time.js';
@@ -200,7 +200,7 @@ export function randomEventMonth(game) {
   const last = game.city.events.cooldowns[e.cooldown];
   if (Number.isFinite(last) && now - last < cooldownOf(game, e)) return null;
   if (!eventCondition(game, key)) return null;
-  applyEvent(game, key, eventAmount(game.seed, now, 1, 4));
+  applyEvent(game, key, eventAmount(game.seed, now, WAGE_STEP[0], WAGE_STEP[1]));
   return key;
 }
 

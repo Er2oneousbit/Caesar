@@ -180,6 +180,12 @@
  *        village buildings (kind 'village', ids from NATIVE_ID_BASE, with
  *        anger and their attack), villagers (units, side 'native'), the
  *        mission post, missionaries and village traders.
+ *  24  the sandbox's events, one switch each (data/events.js): a sandbox
+ *      scenario's `events` is the list of switches left on, where it was
+ *      one switch (true, false, or missing before events). An older
+ *      sandbox with its events on (or from before them) gets every switch
+ *      on, one with them off none, see upgradeEventSwitchesV23(). Campaign
+ *      saves store only the mission id and are unchanged.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -213,6 +219,7 @@ import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
 import { emptyWildlife } from '../sim/wildlife.js';
 import { eventStateOf } from '../sim/events.js';
+import { sandboxEventSwitches } from '../data/events.js';
 import { log } from './debug.js';
 import { NATIVE_ID_BASE } from '../data/natives.js';
 
@@ -417,6 +424,7 @@ export function deserializeGame(data, flags = {}) {
   assert(data.map && data.time && data.city && Array.isArray(data.buildings), 'missing sections');
   // Renames on the raw data, before anything is built from it.
   if (data.version < 7) data = upgradeGodsV6(data);
+  if (data.version < 24) data = upgradeEventSwitchesV23(data);
 
   const scenario = data.scenario && data.scenario.map ? data.scenario : withDifficulty(findScenario(data.scenario?.id), data.difficulty);
   assert(scenario, `unknown scenario "${data.scenario?.id}"`);
@@ -856,6 +864,21 @@ export function upgradeTurnsV21(game) {
  */
 export function upgradeEventsV22(game) {
   eventStateOf(game.city);
+}
+
+/**
+ * A save before version 24 (one Events switch for the sandbox): returns a
+ * copy of the raw data whose sandbox scenario lists its switches, every one
+ * if its events were on (`true`, or no field: a save from before events,
+ * which played with them all once loaded) and none if they were off. It
+ * runs on the raw data because the Game reads its events from the scenario
+ * it is built with. Campaign saves hold only the mission id and are left
+ * alone, as is a sandbox that already holds a list (a hand edit).
+ */
+export function upgradeEventSwitchesV23(data) {
+  const s = data.scenario;
+  if (!s || typeof s !== 'object' || s.id !== 'sandbox' || Array.isArray(s.events)) return data;
+  return { ...data, scenario: { ...s, events: sandboxEventSwitches(s.events !== false) } };
 }
 
 /**

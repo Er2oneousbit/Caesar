@@ -201,8 +201,9 @@ test('capacity model: a villa quarter where the Villa can be reached, its people
   assert.ok(count(plan, 'farm_vine') > count(working, 'farm_vine'), 'the villas drink wine');
   // Missions 1 to 3 cannot reach the Villa: no quarter. (Their ceilings
   // were 300, 450, 980 and 1,160 before the gardeners' yards: mission 1's
-  // Huts need no gardens, so it plans none.)
-  for (const [id, ceiling] of [['c1', 300], ['c2', 470], ['c3', 1120], ['c3m', 1190]]) {
+  // Huts need no gardens, so it plans none. Figlina's 1,550 counts the
+  // pottery Tarraco and Capua buy.)
+  for (const [id, ceiling] of [['c1', 300], ['c2', 470], ['c3', 1550], ['c3m', 1190]]) {
     const s = findScenario(id);
     assert.equal(planCity(s, 500, SENSIBLE).villas, 0, `${id}: no villas`);
     assert.equal(employmentCeiling(s, SENSIBLE), ceiling, id);

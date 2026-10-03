@@ -200,6 +200,12 @@
  *      (its mood target falls once it passes a year) and `festivalsHeld`.
  *      Older saves load as a new game starts: every god at 0 months, a
  *      fresh year, with none held yet, see upgradeFestivalsV26().
+ *  28  a prefect fights one burning building at a time (sim/risk.js): each
+ *      entry of fires[] is [tile, days left, fire], the fire being the id
+ *      of the building that burned there, so a building's tiles go out
+ *      together; a prefect at a fire holds it in fireTile, waiting with
+ *      afterWait 'douse'. Older saves tie burning tiles together by the
+ *      ruin they share, see upgradeFireGroupsV27().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -227,6 +233,7 @@ import { findScenario, withDifficulty } from '../data/scenarios.js';
 import { SITES } from '../data/sites.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
+import { fireOf } from '../sim/risk.js';
 import { isStable, stableRoom } from '../sim/storage.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
@@ -403,7 +410,7 @@ export function serializeGame(game, extra = {}) {
     map: game.map.serialize(encodeLayer),
     buildings,
     walkers,
-    fires: [...game.fires],
+    fires: [...game.fires].map(([i, d]) => [i, d, fireOf(game, i)]),
     ruins: serializeRuins(game),
     units,
     military: game.military,
@@ -505,7 +512,10 @@ export function deserializeGame(data, flags = {}) {
   // Drop walker references to buildings that no longer exist.
   for (const b of game.buildings.values()) b.walkers = (b.walkers || []).filter((id) => game.walkers.has(id));
 
-  for (const [i, d] of data.fires || []) game.fires.set(i, d);
+  for (const [i, d, g] of data.fires || []) {
+    game.fires.set(i, d);
+    if (Number.isInteger(g)) game.fireGroups.set(i, g); // (none before version 28: upgradeFireGroupsV27)
+  }
   restoreRuins(game, data.ruins); // (none before version 7)
 
   // Soldiers and raiders
@@ -543,6 +553,7 @@ export function deserializeGame(data, flags = {}) {
   numberForts(game);
   if (data.version < 26) upgradeGardensV25(game);
   if (data.version < 27) upgradeFestivalsV26(game);
+  if (data.version < 28) upgradeFireGroupsV27(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A garden's or statue's care out of range, or a visit in the future (a
@@ -923,6 +934,25 @@ export function upgradeFestivalsV26(game) {
     if (!s || typeof s !== 'object') continue;
     s.monthsSinceFestival = 0;
     s.festivalsHeld = 0;
+  }
+}
+
+/**
+ * A save before version 28 (before prefects fought one burning building at
+ * a time): the burning tiles that share a ruin record (sim/ruins.js: every
+ * tile of a fallen footprint shares one) are one building's fire, keyed by
+ * the first of them, as a negative key no building id can take. A tile with
+ * no record is a fire of its own. A prefect resting after a fire in the old
+ * way (afterWait 'nextFire') looks for the next one when his rest is up, as
+ * he did then.
+ */
+export function upgradeFireGroupsV27(game) {
+  const keyOf = new Map(); // ruin record -> fire key
+  for (const i of game.fires.keys()) {
+    const rec = game.ruins ? game.ruins.get(i) : null;
+    if (!rec) continue; // fireOf: a fire of its own
+    if (!keyOf.has(rec)) keyOf.set(rec, -(i + 1));
+    game.fireGroups.set(i, keyOf.get(rec));
   }
 }
 

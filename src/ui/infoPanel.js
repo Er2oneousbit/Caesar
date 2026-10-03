@@ -36,7 +36,7 @@ import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../si
 import { trainedText, trainingNote, schoolStatus, inTrainingText } from './trainingInfo.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding, footprintRect } from '../sim/entities.js';
-import { riskRates } from '../sim/risk.js';
+import { riskRates, beingPutOut } from '../sim/risk.js';
 import { farmDormant, daysToNextMare, stablesFull } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
@@ -1013,7 +1013,7 @@ export class InfoPanel {
     if (x === map.entry.x && y === map.entry.y) notes.push('Map entrance (green pennants): settlers and trade caravans arrive here.');
     if (x === map.exit.x && y === map.exit.y) notes.push('Map exit (red pennants): people leaving the city, and trade caravans heading home, go this way.');
     if (map.rubble[i]) notes.push(`${ruinText(ruinAt(g, i)) || 'Rubble from a disaster.'} Clear it before building.`);
-    if (g.fires.has(i)) notes.push('Burning! Prefects are on their way.');
+    if (g.fires.has(i)) notes.push(beingPutOut(g, i) ? 'Burning! Being put out by a prefect.' : 'Burning! Prefects are on their way.');
     const wall = map.wall[i];
     if (wall) notes.push(wall === Wall.GATE ? 'A gate: citizens pass freely, raiders must break it down.' : 'A wall: raiders must break through it (or find a way around).');
     mount(this.el,

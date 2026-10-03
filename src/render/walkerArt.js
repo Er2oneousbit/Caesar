@@ -38,8 +38,10 @@ const STEP_RAD = Math.PI * 2 * 0.8;
  * @param {number} [stride] tiles walked (interpolated): drives the legs
  * @param {object|null} [origin] def of the building that sent a cart: how
  *        much the cart holds, and whether it is a farm wagon
+ * @param {{x: number, y: number}|null} [aim] a prefect putting out a fire:
+ *        the burning tile's middle from his feet (world px, zoom 1)
  */
-export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked || 0, origin = null) {
+export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked || 0, origin = null, aim = null) {
   const def = WALKER_TYPES[w.type];
   if (w.type === 'fishing_boat') { drawFishingBoat(ctx, w, sx, sy, k, t, dirX); return; }
   if (def.kind === 'ship') { drawShip(ctx, w, sx, sy, k, t, dirX); return; }
@@ -142,6 +144,8 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
     if (raised) ctx.lineTo(sx + face * (3.6 + wave * 0.5) * k, sy - (16 + wave) * k);
     // a carter holds the back of his cart's bed
     else if (item === 'cart') ctx.lineTo(sx + face * 4.8 * k, sy - 8.2 * k);
+    // a prefect at a fire swings his bucket up toward it
+    else if (dousing(w)) ctx.lineTo(sx + face * 4.6 * k, sy - 11.5 * k);
     else ctx.lineTo(sx + face * 3.5 * k, sy - (7.5 - phase) * k);
   }
   ctx.stroke();
@@ -164,10 +168,51 @@ export function drawWalker(ctx, w, sx, sy, k, t, dirX, dirY, stride = w.walked |
     ctx.fill();
   }
 
-  drawItem(ctx, w, item, sx, sy, k, face, wave, t);
+  drawItem(ctx, w, item, sx, sy, k, face, wave, t, aim);
 }
 
-function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0) {
+/** A prefect standing at a burning building he puts out (sim/risk.js fightFire). */
+const dousing = (w) => w.type === 'prefect' && w.state === 'extinguish' && w.waitTicks > 0;
+
+// A thrown bucket's reach on the screen (world px): a fire up to 4 tiles off
+// (PREFECT_DOUSE_REACH) is met by a stream that heads its way and falls short.
+const DOUSE_THROW = 40;
+
+/**
+ * His bucket held up at shoulder height (the renderer turns him to face the
+ * fire) and a stream of water arcing from it onto the flames at `aim`: drops
+ * ride an arc, each a little further along than the last, moving with the
+ * animation time, so the stream pours while the game runs and holds still
+ * when it is paused. With no aim, the stream lands a tile ahead of him.
+ */
+function drawDousing(ctx, w, sx, sy, k, face, t, aim) {
+  const bx = sx + face * 5 * k;
+  const by = sy - 12.5 * k;
+  ctx.fillStyle = '#7a5a3a';
+  ctx.fillRect(bx - 1.5 * k, by - 1.5 * k, 3 * k, 3 * k);
+  ctx.fillStyle = '#6fb0e0';
+  ctx.fillRect(bx - 1.5 * k, by - 1.7 * k, 3 * k, 0.9 * k);
+  // Where the water lands: the flames' middle, a little above the ground.
+  let dx = aim ? sx + aim.x * k - bx : face * 14 * k;
+  let dy = aim ? sy + (aim.y - 6) * k - by : 10 * k;
+  const len = Math.hypot(dx, dy);
+  if (len > DOUSE_THROW * k) {
+    dx *= (DOUSE_THROW * k) / len;
+    dy *= (DOUSE_THROW * k) / len;
+  }
+  const lift = 4 * k + Math.min(len, DOUSE_THROW * k) * 0.2;
+  ctx.fillStyle = 'rgba(150,205,240,0.9)';
+  const N = 8;
+  for (let n = 0; n < N; n++) {
+    const u = (n / N + t * 1.6 + (w.id % 7) * 0.13) % 1; // 0 at the bucket, 1 on the fire
+    const x = bx + dx * u;
+    const y = by + dy * u - Math.sin(u * Math.PI) * lift;
+    const r = (0.7 + u * 0.5) * k;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+}
+
+function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0, aim = null) {
   const hx = sx + face * 4 * k;
   const hy = sy - 7 * k;
   switch (item) {
@@ -209,6 +254,10 @@ function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0) {
       break;
     }
     case 'bucket':
+      if (dousing(w)) {
+        drawDousing(ctx, w, sx, sy, k, face, t, aim);
+        break;
+      }
       ctx.fillStyle = '#7a5a3a';
       ctx.fillRect(hx - 1.5 * k, hy - 1 * k, 3 * k, 3 * k);
       ctx.fillStyle = '#6fb0e0';

@@ -854,11 +854,19 @@ export class Renderer {
       const stride = w.walked + (w.moving ? alpha * w.speed : 0); // tiles walked, for the leg animation
       // A cart's look depends on who sent it (a farm's wagon, a warehouse's single lot).
       const origin = w.type === 'cart' ? game.buildings.get(w.origin)?.def || null : null;
-      const dirX = ddx === 0 ? (last === 1 || last === 0 ? 1 : -1) : Math.sign(ddx);
+      let dirX = ddx === 0 ? (last === 1 || last === 0 ? 1 : -1) : Math.sign(ddx);
+      // A prefect putting out a fire faces it and throws his water at it:
+      // `aim` is the burning tile's middle from his feet, in world px.
+      let aim = null;
+      if (w.state === 'extinguish' && w.fireTile !== undefined && game.fires.has(w.fireTile)) {
+        const [fdx, fdy] = viewDir(map.xOf(w.fireTile) - w.x, map.yOf(w.fireTile) - w.y, vt);
+        if (fdx !== fdy) dirX = Math.sign(fdx - fdy);
+        aim = { x: (fdx - fdy) * HALF_W, y: (fdx + fdy) * HALF_H };
+      }
       // A carter's cart (and a wagon's ox) is drawn ahead of him and is most
       // of what the eye sees: clicks on it pick the carter (cartReach).
       this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
-      items.push({ d: span.d ?? fd + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
+      items.push({ d: span.d ?? fd + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy), aim });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -933,7 +941,7 @@ export class Renderer {
           break;
         case K_WALKER:
           if (it.w.id === this.selectedWalker) this.drawWalkerRing(it);
-          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride, it.origin);
+          drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride, it.origin, it.aim);
           break;
         case K_FIRE:
           drawFlames(ctx, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, this.time, it.seed);

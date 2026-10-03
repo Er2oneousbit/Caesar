@@ -50,6 +50,8 @@ function stepWalker(game, w) {
     return;
   }
   if (w.waitTicks > 0) {
+    // The building a prefect fights burned out by itself: on to the next at once.
+    if (w.afterWait === 'douse' && !game.fires.has(w.fireTile)) w.waitTicks = 1;
     w.waitTicks--;
     if (w.waitTicks === 0 && w.afterWait) {
       const what = w.afterWait;

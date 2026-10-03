@@ -167,6 +167,10 @@ export class Game {
     this.buildings = new Map();
     this.walkers = new Map();
     this.fires = new Map(); // tile index -> days left burning
+    // Burning tile -> the fire it belongs to (the id of the building that
+    // burned there): a prefect puts out one building's tiles together
+    // (sim/risk.js fireOf).
+    this.fireGroups = new Map();
     this.messages = [];
     this.dirty = { des: true, water: true, roads: true };
     this.lastUndo = null;

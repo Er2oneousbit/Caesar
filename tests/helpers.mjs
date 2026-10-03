@@ -5,18 +5,20 @@
 
 import { Game } from '../src/core/game.js';
 import { sandboxScenario } from '../src/data/scenarios.js';
+import { EVENT_SWITCHES } from '../src/data/events.js';
 import { planAction, applyPlan } from '../src/sim/construction.js';
 import { Terrain } from '../src/world/map.js';
 
 /**
  * A small sandbox game on a known map. Raids are off unless asked for;
  * difficulty is Normal unless asked for; the sandbox's random events
- * (sim/events.js) are off unless asked for (`events: true`), so a test of
- * one rule is not upset by a wage change or a caved-in clay pit.
+ * (sim/events.js) are off unless asked for (`events: true` for every switch,
+ * or a list of them), so a test of one rule is not upset by a wage change or
+ * a caved-in clay pit.
  */
 export function newGame(opts = {}) {
   const scenario = sandboxScenario({ size: opts.size || 64, type: opts.type || 'river', seed: opts.seed || 'test-seed', invasions: opts.invasions || 'none', difficulty: opts.difficulty || 'normal' });
-  scenario.events = opts.events === true;
+  scenario.events = Array.isArray(opts.events) ? [...opts.events] : opts.events === true ? [...EVENT_SWITCHES] : [];
   return new Game({ scenario, flags: { unlockall: true, money: opts.money ?? 50000 } });
 }
 

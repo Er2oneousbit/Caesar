@@ -90,6 +90,7 @@ import { BUILDINGS, TOOLS } from './buildings.js';
 import { SANDBOX_RANK, TOP_RANK, clampRank } from './ranks.js';
 import { GOD_KEYS } from './gods.js';
 import { HOME_SITE, SANDBOX_SITES } from './sites.js';
+import { sandboxEventSwitches } from './events.js';
 
 /**
  * Trade partners.
@@ -640,7 +641,7 @@ export function withDifficulty(scenario, difficulty = 'normal') {
 }
 
 /** Sandbox settings template. The New Game screen fills in the blanks. */
-export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true, rank = SANDBOX_RANK, site = HOME_SITE } = {}) {
+export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', funds = 8000, difficulty = 'normal', invasions = 'occasional', seaRaids = true, rank = SANDBOX_RANK, site = HOME_SITE, events = true } = {}) {
   return {
     id: 'sandbox', name: 'Sandbox', title: 'Free Build',
     intro: 'No goals, no deadlines. Build the city you want.',
@@ -655,6 +656,7 @@ export function sandboxScenario({ size = 96, type = 'river', seed = 'sandbox', f
     seaRaids: seaRaids !== false, // some raids come by sea where ships can sail (sim/navy.js)
     difficulty,
     rank: clampRank(rank), // the governor's rank, picked in the setup (data/ranks.js)
+    events: sandboxEventSwitches(events), // the random events switched on in the setup (data/events.js), all by default
     hints: ['Tip: press F1 for help at any time.'],
   };
 }

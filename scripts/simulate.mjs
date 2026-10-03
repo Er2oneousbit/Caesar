@@ -32,6 +32,7 @@
  *   npm run sim -- --type coast --raids frequent --garrison --navy --years 8   (sea raids against a fleet)
  *   npm run sim -- --type coast --raids frequent --garrison --navy --academy --years 8   (and training)
  *   npm run sim -- --events off   (no events: the city as before they existed)
+ *   npm run sim -- --events wages,clay   (the sandbox with only these random events switched on)
  *   npm run sim -- --scenario c10p --years 10   (a mission's events: Puteoli's earthquake in its 8th year)
  *
  * Campaign runs build every building unless --unlocks is given (then only
@@ -64,6 +65,7 @@ import { Terrain } from '../src/world/map.js';
 import { spareBoat, hasBoatTimber } from '../src/sim/fishing.js';
 import { PEOPLES } from '../src/data/peoples.js';
 import { quakeSummary } from '../src/sim/events.js';
+import { parseEventsOption, EVENT_SWITCHES } from '../src/data/events.js';
 
 const HELP = `
 Headless balance simulation
@@ -121,8 +123,10 @@ Options:
                     mission's own people, the sandbox's generic band
   --wolves [on|off] wolf packs on the map (default: a mission's own, none in the sandbox).
                     Reports the packs, wolves killed and walkers lost to them
-  --events <s>      on | off: the province's events (default on: the sandbox's random events, a mission's
-                    random and scheduled ones, sim/events.js). Off plays as before events existed
+  --events <s>      on | off | a list: the province's events (default on: the sandbox's random events, a
+                    mission's random and scheduled ones, sim/events.js). Off plays as before events
+                    existed. A comma list (wages,land,sea,water,mine,clay, or none) is the sandbox
+                    setup's switches left on; a mission keeps its own events
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
   --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
   --legion <m>      Caesar's legions arrive at the start of month m (the size of a first attack, or
@@ -230,11 +234,14 @@ const SIM_MONEY = 20000 * Math.max(1, opts.blocks + opts.villas);
 if (opts.seaRaids !== null && !['on', 'off'].includes(opts.seaRaids)) { console.error(`--sea-raids takes on or off
 ${HELP}`); process.exit(2); }
 if (opts.people !== null && opts.people !== 'site' && !PEOPLES[opts.people]) { console.error(`--people takes site or one of ${Object.keys(PEOPLES).join(', ')}\n${HELP}`); process.exit(2); }
-if (!['on', 'off'].includes(opts.events)) { console.error(`--events takes on or off
+const eventsOption = parseEventsOption(opts.events);
+if (!eventsOption) { console.error(`--events takes on, off or a list of ${EVENT_SWITCHES.join(', ')} (or none)
 ${HELP}`); process.exit(2); }
-// --events off: no event of any kind (the sandbox setup's switch, and for a mission the debug flag).
-if (opts.events === 'off' && scenario.id === 'sandbox') scenario.events = false;
-const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids, people: opts.people, wolves: opts.wolves, ...(opts.events === 'off' ? { events: 'off' } : {}) } });
+if (Array.isArray(eventsOption) && !/^on$/i.test(String(opts.events).trim()) && scenario.id !== 'sandbox') { console.error('--events with a list is for the sandbox: a mission keeps its own events (on or off)'); process.exit(2); }
+// --events off: no event of any kind (the sandbox setup's switches, and for a
+// mission the debug flag). A list: the sandbox's switches left on.
+if (scenario.id === 'sandbox') scenario.events = eventsOption === 'off' ? [] : eventsOption;
+const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids, people: opts.people, wolves: opts.wolves, ...(eventsOption === 'off' ? { events: 'off' } : {}) } });
 // The governor's salary (sim/governor.js) is his own, not the city's: it goes
 // into savings he can give back (donations) or spend on gifts. Unless asked,
 // the demo governor draws none and Rome judges none (he is a Citizen, whose
@@ -522,7 +529,7 @@ if (harbor.docks) {
 // The province's events (sim/events.js): what came, and what it cost. Not
 // printed with --events off, so that run reads exactly as before events.
 const ev = c.events;
-const events = opts.events === 'on' ? { counts: { ...ev.counts }, romeWage: c.romeWage, quake: ev.quake ? quakeSummary(game) : null } : null;
+const events = eventsOption !== 'off' ? { counts: { ...ev.counts }, romeWage: c.romeWage, quake: ev.quake ? quakeSummary(game) : null } : null;
 if (events) console.log(`Events: ${Object.entries(events.counts).filter(([k]) => !k.startsWith('quake') || k === 'quake').map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}; Rome's wage ${c.romeWage}${ev.counts.quake ? `; earthquakes destroyed ${ev.counts.quakeLost || 0} buildings (${ev.counts.quakeHomes || 0} homes)` : ''}${events.quake ? `; still shaking: ${events.quake}` : ''}`);
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));

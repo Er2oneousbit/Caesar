@@ -25,6 +25,8 @@
  *                  ligurians, carthaginians...), or site for the province's own
  *   wolves=on|off  wolf packs on a new game's map, or none (sim/wildlife.js)
  *   events=off     no events, random or scheduled, in any game (sim/events.js)
+ *   events=LIST    the sandbox's random events switched on (its setup's ticks and
+ *                  a skipmenu=1 sandbox): wages,land,sea,water,mine,clay, or none
  *   nofog=1        reserved for future use
  *   mute=1         start with sound off
  *
@@ -32,6 +34,8 @@
  * a "copy error report" button with recent context.
  * ----------------------------------------------------------------------------
  */
+
+import { parseEventsOption } from '../data/events.js';
 
 const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
 
@@ -88,7 +92,10 @@ export function parseFlags(source) {
   // (An unknown people falls back to the province's own: sim/military.js peopleFor.)
   if (/^[a-z_]+$/.test(String(get('people') ?? ''))) flags.people = String(get('people'));
   if (['off', 'on'].includes(get('wolves'))) flags.wolves = get('wolves');
-  if (get('events') === 'off') flags.events = 'off';
+  // 'off' (nothing at all, in any game) or the sandbox's switches left on (a
+  // list; 'on' is all of them); anything unreadable leaves the default, all on.
+  const events = get('events') == null ? null : parseEventsOption(get('events'));
+  if (events) flags.events = events;
   flags.mute = truthy(get('mute'));
   return flags;
 }

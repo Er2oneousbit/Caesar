@@ -6,7 +6,9 @@
  * most; not where it cannot be worshipped, not in towns under 800), a
  * festival of any size starts its year again; festivals cost food from the
  * granaries and, large or grand, wine from the warehouses, taken in a fixed
- * order and only when all of it is there; the shorter city-wide cooldown
+ * order and only when all of it is there; the temples each size is held at
+ * (a staffed temple of the god, its large temple, an Oracle), and what a
+ * province without them says; the shorter city-wide cooldown
  * lets small festivals in turn keep all five gods inside their year; the
  * demo city's habit; and saves before version 25 loading as a fresh year.
  * ----------------------------------------------------------------------------
@@ -23,7 +25,7 @@ import { findScenario } from '../src/data/scenarios.js';
 import { addBuilding } from '../src/sim/entities.js';
 import {
   updateReligion, festivalNeglect, neglectPenalty, festivalCost, festivalFood, festivalWine, festivalNeeds,
-  festivalMeans, festivalBlocked, holdFestival, levelTakes, monthsSinceAnyFestival, FESTIVAL_SIZES,
+  festivalMeans, festivalBlocked, festivalTempleBlocked, holdFestival, levelTakes, monthsSinceAnyFestival, FESTIVAL_SIZES,
 } from '../src/sim/religion.js';
 import { holdDemoFestival } from '../src/dev/demoCity.js';
 import { serializeGame, deserializeGame, upgradeFestivalsV26 } from '../src/core/save.js';
@@ -45,12 +47,28 @@ function store(game, type, stock = {}) {
   return b;
 }
 
-/** A staffed temple of `god`, placed directly. */
-function temple(game, god) {
-  const spot = findFree(game, 3, 3);
-  const b = addBuilding(game, `temple_${god}`, spot.x, spot.y, 2);
+/** A staffed temple of `god` (`large`: its large temple), placed directly. */
+function temple(game, god, large = false) {
+  const size = large ? 3 : 2;
+  const spot = findFree(game, size + 1, size + 1);
+  const b = addBuilding(game, large ? `temple_large_${god}` : `temple_${god}`, spot.x, spot.y, size);
   b.efficiency = 1;
   return b;
+}
+
+/** An Oracle, placed directly (it has no workers). */
+function oracle(game) {
+  const spot = findFree(game, 3, 3);
+  return addBuilding(game, 'oracle', spot.x, spot.y, 2);
+}
+
+/** Every god's small and large temple, staffed, and an Oracle: festivals of every size may be held. */
+function sanctuaries(game) {
+  for (const g of GOD_KEYS) {
+    temple(game, g);
+    temple(game, g, true);
+  }
+  oracle(game);
 }
 
 /** Every god waits out a long cooldown, so no blessing or wrath upsets a mood. */
@@ -125,6 +143,7 @@ test('neglect: not in a town under 800 people, and not for a god that cannot be 
 test('a festival of any size starts its god\'s year again; the others keep counting', () => {
   for (let size = 0; size < 3; size++) {
     const game = newGame({ seed: `reset-${size}` });
+    sanctuaries(game);
     game.city.population = 1000;
     store(game, 'granary', { wheat: 1000 });
     store(game, 'warehouse', { wine: 2000 });
@@ -191,6 +210,7 @@ test('levelTakes: the largest stocks give first and end level; ties in the given
 
 test('a festival\'s food comes from the largest food stocks first, each from the granary holding most of it (lowest id on a tie)', () => {
   const game = newGame({ seed: 'take-food' });
+  sanctuaries(game);
   game.city.population = 10000; // a small festival: 125 food
   const a = store(game, 'granary', { wheat: 200, vegetables: 150 });
   const b = store(game, 'granary', { wheat: 100, fruit: 300, meat: 10 });
@@ -214,6 +234,7 @@ test('a festival\'s food comes from the largest food stocks first, each from the
 
 test('a festival\'s wine comes from the warehouse holding most first, the lowest id on a tie, as far as each goes', () => {
   const game = newGame({ seed: 'take-wine' });
+  sanctuaries(game);
   game.city.population = 1000; // grand: 300 wine and 100 food
   store(game, 'granary', { meat: 400 });
   const w1 = store(game, 'warehouse', { wine: 100 });
@@ -227,6 +248,7 @@ test('a festival\'s wine comes from the warehouse holding most first, the lowest
 
   // Two warehouses that tie: the lower id gives.
   const g2 = newGame({ seed: 'take-wine-tie' });
+  sanctuaries(g2);
   g2.city.population = 1000; // large: 200 wine
   store(g2, 'granary', { wheat: 400 });
   const x = store(g2, 'warehouse', { wine: 300 });
@@ -238,6 +260,7 @@ test('a festival\'s wine comes from the warehouse holding most first, the lowest
 
 test('a festival the city cannot pay in full is not held, nothing is taken, and the reason says what is short', () => {
   const game = newGame({ seed: 'short' });
+  sanctuaries(game);
   game.city.population = 1000;
   const gran = store(game, 'granary', { wheat: 25, fruit: 15 });
   const wh = store(game, 'warehouse', { wine: 100 });
@@ -267,6 +290,7 @@ test('a festival the city cannot pay in full is not held, nothing is taken, and 
 test('the cooldown: 2, 4 and 8 months, and its reason', () => {
   assert.deepEqual(CONFIG.FESTIVAL_COOLDOWN, [2, 4, 8]);
   const game = newGame({ seed: 'cooldown' });
+  sanctuaries(game);
   game.city.population = 600;
   store(game, 'granary', { wheat: 2000 });
   assert.equal(holdFestival(game, 'ceres', 0).ok, true);
@@ -279,6 +303,7 @@ test('the cooldown: 2, 4 and 8 months, and its reason', () => {
 
 test('the people tire of festivals: one held sooner than 3 months after the last lifts the city mood in proportion; the god always gets its full share', () => {
   const game = newGame({ seed: 'city-share' });
+  sanctuaries(game);
   game.city.population = 1000;
   store(game, 'granary', { wheat: 2000 });
   store(game, 'warehouse', { wine: 2000 });
@@ -304,6 +329,7 @@ test('the people tire of festivals: one held sooner than 3 months after the last
 
 test('a store set to Get the good gives last, as for the Emperor', () => {
   const game = newGame({ seed: 'take-get' });
+  sanctuaries(game);
   game.city.population = 1000; // large: 200 wine, 100 food
   const keep = store(game, 'warehouse', { wine: 900 });
   keep.orders.wine = 'get';
@@ -318,6 +344,7 @@ test('a store set to Get the good gives last, as for the Emperor', () => {
 
 test('small festivals in turn keep all five gods inside their year, five years on', () => {
   const game = newGame({ seed: 'rotation' });
+  sanctuaries(game);
   game.city.population = 2000;
   const gran = store(game, 'granary', {});
   quiet(game);
@@ -338,11 +365,95 @@ test('small festivals in turn keep all five gods inside their year, five years o
 });
 
 // ---------------------------------------------------------------------------
+// The temples a festival is held at
+// ---------------------------------------------------------------------------
+
+/** A city of 1,000 with the food and wine for any festival, and no temple yet. */
+function stocked(game) {
+  game.city.population = 1000;
+  store(game, 'granary', { wheat: 2000 });
+  store(game, 'warehouse', { wine: 2000 });
+  return game;
+}
+
+const blocked = (game, god) => [0, 1, 2].map((size) => festivalTempleBlocked(game, god, size));
+
+test('temples: a small festival needs a staffed temple of the god, a large one its large temple too, a grand one an Oracle as well', () => {
+  const game = stocked(newGame({ seed: 'temples' }));
+  assert.deepEqual(blocked(game, 'mars'), ['Needs a temple of Mars.', 'Needs a temple and a large temple of Mars.', 'Needs a temple and a large temple of Mars, and an Oracle.']);
+  // The reason is the festival's, said first, before anything the city is short of.
+  assert.equal(festivalBlocked(game, 0, 'mars'), 'Needs a temple of Mars.');
+  assert.equal(festivalBlocked(game, 0), null, 'without a god: only what every festival needs');
+  const was = JSON.stringify([game.city.treasury, game.city.gods, game.city.festivalCooldown]);
+  assert.deepEqual(holdFestival(game, 'mars', 0), { ok: false, reason: 'Needs a temple of Mars.' });
+  assert.equal(JSON.stringify([game.city.treasury, game.city.gods, game.city.festivalCooldown]), was, 'nothing paid, no god moved');
+
+  // A temple with no workers holds no rites (as it does not count for the god's mood).
+  const small = temple(game, 'mars');
+  small.efficiency = 0;
+  assert.equal(festivalTempleBlocked(game, 'mars', 0), 'Needs a staffed temple of Mars.');
+  small.efficiency = 0.5;
+  assert.deepEqual(blocked(game, 'mars'), [null, 'Needs a large temple of Mars.', 'Needs a large temple of Mars and an Oracle.']);
+  // Another god's temples are no help.
+  temple(game, 'venus', true);
+  assert.equal(festivalTempleBlocked(game, 'mars', 1), 'Needs a large temple of Mars.');
+  const large = temple(game, 'mars', true);
+  large.efficiency = 0;
+  assert.equal(festivalTempleBlocked(game, 'mars', 1), 'Needs a staffed large temple of Mars.');
+  large.efficiency = 1;
+  assert.deepEqual(blocked(game, 'mars'), [null, null, 'Needs an Oracle.']);
+  // The large temple alone, without a small one, is not enough.
+  assert.equal(festivalTempleBlocked(game, 'venus', 1), 'Needs a temple of Venus.');
+  // Any Oracle: it speaks for every god, and has no workers to wait for.
+  oracle(game);
+  assert.deepEqual(blocked(game, 'mars'), [null, null, null]);
+  assert.deepEqual(holdFestival(game, 'mars', 2), { ok: true });
+  // The cooldown is still said alone.
+  assert.equal(festivalBlocked(game, 0, 'ceres'), 'Citizens are still recovering from the last festival (8 months).');
+  game.city.festivalCooldown = 0;
+  small.efficiency = 0;
+  game.city.treasury = 10;
+  assert.equal(festivalBlocked(game, 0, 'mars'), 'Needs a staffed temple of Mars. Needs 210 Dn, 10 in the treasury.', 'the temples first, then the money');
+});
+
+test('temples: where the province has no large temples or oracles, the larger festivals say so', () => {
+  const mission = (id) => {
+    const game = new Game({ scenario: findScenario(id), flags: { money: 50000 } });
+    return stocked(game);
+  };
+  // Mission 1: Ceres's and Mercury's temples only.
+  const m1 = mission('c1');
+  assert.deepEqual(blocked(m1, 'neptune'), Array(3).fill('Temples of Neptune are not available in this province.'));
+  assert.equal(festivalTempleBlocked(m1, 'ceres', 0), 'Needs a temple of Ceres.');
+  temple(m1, 'ceres');
+  assert.deepEqual(blocked(m1, 'ceres'), [null, 'Large temples are not available in this province.', 'Large temples and oracles are not available in this province.']);
+  assert.deepEqual(holdFestival(m1, 'ceres', 0), { ok: true }, 'a small festival is held as before');
+  // Mission 2: every god's small temple, no large ones yet.
+  const m2 = mission('c2');
+  temple(m2, 'mars');
+  assert.deepEqual(blocked(m2, 'mars'), [null, 'Large temples are not available in this province.', 'Large temples and oracles are not available in this province.']);
+  // Missions 3 and 4: large temples, no Oracle.
+  for (const id of ['c3', 'c3m', 'c4', 'c4p']) {
+    const g = mission(id);
+    temple(g, 'mars');
+    assert.equal(festivalTempleBlocked(g, 'mars', 1), 'Needs a large temple of Mars.', id);
+    temple(g, 'mars', true);
+    assert.deepEqual(blocked(g, 'mars'), [null, null, 'Oracles are not available in this province.'], id);
+  }
+  // From step 5 the Oracle too.
+  const m5 = mission('c5');
+  temple(m5, 'mars');
+  temple(m5, 'mars', true);
+  assert.equal(festivalTempleBlocked(m5, 'mars', 2), 'Needs an Oracle.');
+});
+
+// ---------------------------------------------------------------------------
 // The demo city's habit
 // ---------------------------------------------------------------------------
 
 test('the demo city holds a small festival for the god longest without one, once it can spare the food', () => {
   const game = newGame({ seed: 'demo-fest' });
+  sanctuaries(game);
   game.city.population = 1000; // a month of food is 250
   const gran = store(game, 'granary', { wheat: 300 });
   for (const g of GOD_KEYS) game.city.gods[g].monthsSinceFestival = 5;
@@ -363,6 +474,16 @@ test('the demo city holds a small festival for the god longest without one, once
   assert.equal(holdDemoFestival(game), 'venus');
   assert.equal(game.city.gods.venus.festivalsHeld, 1);
   assert.equal(game.city.festivalCooldown, 2, 'a small one: never wine');
+
+  // A god with no staffed temple is passed over for the next longest waiting.
+  const bare = newGame({ seed: 'demo-fest-bare' });
+  bare.city.population = 1000;
+  store(bare, 'granary', { wheat: 1000 });
+  for (const g of GOD_KEYS) if (g !== 'mars') temple(bare, g);
+  for (const g of GOD_KEYS) bare.city.gods[g].monthsSinceFestival = 5;
+  bare.city.gods.mars.monthsSinceFestival = 9;
+  bare.city.gods.neptune.monthsSinceFestival = 7;
+  assert.equal(holdDemoFestival(bare), 'neptune');
 });
 
 // ---------------------------------------------------------------------------

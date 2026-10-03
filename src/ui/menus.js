@@ -322,7 +322,7 @@ export function sandboxMenu(app) {
       h('div', { class: 'field' }, h('label', {}, 'Your rank'),
         h('select', { class: 'rank-select', onchange: (e) => { state.rank = Number(e.target.value); } },
           RANKS.map((r, i) => h('option', { value: i, selected: i === state.rank }, `${r.name} (salary ${r.salary} Dn a month)`))),
-        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Sets the salary Rome expects you to draw: more costs favor, less earns a little.')),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Sets the most salary Rome lets you draw: less, by your own choice, earns a little favor.')),
       h('div', { class: 'field' }, h('label', {}, 'Province'),
         h('select', { class: 'site-select', onchange: (e) => { state.site = e.target.value; showRaiders(); } },
           SANDBOX_SITES.map((id) => h('option', { value: id, selected: id === state.site }, `${SITES[id].name} (${SITES[id].region})`))),

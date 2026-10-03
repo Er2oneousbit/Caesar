@@ -1125,8 +1125,14 @@ try {
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Imperial")');
   const govText = await page.textContent('.governor-card');
-  await page.selectOption('.salary-select', '6');
+  // Every rank is listed, those above the governor's (a Procurator's, 5)
+  // greyed out: Rome pays no governor above his rank.
+  const salaryOptions = await page.evaluate(() => [...document.querySelectorAll('.salary-select option')].map((o) => ({ v: Number(o.value), off: o.disabled, text: o.textContent })));
+  await page.selectOption('.salary-select', '4');
   const salaryRank = await page.evaluate(() => window.colonia.game.city.governor.salaryRank);
+  check('the salary picker offers the governor\'s rank and those below it; the ranks above are listed greyed out',
+    salaryOptions.length === 11 && salaryOptions.every((o) => o.off === (o.v > 5)) && /Aedile: 30 Dn a month \(above your rank\)/.test(salaryOptions[6]?.text) && /\(your rank\)/.test(salaryOptions[5]?.text) && salaryRank === 4 && errors.length === 0,
+    JSON.stringify({ salaryOptions: salaryOptions.map((o) => `${o.v}${o.off ? ' off' : ''}`), salaryRank }));
   const before = await page.evaluate(() => {
     const g = window.colonia.game;
     window.colonia.ui.console.run(`savings ${400 - g.city.governor.savings}`);
@@ -1136,7 +1142,7 @@ try {
   const lavish = await page.textContent('.gift-btn:has-text("Lavish")');
   await page.click('.gift-btn:has-text("Lavish")');
   const after = await page.evaluate(() => ({ savings: window.colonia.game.city.governor.savings, favor: window.colonia.game.city.ratings.favor, treasury: window.colonia.game.city.treasury }));
-  check('the Imperial advisor shows the rank and savings, sets the salary and sends a gift from savings', /Procurator/.test(govText) && /Personal savings/.test(govText) && salaryRank === 6 && /300 Dn \(\+10 favor\)/.test(lavish) && after.savings === 100 && after.favor > before.favor && after.treasury === before.treasury && errors.length === 0, JSON.stringify({ govText: govText.slice(0, 120), salaryRank, lavish, before, after }));
+  check('the Imperial advisor shows the rank and savings, sets the salary and sends a gift from savings', /Procurator/.test(govText) && /Personal savings/.test(govText) && salaryRank === 4 && /300 Dn \(\+10 favor\)/.test(lavish) && after.savings === 100 && after.favor > before.favor && after.treasury === before.treasury && errors.length === 0, JSON.stringify({ govText: govText.slice(0, 120), salaryRank, lavish, before, after }));
   await page.keyboard.press('Escape');
 
   // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
@@ -1309,11 +1315,18 @@ try {
     gran.stock.wheat += 800;
     c.festivalCooldown = 0;
     c.treasury = Math.max(c.treasury, 5000);
+    // No staffed large temple of Ceres for the moment (the demo city builds
+    // small ones): her large festival waits for one, and says so.
+    const largeCeres = [...g.buildings.values()].filter((b) => b.type === 'temple_large_ceres').map((b) => [b, b.efficiency]);
+    for (const [b] of largeCeres) b.efficiency = 0;
     app.ui.openAdvisors('religion');
     const body = () => document.querySelector('.modal-body');
     const rows = [...body().querySelectorAll('.festivals tr[data-size]')].map((tr) => [...tr.children].map((td) => td.textContent));
     const btn = (size) => body().querySelector(`[data-god="ceres"] button[data-size="${size}"]`);
     const shown = { grandOff: !!btn('grand')?.disabled, largeOff: !!btn('large')?.disabled, smallOn: btn('small') && !btn('small').disabled, title: btn('grand')?.title || '', short: body().querySelector('.festivals [data-short="grand"]')?.textContent || '' };
+    shown.largeTitle = btn('large')?.title || '';
+    shown.templeNote = body().querySelector('[data-god="ceres"] [data-temples~="large"]')?.textContent || '';
+    for (const [b, eff] of largeCeres) b.efficiency = eff;
     const food = () => { let n = 0; for (const b of g.buildings.values()) if (b.def.kind === 'granary') for (const k in b.stock) n += b.stock[k]; return n; };
     const before = food();
     btn('small').click();
@@ -1338,6 +1351,9 @@ try {
       && fest.grandOff && fest.largeOff && fest.smallOn && /Needs \d+ wine in the warehouses, 0 stored/.test(fest.title) && /Grand: Needs \d+ wine/.test(fest.short)
       && fest.taken >= 100 && fest.last && fest.cooldown === 2 && fest.afterOff && fest.music === 'festival' && fest.musicLater !== 'festival' && errors.length === 0,
     JSON.stringify({ ...fest, errors }));
+  check('a festival size the god\'s temples cannot hold is greyed out, with the reason on the button and under it',
+    fest.granary && fest.largeOff && /^Needs a (staffed )?large temple of Ceres\./.test(fest.largeTitle) && /^Large festival: Needs a (staffed )?large temple of Ceres\.$/.test(fest.templeNote) && errors.length === 0,
+    JSON.stringify({ largeTitle: fest.largeTitle, templeNote: fest.templeNote }));
 
   // 5a5. Auto-pause (ui/autoPause.js): Settings turns on "a fire breaks out";
   //      a fire in the running game then pauses it, with a note that goes
@@ -1873,6 +1889,11 @@ try {
     const app = window.colonia;
     const m = app.game.map;
     app.ui.console.run('arch');
+    // By now this city is often in debt (-150 to -300 Dn around day 140,
+    // more or less as the steps before ran fast or slow), and the road
+    // dragged under the arch failed for want of money: this step is about
+    // the arch, so the treasury is topped up first.
+    if (app.game.city.treasury < 2000) app.ui.console.run(`money ${Math.ceil(2000 - app.game.city.treasury)}`);
     // A 5 x 3 patch of open land near the middle: a road along its middle row, the arch over it.
     const c = { x: Math.floor(m.w / 2), y: Math.floor(m.h / 2) };
     for (let r = 0; r < 30; r++) {
@@ -2181,6 +2202,21 @@ try {
   await page.evaluate(() => window.colonia.turnView(-window.colonia.renderer.viewTurn));
   const units = await page.evaluate(() => window.colonia.game.units.size);
   check('soldiers and raiders survive save + load', units > 0, `${units} units`);
+  // A save made when a salary above the rank was allowed (sim/governor.js
+  // salaryWithinRank): it loads at the rank's rate, and the toast says what
+  // went back to the treasury (it is said while the save loads, before the
+  // game's messages reach the screen, so the app shows it after).
+  const lowered = await page.evaluate(() => {
+    const app = window.colonia;
+    const raw = JSON.parse(localStorage.getItem('colonia.save.quick'));
+    const gv = raw.city.governor;
+    Object.assign(gv, { salaryRank: Math.min(10, gv.rank + 1), savings: 500, paidThisYear: 100000 });
+    app.importText(JSON.stringify(raw));
+    const now = app.game.city.governor;
+    return { rank: now.rank, salaryRank: now.salaryRank, savings: now.savings, toast: [...document.querySelectorAll('#messages .toast')].map((t) => t.textContent).find((t) => /pays no governor above his rank/.test(t)) || '' };
+  });
+  check('an older save drawing a salary above the rank loads at the rank\'s rate, and a toast says what went back to the treasury',
+    lowered.salaryRank === lowered.rank && lowered.savings === 0 && /your salary is an? \w+'s \d+ Dn a month, and the 500 Dn you drew above/.test(lowered.toast) && errors.length === 0, JSON.stringify(lowered));
   await page.keyboard.press('Escape');
   await page.click('text=Save game');
   check('save menu shows localStorage usage', await page.isVisible('text=Stored in this browser (localStorage)'));
@@ -2900,6 +2936,99 @@ try {
     const raider = await clickUnit('enemy');
     check('clicking a raiding warrior opens his panel, naming his people and what the warband is after', !!raider.at && raider.target?.kind === 'unit' && raider.chip === 'Cimbri and Teutones' && /Warband/.test(raider.text) && serrors.length === 0, JSON.stringify({ ...raider, text: (raider.text || '').slice(0, 200) }));
     await sp.close();
+  }
+
+  // 6f. Clicks on figures by buildings: a recruit training at the Military
+  //     Academy, standing in plain view by its corner, could not be clicked
+  //     (a building hid whatever stood within a box as tall as its sprite).
+  //     Then forts at rest: their men stand in the yard, inside the walls,
+  //     and a click on one there opens his panel.
+  {
+    const mp = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+    const merrors = [];
+    mp.on('pageerror', (e) => merrors.push(`pageerror: ${e.message}`));
+    mp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) merrors.push(m.text()); });
+    await mp.goto(`${url}?skipmenu=1&seed=fp1&mute=1`);
+    await mp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const rec = await mp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      const c = app.ui.console;
+      c.run('demo 2');
+      c.run('garrison');
+      c.run('academy');
+      let w = null;
+      for (let d = 0; d < 160 && !w; d++) {
+        c.run('days 1');
+        w = [...app.game.walkers.values()].find((v) => v.type === 'recruit' && v.state === 'training');
+      }
+      if (w) app.renderer.camera.centerOnTile(w.x, w.y);
+      return w ? { id: w.id, x: w.x, y: w.y } : null;
+    });
+    // A click on his body, a few pixels above his feet, after a frame has drawn him.
+    const figureAt = (id, kind) => mp.evaluate(([id, kind]) => {
+      const app = window.colonia;
+      const r = app.renderer;
+      const cam = r.camera;
+      const s = (kind === 'unit' ? r.unitSpots : r.walkerSpots).find((v) => v.id === id);
+      if (!s) return null;
+      const q = cam.toScreen(s.wx, s.wy - 8);
+      const rect = app.canvas.getBoundingClientRect();
+      return { x: rect.left + q.x / cam.dpr, y: rect.top + q.y / cam.dpr };
+    }, [id, kind]);
+    const panelOf = () => mp.evaluate(() => ({ target: window.colonia.ui.info.target, text: document.querySelector('#info-panel')?.textContent || '' }));
+    let recClick = null;
+    if (rec) {
+      await mp.waitForTimeout(300);
+      const p = await figureAt(rec.id, 'walker');
+      if (p) {
+        await mp.mouse.click(p.x, p.y);
+        await mp.waitForTimeout(150);
+        recClick = await panelOf();
+      }
+    }
+    check('a recruit training at the Military Academy, beside its corner, opens his panel when clicked', !!rec && recClick?.target?.kind === 'walker' && recClick.target.id === rec.id && /Recruit/i.test(recClick.text) && merrors.length === 0,
+      JSON.stringify({ rec, target: recClick?.target, text: (recClick?.text || '').slice(0, 120), merrors }));
+    // The forts' men at rest: in their yards, and clickable there.
+    const yard = await mp.evaluate(() => {
+      const app = window.colonia;
+      app.ui.info.close();
+      app.ui.console.run('days 90');
+      const g = app.game;
+      const inside = (u) => { const f = g.buildings.get(u.fort); return !!f && u.x >= f.x && u.y >= f.y && u.x < f.x + f.size && u.y < f.y + f.size; };
+      const idle = [...g.units.values()].filter((u) => u.side === 'rome' && u.fort && u.state === 'idle');
+      const man = idle.find(inside);
+      if (man) { const f = g.buildings.get(man.fort); app.renderer.camera.centerOnTile(f.x + 1, f.y + 1); }
+      return { idle: idle.length, inside: idle.filter(inside).length, id: man ? man.id : 0 };
+    });
+    check('forts at rest: every idle soldier stands in his fort\'s yard, inside its walls', yard.idle > 0 && yard.inside === yard.idle, JSON.stringify(yard));
+    let manClick = null;
+    if (yard.id) {
+      await mp.waitForTimeout(300);
+      // A man the pointer picks on his own body (in a tight yard a neighbour's box may be nearer).
+      const pick = await mp.evaluate((fortOf) => {
+        const app = window.colonia;
+        const r = app.renderer;
+        const cam = r.camera;
+        const rect = app.canvas.getBoundingClientRect();
+        for (const s of r.unitSpots) {
+          const u = app.game.units.get(s.id);
+          if (!u || u.fort !== fortOf) continue;
+          const q = cam.toScreen(s.wx, s.wy - 8);
+          if (r.pickUnit(q.x / cam.dpr, q.y / cam.dpr) === s.id) return { id: s.id, x: rect.left + q.x / cam.dpr, y: rect.top + q.y / cam.dpr };
+        }
+        return null;
+      }, await mp.evaluate((id) => window.colonia.game.units.get(id).fort, yard.id));
+      if (pick) {
+        await mp.mouse.click(pick.x, pick.y);
+        await mp.waitForTimeout(150);
+        manClick = { id: pick.id, ...(await panelOf()) };
+      }
+      if (shots) await mp.screenshot({ path: path.join(shots, 'smoke-fort-yard.png') });
+    }
+    check('a click on a soldier in his fort\'s yard opens his panel', !!manClick && manClick.target?.kind === 'unit' && manClick.target.id === manClick.id && merrors.length === 0,
+      JSON.stringify({ id: manClick?.id, target: manClick?.target, text: (manClick?.text || '').slice(0, 120), merrors }));
+    await mp.close();
   }
 
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet

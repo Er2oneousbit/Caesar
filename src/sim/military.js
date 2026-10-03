@@ -12,10 +12,11 @@
  *   One recruit: legionary 50 weapons, archer 50 arrows, cavalryman 1 horse.
  *
  * Units (both sides) move freely over open land in continuous tile
- * coordinates (tile centers are at .5). Roman soldiers stand on formation
- * spots around their fort (or a rally point the player picks). At the fort they
- * hold their ground (fight only what comes to them); deployed, they engage
- * raiders around the rally point. Raiders follow a "flow field": one
+ * coordinates (tile centers are at .5). Roman soldiers at rest stand in
+ * their fort's yard, inside its walls; while enemies are about they stand
+ * on formation spots by it, where they always stood (or around a rally point the player
+ * picks). At the fort they hold their ground (fight only what comes to
+ * them); deployed, they engage raiders around the rally point. Raiders follow a "flow field": one
  * Dijkstra pass from every building tile gives each land tile the cost to
  * reach the nearest building, so every raider just walks downhill. Walls cost
  * extra in that field, so raiders pick the cheapest place to break through.
@@ -34,7 +35,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { UNIT_TYPES, FORT_CAPACITY, TRAIN_DAYS } from '../data/units.js';
+import { UNIT_TYPES, FORT_CAPACITY, TRAIN_DAYS, FORT_YARD, FORT_GATEWAY } from '../data/units.js';
 import { TOOLS } from '../data/buildings.js';
 import { WALKER_TYPES } from '../data/walkers.js';
 import { RECRUIT_COST, RECRUIT_SOURCE, GOODS } from '../data/goods.js';
@@ -42,7 +43,7 @@ import { Terrain, Road, Wall } from '../world/map.js';
 import { MinHeap } from '../world/pathfinding.js';
 import { INVASION_PRESETS } from '../data/scenarios.js';
 import { difficultyOf } from '../data/difficulty.js';
-import { spawnWalker, killWalker, STRIDE_WRAP, mainOf } from './entities.js';
+import { spawnWalker, killWalker, STRIDE_WRAP, mainOf, inOwnFort } from './entities.js';
 import { followPath } from './movement.js';
 import { transact } from './economy.js';
 import { igniteBuilding, collapseBuilding, riskRates, withArticle } from './risk.js';
@@ -73,6 +74,16 @@ const SLOT_OFFSETS = [[0, 0], [0.26, -0.26], [-0.26, 0.26], [0.26, 0.26], [-0.26
 // def.aggro * 1.5 around it and chase up to 4 tiles farther (fightZone).
 const HOLD_REACH = 2;
 const HOLD_LEASH = 1;
+// A fort's men rest in its yard, inside its walls, and stand to on its
+// ground by it (formationSpots around its post, where they always stood)
+// while raiders, Caesar's men or a revolt are in the province, or raider
+// ships off its shore: they come out long before a warband crosses the map,
+// so they meet it where and as they always did. A wolf or an angry villager
+// calls them out only within STAND_TO_REACH tiles of the fort's post, and a
+// man already out goes back in only once it is STAND_DOWN_SLACK tiles beyond
+// that (a wolf roaming about the line would have him in and out by turns).
+const STAND_TO_REACH = 12;
+const STAND_DOWN_SLACK = 4;
 const WALL_HP = { [Wall.WALL]: 220, [Wall.GATE]: 320 };
 const FIELD_WALL_COST = 14; // how much raiders dislike breaking a wall vs walking
 const TOWER_RANGE = 8;
@@ -535,9 +546,203 @@ function formationSpots(game, fort) {
   return spots;
 }
 
-/** Where a soldier should stand right now. */
+/**
+ * A soldier's spot in his fort's ranks: on its ground by it (around its post),
+ * or around its rally point. His fight zone is measured from here (an
+ * archer's) or from the whole formation (fightZone), wherever he stands.
+ */
 function postOf(game, u, fort) {
   return formationSpots(game, fort)[u.slot % FORT_CAPACITY];
+}
+
+// ---------------------------------------------------------------------------
+// The fort's yard: where its men rest, inside the walls
+// ---------------------------------------------------------------------------
+
+/**
+ * A point (u, v) of a fort's unturned art, in tiles of a 3 x 3 fort, as a
+ * map point: scaled to the fort's size and turned as the fort stands (the
+ * R key's turn, b.turn), as render/turn.js turnUV turns the art itself.
+ */
+function fortPoint(fort, u, v) {
+  const S = fort.size;
+  const a = (u * S) / 3;
+  const b = (v * S) / 3;
+  switch ((fort.turn || 0) & 3) {
+    case 1: return { x: fort.x + S - b, y: fort.y + a };
+    case 2: return { x: fort.x + S - a, y: fort.y + S - b };
+    case 3: return { x: fort.x + b, y: fort.y + S - a };
+    default: return { x: fort.x + a, y: fort.y + b };
+  }
+}
+
+/** Where a soldier stands at rest: his spot in his fort's yard (FORT_YARD). */
+export function yardSpot(fort, slot) {
+  const spots = FORT_YARD[fort.def.unit] || FORT_YARD.legionary;
+  const [u, v] = spots[slot % spots.length];
+  return fortPoint(fort, u, v);
+}
+
+/**
+ * Where a fort's men go in and out: `out`, the middle of the open tile in
+ * front of the gateway in its art (FORT_GATEWAY, turned with the fort), and
+ * `door`, the middle of the footprint tile behind it. With that tile built
+ * over, the post's tile (fortPost) and the footprint tile beside it; null
+ * when that is shut too (the men stay where they are, in or out). Fort
+ * footprints stay closed to everyone: a man walks in through here only,
+ * and leaves through here before any route is planned (planPath cannot
+ * start inside a building). The gateway's tile counts only if it leads
+ * somewhere (gateLeadsOut): walled into a pocket it would have kept the
+ * whole garrison in. Cached per fort until the map changes (derived, not
+ * saved).
+ */
+export function fortGate(game, fort) {
+  const map = game.map;
+  const key = `${map.revision}:${fort.x},${fort.y},${fort.turn || 0}`;
+  if (!game.fortGates) game.fortGates = new Map(); // fort id -> { key, gate }
+  const hit = game.fortGates.get(fort.id);
+  if (hit && hit.key === key) return hit.gate;
+  const S = fort.size;
+  const tile = (p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) });
+  const open = (t) => map.inBounds(t.x, t.y) && passable(game, 'rome', map.idx(t.x, t.y));
+  const mid = (t) => ({ x: t.x + 0.5, y: t.y + 0.5 });
+  const [gu, gv] = FORT_GATEWAY;
+  const out = tile(fortPoint(fort, gu, gv + 1.5 / S));
+  const post = tile(fortPost(game, fort));
+  let gate = null;
+  if (open(out) && gateLeadsOut(game, fort, out, post)) gate = { out: mid(out), door: mid(tile(fortPoint(fort, gu, gv - 1.5 / S))) };
+  else if (open(post)) {
+    const door = { x: Math.min(fort.x + S - 1, Math.max(fort.x, post.x)), y: Math.min(fort.y + S - 1, Math.max(fort.y, post.y)) };
+    gate = { out: mid(post), door: mid(door) };
+  }
+  game.fortGates.set(fort.id, { key, gate });
+  return gate;
+}
+
+/**
+ * Does the open tile `out` before a fort's gateway lead anywhere: to the
+ * fort's post, or to open ground 3 tiles or more from the fort? A small
+ * breadth-first search over open tiles, outside the footprint.
+ */
+function gateLeadsOut(game, fort, out, post) {
+  const map = game.map;
+  const S = fort.size;
+  const far = (x, y) => Math.max(fort.x - x, x - (fort.x + S - 1), fort.y - y, y - (fort.y + S - 1)) >= 3;
+  const start = map.idx(out.x, out.y);
+  const seen = new Set([start]);
+  const queue = [start];
+  for (let q = 0; q < queue.length && q < 200; q++) {
+    const x = map.xOf(queue[q]);
+    const y = map.yOf(queue[q]);
+    if ((x === post.x && y === post.y) || far(x, y)) return true;
+    for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!map.inBounds(nx, ny)) continue;
+      const j = map.idx(nx, ny);
+      if (seen.has(j) || !passable(game, 'rome', j)) continue;
+      seen.add(j);
+      queue.push(j);
+    }
+  }
+  return false;
+}
+
+/**
+ * A step straight toward (tx, ty), the ground unchecked: only inside a
+ * fort's walls (nothing there stands in a man's way) and through its gate,
+ * between the door tile and the open tile in front of it.
+ */
+function stepFree(u, tx, ty, speed) {
+  const dx = tx - u.x;
+  const dy = ty - u.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.05) { u.moving = false; return true; }
+  const step = Math.min(d, speed);
+  u.x += (dx / d) * step;
+  u.y += (dy / d) * step;
+  const sdx = dx - dy;
+  if (Math.abs(sdx) > 0.01) u.facing = sdx > 0 ? 1 : -1;
+  u.moving = true;
+  u.stuck = 0;
+  u.walked = (u.walked + step) % STRIDE_WRAP;
+  return false;
+}
+
+const onTile = (u, p) => Math.floor(u.x) === Math.floor(p.x) && Math.floor(u.y) === Math.floor(p.y);
+
+/** A step of a man in his fort's yard on his way out: to the door tile, then out of the gate. */
+function leaveFort(u, gate, speed) {
+  u.state = 'march';
+  u.path = null;
+  const to = onTile(u, gate.door) ? gate.out : gate.door;
+  stepFree(u, to.x, to.y, speed);
+}
+
+/**
+ * A step of a man at rest toward his spot in the yard: through the gate
+ * when he is on its tile, straight to his spot inside, else on to the gate
+ * as to any post (marchToPost). `gate` null: he is inside and cannot get
+ * out, so he goes to his spot all the same.
+ */
+function goToYard(game, u, fort, gate, def) {
+  if (inOwnFort(game, u) || !gate) {
+    u.path = null;
+    const spot = yardSpot(fort, u.slot);
+    if (stepFree(u, spot.x, spot.y, def.speed)) { u.state = 'idle'; u.stuck = 0; } else u.state = 'march';
+    return;
+  }
+  if (onTile(u, gate.out)) {
+    u.state = 'march';
+    u.path = null;
+    stepFree(u, gate.door.x, gate.door.y, def.speed);
+    return;
+  }
+  marchToPost(game, u, gate.out, def, true);
+}
+
+/**
+ * One tick of a man's march to a spot outside (his place in the ranks, or
+ * with `toGate` his fort's gate on his way in): idle once there, or as near
+ * as the ground lets him (a spot built over). A route planned for the
+ * other one (`u.pathGate` says which) is dropped: when the men stand to or
+ * stand down halfway, they turn at once rather than walk it out.
+ */
+function marchToPost(game, u, post, def, toGate = false) {
+  const d = Math.hypot(post.x - u.x, post.y - u.y);
+  // Close enough, or as close as the terrain allows (post slot blocked).
+  if (d < 0.15 || (d < 1.2 && u.stuck > 10)) { u.state = 'idle'; u.moving = false; u.path = null; u.stuck = 0; return; }
+  u.state = 'march';
+  if (u.pathFor) { u.path = null; u.pathFor = 0; } // a route toward an enemy who is gone
+  if (u.path && !!u.pathGate !== toGate) u.path = null;
+  if (u.path) { followUnitPath(game, u, def.speed); return; }
+  const plan = () => { replan(game, u, post.x, post.y); if (toGate) u.pathGate = true; };
+  if ((d > 5 || !straightClear(game, u, post.x, post.y)) && u.stuck === 0 && !u.noPath) {
+    plan();
+    if (u.path) return;
+  }
+  moveToward(game, u, post.x, post.y, def.speed);
+  if (u.stuck > 20) plan();
+}
+
+/**
+ * Do a fort's men stand to (on its ground by it, around its post) rather than
+ * rest in its yard? While raiders, Caesar's men or a revolt are in the
+ * province, or raider ships off its shore (`alarm`), and while any other
+ * foe (a wolf, an angry villager) is within STAND_TO_REACH of its post; a
+ * man already `out` stays out until it is STAND_DOWN_SLACK beyond. `memo`:
+ * this tick's nearest foe, per fort.
+ */
+function standsTo(game, fort, watch, out) {
+  if (watch.alarm) return true;
+  let d = watch.memo.get(fort.id);
+  if (d === undefined) {
+    const p = fortPost(game, fort);
+    d = Infinity;
+    for (const e of watch.foes) d = Math.min(d, Math.hypot(e.x - p.x, e.y - p.y));
+    watch.memo.set(fort.id, d);
+  }
+  return d <= STAND_TO_REACH + (out ? STAND_DOWN_SLACK : 0);
 }
 
 /**
@@ -1054,8 +1259,12 @@ function pickTarget(enemies, u, zone) {
   return best;
 }
 
-/** One soldier's tick. `enemies`: every land unit hostile to Rome (hostileToRome). */
-function updateRoman(game, u, enemies) {
+/**
+ * One soldier's tick. `enemies`: every land unit hostile to Rome
+ * (hostileToRome); `watch`: what calls a fort's men out of its yard
+ * (standsTo).
+ */
+function updateRoman(game, u, enemies, watch) {
   const def = UNIT_TYPES[u.type];
   const fort = game.buildings.get(u.fort);
   if (!fort) { removeUnit(game, u, 'disbanded'); return; }
@@ -1077,14 +1286,23 @@ function updateRoman(game, u, enemies) {
     }
   }
   u.target = target ? target.id : 0;
+  const inside = inOwnFort(game, u);
 
   if (target) {
     u.state = 'engage';
     const d = Math.hypot(target.x - u.x, target.y - u.y);
-    if (d <= def.range) {
+    // Nobody fights from the yard: an archer there shooting over the wall was
+    // out of every enemy's reach (they do not pick men inside), so he goes out
+    // first like the rest.
+    if (d <= def.range && !inside) {
       u.moving = false;
       u.path = null;
       if (u.cooldown <= 0) attackUnit(game, u, def, target);
+      return;
+    }
+    if (inside) {
+      const gate = fortGate(game, fort);
+      if (gate) { leaveFort(u, gate, def.speed); u.state = 'engage'; } else u.moving = false;
       return;
     }
     approach(game, u, target, def.speed);
@@ -1100,31 +1318,36 @@ function updateRoman(game, u, enemies) {
     }
     return;
   }
-  // No enemy: to (or at) his post.
-  const d = Math.hypot(post.x - u.x, post.y - u.y);
-  // Close enough, or as close as the terrain allows (post slot blocked).
-  if (d < 0.15 || (d < 1.2 && u.stuck > 10)) { u.state = 'idle'; u.moving = false; u.path = null; u.stuck = 0; return; }
-  u.state = 'march';
-  if (u.pathFor) { u.path = null; u.pathFor = 0; } // a route toward an enemy who is gone
-  if (u.path) { followUnitPath(game, u, def.speed); return; }
-  if ((d > 5 || !straightClear(game, u, post.x, post.y)) && u.stuck === 0 && !u.noPath) {
-    replan(game, u, post.x, post.y);
-    if (u.path) return;
-  }
-  moveToward(game, u, post.x, post.y, def.speed);
-  if (u.stuck > 20) replan(game, u, post.x, post.y);
+  // No enemy: at rest in the yard, or to (or at) his post in the ranks. A
+  // man inside goes out by the gate first; with the gate shut he stays in,
+  // and one outside stands in the ranks.
+  const rest = !fort.rally && !standsTo(game, fort, watch, !inside);
+  const gate = rest || inside ? fortGate(game, fort) : null;
+  if (inside ? rest || !gate : rest && gate) { if (u.pathFor) u.pathFor = 0; goToYard(game, u, fort, gate, def); return; }
+  if (inside) { if (u.pathFor) u.pathFor = 0; leaveFort(u, gate, def.speed); return; }
+  marchToPost(game, u, post, def);
 }
 
 /**
- * A soldier sent to a distant battle (sim/battle.js) marches to the map exit
- * over open land, as to his post, and leaves the province there. One who
- * cannot get there in AWAY_MAX_TICKS (cut off by water, say) is taken to have
- * found another way out.
+ * A soldier of an older save still on his way to a distant battle (sim/battle.js
+ * now sends troops away at once) marches to the map exit over open land, as
+ * to his post, and leaves the province there. One who cannot get there in
+ * AWAY_MAX_TICKS (cut off by water, say) is taken to have found another way
+ * out. The gate step is a safety net: no such man should be in a yard, but
+ * one there must never plan a route from inside the walls.
  */
 function marchOut(game, u) {
   const ex = game.map.exit;
   u.state = 'away';
   u.target = 0;
+  // Out of his fort's yard by the gate first (no route starts inside a building).
+  const gate = inOwnFort(game, u) ? fortGate(game, game.buildings.get(u.fort)) : null;
+  if (gate) {
+    leaveFort(u, gate, UNIT_TYPES[u.type].speed);
+    u.state = 'away';
+    if (game.time.totalTicks - (u.awayTick || 0) > AWAY_MAX_TICKS) leaveForBattle(game, u);
+    return;
+  }
   const d = marchTo(game, u, ex.x + 0.5, ex.y + 0.5, UNIT_TYPES[u.type].speed);
   if (d < 1.2 || game.time.totalTicks - (u.awayTick || 0) > AWAY_MAX_TICKS) leaveForBattle(game, u);
 }
@@ -1154,10 +1377,12 @@ function replan(game, u, x, y) {
   if (u.noPath > 0) return;
   u.path = planPath(game, u, x, y);
   u.pathIndex = 0;
+  if (u.pathGate) u.pathGate = false; // (a route to a fort's gate says so after: marchToPost)
   if (!u.path) u.noPath = 60;
 }
 
-function updateRaider(game, u, romans) {
+/** One raider's tick. `romans`: the soldiers he can get at; `soldiers`: how many the city has at home. */
+function updateRaider(game, u, romans, soldiers) {
   const def = UNIT_TYPES[u.type];
   const map = game.map;
   const inv = game.military.active;
@@ -1178,7 +1403,7 @@ function updateRaider(game, u, romans) {
   }
   // Fight soldiers who come close.
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && Math.hypot(target.x - u.x, target.y - u.y) > def.aggro * 1.6) target = null;
+  if (target && (Math.hypot(target.x - u.x, target.y - u.y) > def.aggro * 1.6 || inOwnFort(game, target))) target = null;
   if ((game.time.totalTicks + u.id) % 6 === 0 || !target) target = nearestHostile(romans, u.x, u.y, def.aggro) || target;
   u.target = target ? target.id : 0;
   if (target) {
@@ -1192,7 +1417,7 @@ function updateRaider(game, u, romans) {
   if (fightPrefect(game, u, def)) return;
   // A missile man of a people who aim at the city's people, in a city with
   // few soldiers: a walker in reach (the original's rule).
-  if (def.ranged && volleyAtWalkers(game, u, def, inv, romans)) return;
+  if (def.ranged && volleyAtWalkers(game, u, def, inv, soldiers)) return;
   if (u.prey) u.prey = 0;
   // Otherwise head for his people's targets, or the nearest building, via the flow field.
   const tx = Math.floor(u.x);
@@ -1253,8 +1478,8 @@ function updateRaider(game, u, romans) {
  * once (missiles only know units), as a slinger's at a prefect does.
  * @returns {boolean} true when he spent his turn on a walker
  */
-function volleyAtWalkers(game, u, def, inv, romans) {
-  if (romans.length >= WALKER_TARGET_SOLDIERS || !raidPeople(game, inv).missilesAtWalkers) return false;
+function volleyAtWalkers(game, u, def, inv, soldiers) {
+  if (soldiers >= WALKER_TARGET_SOLDIERS || !raidPeople(game, inv).missilesAtWalkers) return false;
   let w = u.prey ? game.walkers.get(u.prey) : null;
   const reach = (p) => canHarm(p) && Math.hypot(p.x + 0.5 - u.x, p.y + 0.5 - u.y) <= def.range;
   if (w && !reach(w)) w = null;
@@ -1370,23 +1595,29 @@ export function updateMilitary(game) {
   // one here, and no one picks a fight with them. (Liburnians sailing out are
   // in `fleet`: sim/navy.js sends them on.)
   const home = romans.some((u) => u.away) ? romans.filter((u) => !u.away) : romans;
+  // What calls a fort's men out of its yard this tick (standsTo).
+  const watch = { alarm: enemies.length > 0 || pirates.length > 0, foes: hostiles, memo: new Map() };
   for (const u of romans) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
     if (u.away) marchOut(game, u);
-    else updateRoman(game, u, hostiles);
+    else updateRoman(game, u, hostiles, watch);
   }
+  // Men in their fort's yard are out of everyone's reach behind its walls
+  // (they come out to fight: standsTo); they still count as the city's
+  // soldiers (a slinger's choice of walkers, sim/legion.js overrun).
+  const seen = home.some((u) => inOwnFort(game, u)) ? home.filter((u) => !inOwnFort(game, u)) : home;
   for (const u of enemies) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
-    if (u.legion) updateLegionary(game, u, home);
-    else updateRaider(game, u, home);
+    if (u.legion) updateLegionary(game, u, seen);
+    else updateRaider(game, u, seen, home.length);
   }
-  if (wild.length) updateWolves(game, wild, home);
+  if (wild.length) updateWolves(game, wild, seen);
   for (const u of villagers) {
     if (!game.units.has(u.id)) continue;
     if (u.cooldown > 0) u.cooldown--;
-    updateVillager(game, u, home);
+    updateVillager(game, u, seen);
   }
   if (fleet.length || pirates.length) updateNavy(game, fleet, pirates);
   updateTowers(game, hostiles.filter((e) => game.units.has(e.id) && hostileToRome(e)));

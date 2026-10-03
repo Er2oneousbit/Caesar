@@ -13,6 +13,15 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.3)
+
+* **Numbered forts and their keys**: each fort takes the lowest free number (Castra III), shown on its panel, in the Military advisor and over its deployed standard. Shift+1 to 9 glides to that fort and opens its panel, and again to its standard when deployed; F deploys the fort or naval station whose panel is open
+* **Rally flags you can click and drag**: a click on a deployed standard or squadron flag opens its panel with Recall; a drag moves it, with a ghost that turns red where it cannot stand (the Deploy click's ghost does too). A drag never pans the map, and a drop off the map or over a panel leaves it where it was
+* **Troops sent to a distant battle leave at once**: walking to the map's edge took longer than some marches, and the march months stand for the whole way
+* Saves: version 25 (an older save numbers its forts in the order they were built)
+* Headless sim: every level identical to v0.18.2
+* 896 unit tests, 190 browser checks
+
 ## Done (v0.18.2)
 
 * **A switch per event in the sandbox**: the setup's Events box ticks or clears six switches below it: Rome's wage (rise and cut together), land trade stopped, sea trade stopped, bad water, mine collapse, clay pit flood. A month that draws a switched-off event brings nothing, so the others keep their odds. Missions keep their designed events, and the Hall of Fame scores missions only, so the switches never touch a score. URL flag `events=wages,sea` and `npm run sim -- --events wages,clay` take a list

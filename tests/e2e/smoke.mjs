@@ -2816,6 +2816,88 @@ try {
       }
       check('the low bridge draws at every view turn without an error', berrors.length === 0, berrors.join(' | '));
     }
+    // A ship bridge dragged across the river climbs from the road on ramps:
+    // a walker set down where the ramp meets the water is drawn lifted a
+    // third of the deck's height, one in the middle of the bank's road tile
+    // not at all, and one a tile further on is up on the deck.
+    const span = await bp.evaluate((low) => {
+      const app = window.colonia;
+      const m = app.game.map;
+      // A straight east-west crossing of 3 to 8 water tiles, clear of the low bridge.
+      for (let i = 0; i < m.size; i++) {
+        const x = m.xOf(i);
+        const y = m.yOf(i);
+        if (x < 6 || y < 6 || x > m.w - 16 || y > m.h - 6 || (low && Math.abs(y - low.y) < 3) || m.isWater(x, y) || !m.isWater(x + 1, y)) continue;
+        let n = 1;
+        while (n <= 9 && m.isWater(x + n, y)) n++;
+        if (n < 4 || n > 9) continue;
+        const end = m.idx(x + n, y);
+        if (m.terrain[i] === 3 || m.terrain[end] === 3 || m.building[i] || m.building[end] || m.wall[i] || m.wall[end] || m.road[i] || m.road[end]) continue;
+        app.renderer.camera.centerOnTile(x + n / 2, y);
+        return { x, y, n };
+      }
+      return null;
+    }, crossing);
+    if (span) {
+      await bp.waitForTimeout(200);
+      const toScreen = (tx, ty) => bp.evaluate(([x, y]) => {
+        const cam = window.colonia.renderer.camera;
+        const r = window.colonia.canvas.getBoundingClientRect();
+        return { x: r.left + (((x - y) * 32 - cam.x) * cam.scale) / cam.dpr, y: r.top + (((x + y + 1) * 16 - cam.y) * cam.scale) / cam.dpr };
+      }, [tx, ty]);
+      await bp.evaluate(() => window.colonia.ui.selectTool('bridge'));
+      const a = await toScreen(span.x, span.y);
+      const b = await toScreen(span.x + span.n, span.y);
+      await bp.mouse.move(a.x, a.y);
+      await bp.mouse.down();
+      await bp.mouse.move(b.x, b.y, { steps: 8 });
+      await bp.mouse.up();
+      await bp.evaluate(() => window.colonia.ui.selectTool(null));
+    }
+    const ramp = await bp.evaluate(() => {
+      const app = window.colonia;
+      const g = app.game;
+      const m = g.map;
+      const plainRoad = (x, y) => m.inBounds(x, y) && m.road[m.idx(x, y)] === 1 && !m.isWater(x, y) && !m.building[m.idx(x, y)] && !m.wall[m.idx(x, y)] && !m.aqueduct[m.idx(x, y)] && !m.roadblock[m.idx(x, y)];
+      const ship = (x, y) => m.inBounds(x, y) && m.road[m.idx(x, y)] === 3 && !m.bridgeLow[m.idx(x, y)];
+      let spot = null;
+      for (let i = 0; i < m.size && !spot; i++) {
+        const x = m.xOf(i);
+        const y = m.yOf(i);
+        if (!ship(x, y)) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          // The bank's road tile at (x + dx, y + dy), the bridge running on to (x - dx, y - dy).
+          if (plainRoad(x + dx, y + dy) && ship(x - dx, y - dy) && ship(x - 2 * dx, y - 2 * dy)) { spot = { x, y, dx, dy }; break; }
+        }
+      }
+      if (!spot) return null;
+      const r = app.renderer;
+      r.setViewTurn(0);
+      r.camera.centerOnTile(spot.x, spot.y);
+      const id = g.nextWalkerId++;
+      const w = { id, type: 'prefect', kind: 'roamer', x: spot.x + spot.dx, y: spot.y + spot.dy, tx: spot.x, ty: spot.y, progress: 0, moving: true, speed: 0, state: 'roam', path: null, pathIndex: 0, origin: 0, target: 0, cargo: null, people: 0, lastDir: -1, walked: 0, anim: 0, dead: false };
+      g.walkers.set(id, w);
+      const lifts = [];
+      const picks = [];
+      for (const [p, sx, sy] of [[0, w.x, w.y], [0.5, w.x, w.y], [0.5, spot.x, spot.y]]) {
+        w.x = sx; w.y = sy;
+        w.tx = sx - spot.dx; w.ty = sy - spot.dy;
+        w.progress = p;
+        r.render(0, 0.016);
+        const s = r.walkerSpots.find((q) => q.id === id);
+        // Its feet on the ground, unturned: (x + y) * 16 from the middle of its spot.
+        const fx = w.x + (w.tx - w.x) * p + 0.5;
+        const fy = w.y + (w.ty - w.y) * p + 0.5;
+        lifts.push(s ? Math.round((fx + fy) * 16 - s.wy) : null);
+        // A click on its body picks it, up on the ramp and the deck as on the road.
+        const q = s ? r.camera.toScreen(s.wx, s.wy - 9) : null;
+        picks.push(!!q && r.pickWalker(q.x / r.camera.dpr, q.y / r.camera.dpr) === id);
+      }
+      g.walkers.delete(id);
+      return { spot, lifts, picks };
+    });
+    check('a walker on the ship bridge\'s ramp is drawn lifted onto it (none in the middle of the bank\'s road, a third up at the water, the deck a tile on), and a click on it picks it',
+      !!ramp && ramp.lifts[0] === 0 && ramp.lifts[1] === 11 && ramp.lifts[2] === 33 && ramp.picks.every(Boolean), JSON.stringify({ span, ramp }));
     await bp.close();
   }
 

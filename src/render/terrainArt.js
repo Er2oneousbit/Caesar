@@ -11,8 +11,9 @@
  * Seasons: grass, meadow, forest-floor and tree colors come from a palette
  * (weather.js seasonPalette), so the renderer asks for the current month's
  * look. Lying snow (pal.snow, 0..1) whitens the ground (SNOW_HOLD: sand and
- * rock keep less), caps the trees and the tops of the rocks. Water, roads,
- * plazas and bridges stay as they are: cleared roads read well in the snow.
+ * rock keep less), caps the trees, the tops of the rocks and a stone
+ * bridge's parapets. Water, roads, plazas and bridge decks stay as they
+ * are: cleared roads read well in the snow.
  *
  * Edge blending: where two kinds of ground meet, blendSpec() draws a wavy
  * fringe of the "stronger" neighbour onto the weaker tile (forest floor >
@@ -526,70 +527,229 @@ export function plazaSpec(variant) {
   };
 }
 
-/** Height of a bridge's deck over the water (px at zoom 1): people on it are drawn this much higher (renderer.js bridgeSpan). */
-export const BRIDGE_DECK_Z = 10;
+/**
+ * Height of a ship bridge's deck over the water (px at zoom 1). A
+ * merchantman's mast stands about 45 px with its pennant (and bobs a px
+ * more) and a liburnian's 41: seen over a ship under the middle of a tile,
+ * the deck's width and its far parapet hide 13 px more than the deck's
+ * height, so both pass under it with their masts out of sight (a test
+ * measures the ships' art against it). People on it stand this high
+ * (bridgeProfile.js).
+ */
+export const BRIDGE_DECK_Z = 33;
+const BR_S0 = 0.2; // the deck's two sides across the tile
+export const BRIDGE_FAR_SIDE = BR_S0; // (bridgeProfile.js mastClip: the far parapet a mast must stay under)
+const BR_S1 = 0.8;
+const BR_PIER = 0.14; // a pier's thickness along the bridge
+const BR_SPRING = 7; // where the arches spring, over the water
+const BR_DECK = 5; // the deck's thickness over an arch
+export const BR_PARAPET = 4;
+const BR_STONE = '#b9ad94';
+const BR_PAVING = '#a89a80';
+
+/** Height at `t` (0..1 along a bridge tile) of a deck whose heights at 0, 0.5 and 1 are `h`. */
+export function deckAt(h, t) {
+  return t <= 0.5 ? h[0] + (h[1] - h[0]) * t * 2 : h[1] + (h[2] - h[1]) * (t - 0.5) * 2;
+}
+
+/** A band along a deck (a parapet, a beam): from `lo` to `hi` over the deck at `s`, the deck's heights `h`. */
+function deckBand(at, s, h, lo, hi) {
+  return [at(0, s, h[0] + lo), at(0.5, s, h[1] + lo), at(1, s, h[2] + lo), at(1, s, h[2] + hi), at(0.5, s, h[1] + hi), at(0, s, h[0] + hi)];
+}
 
 /**
- * Stone bridge over water, high enough for ships to pass under its arch: a
- * pier in the middle of each tile, an arch either side, the deck on top
- * with low parapets. axis 'u' runs along x, 'v' along y. Drawn as an object
- * over a ship under it (renderer.js), not as ground.
+ * Level courses of masonry on a wall, clipped to its outline `pts`: against
+ * them the top of a ramp reads as a slope, even where a ramp climbing
+ * toward the viewer runs almost flat across the screen.
  */
-export function bridgeSpec(axis) {
-  const z = BRIDGE_DECK_Z;
-  const stone = '#b9ad94';
+function courses(ctx, pts, at, s, top, color) {
+  ctx.save();
+  ctx.beginPath();
+  pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+  ctx.clip();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let z = 4; z < top; z += 5) {
+    const a = at(-0.1, s, z);
+    const b = at(1.1, s, z);
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Light on a ramp's paving from the sun in the upper left of the screen
+ * (the shadows fall to the lower right): a ramp climbing toward the front
+ * of the view faces the sun and shows lighter, one going down darker.
+ */
+function rampLight(rise) {
+  return rise > 0 ? 'rgba(255,248,230,0.16)' : 'rgba(40,30,20,0.14)';
+}
+
+/** A line through points, for parapet copings and rails. */
+function strokeLine(ctx, pts, color, lw) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+}
+
+/**
+ * Stone ship bridge over water, one tile of it: an arch from pier to pier
+ * high enough for a ship to sail under, the paved deck on top with a
+ * parapet each side. axis 'u' runs along x, 'v' along y (in the view). The
+ * deck stands h0, hm, h1 px up at the tile's near edge, middle and far
+ * edge (bridgeProfile.js: a ramp comes down to each bank), and the arch
+ * flattens under a ramp. Each tile draws the pier at its far end (+t): the
+ * pier at its near end is the previous tile's, drawn earlier, so a ship
+ * under this tile (drawn just before it, renderer.js) shows in front of
+ * the near pier and behind the far one, as it would. `abut`: the run's
+ * first tile in the view, which draws its own support at the near end.
+ * `snow` (0..1) caps the parapets and cutwaters; the deck stays clear, as
+ * the roads do.
+ */
+export function bridgeSpec(axis, h0 = BRIDGE_DECK_Z, hm = h0, h1 = hm, abut = false, snow = 0) {
+  const h = [h0, hm, h1];
+  const deck = (t) => deckAt(h, t);
+  const top = Math.max(h0, hm, h1);
+  const stone = BR_STONE;
   const dark = shade(stone, -0.35);
-  const deck = '#a89a80';
+  const cap = snow ? mix(shade(stone, 0.12), SNOW, 0.5 + snow * 0.5) : shade(stone, 0.12);
   // Along the bridge (t, 0..1) and across it (s, 0..1), as tile (u, v).
-  const at = axis === 'u' ? (t, s, h) => P(t, s, h) : (t, s, h) => P(s, t, h);
+  const at = axis === 'u' ? (t, s, z) => P(t, s, z) : (t, s, z) => P(s, t, z);
+  const tA = abut ? BR_PIER : 0; // the opening, between the supports
+  const tB = 1 - BR_PIER;
+  const crown = BRIDGE_DECK_Z - BR_DECK - 3;
+  // A round arch from pier to pier, pressed flat where a ramp comes down over it.
+  const arch = (t) => {
+    const u = (t - tA) / (tB - tA);
+    const round = BR_SPRING + (crown - BR_SPRING) * Math.sqrt(Math.max(0, 1 - (2 * u - 1) ** 2));
+    return Math.max(-2, Math.min(round, deck(t) - BR_DECK));
+  };
+  const N = 14;
+  const curve = (s, dz = 0) => {
+    const pts = [];
+    for (let k = 0; k <= N; k++) {
+      const t = tA + ((tB - tA) * k) / N;
+      pts.push(at(t, s, arch(t) + dz));
+    }
+    return pts;
+  };
   return {
     w: TW + 4,
-    h: TH + 8 + z + 6,
+    h: TH + 10 + top + BR_PARAPET + 4,
     ax: HALF_W + 2,
-    ay: z + 6,
+    ay: top + BR_PARAPET + 4,
     draw(ctx) {
-      // The pier: a stone block in the water under the middle of the tile.
-      const [p0, p1] = [0.42, 0.58];
-      poly(ctx, [at(p0, 0.82, -2), at(p1, 0.82, -2), at(p1, 0.82, z), at(p0, 0.82, z)], shade(stone, -0.1), dark, 0.6);
-      poly(ctx, [at(p1, 0.18, -2), at(p1, 0.82, -2), at(p1, 0.82, z), at(p1, 0.18, z)], shade(stone, -0.25), dark, 0.6);
-      // The front face of the deck, with an arch either side of the pier.
-      const face = (s0) => {
-        ctx.beginPath();
-        const [ax0, ay0] = at(0, s0, z + 2);
-        ctx.moveTo(ax0, ay0);
-        const top = at(1, s0, z + 2);
-        ctx.lineTo(top[0], top[1]);
-        const end = at(1, s0, z - 4);
-        ctx.lineTo(end[0], end[1]);
-        // arches: from each end down to the pier, curving up between
-        for (const [t0, t1] of [[1, p1], [p0, 0]]) {
-          const a0 = at(t0, s0, z - 4);
-          const a1 = at(t1, s0, z - 4);
-          const mid = at((t0 + t1) / 2, s0, z - 1);
-          ctx.lineTo(a0[0], a0[1]);
-          ctx.quadraticCurveTo(mid[0] * 2 - (a0[0] + a1[0]) / 2, mid[1] * 2 - (a0[1] + a1[1]) / 2 + 6, a1[0], a1[1]);
-          if (t1 === p1) { const q = at(p0, s0, z - 4); ctx.lineTo(q[0], q[1]); }
-        }
-        ctx.closePath();
-        ctx.fillStyle = shade(stone, -0.05);
-        ctx.fill();
-        ctx.strokeStyle = dark;
-        ctx.lineWidth = 0.6;
-        ctx.stroke();
-      };
-      face(0.82);
-      // The deck and its joints.
-      poly(ctx, [at(-0.02, 0.18, z + 2), at(1.02, 0.18, z + 2), at(1.02, 0.82, z + 2), at(-0.02, 0.82, z + 2)], deck, shade(deck, -0.35), 0.6);
-      for (let k = 1; k < 4; k++) {
-        const p = at(k / 4, 0.18, z + 2);
-        const q = at(k / 4, 0.82, z + 2);
-        ctx.strokeStyle = shade(deck, -0.18);
-        ctx.lineWidth = 0.5;
-        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      // The far pier's end, seen through the next tile's arch (or the
+      // bridge's end over a bank), and the near support's inner face.
+      poly(ctx, [at(1, BR_S1, -2), at(1, BR_S0, -2), at(1, BR_S0, h1), at(1, BR_S1, h1)], shade(stone, -0.28), dark, 0.5);
+      if (abut) poly(ctx, [at(tA, BR_S1, -2), at(tA, BR_S0, -2), at(tA, BR_S0, deck(tA)), at(tA, BR_S1, deck(tA))], shade(stone, -0.32), dark, 0.5);
+      // The front face: the deck's edge and the far pier down into the
+      // water, with the arch left open (a ship under it shows through).
+      const face = [at(0, BR_S1, h0), at(0.5, BR_S1, hm), at(1, BR_S1, h1), at(1, BR_S1, -2), at(tB, BR_S1, -2), ...curve(BR_S1).reverse()];
+      if (abut) face.push(at(tA, BR_S1, -2), at(0, BR_S1, -2));
+      poly(ctx, face, shade(stone, -0.04), dark, 0.6);
+      courses(ctx, face, at, BR_S1, top, shade(stone, -0.14));
+      // The cornice under the parapet, and the ring of voussoirs round the arch.
+      poly(ctx, deckBand(at, BR_S1, h, -2.4, 0), shade(stone, 0.08));
+      strokeLine(ctx, curve(BR_S1, 1.3), shade(stone, 0.1), 1.6);
+      ctx.strokeStyle = shade(stone, -0.22);
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      for (let k = 1; k < 6; k++) {
+        const t = tA + ((tB - tA) * k) / 6;
+        const a = arch(t);
+        if (a < 1) continue;
+        const p = at(t, BR_S1, a);
+        const q = at(t, BR_S1, a + 2.6);
+        ctx.moveTo(p[0], p[1]);
+        ctx.lineTo(q[0], q[1]);
       }
-      // Parapets.
-      for (const s0 of [0.18, 0.82]) {
-        poly(ctx, [at(0, s0, z + 2), at(1, s0, z + 2), at(1, s0, z + 5), at(0, s0, z + 5)], shade(stone, s0 > 0.5 ? -0.08 : 0.05), dark, 0.6);
+      ctx.stroke();
+      // The cutwater: a pointed stone nose on the pier, breaking the current.
+      const cwH = BR_SPRING - 1;
+      const tm = (tB + 1) / 2;
+      const nose = BR_S1 + 0.09;
+      poly(ctx, [at(tB, BR_S1, -2), at(tm, nose, -2), at(tm, nose, cwH), at(tB, BR_S1, cwH)], shade(stone, -0.02), dark, 0.5);
+      poly(ctx, [at(tm, nose, -2), at(1, BR_S1, -2), at(1, BR_S1, cwH), at(tm, nose, cwH)], shade(stone, -0.18), dark, 0.5);
+      poly(ctx, [at(tB, BR_S1, cwH), at(tm, nose, cwH), at(1, BR_S1, cwH), at(tm, (BR_S1 + nose) / 2, cwH + 3)], cap, dark, 0.4);
+      // The deck and its paving joints.
+      poly(ctx, [at(-0.02, BR_S0, h0), at(0.5, BR_S0, hm), at(1.02, BR_S0, h1), at(1.02, BR_S1, h1), at(0.5, BR_S1, hm), at(-0.02, BR_S1, h0)], BR_PAVING, shade(BR_PAVING, -0.35), 0.6);
+      if (hm !== h0) poly(ctx, [at(0, BR_S0, h0), at(0.5, BR_S0, hm), at(0.5, BR_S1, hm), at(0, BR_S1, h0)], rampLight(hm - h0));
+      if (h1 !== hm) poly(ctx, [at(0.5, BR_S0, hm), at(1, BR_S0, h1), at(1, BR_S1, h1), at(0.5, BR_S1, hm)], rampLight(h1 - hm));
+      ctx.strokeStyle = shade(BR_PAVING, -0.18);
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      for (let k = 1; k < 4; k++) {
+        const p = at(k / 4, BR_S0, deck(k / 4));
+        const q = at(k / 4, BR_S1, deck(k / 4));
+        ctx.moveTo(p[0], p[1]);
+        ctx.lineTo(q[0], q[1]);
+      }
+      ctx.stroke();
+      // Parapets, the far one first, each with its coping (snow on it in winter).
+      for (const s of [BR_S0, BR_S1]) {
+        poly(ctx, deckBand(at, s, h, 0, BR_PARAPET), shade(stone, s > 0.5 ? -0.08 : 0.05), dark, 0.6);
+        strokeLine(ctx, [at(0, s, h0 + BR_PARAPET), at(0.5, s, hm + BR_PARAPET), at(1, s, h1 + BR_PARAPET)], cap, snow ? 1.5 : 1);
+      }
+    },
+  };
+}
+
+/**
+ * The foot of a ship bridge's ramp, on the road tile at the bank: from road
+ * level in the middle of the tile up to `h` px at its edge on the bridge's
+ * side, between low walls, so the road visibly climbs to the deck. axis
+ * 'u' or 'v' as bridgeSpec (in the view); sign +1 when the bridge lies at
+ * +t from this tile, -1 at -t. The road's other half, and any road joining
+ * it from the side, stays at road level.
+ */
+export function bridgeFootSpec(axis, sign, h, snow = 0) {
+  const stone = BR_STONE;
+  const dark = shade(stone, -0.35);
+  const cap = snow ? mix(shade(stone, 0.12), SNOW, 0.5 + snow * 0.5) : shade(stone, 0.12);
+  const at = axis === 'u' ? (t, s, z) => P(t, s, z) : (t, s, z) => P(s, t, z);
+  const edge = sign > 0 ? 1 : 0;
+  const rise = (t) => h * Math.max(0, Math.min(1, (t - 0.5) * sign * 2));
+  const post = 0.5 + sign * 0.08; // where the walls rise out of the road
+  return {
+    w: TW + 4,
+    h: TH + 8 + h + BR_PARAPET + 4,
+    ax: HALF_W + 2,
+    ay: h + BR_PARAPET + 4,
+    draw(ctx) {
+      const ramp = [at(0.5, BR_S0, 0), at(edge, BR_S0, h), at(edge, BR_S1, h), at(0.5, BR_S1, 0)];
+      poly(ctx, ramp, BR_PAVING, shade(BR_PAVING, -0.35), 0.6);
+      poly(ctx, ramp, rampLight(sign));
+      ctx.strokeStyle = shade(BR_PAVING, -0.18);
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      for (const t of [0.5 + sign * 0.17, 0.5 + sign * 0.34]) {
+        const p = at(t, BR_S0, rise(t));
+        const q = at(t, BR_S1, rise(t));
+        ctx.moveTo(p[0], p[1]);
+        ctx.lineTo(q[0], q[1]);
+      }
+      ctx.stroke();
+      // The near retaining wall under the ramp, then the parapets on the
+      // walls, each starting at a stone post where the road begins to climb.
+      const wall = [at(post, BR_S1, 0), at(edge, BR_S1, 0), at(edge, BR_S1, h), at(post, BR_S1, rise(post))];
+      poly(ctx, wall, shade(stone, -0.04), dark, 0.6);
+      courses(ctx, wall, at, BR_S1, h, shade(stone, -0.14));
+      for (const s of [BR_S0, BR_S1]) {
+        poly(ctx, [at(post, s, rise(post)), at(edge, s, h), at(edge, s, h + BR_PARAPET), at(post, s, rise(post) + BR_PARAPET)], shade(stone, s > 0.5 ? -0.08 : 0.05), dark, 0.6);
+        strokeLine(ctx, [at(post, s, rise(post) + BR_PARAPET), at(edge, s, h + BR_PARAPET)], cap, snow ? 1.5 : 1);
+        // The post: a squat block a little taller than the parapet.
+        const [p0, p1] = sign > 0 ? [post - 0.06, post] : [post, post + 0.06];
+        poly(ctx, [at(p0, s + 0.03, 0), at(p1, s + 0.03, 0), at(p1, s + 0.03, BR_PARAPET + 3), at(p0, s + 0.03, BR_PARAPET + 3)], shade(stone, -0.06), dark, 0.5);
+        poly(ctx, [at(p1, s + 0.03, 0), at(p1, s - 0.03, 0), at(p1, s - 0.03, BR_PARAPET + 3), at(p1, s + 0.03, BR_PARAPET + 3)], shade(stone, -0.24), dark, 0.5);
+        poly(ctx, [at(p0, s - 0.03, BR_PARAPET + 3), at(p1, s - 0.03, BR_PARAPET + 3), at(p1, s + 0.03, BR_PARAPET + 3), at(p0, s + 0.03, BR_PARAPET + 3)], cap);
       }
     },
   };
@@ -603,19 +763,19 @@ export const LOW_BRIDGE_DECK_Z = 5;
  * a cross brace under the middle of each tile, a plank deck laid across the
  * way, and a light rail each side. Low and plain beside the stone ship
  * bridge, so the player sees at a glance which one closes the river to
- * boats. axis 'u' runs along x, 'v' along y, as bridgeSpec.
+ * boats. axis 'u' runs along x, 'v' along y, as bridgeSpec; h0, hm, h1 the
+ * deck's height at the tile's near edge, middle and far edge (its short
+ * ramps down to the banks, bridgeProfile.js).
  */
-export function lowBridgeSpec(axis) {
-  const z = LOW_BRIDGE_DECK_Z;
+export function lowBridgeSpec(axis, h0 = LOW_BRIDGE_DECK_Z, hm = h0, h1 = hm) {
+  const h = [h0, hm, h1];
+  const deck = (t) => deckAt(h, t);
+  const z = Math.max(h0, hm, h1);
   const wood = '#8d6b45';
   const dark = shade(wood, -0.45);
-  const deck = '#a07c52';
-  const at = axis === 'u' ? (t, s, h) => P(t, s, h) : (t, s, h) => P(s, t, h);
-  const line = (ctx, a, b, color, lw) => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lw;
-    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
-  };
+  const plank = '#a07c52';
+  const at = axis === 'u' ? (t, s, zz) => P(t, s, zz) : (t, s, zz) => P(s, t, zz);
+  const line = (ctx, a, b, color, lw) => strokeLine(ctx, [a, b], color, lw);
   return {
     w: TW + 4,
     h: TH + 8 + z + 10,
@@ -624,19 +784,19 @@ export function lowBridgeSpec(axis) {
     draw(ctx) {
       // The bent: back pile, brace, front pile (back to front).
       const pile = (s0) => {
-        poly(ctx, [at(0.45, s0, -3), at(0.55, s0, -3), at(0.55, s0, z), at(0.45, s0, z)], shade(wood, -0.15), dark, 0.5);
+        poly(ctx, [at(0.45, s0, -3), at(0.55, s0, -3), at(0.55, s0, hm), at(0.45, s0, hm)], shade(wood, -0.15), dark, 0.5);
       };
       pile(0.24);
-      line(ctx, at(0.5, 0.24, z - 1), at(0.5, 0.76, -1), shade(wood, -0.25), 1.2);
+      if (hm > 2) line(ctx, at(0.5, 0.24, hm - 1), at(0.5, 0.76, -1), shade(wood, -0.25), 1.2);
       pile(0.76);
       // The deck, its planks across the way, and its front beam.
-      poly(ctx, [at(-0.02, 0.2, z), at(1.02, 0.2, z), at(1.02, 0.8, z), at(-0.02, 0.8, z)], deck, dark, 0.6);
-      for (let k = 1; k < 8; k++) line(ctx, at(k / 8, 0.2, z), at(k / 8, 0.8, z), shade(deck, -0.22), 0.5);
-      poly(ctx, [at(-0.02, 0.8, z), at(1.02, 0.8, z), at(1.02, 0.8, z - 2), at(-0.02, 0.8, z - 2)], shade(wood, -0.1), dark, 0.5);
+      poly(ctx, [at(-0.02, 0.2, h0), at(0.5, 0.2, hm), at(1.02, 0.2, h1), at(1.02, 0.8, h1), at(0.5, 0.8, hm), at(-0.02, 0.8, h0)], plank, dark, 0.6);
+      for (let k = 1; k < 8; k++) line(ctx, at(k / 8, 0.2, deck(k / 8)), at(k / 8, 0.8, deck(k / 8)), shade(plank, -0.22), 0.5);
+      poly(ctx, deckBand(at, 0.8, h, -2, 0), shade(wood, -0.1), dark, 0.5);
       // Rails: posts and a top bar each side.
       for (const s0 of [0.2, 0.8]) {
-        for (const t of [0.1, 0.5, 0.9]) line(ctx, at(t, s0, z), at(t, s0, z + 4), dark, 0.9);
-        line(ctx, at(0, s0, z + 4), at(1, s0, z + 4), shade(wood, s0 > 0.5 ? -0.1 : 0.08), 1.1);
+        for (const t of [0.1, 0.5, 0.9]) line(ctx, at(t, s0, deck(t)), at(t, s0, deck(t) + 4), dark, 0.9);
+        strokeLine(ctx, [at(0, s0, h0 + 4), at(0.5, s0, hm + 4), at(1, s0, h1 + 4)], shade(wood, s0 > 0.5 ? -0.1 : 0.08), 1.1);
       }
     },
   };

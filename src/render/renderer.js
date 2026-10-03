@@ -67,7 +67,8 @@ import { roman } from '../sim/fortNumbers.js';
 import { rallyTarget } from '../sim/rallyPoints.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
-import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, BRIDGE_DECK_Z, lowBridgeSpec, LOW_BRIDGE_DECK_Z, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
+import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, bridgeFootSpec, lowBridgeSpec, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
+import { bridgeLook, footLook, bridgeFeet, deckLift, mastClip } from './bridgeProfile.js';
 import { buildingSpec, artState, drawWarehouseStock, drawGranaryStock, shadowLength, flagsFor, templeAltar } from './buildingArt.js';
 import { drawFlag, drawShoppers, drawCrowd, drawAltarFlame, drawMapGate, GATE_H, drawNoRoadSign, NO_ROAD_SIGN_R } from './liveArt.js';
 import { lacksRoad, accessEdgeTiles } from '../sim/roadAccess.js';
@@ -480,18 +481,24 @@ const BRIDGE_DEPTH = 0.006;
 /**
  * A figure on a bridge tile: a ship (or boat) passes under the deck, drawn
  * just before it; anyone else walks on the deck, lifted to it and drawn
- * after it. `d`: the draw depth to use (undefined: the figure's own; the
- * view's x + y at view turn `turn`), `lift`: world px up.
+ * after it. On the road tile at a ship bridge's bank, where its ramp's
+ * foot climbs from the middle of the tile (bridgeProfile.js), people are
+ * lifted onto the ramp and drawn after it too. `d`: the draw depth to use
+ * (undefined: the figure's own; the view's x + y at view turn `turn`),
+ * `lift`: world px up, the deck's height under the figure (deckLift).
  * @returns {{d:number|undefined, lift:number}}
  */
 export function bridgeSpan(map, fx, fy, onWater, turn = 0) {
   const tx = Math.floor(fx);
   const ty = Math.floor(fy);
-  if (!map.inBounds(tx, ty) || map.road[map.idx(tx, ty)] !== Road.BRIDGE) return { d: undefined, lift: 0 };
+  if (!map.inBounds(tx, ty)) return { d: undefined, lift: 0 };
+  const onBridge = map.road[map.idx(tx, ty)] === Road.BRIDGE;
+  const feet = onBridge || onWater ? null : bridgeFeet(map, tx, ty);
+  if (!onBridge && !feet?.length) return { d: undefined, lift: 0 };
   const [vx, vy] = viewTileOf(tx, ty, turn, map.w, map.h);
   const deck = vx + vy + 1 + BRIDGE_DEPTH;
   // (No boat is ever under a low bridge: sim/bridges.js.)
-  return onWater ? { d: deck - 0.004, lift: 0 } : { d: deck + 0.004, lift: map.bridgeLow[map.idx(tx, ty)] ? LOW_BRIDGE_DECK_Z : BRIDGE_DECK_Z };
+  return onWater ? { d: deck - 0.004, lift: 0 } : { d: deck + 0.004, lift: deckLift(map, fx, fy, feet) };
 }
 
 /**
@@ -876,10 +883,26 @@ export class Renderer {
           // The deck is an object, not ground: drawn over a ship passing under
           // it and under the people crossing it (bridgeDepth). On the ground
           // it was drawn first, and ships sailed over the bridge (playtest).
-          // A low bridge (timber on piles) or a ship bridge (stone arches).
-          const axis = viewAxis(map.hasRoad(x + 1, y) || map.hasRoad(x - 1, y) ? 'u' : 'v', vt);
-          const spr = map.bridgeLow[i] ? this.sprites.get(`brl${axis}`, () => lowBridgeSpec(axis)) : this.sprites.get(`br${axis}`, () => bridgeSpec(axis));
+          // A low bridge (timber on piles) or a ship bridge (stone arches),
+          // drawn with the deck's heights at the tile's ends and middle
+          // (ramps down to the banks), in the view's order along it.
+          const { axis, low, h: [h0, hm, h1], abut } = bridgeLook(map, x, y, vt);
+          let spr;
+          if (low) spr = this.sprites.get(`brl${axis}${h0}.${hm}.${h1}`, () => lowBridgeSpec(axis, h0, hm, h1));
+          else {
+            const key = `br${axis}${h0}.${hm}.${h1}${abut ? 'a' : ''}`;
+            spr = this.sprites.get(`${key}${this.snowKey}`, () => bridgeSpec(axis, h0, hm, h1, abut, pal.snow), this.snowPrev === null ? null : `${key}${this.snowPrev}`);
+          }
           items.push({ d: depth + BRIDGE_DEPTH, kind: K_STRIP, spr, wx, wy, full: true });
+        } else if (map.road[i]) {
+          // A ship bridge's ramp starts on the road tile at its bank (its
+          // foot), drawn like the deck: after a ship, before the people on it.
+          for (const f of bridgeFeet(map, x, y)) {
+            const { axis, sign } = footLook(f, vt);
+            const key = `brf${axis}${sign > 0 ? '+' : '-'}${f.h}`;
+            const spr = this.sprites.get(`${key}${this.snowKey}`, () => bridgeFootSpec(axis, sign, f.h, pal.snow), this.snowPrev === null ? null : `${key}${this.snowPrev}`);
+            items.push({ d: depth + BRIDGE_DEPTH, kind: K_STRIP, spr, wx, wy, full: true });
+          }
         }
         if (map.aqueduct[i]) {
           const mask = rotNibbles(this.aqueductMask(x, y), vt);
@@ -930,7 +953,9 @@ export class Renderer {
       // (Its depth goes with the spot: a click asks what was drawn over it, coverDepthAt.)
       const d = span.d ?? fd + 0.003;
       this.walkerSpots.push({ id: w.id, wx, wy, d, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
-      items.push({ d, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy), aim });
+      // A ship under a bridge's deck is cut off at its far parapet (mastClip).
+      const clipY = w.kind === 'ship' && span.d !== undefined ? mastClip(map, fx, fy, vt) : null;
+      items.push({ d, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy), aim, clipY });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -952,7 +977,8 @@ export class Renderer {
       const face = this.unitFace(u, vt); // (before the view test: it keeps the heading of units out of view too)
       if (!inView(wx, wy) && !(naval && inView(wx, wy - 60))) continue;
       const d = this.yardDepth(u, fx, fy) ?? span.d ?? ux + uy + 0.004;
-      items.push({ d, kind: K_UNIT, u, wx, wy, stride, face });
+      const clipY = naval && span.d !== undefined ? mastClip(map, fx, fy, vt) : null; // (a ship under a deck, as a walker's)
+      items.push({ d, kind: K_UNIT, u, wx, wy, stride, face, clipY });
       if (naval) this.shipSpots.push({ id: u.id, wx, wy });
       else this.unitSpots.push({ id: u.id, wx, wy, d });
     }
@@ -969,11 +995,14 @@ export class Renderer {
     for (const b of game.buildings.values()) {
       if (!b.rally) continue;
       const [rx, ry] = toView(b.rally.x, b.rally.y, vt, map.w, map.h);
+      // On a bridge a fort's standard stands on the deck with its men (a
+      // station's flag stays on the water under it, with its ships).
+      const span = bridgeSpan(map, b.rally.x, b.rally.y, b.def.kind === 'station', vt);
       const wx = (rx - ry) * HALF_W;
-      const wy = (rx + ry) * HALF_H;
+      const wy = (rx + ry) * HALF_H - span.lift;
       if (!inView(wx, wy)) continue;
       // A fort's standard carries its number (Shift+N finds it); a station's flag none.
-      items.push({ d: rx + ry + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b), id: b.id, num: b.number > 0 ? roman(b.number) : '' });
+      items.push({ d: span.d ?? rx + ry + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b), id: b.id, num: b.number > 0 ? roman(b.number) : '' });
       this.flagSpots.push({ id: b.id, wx, wy });
     }
     // Map entrance and exit: a gateway over the Imperial road at the map edge.
@@ -1006,7 +1035,9 @@ export class Renderer {
           break;
         case K_WALKER:
           if (it.w.id === this.selectedWalker) this.drawWalkerRing(it);
+          if (it.clipY != null) this.clipBelow(it.clipY);
           drawWalker(ctx, it.w, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, it.dirX, it.dirY, it.stride, it.origin, it.aim);
+          if (it.clipY != null) ctx.restore();
           break;
         case K_FIRE:
           drawFlames(ctx, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, this.time, it.seed);
@@ -1018,7 +1049,9 @@ export class Renderer {
           this.drawExtra(it);
           break;
         case K_UNIT:
+          if (it.clipY != null) this.clipBelow(it.clipY);
           drawUnit(ctx, it.u, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, this.time, tick, (selFort !== 0 && (it.u.fort === selFort || it.u.station === selFort)) || it.u.id === this.selectedUnit, it.stride, it.face);
+          if (it.clipY != null) ctx.restore();
           break;
         case K_PROJ:
           drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, it.vel[0], it.vel[1]);
@@ -1587,11 +1620,30 @@ export class Renderer {
   }
 
   /** Dashed line from a deployed fort to its standard. */
+  /**
+   * Draw only below the world polyline `pts` (left to right) until the
+   * caller's ctx.restore(): a ship under a bridge's deck, cut off at its
+   * far parapet (bridgeProfile.js mastClip).
+   */
+  clipBelow(pts) {
+    const { ctx, camera: cam } = this;
+    const k = cam.scale;
+    const bottom = ctx.canvas.height + 1;
+    ctx.save();
+    ctx.beginPath();
+    for (const p of pts) ctx.lineTo((p.x - cam.x) * k, (p.y - cam.y) * k);
+    ctx.lineTo((pts[pts.length - 1].x - cam.x) * k, bottom);
+    ctx.lineTo((pts[0].x - cam.x) * k, bottom);
+    ctx.closePath();
+    ctx.clip();
+  }
+
   drawRallyLine(b) {
     const { ctx, camera: cam } = this;
     const k = cam.scale;
     const from = this.worldAt(b.x + b.size / 2, b.y + b.size / 2);
     const to = this.worldAt(b.rally.x, b.rally.y);
+    to.y -= bridgeSpan(this.game.map, b.rally.x, b.rally.y, b.def.kind === 'station', cam.turn).lift; // (up on a bridge's deck, as the standard)
     const a = [(from.x - cam.x) * k, (from.y - cam.y) * k];
     const z = [(to.x - cam.x) * k, (to.y - cam.y) * k];
     ctx.save();

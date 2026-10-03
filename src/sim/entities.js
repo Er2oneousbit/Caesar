@@ -380,6 +380,8 @@ export function addBuilding(game, type, x, y, size, { quiet = false, turn = 0 } 
   computeAccessRoad(game, b);
   faceWater(game, b);
   b.createdDay = game.time.totalDays;
+  // A new garden or statue starts fully tended (sim/gardens.js).
+  if (b.def.tended) { b.tendedDay = game.time.totalDays; b.careStep = 0; }
   game.markDirty('des', 'water');
   map.touch();
   if (!quiet) game.events.emit('buildingAdded', b);

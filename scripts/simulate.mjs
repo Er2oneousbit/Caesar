@@ -66,6 +66,7 @@ import { spareBoat, hasBoatTimber } from '../src/sim/fishing.js';
 import { PEOPLES } from '../src/data/peoples.js';
 import { quakeSummary } from '../src/sim/events.js';
 import { parseEventsOption, EVENT_SWITCHES } from '../src/data/events.js';
+import { careInfo, careApplies, YARD_TYPE } from '../src/sim/gardens.js';
 
 const HELP = `
 Headless balance simulation
@@ -419,6 +420,16 @@ const runMonth = () => {
 const INSULA = HOUSE_TIERS.findIndex((t) => t.goods.includes('clothing'));
 const clothing = { months: [], peak: 0, offAt: null, peakBefore: 0 };
 const villaShares = []; // --blocks, --villas, --wine: the share of people in villas, month by month
+// Gardens and statues (sim/gardens.js): each month, the share of its bonus the
+// average one gives and the lowest. Reported only for a city that has some.
+const care = { months: [], lowest: 100 };
+const careMonth = () => {
+  const tended = [...game.buildings.values()].filter((b) => b.def.tended);
+  if (!tended.length) return;
+  const pcts = tended.map((b) => careInfo(game, b).percent);
+  care.months.push(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+  care.lowest = Math.min(care.lowest, ...pcts);
+};
 const pad = (v, n) => String(v).padStart(n);
 console.log(' date        pop  work/jobs  unemp  mood  fed%  food(gran/mkt)  treas   tiers');
 const t0 = Date.now();
@@ -444,6 +455,7 @@ for (let m = 0; m < opts.years * 12; m++) {
   runMonth();
   if (opts.uptown || opts.cloth) clothMonth(m + 1);
   if (quarters) villaShares.push(game.city.population > 0 ? game.city.patricians / game.city.population : 0);
+  careMonth();
   const c = game.city;
   treasuryByMonth.push(c.treasury);
   const out = SIM_MONEY - c.treasury;
@@ -557,6 +569,13 @@ if (opts.uptown || opts.cloth) {
     const after = clothing.months.filter((r) => r.month > opts.clothOff);
     console.log(`Cloth industry demolished after month ${opts.clothOff}: ${clothing.peakBefore} homes at the Insula or above at most before, ${after.length ? Math.min(...after.map((r) => r.top)) : '-'} at the fewest after (${after.map((r) => r.top).join(' ')})`);
   }
+}
+if (care.months.length) {
+  const decor = [...game.buildings.values()].filter((b) => b.def.tended);
+  const yards = [...game.buildings.values()].filter((b) => b.type === YARD_TYPE);
+  const lastYear = care.months.slice(-12);
+  const avg = (a) => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+  console.log(`Gardens: ${decor.length} gardens and statues, ${yards.length} gardeners' yards${careApplies(game) ? '' : ' (no yard here: they never fade)'}; care on average ${avg(care.months)}% of their bonus (${avg(lastYear)}% over the last year), the lowest ${care.lowest}%`);
 }
 const capacityCheck = quarters ? checkCapacity() : null;
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');

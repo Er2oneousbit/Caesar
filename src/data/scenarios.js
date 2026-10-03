@@ -198,8 +198,11 @@ export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
  * ones came with later missions: the house from the first mission, the
  * villa from the third, the palace from the fifth (every building is open
  * from there). No rank is asked for: the mission decides.
+ * The gardeners' yard comes with the garden, from the first mission: its
+ * gardens and statues fade untended only where a yard can be built
+ * (sim/gardens.js careApplies).
  */
-const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'forum', 'governor_house'];
+const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'gardener_yard', 'forum', 'governor_house'];
 const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
 /** The large temples (one per god) come with the third mission, the first to ask for Domus and bigger homes. */
 export const LARGE_TEMPLE_KEYS = Object.freeze(GOD_KEYS.map((g) => `temple_large_${g}`));

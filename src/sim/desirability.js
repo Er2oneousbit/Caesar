@@ -15,6 +15,7 @@
 import { CONFIG } from '../config.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain } from '../world/map.js';
+import { careScale } from './gardens.js';
 
 /** Add one source's contribution to the desirability layer, times `scale` (0..1). */
 function radiate(map, x, y, size, des, scale = 1) {
@@ -42,11 +43,14 @@ const PLAZA_DES = [4, 1, -1, 3];
 /**
  * How much of its desirability a building gives: all of it, except a
  * governor's residence, which gives it as far as it is staffed (an empty
- * residence is a shuttered house). Labor marks desirability for a new pass
- * when a residence's staffing changes (sim/labor.js).
+ * residence is a shuttered house), and a garden or statue, which gives it
+ * as far as it is tended (sim/gardens.js careScale). Labor marks
+ * desirability for a new pass when a residence's staffing changes
+ * (sim/labor.js), and the gardens' care when a decoration's step changes.
  */
 export function desScale(b) {
-  return b.def.kind === 'residence' ? b.efficiency : 1;
+  if (b.def.kind === 'residence') return b.efficiency;
+  return b.def.tended ? careScale(b) : 1;
 }
 const RUBBLE_DES = [-2, 1, 1, 1];
 

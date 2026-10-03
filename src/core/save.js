@@ -186,6 +186,11 @@
  *      sandbox with its events on (or from before them) gets every switch
  *      on, one with them off none, see upgradeEventSwitchesV23(). Campaign
  *      saves store only the mission id and are unchanged.
+ *  25  gardens and statues fade untended (sim/gardens.js): each garden and
+ *      statue holds `tendedDay` (the day a gardener last passed) and
+ *      `careStep` (how far its desirability has faded). An older save's
+ *      start fully tended, last visited the day it loads, see
+ *      upgradeGardensV24().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -522,8 +527,19 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 21) upgradeTradeSwitchesV20(game);
   if (data.version < 22) upgradeTurnsV21(game);
   if (data.version < 23) upgradeEventsV22(game);
+  if (data.version < 25) upgradeGardensV24(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
+  // A garden's or statue's care out of range, or a visit in the future (a
+  // hand-edited file, which would never fade), is taken as tended today: a step past the end of CONFIG.CARE_LEVELS has no share
+  // of its desirability to give, and the whole layer would turn to NaN.
+  for (const b of game.buildings.values()) {
+    if (!b.def.tended) continue;
+    if (!(Number.isInteger(b.careStep) && b.careStep >= 0 && b.careStep < CONFIG.CARE_LEVELS.length) || !Number.isFinite(b.tendedDay) || b.tendedDay > game.time.totalDays) {
+      b.careStep = 0;
+      b.tendedDay = game.time.totalDays;
+    }
+  }
   // A hippodrome's sections lie the way its main section says (they were placed so).
   for (const b of game.buildings.values()) if (b.main && game.buildings.has(b.main)) b.turn = game.buildings.get(b.main).turn;
 
@@ -864,6 +880,21 @@ export function upgradeTurnsV21(game) {
  */
 export function upgradeEventsV22(game) {
   eventStateOf(game.city);
+}
+
+/**
+ * A save before version 25 (before gardens and statues faded untended,
+ * sim/gardens.js): every garden and statue starts fully tended, last visited
+ * the day the save loads, so none fades before a gardener could reach it.
+ * Wired before the derived layers are rebuilt, so the first desirability
+ * pass already counts them at full.
+ */
+export function upgradeGardensV24(game) {
+  for (const b of game.buildings.values()) {
+    if (!b.def.tended) continue;
+    b.tendedDay = game.time.totalDays;
+    b.careStep = 0;
+  }
 }
 
 /**

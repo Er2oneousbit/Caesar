@@ -67,7 +67,8 @@
  *   services   one building per stretch of homes its walker covers (above).
  *              Fountains and hospitals cover their radius, of which HOME_SHARE
  *              is homes. Upkeep (prefects, engineers) covers homes, plus one of
- *              each for the farms and one for any industry
+ *              each for the farms and one for any industry; gardeners' yards
+ *              cover the homes that need gardens and statues (DECOR_DOWN)
  *   food       farms on full meadow at the most productive difficulty: homes
  *              eat their level's kinds of food in equal shares (sim/housing.js
  *              consumeHouse), so the fastest kinds are each grown on their own
@@ -146,6 +147,15 @@ export const MEADOW_FARMED = 2 / 3;
 export const PATRICIAN_SHARE = 0.05;
 /** The villa quarter's homes: the cheapest patrician level (the Villa). */
 export const VILLA_LEVEL = HOUSE_TIERS.findIndex((t) => t.patrician);
+/**
+ * The homes that keep gardens and statues among them: from the level whose
+ * `down` desirability (data/housing.js) first asks for more than the bare
+ * land gives (the Stone Cottage, 4: a well, a temple and trees no longer do),
+ * so the gardeners' yards are planned over their tiles (planCity). A Hut
+ * (down -4) or a Cottage (0) keeps its level on bare land, and a mission 1
+ * town of Huts plans none.
+ */
+export const DECOR_DOWN = 4;
 /** Days a merchant ship stays at an Emporium with storage about 10 road tiles away (docs/GAMEPLAY.md): the docks' count. */
 export const SHIP_STAY_DAYS = 25;
 
@@ -383,6 +393,11 @@ export function planCity(s, people, { production = topProduction(), homesPerStre
   // collectors count with the forums').
   cover('prefecture', everyone, 'fire watch');
   cover('engineer_post', everyone, 'repairs');
+  // Gardeners where gardens and statues stand: among the homes that need
+  // desirability just to keep their level (DECOR_DOWN), whose streets a
+  // player lines with them. Like any walker service, a yard for each stretch
+  // of those homes its gardener's round covers.
+  cover('gardener_yard', (n) => n.down >= DECOR_DOWN, 'gardens and statues');
   cover('market', everyone, 'food and goods to the door');
   if (keys.has('senate')) add('senate', 1, 'culture and prosperity');
   const taxmen = Math.ceil(tilesNeeding(everyone) / reach('forum'));

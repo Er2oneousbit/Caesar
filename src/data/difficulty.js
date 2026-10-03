@@ -49,9 +49,14 @@
  *   eventCooldown    months before the same random event can come again (the
  *                    original had none; these are the later community engine's
  *                    numbers). Rome's wages always wait 12 (data/events.js)
+ *   careFade         how fast an untended garden or statue loses its
+ *                    desirability once its month of grace is over (sim/gardens.js;
+ *                    CONFIG.CARE_STEP_DAYS / careFade days a step): half as
+ *                    fast on Easy, half again as fast on Insane. The grace
+ *                    and the floor stay the same
  *
  * Easy, Normal and Hard only use the first four levers plus raid size, crime,
- * crimePeace, disease and the two event levers (and Easy a longer devolveDays);
+ * crimePeace, disease, the two event levers and careFade (and Easy a longer devolveDays);
  * Insane pulls on all of them.
  *
  * Crime and peace: none on Easy, a little on Normal, some on
@@ -92,6 +97,7 @@ export const DIFFICULTY = Object.freeze({
     winterTrade: 1,
     wolfBite: 4,
     events: 0.5, eventCooldown: 36, // mishaps half as often, and never the same one within 3 years
+    careFade: 0.5, // an untended garden fades over 10 months, not 5
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -108,6 +114,7 @@ export const DIFFICULTY = Object.freeze({
     winterTrade: 1,
     wolfBite: 6,
     events: 1, eventCooldown: 24,
+    careFade: 1,
   }),
   hard: Object.freeze({
     name: 'Hard',
@@ -124,6 +131,7 @@ export const DIFFICULTY = Object.freeze({
     winterTrade: 1,
     wolfBite: 8,
     events: 1.25, eventCooldown: 18,
+    careFade: 1,
   }),
   insane: Object.freeze({
     name: 'Insane',
@@ -142,6 +150,7 @@ export const DIFFICULTY = Object.freeze({
     winterTrade: 2, // winter roads and seas halve trade
     wolfBite: 8,
     events: 1.5, eventCooldown: 12,
+    careFade: 1.5, // fades over 3 months and a third
   }),
 });
 

@@ -26,12 +26,12 @@ import { ledgerNet } from '../src/sim/economy.js';
 import { updateLabor } from '../src/sim/labor.js';
 import {
   newGovernorState, salaryOf, rankForYearPay, salaryFavor, setSalary, paySalary, salaryNewYear,
-  salaryOutlook, donate, residenceOf, storeCampaignSavings, campaignSavings, salaryAtVictory, salaryMonthsSoFar, savingsRecord,
+  salaryOutlook, donate, residenceOf, storeCampaignSavings, campaignSavings, salaryWithinRank, salaryAboveRank, salaryMonthsSoFar, savingsRecord,
 } from '../src/sim/governor.js';
 import { checkOutcome } from '../src/sim/ratings.js';
 import { GIFT_SIZES, GIFT_MEMORY_MONTHS, giftCost, giftFavor, sendGift, giftsMonth } from '../src/sim/emperor.js';
 import {
-  rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, briefingGovernorLine, victoryGovernorLine, victoryTitle, salaryNow,
+  rankLine, salaryOption, salaryPickable, salaryOutlookText, giftLabel, giftBlocked, giftNote, briefingGovernorLine, victoryGovernorLine, victoryTitle, salaryNow,
 } from '../src/ui/governorInfo.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -102,33 +102,39 @@ test('salary: a whole year at the rank\'s rate (a Procurator, 240 Dn) changes no
   assert.equal(salaryMessages(game).length, 0);
 });
 
-test('salary, worked example 1: a Quaestor drawing an Aedile\'s 30 Dn saves 360 a year and loses 2 favor; an Architect\'s 8 Dn saves 96 and gains 1', () => {
-  for (const [rate, saved, favor] of [[6, 360, 48], [3, 96, 51]]) {
-    const game = governed({ rank: 4 });
-    const t0 = game.city.treasury;
-    assert.ok(setSalary(game, rate).ok);
-    game.runTicks(12 * TICKS_PER_MONTH);
-    const c = game.city;
-    assert.equal(c.governor.savings, saved);
-    assert.equal(c.treasury, t0 - saved);
-    assert.equal(c.ratings.favor, favor);
-    assert.equal(salaryMessages(game).length, 1);
-  }
+test('salary, worked example 1: a Quaestor drawing an Architect\'s 8 Dn saves 96 a year and gains 1 favor', () => {
+  const game = governed({ rank: 4 });
+  const t0 = game.city.treasury;
+  assert.ok(setSalary(game, 3).ok);
+  game.runTicks(12 * TICKS_PER_MONTH);
+  const c = game.city;
+  assert.equal(c.governor.savings, 96);
+  assert.equal(c.treasury, t0 - 96);
+  assert.equal(c.ratings.favor, 51);
+  assert.equal(salaryMessages(game).length, 1);
 });
 
-test('salary, worked example 2: Caesar\'s pay all year, switched back on the last day, is judged on what was paid', () => {
-  // The original looked only at the rate set on New Year's Eve (no favor
-  // lost); Colonia judges the year's pay: 1,100 Dn is a Caesar's (a
-  // Proconsul's year is 960), six ranks above a Quaestor.
+test('salary, worked example 2: no rate above the rank; Rome refuses it and says why', () => {
+  // The original let a Quaestor draw an Aedile's 30 Dn and took 2 favor at
+  // New Year; Colonia holds the salary to the rank.
   const game = governed({ rank: 4 });
-  setSalary(game, 10);
-  game.runTicks(11 * TICKS_PER_MONTH);
-  assert.equal(game.city.governor.paidThisYear, 1100);
-  setSalary(game, 4); // the last month at his own rate
-  game.runTicks(TICKS_PER_MONTH);
-  assert.equal(game.city.governor.savings, 1112);
-  assert.equal(game.city.ratings.favor, 44);
-  assert.match(salaryMessages(game)[0].text, /1112 Dn last year is a Caesar's pay, above your rank of Quaestor\. Favor -6\./);
+  for (const above of [5, 6, 10]) {
+    assert.deepEqual(setSalary(game, above), { ok: false, reason: 'Rome pays no governor above his rank: a Quaestor draws at most 12 Dn a month.' }, `rank ${above}`);
+    assert.equal(game.city.governor.salaryRank, 4, 'the rate is unchanged');
+  }
+  assert.equal(salaryAboveRank(game, 4), null);
+  assert.equal(salaryAboveRank(game, 0), null);
+  assert.ok(setSalary(game, 4).ok, 'his own rank');
+  assert.ok(setSalary(game, 1).ok, 'a lower rank');
+  // A Citizen can draw nothing but his own nothing; a Proconsul anything but Caesar's.
+  assert.equal(setSalary(governed({ rank: 0 }), 1).ok, false);
+  const pro = governed({ rank: 9 });
+  assert.equal(setSalary(pro, 10).reason, 'Rome pays no governor above his rank: a Proconsul draws at most 80 Dn a month.');
+  assert.ok(setSalary(pro, 9).ok);
+  // The lower rate still earns its point at New Year.
+  game.runTicks(12 * TICKS_PER_MONTH);
+  assert.equal(game.city.governor.savings, 24);
+  assert.equal(game.city.ratings.favor, 51, 'a Clerk\'s pay all year, under a Quaestor\'s');
 });
 
 test('salary: the yearly rule, worked through', () => {
@@ -137,12 +143,11 @@ test('salary: the yearly rule, worked through', () => {
   assert.equal(rankForYearPay(25), 2, 'a penny over a Clerk\'s year is an Engineer\'s pay');
   assert.equal(rankForYearPay(1200), 10);
   assert.equal(rankForYearPay(5000), 10);
-  assert.equal(salaryFavor(4, 360), -2);
   assert.equal(salaryFavor(4, 144), 0);
   assert.equal(salaryFavor(4, 96), 1);
   assert.equal(salaryFavor(4, 0), 1, 'below the rank is +1 however far below');
   assert.equal(salaryFavor(0, 0), 0, 'a Citizen can never earn the +1');
-  assert.equal(salaryFavor(0, 1200), -10);
+  assert.equal(salaryFavor(4, 360), 0, 'above the rank costs nothing now: it cannot be drawn');
   assert.equal(salaryOf(7), 40);
 });
 
@@ -171,31 +176,66 @@ test('salary: Rome stops it once the mission is won, and judges no more', () => 
   assert.equal(salaryNow(game), 'none (mission won)');
 });
 
-test('salary: what was drawn above the rank in the year of victory is taken back before the savings go on', () => {
-  // The year of victory is never weighed at a New Year (the salary stops),
-  // so Caesar's pay from New Year to the victory once cost nothing and went
-  // on to the next mission. A Quaestor (12 Dn) won in Iunius (month 5): five
-  // months' pay are due him, 60 Dn.
+test('salary: a save drawing above the rank comes down to it on load; what was drawn above goes back to the treasury, no favor lost', () => {
+  // Saves made before the rule could draw any rank's rate. A Quaestor (12
+  // Dn) on Caesar's 100 Dn since New Year, saved in Iunius (month 5): five
+  // payments made, 60 Dn of them due him, 440 above.
   const game = governed({ rank: 4, savings: 1000 });
   const c = game.city;
   assert.equal(salaryMonthsSoFar(5), 5);
   assert.equal(salaryMonthsSoFar(0), 12, 'the payment as Ianuarius begins is December\'s');
   game.time.month = 5;
-  c.governor.paidThisYear = 500; // Caesar's 100 Dn for five months
-  assert.equal(salaryAtVictory(game), 440);
-  assert.equal(c.governor.savings, 560);
-  assert.ok(game.messages.some((m) => /taken back 440 Dn/.test(m.text)));
+  Object.assign(c.governor, { salaryRank: 10, paidThisYear: 500 });
+  c.finance.thisYear.salary = 500;
+  c.ratings.favor = 47;
+  const t0 = c.treasury;
+  const copy = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  const cc = copy.city;
+  assert.deepEqual(cc.governor, { rank: 4, salaryRank: 4, savings: 560, paidThisYear: 60 });
+  assert.equal(cc.treasury, t0 + 440);
+  assert.equal(cc.finance.thisYear.salary, 60, 'the ledger shows the rank\'s pay only');
+  assert.equal(cc.ratings.favor, 47, 'no favor lost for the change');
+  assert.match(copy.messages[0].text, /^Rome now pays no governor above his rank: your salary is a Quaestor's 12 Dn a month, and the 440 Dn you drew above a Quaestor's pay this year has gone back to the treasury\.$/);
+  // New Year then judges a Quaestor's year: no verdict, as for any year at the rank.
+  copy.runTicks(7 * TICKS_PER_MONTH);
+  assert.equal(copy.time.month, 0);
+  assert.equal(cc.ratings.favor, 47 + 3, 'only the drift toward 50');
+  assert.equal(salaryMessages(copy).length, 0);
+  // The victory takes nothing more back (it once did: the year of victory is
+  // never weighed, so what was drawn above the rank went on to the next mission).
+  copy.scenario.goals = { population: 1 };
+  cc.population = 10;
+  const saved = cc.governor.savings;
+  checkOutcome(copy);
+  assert.equal(cc.victory, true);
+  assert.equal(cc.governor.savings, saved);
+});
+
+test('salary: the load rule leaves a rate at or below the rank alone, and gives back only what the savings hold', () => {
+  const game = governed({ rank: 4, savings: 30 });
+  const c = game.city;
+  game.time.month = 5;
   c.governor.paidThisYear = 60;
-  assert.equal(salaryAtVictory(game), 0, 'his own rank\'s pay is his');
-  // checkOutcome does it as it declares the victory.
-  const won = governed({ rank: 4, savings: 1000 });
-  won.time.month = 5;
-  won.city.governor.paidThisYear = 500;
-  won.scenario.goals = { population: 1 };
-  won.city.population = 10;
-  checkOutcome(won);
-  assert.equal(won.city.victory, true);
-  assert.equal(won.city.governor.savings, 560);
+  assert.equal(salaryWithinRank(game), 0);
+  assert.deepEqual(c.governor, { rank: 4, salaryRank: 4, savings: 30, paidThisYear: 60 });
+  c.governor.salaryRank = 2;
+  c.governor.paidThisYear = 25;
+  assert.equal(salaryWithinRank(game), 0);
+  assert.equal(c.governor.salaryRank, 2, 'a lower rate is kept');
+  assert.equal(game.messages.length, 0, 'and nothing is said');
+  // Set back to his own rate after months above it: no rate to lower, but
+  // the pay above the rank still goes back.
+  c.governor.paidThisYear = 200;
+  c.governor.salaryRank = 4;
+  const t0 = c.treasury;
+  assert.equal(salaryWithinRank(game), 30, 'the savings hold 30 of the 140');
+  assert.deepEqual(c.governor, { rank: 4, salaryRank: 4, savings: 0, paidThisYear: 60 });
+  assert.equal(c.treasury, t0 + 30);
+  assert.match(game.messages[0].text, /^Rome now pays no governor above his rank: the 30 Dn you drew above a Quaestor's pay this year has gone back to the treasury\.$/);
+  // A rate that is no rank at all (a hand-edited file) becomes the rank's.
+  c.governor.salaryRank = 'x';
+  salaryWithinRank(game);
+  assert.equal(c.governor.salaryRank, 4);
 });
 
 test('salary: a treasury too poor to pay him earns no thanks for a modest salary', () => {
@@ -220,21 +260,42 @@ test('savings: a damaged campaign record is replaced, so the victory screen stil
   assert.equal(savingsRecord(ok).c3, 90, 'a sound record is kept');
 });
 
-test('salary: set to any rank\'s rate, nothing else', () => {
+test('salary: set to the rank\'s rate or a lower rank\'s, nothing else', () => {
   const game = governed();
   for (const bad of [-1, 11, 2.5, '3', null]) assert.equal(setSalary(game, bad).ok, false);
   assert.ok(setSalary(game, 0).ok);
   assert.equal(game.city.governor.salaryRank, 0);
-  assert.ok(setSalary(game, 10).ok);
+  assert.ok(setSalary(game, SANDBOX_RANK).ok);
+  assert.equal(setSalary(game, 10).ok, false);
+  assert.equal(game.city.governor.salaryRank, SANDBOX_RANK);
 });
 
 test('salary: the outlook for New Year counts what was paid and the months left at today\'s rate', () => {
   const game = governed({ rank: 4 });
   game.runTicks(3 * TICKS_PER_MONTH); // three payments of 12
-  setSalary(game, 6);
-  assert.deepEqual(salaryOutlook(game), { paid: 36 + 9 * 30, worth: 6, favor: -2 });
+  setSalary(game, 3);
+  assert.deepEqual(salaryOutlook(game), { paid: 36 + 9 * 8, favor: 0 }, '108 Dn is more than an Architect\'s year: no lower rank\'s pay');
+  setSalary(game, 0);
+  assert.deepEqual(salaryOutlook(game), { paid: 36, favor: 1 }, 'an Engineer\'s year at most');
   setSalary(game, 4);
-  assert.deepEqual(salaryOutlook(game), { paid: 144, worth: 4, favor: 0 });
+  assert.deepEqual(salaryOutlook(game), { paid: 144, favor: 0 });
+  // Months the treasury could not pay at his own rate earn no point at New
+  // Year (salaryNewYear), and the outlook no longer promises one.
+  game.city.governor.paidThisYear = 12;
+  assert.deepEqual(salaryOutlook(game), { paid: 12 + 9 * 12, favor: 0 });
+  assert.equal(salaryOutlookText(game), 'At this rate you will have drawn 120 Dn by New Year, less than a Quaestor\'s pay but more than an Architect\'s year of 96 Dn: Rome thanks only a year within a lower rank\'s pay.');
+  // A year within an Architect's pay at his own rate now: months unpaid (or
+  // a lower rate given up) earn nothing.
+  game.city.governor.paidThisYear = 0;
+  game.time.month = 6;
+  assert.deepEqual(salaryOutlook(game), { paid: 72, favor: 0 });
+  assert.equal(salaryOutlookText(game), 'At this rate you will have drawn 72 Dn by New Year, less than a Quaestor\'s pay, but your rate is now your rank\'s: Rome thanks only a lower rate chosen, not months the treasury could not pay.');
+  // A lower rate chosen too late in the year (review): 36 paid, then 8 Dn a
+  // month, 108 Dn, above an Architect's 96: no point, and no blame on the treasury.
+  game.time.month = 3;
+  game.city.governor.paidThisYear = 36;
+  setSalary(game, 3);
+  assert.equal(salaryOutlookText(game), 'At this rate you will have drawn 108 Dn by New Year, less than a Quaestor\'s pay but more than an Architect\'s year of 96 Dn: Rome thanks only a year within a lower rank\'s pay.');
 });
 
 // ---------------------------------------------------------------------------
@@ -459,7 +520,7 @@ test('residences: rioters go for the governor\'s residence before anything else'
 
 test('save: the governor, his savings and his gifts survive a save', () => {
   const game = governed({ rank: 3, savings: 640 });
-  setSalary(game, 7);
+  assert.ok(setSalary(game, 1).ok);
   game.runTicks(2 * TICKS_PER_MONTH);
   sendGift(game, 1);
   addBuilding(game, 'governor_villa', 10, 10);
@@ -518,11 +579,12 @@ test('words: the Imperial advisor, the briefing and the victory screen', () => {
   assert.equal(rankLine(new Game({ scenario: findScenario('c2') })), 'Clerk, the rank of step 2 of the campaign');
   assert.equal(rankLine(new Game({ scenario: findScenario('c4p') })), 'Architect, the rank of step 4 of the campaign');
   assert.equal(salaryOption(4, 4), 'Quaestor: 12 Dn a month (your rank)');
-  assert.equal(salaryOption(10, 4), 'Caesar: 100 Dn a month');
+  assert.equal(salaryOption(10, 4), 'Caesar: 100 Dn a month (above your rank)');
+  assert.equal(salaryOption(2, 4), 'Engineer: 5 Dn a month');
+  // The picker lists every rank, those above his greyed out.
+  assert.deepEqual(RANKS.map((r, i) => salaryPickable(i, 4)), [true, true, true, true, true, false, false, false, false, false, false]);
   assert.equal(salaryNow(game), '12 Dn a month (Quaestor\'s rate)');
   assert.equal(salaryOutlookText(game), 'At this rate you will have drawn 144 Dn by New Year, a Quaestor\'s pay: Rome expects no less and minds no more.');
-  setSalary(game, 6);
-  assert.equal(salaryOutlookText(game), 'At this rate you will have drawn 360 Dn by New Year, an Aedile\'s pay, above your rank of Quaestor: Rome takes 2 favor for it then.');
   setSalary(game, 0);
   assert.equal(salaryOutlookText(game), 'At this rate you will have drawn 0 Dn by New Year, less than a Quaestor\'s pay: Rome will think well of it (+1 favor).');
   assert.deepEqual([0, 1, 2].map((s) => giftLabel(game, s)), ['Modest gift: 70 Dn (+3 favor)', 'Generous gift: 150 Dn (+5 favor)', 'Lavish gift: 300 Dn (+10 favor)']);

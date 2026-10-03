@@ -5,7 +5,9 @@
  *
  * Covers the troop supply chains (weapons, Fletcher arrows from timber+iron,
  * horse breeding), recruiting, raids against defended and undefended cities,
- * a fort at rest holding its ground and a deployed one going out, watchtowers,
+ * a fort at rest holding its ground and a deployed one going out, a fort's
+ * men resting in its yard (in and out by its gate, called out to stand to,
+ * never stranded, out of raiders' and thieves' reach), watchtowers,
  * walls and gates, and saving/loading the military state.
  * ----------------------------------------------------------------------------
  */
@@ -17,10 +19,10 @@ import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { Terrain, Wall } from '../src/world/map.js';
-import { addBuilding, removeBuilding } from '../src/sim/entities.js';
+import { addBuilding, removeBuilding, inOwnFort } from '../src/sim/entities.js';
 import { updateWorkshop, updateProducer } from '../src/sim/production.js';
 import { planAction, applyPlan, undoLast } from '../src/sim/construction.js';
-import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts, fortPost, fillField } from '../src/sim/military.js';
+import { launchInvasion, spawnUnit, updateMilitary, deployFort, recallFort, militaryMonthly, garrisonCounts, fortPost, fillField, fortGate, yardSpot } from '../src/sim/military.js';
 import { MinHeap } from '../src/world/pathfinding.js';
 import { HERD_START, HERD_MAX, HERD_GROWTH_DAYS, FORT_CAPACITY, UNIT_TYPES } from '../src/data/units.js';
 import { buildDemoCity, buildDemoGarrison, commandGarrison } from '../src/dev/demoCity.js';
@@ -216,8 +218,11 @@ test("deploy sends a fort's soldiers to a rally point and recall brings them hom
 // ---------------------------------------------------------------------------
 
 /**
- * A fort of `type` on open plains with `n` soldiers standing at their posts,
- * nothing else near, and a raid under way (so raiders fight rather than flee).
+ * A fort of `type` on open plains with `n` soldiers standing at their posts
+ * in its ranks, nothing else near, and a raid under way (so raiders fight
+ * rather than flee). At rest the men are in the yard; a raider of the raid
+ * pinned at the far corner of the map (`pin`, see pinned) has them stand to
+ * on the fort's ground, where they fight from.
  */
 function heldFort(type = 'fort_legion', n = 1) {
   const game = newGame({ type: 'plains' });
@@ -229,9 +234,20 @@ function heldFort(type = 'fort_legion', n = 1) {
   const men = [];
   for (let slot = 0; slot < n; slot++) men.push(spawnUnit(game, fort.def.unit, post.x, post.y, { fort: fort.id, slot, state: 'march' }));
   for (let t = 0; t < 2000 && !men.every((u) => u.state === 'idle'); t++) updateMilitary(game);
-  assert.ok(men.every((u) => u.state === 'idle'), 'at their posts');
+  assert.ok(men.every((u) => u.state === 'idle' && inOwnFort(game, u)), 'at rest in the yard');
   game.military.active = { id: 1, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false, reached: false };
+  const far = { x: fort.x < game.map.w / 2 ? game.map.w - 2.5 : 2.5, y: fort.y < game.map.h / 2 ? game.map.h - 2.5 : 2.5 };
+  const sentinel = spawnUnit(game, 'raider', far.x, far.y, { invasion: 1, pin: far });
+  sentinel.hp = 1e9;
+  for (let t = 0; t < 2000 && !men.every((u) => u.state === 'idle' && !inOwnFort(game, u)); t++) tick(game);
+  assert.ok(men.every((u) => u.state === 'idle' && !inOwnFort(game, u)), 'stood to at their posts');
   return { game, fort, men, post: { x: men[0].x, y: men[0].y } };
+}
+
+/** One tick, units with a `pin` held there first. */
+function tick(game) {
+  for (const v of game.units.values()) if (v.pin) { v.x = v.pin.x; v.y = v.pin.y; }
+  updateMilitary(game);
 }
 
 /** A w x h rectangle with no water, rock, road or building, its trees cleared to grass. */
@@ -257,7 +273,7 @@ function pinned(game, u, foe, x, y, ticks, from) {
   for (let t = 0; t < ticks; t++) {
     foe.x = x;
     foe.y = y;
-    updateMilitary(game);
+    tick(game);
     if (game.units.has(u.id)) far = Math.max(far, Math.hypot(u.x - from.x, u.y - from.y));
   }
   return far;
@@ -296,7 +312,7 @@ test('an archer at rest shoots from his post at what comes in range, and never w
     const before = game.projectiles.length;
     foe.x = post.x;
     foe.y = post.y + 5;
-    updateMilitary(game);
+    tick(game);
     if (game.projectiles.length > before) shots++;
   }
   assert.ok(shots >= 2, `in range: he shoots (${shots})`);
@@ -320,7 +336,7 @@ test('a fort at rest fights as one: a raider at the front man is taken on by the
   for (let t = 0; t < 60 && !rearEngaged; t++) {
     foe.x = x;
     foe.y = y;
-    updateMilitary(game);
+    tick(game);
     rearEngaged = rear.target === foe.id;
   }
   assert.ok(rearEngaged, 'the rear man comes up to fight');
@@ -334,7 +350,7 @@ test('a man at rest answers a slinger striking at him, and lets him go when he s
   for (let t = 0; t < 120 && !answered; t++) {
     foe.x = post.x;
     foe.y = post.y + 4.5;
-    updateMilitary(game);
+    tick(game);
     answered = u.target === foe.id && foe.target === u.id;
   }
   assert.ok(answered, 'he goes for the slinger shooting at him');
@@ -349,7 +365,7 @@ test('a deployed fort still goes out: its men chase a raider 10 tiles from the s
   const rx = Math.floor(post.x);
   const ry = Math.floor(post.y) + 2;
   assert.ok(deployFort(game, fort.id, rx, ry));
-  for (let t = 0; t < 2000 && u.state !== 'idle'; t++) updateMilitary(game);
+  for (let t = 0; t < 2000 && u.state !== 'idle'; t++) tick(game);
   const rally = { x: rx + 0.5, y: ry + 0.5 };
   assert.ok(Math.hypot(u.x - rally.x, u.y - rally.y) < 1, 'at the rally point');
   const foe = spawnUnit(game, 'raider', rally.x + 20, rally.y, { invasion: 1 });
@@ -357,6 +373,295 @@ test('a deployed fort still goes out: its men chase a raider 10 tiles from the s
   assert.ok(idle < 0.5, 'one 20 tiles off is left alone');
   const far = pinned(game, u, foe, rally.x + 10, rally.y, 200, rally);
   assert.ok(far > 4, `he went out after the one 10 tiles off (${far.toFixed(1)} tiles)`);
+});
+
+// ---------------------------------------------------------------------------
+// The fort's yard: men at rest inside the walls
+// ---------------------------------------------------------------------------
+
+/** A fort of `type` turned `turn` on open plains, `n` men put down at `at` (default: its post) marching home. */
+function restingFort(type = 'fort_legion', n = FORT_CAPACITY, turn = 0, at = null) {
+  const game = newGame({ type: 'plains' });
+  const spot = clearedLand(game, 22, 16);
+  assert.ok(spot, 'open land');
+  const fort = addBuilding(game, type, spot.x + 8, spot.y + 2, undefined, { turn });
+  fort.efficiency = 1;
+  const from = at || fortPost(game, fort);
+  const men = [];
+  for (let slot = 0; slot < n; slot++) men.push(spawnUnit(game, fort.def.unit, from.x, from.y, { fort: fort.id, slot, state: 'march' }));
+  return { game, fort, men };
+}
+
+/**
+ * Tick until every man is idle (or `ticks` run out), keeping each man's
+ * tiles in order: no man may stand on any building but his own fort, and
+ * he goes in and out of it only between its door tile and the gate tile.
+ */
+function walkLog(game, fort, men, ticks = 3000, until = () => men.every((u) => u.state === 'idle')) {
+  const map = game.map;
+  const bad = [];
+  const last = new Map(men.map((u) => [u.id, map.idx(Math.floor(u.x), Math.floor(u.y))]));
+  let t = 0;
+  for (; t < ticks && !until(); t++) {
+    tick(game);
+    for (const u of men) {
+      if (!game.units.has(u.id)) continue;
+      const i = map.idx(Math.floor(u.x), Math.floor(u.y));
+      const was = last.get(u.id);
+      if (i === was) continue;
+      const b = map.building[i];
+      if (b && b !== fort.id) bad.push(`man ${u.slot} on building ${b}`);
+      const inNow = b === fort.id;
+      const inThen = map.building[was] === fort.id;
+      if (inNow !== inThen) {
+        const gate = fortGate(game, fort);
+        const door = map.idx(Math.floor(gate.door.x), Math.floor(gate.door.y));
+        const out = map.idx(Math.floor(gate.out.x), Math.floor(gate.out.y));
+        if (!((i === door && was === out) || (i === out && was === door))) bad.push(`man ${u.slot} crossed the wall from ${map.xOf(was)},${map.yOf(was)} to ${map.xOf(i)},${map.yOf(i)}`);
+      }
+      last.set(u.id, i);
+    }
+  }
+  return { bad, ticks: t };
+}
+
+test('a fort at rest keeps its men in its yard, each on his spot, in by the gate, at every turn of the fort', () => {
+  // Playtest: trained troops stood about outside their fort's walls.
+  for (const type of ['fort_legion', 'fort_archer', 'fort_cavalry']) {
+    for (const turn of [0, 1, 2, 3]) {
+      const { game, fort, men } = restingFort(type, FORT_CAPACITY, turn);
+      const say = `${type} turned ${turn}`;
+      const { bad } = walkLog(game, fort, men);
+      assert.deepEqual(bad, [], say);
+      assert.ok(men.every((u) => u.state === 'idle'), `${say}: all at rest`);
+      for (const u of men) {
+        const s = yardSpot(fort, u.slot);
+        assert.ok(inOwnFort(game, u), `${say}: man ${u.slot} is inside the walls`);
+        assert.ok(Math.hypot(u.x - s.x, u.y - s.y) < 0.06, `${say}: man ${u.slot} on his spot`);
+        // Clear of the walls (0.22 thick with the towers) on every side.
+        const [a, b] = [u.x - fort.x, u.y - fort.y];
+        assert.ok(Math.min(a, b, 3 - a, 3 - b) > 0.5, `${say}: man ${u.slot} well inside (${a.toFixed(2)}, ${b.toFixed(2)})`);
+      }
+      const spots = men.map((u) => yardSpot(fort, u.slot));
+      for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) assert.ok(Math.hypot(spots[i].x - spots[j].x, spots[i].y - spots[j].y) > 0.3, `${say}: spots ${i} and ${j} apart`);
+      // The gate is the art's gateway, in the middle of the turned front wall.
+      const gate = fortGate(game, fort);
+      const mid = { x: fort.x + 1.5, y: fort.y + 1.5 };
+      assert.equal(Math.hypot(gate.door.x - mid.x, gate.door.y - mid.y), 1, `${say}: the door is the middle tile of a side`);
+      const side = [[0, 1], [-1, 0], [0, -1], [1, 0]][turn];
+      assert.deepEqual([gate.out.x - mid.x, gate.out.y - mid.y], [side[0] * 2, side[1] * 2], `${say}: the gate faces the art's front`);
+    }
+  }
+});
+
+test('raiders call a resting fort\'s men out to its ground in front, where they always stood; with the raid over they go back in', () => {
+  const { game, fort, men } = restingFort('fort_legion', 4);
+  walkLog(game, fort, men);
+  assert.ok(men.every((u) => inOwnFort(game, u)), 'at rest inside');
+  game.military.active = { id: 1, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false, reached: false };
+  const far = { x: fort.x < game.map.w / 2 ? game.map.w - 2.5 : 2.5, y: 2.5 };
+  const raider = spawnUnit(game, 'raider', far.x, far.y, { invasion: 1, pin: far });
+  raider.hp = 1e9;
+  // The first tick: nobody picks a man inside the walls, near or far.
+  const near = spawnUnit(game, 'raider', fort.x + 1.5, fort.y - 0.5, { invasion: 1, pin: { x: fort.x + 1.5, y: fort.y - 0.5 } });
+  near.hp = 1e9;
+  tick(game);
+  assert.equal(near.target, 0, 'a raider by the wall does not go for the men inside');
+  game.units.delete(near.id);
+  const out = walkLog(game, fort, men, 3000, () => men.every((u) => u.state === 'idle' && !inOwnFort(game, u)));
+  assert.deepEqual(out.bad, []);
+  assert.ok(out.ticks < 200, `out within 10 days (${out.ticks} ticks)`);
+  // Each on his old spot in the ranks (formationSpots: the open tiles nearest the post).
+  const post = fortPost(game, fort);
+  for (const u of men) assert.ok(Math.hypot(u.x - post.x, u.y - post.y) < 3, `man ${u.slot} by the post`);
+  // The raid ends: back in.
+  game.units.delete(raider.id);
+  game.military.active = null;
+  const back = walkLog(game, fort, men, 3000, () => men.every((u) => u.state === 'idle' && inOwnFort(game, u)));
+  assert.deepEqual(back.bad, []);
+  assert.ok(men.every((u) => inOwnFort(game, u)), 'back in the yard');
+});
+
+test('a wolf near the fort calls its men out, and they go back in only once it is well off', () => {
+  const { game, fort, men } = restingFort('fort_archer', 2);
+  walkLog(game, fort, men);
+  const post = fortPost(game, fort);
+  const at = (d) => ({ x: post.x, y: post.y + (post.y < game.map.h / 2 ? d : -d) });
+  game.wildlife = null; // (a lone wolf with no pack: it stays where it is put)
+  const wolf = spawnUnit(game, 'wolf', at(24).x, at(24).y, { pin: at(24) });
+  for (let t = 0; t < 100; t++) tick(game);
+  assert.ok(men.every((u) => inOwnFort(game, u)), 'a wolf 24 tiles off: they rest');
+  wolf.pin = at(8);
+  walkLog(game, fort, men, 400, () => men.every((u) => !inOwnFort(game, u)));
+  assert.ok(men.every((u) => !inOwnFort(game, u)), 'a wolf 8 tiles off: they stand to');
+  // It roams about the line: no going in and out by turns.
+  wolf.pin = at(14);
+  for (let t = 0; t < 200; t++) tick(game);
+  assert.ok(men.every((u) => !inOwnFort(game, u)), 'a wolf 14 tiles off: still out');
+  wolf.pin = at(20);
+  walkLog(game, fort, men, 600, () => men.every((u) => inOwnFort(game, u) && u.state === 'idle'));
+  assert.ok(men.every((u) => inOwnFort(game, u)), 'a wolf 20 tiles off: back in');
+});
+
+test('deployed, a fort\'s men leave by the gate and march out; recalled, they come back in by it', () => {
+  const { game, fort, men } = restingFort('fort_cavalry', 3, 2);
+  walkLog(game, fort, men);
+  const rally = findFree(game, 1, 1, { x: fort.x + 9, y: fort.y + 1 });
+  assert.ok(deployFort(game, fort.id, rally.x, rally.y));
+  const out = walkLog(game, fort, men, 3000, () => men.every((u) => u.state === 'idle'));
+  assert.deepEqual(out.bad, []);
+  assert.ok(men.every((u) => Math.hypot(u.x - rally.x - 0.5, u.y - rally.y - 0.5) < 3), 'at the rally point');
+  assert.ok(recallFort(game, fort.id));
+  const back = walkLog(game, fort, men);
+  assert.deepEqual(back.bad, []);
+  assert.ok(men.every((u) => inOwnFort(game, u) && u.state === 'idle'), 'home in the yard');
+});
+
+test('a man inside never strands: the gate built over, the men use the post; every side shut, they stay in', () => {
+  const { game, fort, men } = restingFort('fort_legion', 2);
+  walkLog(game, fort, men);
+  const gate = fortGate(game, fort);
+  // A building on the gate tile: the next way in is the post.
+  addBuilding(game, 'well', Math.floor(gate.out.x), Math.floor(gate.out.y));
+  const alt = fortGate(game, fort);
+  assert.ok(alt && (alt.out.x !== gate.out.x || alt.out.y !== gate.out.y), 'another way out');
+  const post = fortPost(game, fort);
+  assert.deepEqual([alt.out.x, alt.out.y], [Math.floor(post.x) + 0.5, Math.floor(post.y) + 0.5], 'by the post');
+  const rally = findFree(game, 1, 1, { x: fort.x + 9, y: fort.y + 1 });
+  deployFort(game, fort.id, rally.x, rally.y);
+  const out = walkLog(game, fort, men);
+  assert.deepEqual(out.bad, []);
+  assert.ok(men.every((u) => !inOwnFort(game, u)), 'out by the post');
+  recallFort(game, fort.id);
+  walkLog(game, fort, men);
+  assert.ok(men.every((u) => inOwnFort(game, u)), 'and back in');
+  // Every tile round the fort built over or walled: no way out, and no harm.
+  const map = game.map;
+  for (let y = fort.y - 1; y <= fort.y + 3; y++) for (let x = fort.x - 1; x <= fort.x + 3; x++) {
+    if (map.building[map.idx(x, y)]) continue;
+    map.wall[map.idx(x, y)] = Wall.WALL;
+  }
+  map.touch();
+  assert.equal(fortGate(game, fort), null, 'shut in');
+  deployFort(game, fort.id, rally.x, rally.y);
+  for (let t = 0; t < 300; t++) tick(game);
+  assert.ok(men.every((u) => inOwnFort(game, u) && game.units.has(u.id)), 'they stay in their yard');
+  assert.ok(men.every((u) => Number.isFinite(u.x) && Number.isFinite(u.y)));
+});
+
+test('a gateway opening into a walled pocket is no gate: the men go out by the post, and get to their rally point', () => {
+  const { game, fort, men } = restingFort('fort_legion', 4);
+  walkLog(game, fort, men);
+  const gate = fortGate(game, fort);
+  const ox = Math.floor(gate.out.x);
+  const oy = Math.floor(gate.out.y);
+  // Wall in the tile before the gateway on its three outer sides.
+  const map = game.map;
+  for (const [x, y] of [[ox - 1, oy], [ox + 1, oy], [ox, oy + 1]]) map.wall[map.idx(x, y)] = Wall.WALL;
+  map.touch();
+  const alt = fortGate(game, fort);
+  assert.ok(alt && (alt.out.x !== gate.out.x || alt.out.y !== gate.out.y), 'the pocket is not the gate');
+  const rally = findFree(game, 1, 1, { x: fort.x + 10, y: fort.y + 1 });
+  assert.ok(deployFort(game, fort.id, rally.x, rally.y));
+  const out = walkLog(game, fort, men);
+  assert.deepEqual(out.bad, []);
+  assert.ok(men.every((u) => Math.hypot(u.x - rally.x - 0.5, u.y - rally.y - 0.5) < 3), 'at the rally point');
+});
+
+test('nobody fights from the yard: an archer with a foe in range goes out first, and shoots only from outside', () => {
+  const { game, fort, men } = restingFort('fort_archer', 4);
+  walkLog(game, fort, men);
+  game.wildlife = null; // (a lone wolf with no pack: it stays where it is put)
+  // 4.5 tiles behind the back wall, in an archer's range of the yard.
+  const at = { x: fort.x + 1.5, y: fort.y - 4.5 };
+  const wolf = spawnUnit(game, 'wolf', at.x, at.y, { pin: at });
+  wolf.hp = 1e9;
+  let fromYard = 0;
+  let shots = 0;
+  for (let t = 0; t < 600; t++) {
+    const before = new Map(men.map((u) => [u.id, u.strikeTick || 0]));
+    tick(game);
+    for (const u of men) {
+      if ((u.strikeTick || 0) === before.get(u.id)) continue;
+      shots++;
+      if (inOwnFort(game, u)) fromYard++;
+    }
+  }
+  assert.equal(fromYard, 0, `never from inside the walls (${shots} shots in all)`);
+  // Out on their posts, as before: there it is out of range (it is behind the fort), so they hold.
+  assert.ok(men.every((u) => !inOwnFort(game, u) && u.state === 'idle'), 'stood to on their posts');
+});
+
+test('men standing to or standing down halfway turn at once, not walking out the old route', () => {
+  // The fort turned 2 has its gate at the back, away from its post: the way between goes round it.
+  const { game, fort, men } = restingFort('fort_legion', 1, 2);
+  walkLog(game, fort, men);
+  const [u] = men;
+  game.military.active = { id: 1, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false, reached: false };
+  const far = { x: fort.x < game.map.w / 2 ? game.map.w - 2.5 : 2.5, y: 2.5 };
+  const raider = spawnUnit(game, 'raider', far.x, far.y, { invasion: 1, pin: far });
+  raider.hp = 1e9;
+  const gate = fortGate(game, fort);
+  // Out and on his way round to the ranks.
+  for (let t = 0; t < 400 && !(!inOwnFort(game, u) && Math.hypot(u.x - gate.out.x, u.y - gate.out.y) > 1.5); t++) tick(game);
+  assert.ok(!inOwnFort(game, u) && u.state === 'march', 'on his way');
+  // The raid is over: he heads back to the gate at once.
+  game.units.delete(raider.id);
+  game.military.active = null;
+  const d0 = Math.hypot(u.x - gate.out.x, u.y - gate.out.y);
+  let worst = 0;
+  for (let t = 0; t < 40; t++) { tick(game); worst = Math.max(worst, Math.hypot(u.x - gate.out.x, u.y - gate.out.y) - d0); }
+  assert.ok(worst < 0.3, `no farther from the gate (${worst.toFixed(2)} tiles more)`);
+});
+
+test('a soldier standing outside in an older save walks into his fort\'s yard', () => {
+  const { game, fort, men } = restingFort('fort_legion', 3);
+  // Put down where an older version stood them: on their spots in the ranks.
+  const post = fortPost(game, fort);
+  men.forEach((u, k) => { u.x = post.x + (k % 2) * 0.5; u.y = post.y + 0.2 * k; u.state = 'idle'; });
+  const copy = deserializeGame(JSON.parse(JSON.stringify(serializeGame(game))));
+  const moved = [...copy.units.values()].filter((u) => u.fort === fort.id);
+  const f2 = copy.buildings.get(fort.id);
+  const { bad } = walkLog(copy, f2, moved, 3000, () => moved.every((u) => u.state === 'idle' && inOwnFort(copy, u)));
+  assert.deepEqual(bad, []);
+  assert.ok(moved.every((u) => inOwnFort(copy, u) && u.state === 'idle'), 'in the yard');
+});
+
+test('a man leaving for a distant battle goes out by the gate', () => {
+  const { game, fort, men } = restingFort('fort_legion', 1);
+  walkLog(game, fort, men);
+  const [u] = men;
+  u.away = true;
+  u.awayTick = game.time.totalTicks;
+  const gate = fortGate(game, fort);
+  let left = null;
+  for (let t = 0; t < 200 && !left; t++) {
+    tick(game);
+    if (!inOwnFort(game, u)) left = { x: Math.floor(u.x), y: Math.floor(u.y) };
+  }
+  assert.deepEqual(left, { x: Math.floor(gate.out.x), y: Math.floor(gate.out.y) }, 'first step outside on the gate tile');
+});
+
+test('a thief passing the fort is not caught by the men resting behind its walls; a man outside catches him', async () => {
+  const { updateCriminals } = await import('../src/sim/crime.js');
+  const { spawnWalker } = await import('../src/sim/entities.js');
+  const { game, fort, men } = restingFort('fort_legion', 1);
+  walkLog(game, fort, men);
+  const [u] = men;
+  // A thief on the tile just outside the wall nearest the man, within a tile of him.
+  const tx = Math.floor(u.x);
+  const ty = fort.y - 1;
+  const fresh = () => spawnWalker(game, 'thief', game.map.idx(tx, ty), null, { state: 'steal', hp: CONFIG.CRIMINAL_HP });
+  u.y = fort.y + 0.6; // (by the back wall, a tile from the street)
+  assert.ok(inOwnFort(game, u));
+  const thief = fresh();
+  updateCriminals(game);
+  assert.equal(thief.hp, CONFIG.CRIMINAL_HP, 'nobody behind the wall lays a hand on him');
+  // The same man standing in the street does.
+  u.y = fort.y - 0.5;
+  u.x = tx + 1.5;
+  updateCriminals(game);
+  assert.ok(thief.hp < CONFIG.CRIMINAL_HP || thief.dead, 'a man outside catches him');
 });
 
 // ---------------------------------------------------------------------------
@@ -564,7 +869,7 @@ test('a deployed soldier crosses a river by its bridge to reach a raider on the 
   let atBank = 0;
   for (let t = 0; t < 2400 && game.units.has(raider.id) && !crossed; t++) {
     raider.x = rx + 3.5; raider.y = soldier.y; // he stays put on the far bank
-    updateMilitary(game);
+    tick(game);
     if (Math.floor(soldier.x) > rx + 1) crossed = true;
     if (Math.abs(soldier.x - (rx - 0.5)) < 0.6 && Math.abs(Math.floor(soldier.y) - by) > 1) atBank++;
   }

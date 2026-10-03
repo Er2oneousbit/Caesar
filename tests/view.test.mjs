@@ -12,7 +12,9 @@
  *   - neighbour masks turned: roads, shores, walls and aqueducts, and the
  *     ground blends, against the same map turned for real
  *   - picking a tile, a walker and a building's tile at every turn, and a
- *     tall building hiding a walker behind it as the view sees it
+ *     tall building hiding a walker behind it as the view sees it, but
+ *     only where a strip drawn after him is opaque (at every zoom too); a
+ *     soldier in his fort's yard drawn after the fort and clicked there
  *   - sprite keys: a building's art turn is its own plus the view's, the
  *     look suffixes stay last; a unit's and a projectile's screen direction,
  *     the races' direction, the map gate's pillars
@@ -26,10 +28,13 @@ import assert from 'node:assert/strict';
 import { toView, fromView, viewTileOf, viewSize, tileAxes, viewFoot, viewDir, rotMask, rotNibbles, rotBlend, viewAxis, mapRectOfView } from '../src/render/view.js';
 import { needleAngle } from '../src/ui/hud.js';
 import { Camera, worldOf } from '../src/render/camera.js';
-import { Renderer, walkerWorld, ghostOrder, blendCode, aqueductMaskAt, buildingKey, artTurn, raceSpot, mapGateOffset, bridgeSpan } from '../src/render/renderer.js';
+import { Renderer, coverDepthAt, walkerWorld, ghostOrder, blendCode, aqueductMaskAt, buildingKey, artTurn, raceSpot, mapGateOffset, bridgeSpan } from '../src/render/renderer.js';
 import { GameMap, Terrain, Road } from '../src/world/map.js';
 import { turnDir } from '../src/render/turn.js';
-import { newGame, findFree } from './helpers.mjs';
+import { newGame, findFree, blockSprite } from './helpers.mjs';
+import { addBuilding } from '../src/sim/entities.js';
+import { yardSpot } from '../src/sim/military.js';
+import { FORT_CAPACITY } from '../src/data/units.js';
 import { planAction, applyPlan } from '../src/sim/construction.js';
 import { serializeGame } from '../src/core/save.js';
 import { HALF_W, HALF_H } from '../src/config.js';
@@ -327,14 +332,14 @@ test('view: picking a tile, a walker and a building at every turn; a building in
     // A walker beside it is picked at every turn.
     const w = { id: 5, x: b.x - 1, y: b.y, tx: b.x - 1, ty: b.y, progress: 0, moving: false, speed: 0.1, kind: 'roamer' };
     const spot = walkerWorld(w, 0, t, map.w, map.h);
-    const r = { camera: cam, walkerSpots: [{ id: 5, ...spot, ship: false }], buildingBoxes: [] };
+    const r = { camera: cam, walkerSpots: [{ id: 5, ...spot, ship: false }], coverStrips: [] };
     const s = cam.toScreen(spot.wx, spot.wy - 10);
     assert.equal(Renderer.prototype.pickWalker.call(r, s.x / cam.dpr, s.y / cam.dpr), 5, `turn ${t}: the walker`);
     // A tall building on the tile in front of the walker as the view sees it hides it.
     const [vx, vy] = viewTileOf(w.x, w.y, t, map.w, map.h);
-    r.buildingBoxes = [{ x: vx + 1, y: vy + 1, S: 1, H: 40 }];
+    r.coverStrips = [{ d: vx + vy + 3, spr: blockSprite(1, 40), wx: (vx - vy) * 32, wy: (vx + vy + 2) * 16, full: true }];
     assert.equal(Renderer.prototype.pickWalker.call(r, s.x / cam.dpr, s.y / cam.dpr), 0, `turn ${t}: hidden behind a building`);
-    // The renderer's own boxes are in view tiles: the same footprint gives that box.
+    // The renderer's footprints are in view tiles.
     const rr = rendererFor(map, t);
     const foot = rr.footAt(w.x, w.y);
     assert.deepEqual([foot.vx, foot.vy], [vx, vy]);
@@ -343,6 +348,97 @@ test('view: picking a tile, a walker and a building at every turn; a building in
     const tiles = [];
     for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) tiles.push(viewTileOf(b.x + dx, b.y + dy, t, map.w, map.h));
     assert.deepEqual([big.vx, big.vy], [Math.min(...tiles.map((c) => c[0])), Math.min(...tiles.map((c) => c[1]))]);
+  }
+});
+
+test('view: a building hides a figure only where its strips drawn after him are opaque, at every turn and zoom', () => {
+  // Playtest: a recruit training at the academy stood plainly in view by its
+  // corner and could not be clicked. Buildings were boxes as tall as their
+  // sprite (flag pole and all) over the whole footprint.
+  const game = newGame({ seed: 'view-pick' });
+  const at = findFree(game, 7, 7);
+  const B = addBuilding(game, 'military_academy', at.x + 2, at.y + 2);
+  const S = B.size;
+  const map = game.map;
+  for (const t of TURNS) {
+    for (const zoom of [0, 2, 4]) {
+      const say = `turn ${t}, zoom ${zoom}`;
+      const rr = rendererFor(map, t);
+      rr.camera = cameraAt(map.w, map.h, t, zoom);
+      rr.camera.centerOnTile(B.x + 1, B.y + 1);
+      Object.assign(rr, { game, overlay: { key: 'none' }, pal: { snow: 0 }, snowKey: '', snowPrev: null, appear: new Map(), coverStrips: [], noRoadMarks: [], walkerSpots: [], unitSpots: [] });
+      // Its art: walls 20 px high over the footprint, open air above (a flag pole's).
+      const spr = blockSprite(S, 20, rr.camera.scale);
+      rr.sprites = { get: () => spr };
+      const items = [];
+      rr.collectBuilding(B, items, false);
+      assert.equal(rr.coverStrips.length, 2 * S, `${say}: its strips are kept for clicks`);
+      assert.equal(spr.reads, 0, `${say}: no pixel is read while drawing`);
+      const foot = rr.footAt(B.x, B.y, S);
+      // A man on the map tile seen just behind the footprint's top corner, and one just in front of its bottom corner.
+      const tileAtView = (vx, vy) => {
+        for (let y = B.y - 1; y <= B.y + S; y++) for (let x = B.x - 1; x <= B.x + S; x++) {
+          const [a, b] = viewTileOf(x, y, t, map.w, map.h);
+          if (a === vx && b === vy) return { x, y };
+        }
+        return null;
+      };
+      const man = (id, tile) => {
+        const w = { id, x: tile.x, y: tile.y, tx: tile.x, ty: tile.y, progress: 0, moving: false, speed: 0.1, kind: 'roamer' };
+        const p = walkerWorld(w, 0, t, map.w, map.h);
+        return { id, wx: p.wx, wy: p.wy, d: p.d + 0.003, ship: false };
+      };
+      const back = man(1, tileAtView(foot.vx - 1, foot.vy - 1));
+      const front = man(2, tileAtView(foot.vx + S, foot.vy + S));
+      const cam = rr.camera;
+      const click = (s, up) => { const q = cam.toScreen(s.wx, s.wy - up); return [q.x / cam.dpr, q.y / cam.dpr]; };
+      rr.walkerSpots = [back];
+      // His head shows over the low wall: his. His feet behind the wall: the building's.
+      assert.equal(rr.pickWalker(...click(back, 12), false), 1, `${say}: the man behind is clicked on his head`);
+      assert.equal(rr.pickWalker(...click(back, 1), false), 0, `${say}: but not through the wall in front of his feet`);
+      // In front of the building he is drawn after it: his, over its walls.
+      rr.walkerSpots = [front];
+      assert.ok(coverDepthAt(rr.coverStrips, cam.screenToWorld(...click(front, 20))) > -Infinity, `${say}: the wall is there`);
+      assert.equal(rr.pickWalker(...click(front, 20), false), 2, `${say}: the man in front is clicked over the wall behind him`);
+      assert.ok(spr.reads > 0 && spr.reads < 10, `${say}: a click reads a pixel or two (${spr.reads})`);
+      // Units are picked the same way.
+      rr.unitSpots = [{ id: 9, wx: back.wx, wy: back.wy, d: back.d + 0.001 }];
+      assert.equal(rr.pickUnit(...click(back, 12)), 9, `${say}: a soldier behind is clicked on his head`);
+      assert.equal(rr.pickUnit(...click(back, 1)), 0, `${say}: not through the wall`);
+    }
+  }
+});
+
+test('view: a soldier in his fort\'s yard is drawn after the fort and clicked there, at every turn', () => {
+  const game = newGame({ seed: 'view-pick' });
+  const at = findFree(game, 7, 7);
+  const fort = addBuilding(game, 'fort_legion', at.x + 2, at.y + 2);
+  const map = game.map;
+  for (const t of TURNS) {
+    const rr = rendererFor(map, t);
+    rr.camera.centerOnTile(fort.x + 1, fort.y + 1);
+    Object.assign(rr, { game, overlay: { key: 'none' }, pal: { snow: 0 }, snowKey: '', snowPrev: null, appear: new Map(), coverStrips: [], noRoadMarks: [] });
+    // Walls and towers as tall as a man over the whole footprint: whatever the fort's strips drew after him would hide him.
+    const spr = blockSprite(3, 40, rr.camera.scale);
+    rr.sprites = { get: () => spr };
+    rr.collectBuilding(fort, [], false);
+    const front = Math.max(...rr.stripsFor(fort));
+    const cam = rr.camera;
+    for (let slot = 0; slot < FORT_CAPACITY; slot++) {
+      const s = yardSpot(fort, slot);
+      const u = { id: 100 + slot, fort: fort.id };
+      const d = rr.yardDepth(u, s.x, s.y);
+      assert.ok(d > front, `turn ${t}, man ${slot}: drawn after the fort's last strip`);
+      const [vx, vy] = toView(s.x, s.y, t, map.w, map.h);
+      rr.unitSpots = [{ id: u.id, wx: (vx - vy) * HALF_W, wy: (vx + vy) * HALF_H, d }];
+      const q = cam.toScreen(rr.unitSpots[0].wx, rr.unitSpots[0].wy - 8);
+      assert.equal(rr.pickUnit(q.x / cam.dpr, q.y / cam.dpr), u.id, `turn ${t}, man ${slot}: clicked in the yard`);
+      // At his own depth the fort's strips would have hidden him.
+      rr.unitSpots[0].d = vx + vy + 0.004;
+      assert.equal(rr.pickUnit(q.x / cam.dpr, q.y / cam.dpr), 0, `turn ${t}, man ${slot}: (drawn at his own depth the walls would cover him)`);
+    }
+    assert.equal(rr.yardDepth({ fort: fort.id }, fort.x - 0.5, fort.y + 1.5), null, 'outside the walls: his own depth');
+    assert.equal(rr.yardDepth({ fort: 0 }, fort.x + 1.5, fort.y + 1.5), null, 'not his fort: his own depth');
   }
 });
 

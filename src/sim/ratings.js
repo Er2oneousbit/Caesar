@@ -19,7 +19,6 @@ import { GOD_KEYS } from '../data/gods.js';
 import { ledgerNet, romeWage } from './economy.js';
 import { entertainmentScore } from './housing.js';
 import { racesRunning } from './entertainment.js';
-import { salaryAtVictory } from './governor.js';
 
 /** Coverage shares (0..1) of the population for culture services. */
 export function computeCoverage(game) {
@@ -143,7 +142,6 @@ export function checkOutcome(game) {
     }
     delete c.victoryHeld;
     c.victory = true;
-    salaryAtVictory(game); // before the app stores the savings for the next mission
     game.events.emit('victory', { scenario: game.scenario.id });
   }
 }

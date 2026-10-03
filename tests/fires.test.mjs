@@ -276,4 +276,7 @@ test('a prefecture sends at most PREFECT_FIRE_CREW fresh prefects to fires at a 
   // Before: one for each 3-tile cluster; uncapped, one for every building.
   assert.equal(crew.length, CONFIG.PREFECT_FIRE_CREW, 'a crew, not one prefect for every building');
   assert.equal(new Set(crew.map((w) => fireOf(game, w.fireTile))).size, crew.length, 'each to a different building');
+  // The fires left waiting are not forgotten: the crew takes them as theirs go out.
+  steps(game, 20 * CONFIG.TICKS_PER_DAY);
+  assert.equal(game.fires.size, 0, 'all six put out');
 });

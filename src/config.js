@@ -123,10 +123,11 @@ export const CONFIG = {
   // He fights a burning building with a tile this close to him (Chebyshev,
   // tiles): the 4 he used to douse everything within, from the road he runs to.
   PREFECT_DOUSE_REACH: 4,
-  // A prefecture sends at most this many fresh prefects to fires at a time
-  // (prefects already out on their rounds are called on top). As many as a
-  // block alight needs to be fought building by building, not one for every
-  // burning building: unchecked, one street on fire drew 17 from one post.
+  // A prefecture sends no fresh prefect to a fire while this many of its own
+  // are on fire duty (its patrolling prefects called to a fire count too);
+  // the next prefecture in reach sends one instead. As many as a block alight
+  // needs to be fought building by building, not one for every burning
+  // building: unchecked, one street on fire drew 17 from one post.
   PREFECT_FIRE_CREW: 3,
   // Prefects against raiders and Caesar's legionaries (sim/prefectFight.js).
   // A prefect on his rounds stops and fights an enemy this close (tiles, from

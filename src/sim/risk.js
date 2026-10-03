@@ -272,7 +272,8 @@ export function dispatchPrefect(game, fireIdx) {
   // Otherwise a prefecture sends someone, if it has not sent its whole crew
   // to fires already: with one prefect called for each burning building, a
   // street alight had a prefecture send 17 at once (and its patrols wait
-  // until they are back). The rest of the fire waits for those out.
+  // until they are back). The rest of the fire waits for those out (each
+  // takes the next one when his is out), or a prefecture farther off.
   const found = pf.findNearest(road, (id) => {
     const b = game.buildings.get(id);
     return b && b.type === 'prefecture' && b.efficiency > 0 && b.accessRoad >= 0 && fireCrewOut(game, b) < CONFIG.PREFECT_FIRE_CREW;

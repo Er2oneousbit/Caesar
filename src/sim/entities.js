@@ -18,6 +18,7 @@ import { WALKER_TYPES } from '../data/walkers.js';
 import { HERD_START } from '../data/units.js';
 import { clearRuin } from './ruins.js';
 import { freeFortNumber } from './fortNumbers.js';
+import { Terrain } from '../world/map.js';
 
 // ---------------------------------------------------------------------------
 // Buildings
@@ -354,14 +355,62 @@ export function sideToward(map, water, x, y, size) {
 }
 
 /**
- * The water a waterside building at (x, y) would face, or -1: navigable
- * water for those ships tie up at (the Emporium, the Navalia, a Naval
- * Station, the Portus), fishing water for a shipyard or wharf.
+ * The first water tile beside a footprint that a waterside building of
+ * `def` can use, anywhere round it, or -1: navigable water for those ships
+ * tie up at (the Emporium, the Navalia, a Naval Station, the Portus),
+ * fishing water for a shipyard or wharf.
  */
-export function shoreWaterAt(map, def, x, y, size = def.size) {
+function berthBeside(map, def, x, y, size) {
   if (def.placement === 'shore') return map.navigableBeside(x, y, size);
   if (def.placement === 'fishingShore') return map.fishWaterBeside(x, y, size);
   return -1;
+}
+
+/** Can a waterside building of `def` use water tile `i` (ships reach it, or it has fish)? */
+function berthWater(map, def, i) {
+  if (def.placement === 'shore') return !!map.navigable[i] && !map.bridgeLow[i];
+  return map.fishBody[i] > 0;
+}
+
+/**
+ * The side of a footprint at (x, y) that stands right at the water's edge,
+ * as a waterside building must: every tile just past that edge is water
+ * (no strip of land between the quay and the water), and the building can
+ * use at least one of them. @returns {{side:number, water:number}|null}
+ * `side` as sideToward, `water` the first usable tile along it (the berth).
+ * The side of the first usable tile found round the footprint the old way
+ * (berthBeside) wins when it qualifies, so a building that already stood
+ * right at the water faces it exactly as before; then the sides in order.
+ */
+export function waterEdge(map, def, x, y, size = def.size) {
+  const first = berthBeside(map, def, x, y, size);
+  if (first < 0) return null;
+  const firstSide = sideToward(map, first, x, y, size);
+  for (const side of [firstSide, 0, 1, 2, 3]) {
+    let water = -1;
+    let whole = true;
+    for (let d = 0; d < size && whole; d++) {
+      const tx = side === 1 ? x + size : side === 3 ? x - 1 : x + d;
+      const ty = side === 0 ? y - 1 : side === 2 ? y + size : y + d;
+      if (!map.inBounds(tx, ty)) { whole = false; break; }
+      const i = map.idx(tx, ty);
+      if (map.terrain[i] !== Terrain.WATER) whole = false;
+      else if (water < 0 && berthWater(map, def, i)) water = i;
+    }
+    if (whole && water >= 0) return { side, water };
+  }
+  return null;
+}
+
+/**
+ * The water a waterside building at (x, y) faces, or -1: the berth on its
+ * side right at the water's edge (waterEdge), or, for one that stands
+ * back from the water (placed before that rule, kept by older saves), the
+ * first usable water beside it, as it always had.
+ */
+export function shoreWaterAt(map, def, x, y, size = def.size) {
+  const edge = waterEdge(map, def, x, y, size);
+  return edge ? edge.water : berthBeside(map, def, x, y, size);
 }
 
 /**

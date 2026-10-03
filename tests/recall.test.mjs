@@ -6,7 +6,8 @@
  * recruit already on his way still joins) until it is recalled and its men
  * are home; the same for Naval Stations and the Navalia; the rider's time
  * and the way home; what a recall does to the battle; saves with a rider out
- * (version 19) and from before it.
+ * (version 19) and from before it; no clearing (or undoing) a fort or
+ * station while its men or ships are away, raiders still taking it down.
  */
 
 import test from 'node:test';
@@ -17,7 +18,7 @@ import { CONFIG } from '../src/config.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
 import { addBuilding } from '../src/sim/entities.js';
 import { updateWalkers } from '../src/sim/walkers.js';
-import { spawnUnit, updateBarracks, updateDemand, deployFort, recallFort } from '../src/sim/military.js';
+import { spawnUnit, updateBarracks, updateDemand, deployFort, recallFort, damageBuilding } from '../src/sim/military.js';
 import { shoreBerth, squadron, updateNavalia, updateNavalDemand, deployStation, recallStation } from '../src/sim/navy.js';
 import {
   requestTroops, battleMonthly, sendTroops, setService, fightBattle, awayCounts, battleSummary,
@@ -26,6 +27,7 @@ import {
 import { battleLines, newMenNote, recallLines } from '../src/ui/empireInfo.js';
 import { empireTravelers, travelerLabel } from '../src/ui/empireMap.js';
 import { buildDemoCity, buildDemoNavy } from '../src/dev/demoCity.js';
+import { planAction, applyPlan, canUndo, undoLast, demolishBlocked } from '../src/sim/construction.js';
 import { removeBuilding } from '../src/sim/entities.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -414,4 +416,101 @@ test('save: an older save (version 16) with troops away loads with no rider out,
   assert.equal(copy.military.battle.sent.men.length, 8);
   assert.ok(recallFromBattle(copy, fort.id).ok);
   assert.equal(recallOf(copy, fort.id).rider, 1);
+});
+
+// ---------------------------------------------------------------------------
+// No clearing a post while its men are away
+// ---------------------------------------------------------------------------
+
+const AWAY_FORT = /^Its soldiers are away at a distant battle: recall them or wait for them to come home$/;
+
+/** The clear tool over the fort's footprint, as the player drags it. */
+const clearFort = (game, f) => planAction(game, 'clear', f.x, f.y, f.x + f.size - 1, f.y + f.size - 1);
+
+test('a fort whose men are away cannot be cleared, nor taken down by undo, until they are home', () => {
+  const { game, posts: [fort] } = marching();
+  assert.match(demolishBlocked(game, fort), AWAY_FORT);
+  // The clear tool: refused, red, and saying why; clicking does nothing.
+  const plan = clearFort(game, fort);
+  assert.equal(plan.count, 0);
+  assert.match(plan.reason, AWAY_FORT);
+  assert.ok(plan.items.some((it) => it.ok === false && it.away && it.x === fort.x && it.y === fort.y), 'the fort is shown refused');
+  const res = applyPlan(game, plan);
+  assert.equal(res.ok, false);
+  assert.ok(game.buildings.has(fort.id), 'still standing');
+  assert.equal(awayCounts(game).get(fort.id), 8, 'its men still have their places');
+  // A drag over the fort and a road beside it: the road goes, the fort stays and says why.
+  assert.ok(build(game, 'road', fort.x + 3, fort.y, fort.x + 3, fort.y + 2).ok);
+  const wide = planAction(game, 'clear', fort.x, fort.y, fort.x + 3, fort.y + 2);
+  const roads = wide.items.filter((it) => it.ok);
+  assert.ok(roads.length > 0 && roads.every((it) => it.road) && wide.count === roads.length, 'the road tiles only');
+  assert.ok(wide.warnings.some((w) => AWAY_FORT.test(w)));
+  assert.ok(applyPlan(game, wide).ok);
+  assert.ok(game.buildings.has(fort.id));
+  // Recalled and on their way home: still away.
+  months(game, 2);
+  assert.ok(recallFromBattle(game, fort.id).ok);
+  assert.match(demolishBlocked(game, fort), AWAY_FORT, 'a rider out to them');
+  months(game, 1);
+  assert.equal(recallOf(game, fort.id).rider, 0);
+  assert.match(clearFort(game, fort).reason, AWAY_FORT, 'turned back, on the road home');
+  months(game, recallOf(game, fort.id).homeIn);
+  assert.equal(atFort(game, fort).length, 8, 'home');
+  assert.equal(demolishBlocked(game, fort), null);
+  const now = clearFort(game, fort);
+  assert.equal(now.count, 1);
+  assert.ok(applyPlan(game, now).ok);
+  assert.ok(!game.buildings.has(fort.id), 'cleared once they are home');
+});
+
+test('a fort sent off between the preview and the click stands', () => {
+  const game = newGame();
+  const fort = fortWith(game, 4, 4);
+  const s = findFree(game, 3, 3, { x: 10, y: 10 });
+  assert.ok(build(game, 'road', s.x, s.y, s.x + 2, s.y).ok);
+  assert.equal(canUndo(game), true, 'the road can be undone');
+  const sounds = [];
+  game.events.on('sound', (e) => sounds.push(e.name));
+  const plan = clearFort(game, fort);
+  assert.equal(plan.count, 1, 'nobody away: it may be cleared');
+  requestTroops(game, 'placentia', 10);
+  assert.ok(sendTroops(game).ok);
+  assert.ok(awayCounts(game).get(fort.id) > 0, 'sent off (troops leave the province at once)');
+  const res = applyPlan(game, plan);
+  assert.equal(res.ok, false);
+  assert.match(res.reason, AWAY_FORT);
+  assert.ok(game.buildings.has(fort.id));
+  assert.equal(canUndo(game), true, 'nothing cleared: the road can still be undone');
+  assert.ok(!sounds.includes('demolish'), 'and no demolition sound');
+});
+
+test('undo cannot take down a fort whose men are away', () => {
+  const game = newGame();
+  const s = findFree(game, 5, 5, { x: 30, y: 30 });
+  assert.ok(applyPlan(game, planAction(game, 'fort_legion', s.x + 1, s.y + 1, s.x + 1, s.y + 1)).ok);
+  const fort = game.buildings.get(game.map.buildingAt(s.x, s.y));
+  assert.equal(fort.type, 'fort_legion');
+  assert.equal(canUndo(game), true);
+  const u = spawnUnit(game, fort.def.unit, s.x + 1.5, s.y + 3.5, { fort: fort.id, slot: 0, state: 'idle' });
+  u.away = true; // (on his way out to a distant battle)
+  assert.equal(canUndo(game), false);
+  assert.match(undoLast(game).reason, AWAY_FORT);
+  assert.ok(game.buildings.has(fort.id));
+  u.away = false;
+  assert.ok(undoLast(game).ok, 'home again: it can be undone');
+});
+
+test('a Naval Station whose ships are away cannot be cleared; raiders still take a fort down and release its men', () => {
+  const { game, station } = fleetCity();
+  const berth = shoreBerth(game, station);
+  const ship = spawnUnit(game, 'liburnian', game.map.xOf(berth) + 0.5, game.map.yOf(berth) + 0.5, { station: station.id, slot: 0, state: 'idle' });
+  assert.equal(demolishBlocked(game, station), null);
+  ship.away = true;
+  assert.match(demolishBlocked(game, station), /^Its ships are away at a distant battle/);
+  assert.equal(clearFort(game, station).count, 0);
+  // A fort raiders bring down (not the player): its men away are released, as before.
+  const { game: g2, posts: [fort] } = marching();
+  damageBuilding(g2, fort, 1e9); // (a warband's blows)
+  assert.ok(!g2.buildings.has(fort.id));
+  assert.equal(awayCounts(g2).get(fort.id) || 0, 0, 'released there');
 });

@@ -13,6 +13,17 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.6)
+
+* **Salary up to your rank**: ranks above the governor's are shown greyed out and cannot be picked; a lower salary still earns favor at New Year. An older save paying above its rank drops to it on load, and what was drawn above it since New Year goes back to the treasury
+* **Festivals need temples** of the god honored, staffed: a small festival a temple, a large one a temple and a large temple, a grand one both and an Oracle. A size the city cannot hold says why, or that the province has no large temples or oracles
+* **The Senate (Curia) from mission 2**; Figlina asks for 1,400 people (was 1,350) to stay at 85% of its jobs
+* **A building faces the road**: held with a road along exactly one side, it turns its front to it; R takes over until another tool is picked
+* **Waterside buildings at the water's edge**: docks, wharves, shipyards, the Navalia, naval stations and the Portus need one whole side on the water, with no land between (older saves keep theirs)
+* **A fort or station with men away cannot be demolished** (clear tool, panel and undo): recall them or wait for them to come home
+* Headless sim: every level identical to v0.18.5
+* 962 unit tests, 201 browser checks
+
 ## Done (v0.18.5)
 
 * **Soldiers rest inside their fort**: at rest a fort's men stand in its yard among the tents, in and out by its gate; while raiders, Caesar's legions or a revolt are on the map they stand to at their old places outside and fight as before (in scripted raids, as many raiders slain or more, and the same buildings lost)

@@ -20,7 +20,7 @@
  */
 
 import { planAction, applyPlan, undoLast } from '../sim/construction.js';
-import { removeBuilding } from '../sim/entities.js';
+import { removeBuilding, waterEdge } from '../sim/entities.js';
 import { openRoute, setTradeMode, dockBerth } from '../sim/trade.js';
 import { TRADE_PARTNERS, FIRST_NINE } from '../data/scenarios.js';
 import { Terrain, WaterBits } from '../world/map.js';
@@ -742,7 +742,7 @@ export function buildDemoPortus(game, station) {
   const body = berth >= 0 ? map.navBody[berth] : 0;
   if (!body) return null;
   const onWater = (x, y) => {
-    const i = map.navigableBeside(x, y, 3);
+    const i = edgeWater(map, 'portus', x, y);
     return i >= 0 && map.navBody[i] === body;
   };
   const portus = placeJoined(game, 'portus', 3, station, 30, onWater);
@@ -784,6 +784,16 @@ function demoWall(game, center) {
 function homesInReach(game, start) {
   game.processRoadChanges(); // (indexes the homes by road too)
   return game.pf.bfsRoad(start, (i) => !!game.homeByRoad.get(i), CONFIG.LABOR_RANGE - 4) >= 0;
+}
+
+/**
+ * The water a waterside building of `type` with its top-left at (x, y)
+ * would berth at, or -1 where it may not stand: it must stand right at the
+ * water's edge (sim/entities.js waterEdge), so the showcases look only at
+ * spots the player could build on.
+ */
+function edgeWater(map, type, x, y) {
+  return waterEdge(map, BUILDINGS[type], x, y)?.water ?? -1;
 }
 
 /**
@@ -855,14 +865,14 @@ export function buildDemoFishery(game, center, { wharves = 2, stock = true } = {
   if (!game.isUnlocked('wharf') || !game.isUnlocked('shipyard')) return { ok: false, wharves: [] };
   // Water with fish and a ground: the spot must touch such water.
   const fishing = (x, y) => {
-    const i = map.fishWaterBeside(x, y, 2);
+    const i = edgeWater(map, 'wharf', x, y);
     return i >= 0 && map.groundsOf(map.fishBody[i]).length > 0;
   };
   const shipyard = placeJoined(game, 'shipyard', 2, center, 45, fishing);
   if (!shipyard) return { ok: false, wharves: [] };
   if (stock) shipyard.stock.timber = DEMO_YARD_TIMBER;
-  const body = map.fishBody[map.fishWaterBeside(shipyard.x, shipyard.y, 2)];
-  const sameWater = (x, y) => fishing(x, y) && map.fishBody[map.fishWaterBeside(x, y, 2)] === body;
+  const body = map.fishBody[edgeWater(map, 'shipyard', shipyard.x, shipyard.y)];
+  const sameWater = (x, y) => fishing(x, y) && map.fishBody[edgeWater(map, 'wharf', x, y)] === body;
   const built = [];
   for (let k = 0; k < wharves; k++) {
     const w = placeJoined(game, 'wharf', 2, shipyard, 30, sameWater);
@@ -1229,7 +1239,7 @@ export function buildDemoNavy(game, center, opts = {}) {
   if (!map.seaEntry || !game.isUnlocked('naval_station') || !game.isUnlocked('navalia')) return { ok: false };
   const sea = map.navBody[map.idx(map.seaEntry.x, map.seaEntry.y)];
   const onSea = (x, y) => {
-    const i = map.navigableBeside(x, y, 3);
+    const i = edgeWater(map, 'naval_station', x, y);
     return i >= 0 && map.navBody[i] === sea;
   };
   const station = placeJoined(game, 'naval_station', 3, center, 45, onSea);

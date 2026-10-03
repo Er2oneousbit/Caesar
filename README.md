@@ -32,7 +32,7 @@ Saved games stay in your browser. To keep a backup or move a city to another com
 * **Fishing:** a shipyard builds fishing boats from timber; a wharf's boat sails out to where the gulls circle and brings the catch home. Fish is a food of its own, and the sea does not freeze in winter.
 * **Native villages** in two late provinces (and the sandbox if you like): the Ligurians attack whatever you build on their land until a missionary from a mission post calms them; calmed, they come to buy your exports.
 * **Two kinds of bridge**, as in the original: a stone ship bridge high enough for every boat to sail under, and a cheaper timber low bridge that no boat passes. A low bridge can cut a dock off from the sea (you are warned while you place it), and keeps raider ships out of the river above it.
-* **Turn your buildings:** press **R** while placing one to turn it a quarter turn (every building is drawn from all four sides); the next of its kind starts the same way. Buildings by the water still face it, and an arch still follows its road.
+* **Turn your buildings:** a building held beside one road turns its front to that road by itself; press **R** while placing one to turn it a quarter turn yourself (every building is drawn from all four sides), and your turn holds until you pick another tool; the next of its kind starts the same way. Buildings by the water still face it (and must stand right at its edge), and an arch still follows its road.
 * **Turn the view:** see the city from any of its four sides (**Q**, or the buttons in the top bar), as in the original; the minimap turns with it.
 * **The Circus:** a 15-tile hippodrome with chariot races (a Factio sends the teams), laid east-west or, turned, north-south: the grandest show in the city and the key to its finest palaces.
 * **Sea raids and a fleet** (new, not in the original, which had no war at sea): where a river or the coast reaches the sea, about a third of raids come by ship, throwing fire pots at boats and buildings by the shore before they land. A Navalia builds liburnians, light warships with two banks of oars and a bronze ram, from timber, iron and linen; naval stations (Stationes) berth them in squadrons you send out like a fort's soldiers, and the Portus, a training harbor, teaches their crews to row in time. A *Sea raids* switch turns it off.
@@ -74,7 +74,7 @@ Press **F1** in the game for the full manual. The rules and numbers are in [docs
 | Space or P | Pause |
 | 1 2 3 4 | Speed 1x 2x 4x 8x |
 | H / R / X | Housing / Road / Clear tool |
-| R (placing a building) | Turn it a quarter turn clockwise (the ⟳ button beside its name does the same) |
+| R (placing a building) | Turn it a quarter turn clockwise (the ⟳ button beside its name does the same); until you do, a building beside one road faces that road |
 | Q / Shift+Q (or ] / [) | Turn the view: the city a quarter turn clockwise / back (the ⟳ ⟲ buttons in the top bar; the needle between them points north) |
 | Ctrl+Z | Undo the last construction (full refund, for a few days) |
 | O, Shift+O | Next overlay, overlays off |

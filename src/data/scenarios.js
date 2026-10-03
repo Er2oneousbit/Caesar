@@ -178,7 +178,7 @@ export const INVASION_PRESETS = Object.freeze({
  * more. The peaceful provinces ask for more people than their military
  * partner at every step (about a fifth more at steps 3 to 5), and from
  * step 3 for 83 to 90% of the model's sensible ceiling (85 to 90% at
- * steps 3 to 5, but Figlina 82% since the Curia's jobs came to the
+ * steps 3 to 5; Figlina rose to 1,400 when the Curia's jobs came to the
  * missions before step 5; the gardeners' yards lifted the late ceilings), villas
  * counted (never more than 92%: the villa quarter is the model's riskiest
  * assumption), with demand of their own on the original's tiers where
@@ -314,7 +314,7 @@ export const SCENARIOS = Object.freeze([
     map: { size: 112, type: 'plains', seed: 'figlina' },
     site: 'figline', // where it is on the empire map (data/sites.js)
     funds: 7000, startYear: -255,
-    goals: { population: 1350, culture: 45, prosperity: 30, peace: 50, favor: 30 },
+    goals: { population: 1400, culture: 45, prosperity: 30, peace: 50, favor: 30 },
     paceYears: 2.5,
     rank: 2, // Engineer (data/ranks.js)
     unlocks: TIER3, partners: ['tarraco', 'aquileia', 'capua'], requests: true,

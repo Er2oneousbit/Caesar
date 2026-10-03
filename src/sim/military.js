@@ -50,7 +50,7 @@ import { igniteBuilding, collapseBuilding, riskRates, withArticle } from './risk
 import { recordRuin } from './ruins.js';
 import { logGoods } from './goodsLedger.js';
 import { seaRaidPlan, seaLandingNow, launchSeaInvasion, updateNavy, potHit, fleeingToShips, landingReached, updateNavalDemand, seaRaidDays } from './navy.js';
-import { recruitDetour, recruitTrained, updateDrill, endDrill } from './training.js';
+import { recruitDetour, recruitTrained, updateDrill, endDrill, drillSpot, trainAt } from './training.js';
 import { newCaesarState, updateLegionary, refreshLegionField, legionCount, legionSummary, legionTargets } from './legion.js';
 import { PEOPLES, PEOPLE_BY_MISSION, PEOPLE_BY_SITE, GENERIC_PEOPLE, WALKER_TARGET_SOLDIERS, peopleById } from '../data/peoples.js';
 import { siteIdOf } from '../data/sites.js';
@@ -215,10 +215,10 @@ export class Unit {
     this.py = y;
     this.walked = 0; // tiles walked, modulo STRIDE_WRAP (drives the leg animation)
     this.trained = false; // Roman: trained at a Military Academy or the Portus (sim/training.js)
-    this.drill = 0; // Roman ship: id of the Portus it is on its way to, 0 = none (soldiers no longer go)
+    this.drill = 0; // Roman: id of the Campus (a soldier) or Portus (a ship) it is on a trip to, 0 = none
     this.drillDay = 0; // ...the day he set out
     this.drillDays = 0; // ...and how long the trip may take (sim/training.js startDrill)
-    this.trainLeft = 0; // ...and, moored at the Portus, the ticks of training left
+    this.trainLeft = 0; // ...and, there, the ticks of training left
     this.trainWait = 0; // ...and the ticks it has waited there for a full staff
   }
 }
@@ -733,7 +733,7 @@ function marchToPost(game, u, post, def, toGate = false) {
  * man already `out` stays out until it is STAND_DOWN_SLACK beyond. `memo`:
  * this tick's nearest foe, per fort.
  */
-function standsTo(game, fort, watch, out) {
+export function standsTo(game, fort, watch, out) {
   if (watch.alarm) return true;
   let d = watch.memo.get(fort.id);
   if (d === undefined) {
@@ -743,6 +743,21 @@ function standsTo(game, fort, watch, out) {
     watch.memo.set(fort.id, d);
   }
   return d <= STAND_TO_REACH + (out ? STAND_DOWN_SLACK : 0);
+}
+
+/**
+ * What calls the forts' men out of their yards (standsTo), looked up afresh
+ * from the units on the map: what updateMilitary builds each tick from its
+ * own lists, for the daily rules (sim/training.js startTrips).
+ */
+export function watchOf(game) {
+  let alarm = false;
+  const foes = [];
+  for (const u of game.units.values()) {
+    if (u.side === 'enemy') alarm = true; // (raiders, Caesar's men, gladiators, raider ships)
+    if (!UNIT_TYPES[u.type].naval && hostileToRome(u)) foes.push(u);
+  }
+  return { alarm, foes, memo: new Map() };
 }
 
 /**
@@ -764,7 +779,7 @@ export function deployFort(game, fortId, tx, ty) {
   const fort = game.buildings.get(fortId);
   if (!fort || fort.def.kind !== 'fort') return false;
   fort.rally = { x: tx + 0.5, y: ty + 0.5 };
-  for (const u of unitsOfFort(game, fortId)) { u.path = null; u.target = 0; u.state = 'march'; }
+  for (const u of unitsOfFort(game, fortId)) { endDrill(u); u.path = null; u.target = 0; u.state = 'march'; } // (a man on his way to the Campus comes too)
   return true;
 }
 
@@ -1270,9 +1285,9 @@ function updateRoman(game, u, enemies, watch) {
   if (!fort) { removeUnit(game, u, 'disbanded'); return; }
   if (u.noPath > 0) u.noPath--;
   if (u.ignore && game.time.totalTicks > u.ignoreUntil) u.ignore = null;
-  // On a trip to the drill yard in an older save: soldiers at rest no longer
-  // go (sim/training.js), so he comes straight home, untrained.
-  if (u.drill) endDrill(u);
+  // On a trip to the Campus (sim/training.js): called back the moment his
+  // fort is deployed or its men stand to, untrained if he had not finished.
+  if (u.drill && (fort.rally || standsTo(game, fort, watch, false))) endDrill(u);
   const post = postOf(game, u, fort);
   const zone = fightZone(game, def, fort, post);
   let target = u.target ? game.units.get(u.target) : null;
@@ -1318,14 +1333,47 @@ function updateRoman(game, u, enemies, watch) {
     }
     return;
   }
-  // No enemy: at rest in the yard, or to (or at) his post in the ranks. A
-  // man inside goes out by the gate first; with the gate shut he stays in,
-  // and one outside stands in the ranks.
+  // No enemy: on his trip to the Campus, at rest in the yard, or to (or at)
+  // his post in the ranks. A man inside goes out by the gate first; with the
+  // gate shut he stays in, and one outside stands in the ranks.
+  if (u.drill && tripStep(game, u, fort, def)) return;
   const rest = !fort.rally && !standsTo(game, fort, watch, !inside);
   const gate = rest || inside ? fortGate(game, fort) : null;
   if (inside ? rest || !gate : rest && gate) { if (u.pathFor) u.pathFor = 0; goToYard(game, u, fort, gate, def); return; }
   if (inside) { if (u.pathFor) u.pathFor = 0; leaveFort(u, gate, def.speed); return; }
   marchToPost(game, u, post, def);
+}
+
+/**
+ * One tick of a soldier's trip to the Campus (sim/training.js): out of his
+ * fort's yard by the gate, over open land to the academy's road as to any
+ * spot (marchTo), and his days of training there (trainAt). A route toward
+ * an enemy he fought on the way is dropped first.
+ * @returns {boolean} false when the trip is over (trained, or called off:
+ *   the gate shut, the academy gone): he goes home as a man at rest does
+ */
+function tripStep(game, u, fort, def) {
+  if (u.pathFor) { u.path = null; u.pathFor = 0; }
+  if (inOwnFort(game, u)) {
+    const gate = fortGate(game, fort);
+    if (!gate) { endDrill(u); return false; }
+    leaveFort(u, gate, def.speed);
+    u.state = 'drill';
+    return true;
+  }
+  const academy = game.buildings.get(u.drill);
+  const spot = drillSpot(game, academy, u);
+  if (!spot) { endDrill(u); return false; }
+  const d = Math.hypot(spot.x - u.x, spot.y - u.y);
+  // There, or as near as the ground lets him (as at a post: marchToPost).
+  if (d < 0.15 || (d < 1.2 && (u.stuck > 10 || u.state === 'training'))) {
+    u.path = null;
+    u.stuck = 0;
+    return trainAt(game, u, academy, CONFIG.ACADEMY_TRAIN_DAYS);
+  }
+  u.state = 'drill';
+  marchTo(game, u, spot.x, spot.y, def.speed);
+  return true;
 }
 
 /**

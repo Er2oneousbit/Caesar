@@ -33,7 +33,7 @@ import { WALKER_HP } from '../sim/walkerHarm.js';
 import { dockBerth, dockUsed, shipsWaitingText } from '../sim/trade.js';
 import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat, hasBoatTimber } from '../sim/fishing.js';
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
-import { trainedText, trainingNote, schoolStatus, inTrainingText } from './trainingInfo.js';
+import { trainedText, trainingNote, schoolStatus, inTrainingText, atATime } from './trainingInfo.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding, footprintRect, inOwnFort } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
@@ -277,6 +277,10 @@ export function soldierDoing(u, fort = null, inYard = false) {
     case 'engage':
     case 'fight': return 'Fighting';
     case 'drill': return 'On his way to train at the Campus';
+    case 'training': {
+      const days = Math.ceil((u.trainLeft || 0) / CONFIG.TICKS_PER_DAY);
+      return `Training at the Campus, ${days} day${days === 1 ? '' : 's'} left`;
+    }
     case 'away': return 'Away at a distant battle';
     case 'advance': return u.side === 'native' ? 'Attacking a building on his village\'s land' : 'Advancing on the city';
     case 'camp': return 'Camped outside the city';
@@ -691,7 +695,7 @@ export class InfoPanel {
           b.recruiting ? kv('Recruits on the way', `${b.recruiting}`) : null,
           newMenNote(g, b) ? h('div', { class: 'status warn new-men-note' }, newMenNote(g, b)) : null,
           kv('Training', trainedText(g, b)),
-          inTrainingText(g, b) ? kv('Recruits at the Campus', inTrainingText(g, b)) : null,
+          inTrainingText(g, b) ? kv('At the Campus', inTrainingText(g, b)) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Holding the fort'),
           kv('Keys', fortKey(b) ? `${fortKey(b)} shows this fort, F deploys it` : 'F deploys it (Shift+1 to 9 show forts I to IX)'),
@@ -767,7 +771,7 @@ export class InfoPanel {
           kv('Liburnians', `${n} / ${STATION_CAPACITY}`), bar(n, STATION_CAPACITY),
           newMenNote(g, b) ? h('div', { class: 'status warn new-men-note' }, newMenNote(g, b)) : null,
           kv('Crews', trainedText(g, b)),
-          inTrainingText(g, b) ? kv('New ships at the Portus', inTrainingText(g, b)) : null,
+          inTrainingText(g, b) ? kv('At the Portus', inTrainingText(g, b)) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding the water at ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding its berths'),
           kv('Keys', 'F deploys it'),
@@ -787,13 +791,13 @@ export class InfoPanel {
         parts.push(sec('Drill yard',
           kv('Soldiers trained here', fmt(b.trainedHere || 0)),
           kv('In training', inTrainingText(g, b) || 'Nobody'),
-          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Tirocinium marches first to the academy nearest his fort and trains there ${CONFIG.ACADEMY_TRAIN_DAYS} days (counted only while it is fully staffed), his place in the fort kept for him, then marches on to it; soldiers already in a fort stay at their posts and are never sent. Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
+          h('div', { class: 'muted' }, `Only a fully staffed academy (${def.workers} workers) trains anyone. Each new recruit from the Tirocinium marches first to the academy nearest his fort and trains there ${CONFIG.ACADEMY_TRAIN_DAYS} days (counted only while it is fully staffed), his place in the fort kept for him, then marches on to it. Untrained soldiers already in a fort come too, ${atATime()}, while their fort is at rest (not deployed, no enemy about), and go back trained; a raid or a deployment calls them straight home. Trained legionaries holding their ground take a quarter of a missile's damage and +${UNIT_TYPES.legionary.holdDefense} defense; trained archers and cavalry +${UNIT_TYPES.archer.trainedDefense} defense. Attack and health stay the same.`)));
         break;
       case 'portus':
         parts.push(sec('Training harbor',
           kv('Crews trained here', fmt(b.trainedHere || 0)),
           kv('In training', inTrainingText(g, b) || 'Nobody'),
-          h('div', { class: 'muted' }, `Only a fully staffed Portus (${def.workers} workers) trains a crew. A new liburnian rows first to the Portus nearest its station on the same water and moors there ${CONFIG.PORTUS_TRAIN_DAYS} days (counted only while it is fully staffed), then rows on to its berth; ships already at their berths stay there. A trained crew rows faster (${(UNIT_TYPES.liburnian.trainedSpeed * CONFIG.TICKS_PER_DAY).toFixed(1)} tiles a day to ${(UNIT_TYPES.liburnian.speed * CONFIG.TICKS_PER_DAY).toFixed(1)}), rams harder (${UNIT_TYPES.liburnian.trainedRam} to ${UNIT_TYPES.liburnian.ram}) and is harder to hit (+${UNIT_TYPES.liburnian.trainedDefense} defense). Rome's first war fleet, in 260 BC, learned to row on benches on dry land while its ships were built.`)));
+          h('div', { class: 'muted' }, `Only a fully staffed Portus (${def.workers} workers) trains a crew. A new liburnian rows first to the Portus nearest its station on the same water and moors there ${CONFIG.PORTUS_TRAIN_DAYS} days (counted only while it is fully staffed), then rows on to its berth; untrained ships already at their berths come ${atATime()} while their station is at rest. A trained crew rows faster (${(UNIT_TYPES.liburnian.trainedSpeed * CONFIG.TICKS_PER_DAY).toFixed(1)} tiles a day to ${(UNIT_TYPES.liburnian.speed * CONFIG.TICKS_PER_DAY).toFixed(1)}), rams harder (${UNIT_TYPES.liburnian.trainedRam} to ${UNIT_TYPES.liburnian.ram}) and is harder to hit (+${UNIT_TYPES.liburnian.trainedDefense} defense). Rome's first war fleet, in 260 BC, learned to row on benches on dry land while its ships were built.`)));
         break;
       case 'tower':
         parts.push(sec('Turris',

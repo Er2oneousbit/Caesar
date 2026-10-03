@@ -1125,8 +1125,14 @@ try {
   await page.keyboard.press('F2');
   await page.click('.tab:has-text("Imperial")');
   const govText = await page.textContent('.governor-card');
-  await page.selectOption('.salary-select', '6');
+  // Every rank is listed, those above the governor's (a Procurator's, 5)
+  // greyed out: Rome pays no governor above his rank.
+  const salaryOptions = await page.evaluate(() => [...document.querySelectorAll('.salary-select option')].map((o) => ({ v: Number(o.value), off: o.disabled, text: o.textContent })));
+  await page.selectOption('.salary-select', '4');
   const salaryRank = await page.evaluate(() => window.colonia.game.city.governor.salaryRank);
+  check('the salary picker offers the governor\'s rank and those below it; the ranks above are listed greyed out',
+    salaryOptions.length === 11 && salaryOptions.every((o) => o.off === (o.v > 5)) && /Aedile: 30 Dn a month \(above your rank\)/.test(salaryOptions[6]?.text) && /\(your rank\)/.test(salaryOptions[5]?.text) && salaryRank === 4 && errors.length === 0,
+    JSON.stringify({ salaryOptions: salaryOptions.map((o) => `${o.v}${o.off ? ' off' : ''}`), salaryRank }));
   const before = await page.evaluate(() => {
     const g = window.colonia.game;
     window.colonia.ui.console.run(`savings ${400 - g.city.governor.savings}`);
@@ -1136,7 +1142,7 @@ try {
   const lavish = await page.textContent('.gift-btn:has-text("Lavish")');
   await page.click('.gift-btn:has-text("Lavish")');
   const after = await page.evaluate(() => ({ savings: window.colonia.game.city.governor.savings, favor: window.colonia.game.city.ratings.favor, treasury: window.colonia.game.city.treasury }));
-  check('the Imperial advisor shows the rank and savings, sets the salary and sends a gift from savings', /Procurator/.test(govText) && /Personal savings/.test(govText) && salaryRank === 6 && /300 Dn \(\+10 favor\)/.test(lavish) && after.savings === 100 && after.favor > before.favor && after.treasury === before.treasury && errors.length === 0, JSON.stringify({ govText: govText.slice(0, 120), salaryRank, lavish, before, after }));
+  check('the Imperial advisor shows the rank and savings, sets the salary and sends a gift from savings', /Procurator/.test(govText) && /Personal savings/.test(govText) && salaryRank === 4 && /300 Dn \(\+10 favor\)/.test(lavish) && after.savings === 100 && after.favor > before.favor && after.treasury === before.treasury && errors.length === 0, JSON.stringify({ govText: govText.slice(0, 120), salaryRank, lavish, before, after }));
   await page.keyboard.press('Escape');
 
   // 5a3. The Problems overlay: a legend, and the reason over a flagged building;
@@ -1309,11 +1315,18 @@ try {
     gran.stock.wheat += 800;
     c.festivalCooldown = 0;
     c.treasury = Math.max(c.treasury, 5000);
+    // No staffed large temple of Ceres for the moment (the demo city builds
+    // small ones): her large festival waits for one, and says so.
+    const largeCeres = [...g.buildings.values()].filter((b) => b.type === 'temple_large_ceres').map((b) => [b, b.efficiency]);
+    for (const [b] of largeCeres) b.efficiency = 0;
     app.ui.openAdvisors('religion');
     const body = () => document.querySelector('.modal-body');
     const rows = [...body().querySelectorAll('.festivals tr[data-size]')].map((tr) => [...tr.children].map((td) => td.textContent));
     const btn = (size) => body().querySelector(`[data-god="ceres"] button[data-size="${size}"]`);
     const shown = { grandOff: !!btn('grand')?.disabled, largeOff: !!btn('large')?.disabled, smallOn: btn('small') && !btn('small').disabled, title: btn('grand')?.title || '', short: body().querySelector('.festivals [data-short="grand"]')?.textContent || '' };
+    shown.largeTitle = btn('large')?.title || '';
+    shown.templeNote = body().querySelector('[data-god="ceres"] [data-temples~="large"]')?.textContent || '';
+    for (const [b, eff] of largeCeres) b.efficiency = eff;
     const food = () => { let n = 0; for (const b of g.buildings.values()) if (b.def.kind === 'granary') for (const k in b.stock) n += b.stock[k]; return n; };
     const before = food();
     btn('small').click();
@@ -1338,6 +1351,9 @@ try {
       && fest.grandOff && fest.largeOff && fest.smallOn && /Needs \d+ wine in the warehouses, 0 stored/.test(fest.title) && /Grand: Needs \d+ wine/.test(fest.short)
       && fest.taken >= 100 && fest.last && fest.cooldown === 2 && fest.afterOff && fest.music === 'festival' && fest.musicLater !== 'festival' && errors.length === 0,
     JSON.stringify({ ...fest, errors }));
+  check('a festival size the god\'s temples cannot hold is greyed out, with the reason on the button and under it',
+    fest.granary && fest.largeOff && /^Needs a (staffed )?large temple of Ceres\./.test(fest.largeTitle) && /^Large festival: Needs a (staffed )?large temple of Ceres\.$/.test(fest.templeNote) && errors.length === 0,
+    JSON.stringify({ largeTitle: fest.largeTitle, templeNote: fest.templeNote }));
 
   // 5a5. Auto-pause (ui/autoPause.js): Settings turns on "a fire breaks out";
   //      a fire in the running game then pauses it, with a note that goes
@@ -2150,6 +2166,21 @@ try {
   await page.evaluate(() => window.colonia.turnView(-window.colonia.renderer.viewTurn));
   const units = await page.evaluate(() => window.colonia.game.units.size);
   check('soldiers and raiders survive save + load', units > 0, `${units} units`);
+  // A save made when a salary above the rank was allowed (sim/governor.js
+  // salaryWithinRank): it loads at the rank's rate, and the toast says what
+  // went back to the treasury (it is said while the save loads, before the
+  // game's messages reach the screen, so the app shows it after).
+  const lowered = await page.evaluate(() => {
+    const app = window.colonia;
+    const raw = JSON.parse(localStorage.getItem('colonia.save.quick'));
+    const gv = raw.city.governor;
+    Object.assign(gv, { salaryRank: Math.min(10, gv.rank + 1), savings: 500, paidThisYear: 100000 });
+    app.importText(JSON.stringify(raw));
+    const now = app.game.city.governor;
+    return { rank: now.rank, salaryRank: now.salaryRank, savings: now.savings, toast: [...document.querySelectorAll('#messages .toast')].map((t) => t.textContent).find((t) => /pays no governor above his rank/.test(t)) || '' };
+  });
+  check('an older save drawing a salary above the rank loads at the rank\'s rate, and a toast says what went back to the treasury',
+    lowered.salaryRank === lowered.rank && lowered.savings === 0 && /your salary is an? \w+'s \d+ Dn a month, and the 500 Dn you drew above/.test(lowered.toast) && errors.length === 0, JSON.stringify(lowered));
   await page.keyboard.press('Escape');
   await page.click('text=Save game');
   check('save menu shows localStorage usage', await page.isVisible('text=Stored in this browser (localStorage)'));

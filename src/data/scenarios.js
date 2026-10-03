@@ -168,7 +168,9 @@ export const INVASION_PRESETS = Object.freeze({
  * ask for what a sensibly built town employs: measured with the demo city
  * (`npm run sim -- --scenario c1 --unlocks --homes 40`: 312 people, 4% out
  * of work) and held under the capacity model's sensible ceiling by a test
- * (sim/capacity.js, `npm run sim -- --capacity`). The military provinces of
+ * (sim/capacity.js, `npm run sim -- --capacity`); mission 2's 450 was set
+ * before the Curia came to it, whose 30 jobs lift its ceiling to 550, so a
+ * town that builds one has room to spare. The military provinces of
  * steps 3 to 7 ask for a little under what a city of working homes alone
  * employs, or less; the model now counts a few villas too, which leaves
  * them room to spare. Portus Mercatorum asks for 3,900, the most that keeps
@@ -176,7 +178,8 @@ export const INVASION_PRESETS = Object.freeze({
  * more. The peaceful provinces ask for more people than their military
  * partner at every step (about a fifth more at steps 3 to 5), and from
  * step 3 for 83 to 90% of the model's sensible ceiling (85 to 90% at
- * steps 3 to 5; the gardeners' yards lifted the late ceilings), villas
+ * steps 3 to 5, but Figlina 82% since the Curia's jobs came to the
+ * missions before step 5; the gardeners' yards lifted the late ceilings), villas
  * counted (never more than 92%: the villa quarter is the model's riskiest
  * assumption), with demand of their own on the original's tiers where
  * their buildings alone do not give the work (Figlina, Beneventum and each
@@ -216,9 +219,14 @@ export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
  * The gardeners' yard comes with the garden, from the first mission: its
  * gardens and statues fade untended only where a yard can be built
  * (sim/gardens.js careApplies).
+ * The Curia (Senate House) comes with the second mission and stays from
+ * there: a town's seat of government, it collects taxes like a Forum and
+ * lifts culture and prosperity while staffed (sim/ratings.js). It costs 400
+ * Dn and 30 workers, a big share of a small town's people, so it is a
+ * choice there, not a given; the capacity model counts its jobs.
  */
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'gardener_yard', 'forum', 'governor_house'];
-const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
+const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza', 'senate'];
 /** The large temples (one per god) come with the third mission, the first to ask for Domus and bigger homes. */
 export const LARGE_TEMPLE_KEYS = Object.freeze(GOD_KEYS.map((g) => `temple_large_${g}`));
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school', 'governor_villa', ...LARGE_TEMPLE_KEYS];
@@ -296,7 +304,8 @@ export const SCENARIOS = Object.freeze([
       'An Aquaeductus (Aqueduct) connects a full reservoir to other reservoirs farther inland.',
       'Cottages need a fountain; above them homes want entertainment, then a school. A Theatrum (Theater) needs actors: build a Grex (Actor Troupe) nearby.',
       'Prosperity grows with better homes, a profit, work for everyone and fair wages.',
-      'Work is still scarce here: about 450 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
+      'The Curia (Senate House) collects taxes like a Forum and lifts culture and prosperity while staffed, but it costs 400 Dn and needs 30 workers: build it once the town has people to spare.',
+      'Work is still scarce here: about 450 people fill the jobs a sensible town has (about 550 with a Curia). Build homes for the people your buildings can employ, not more.',
     ],
   },
   {

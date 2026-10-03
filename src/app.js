@@ -622,6 +622,12 @@ export class App {
     const game = deserializeGame(data, this.flags);
     this.startGame(game, data.camera || null);
     this.ui.messages.push({ text: `Loaded ${data.meta?.city || 'city'} (${data.meta?.date || ''}).`, level: 'good', date: '' });
+    // What the load itself told the city (an older save's salary brought
+    // down to the rank, sim/governor.js salaryWithinRank) was said before
+    // anything listened, and starting the game cleared the toasts: show it
+    // now, oldest first. Those messages have ids from the save's next one on.
+    const from = data.nextIds?.message || 1;
+    for (const m of game.messages.filter((x) => x.id >= from).reverse()) this.ui.messages.push(m);
   }
 
   continueAutosave() {

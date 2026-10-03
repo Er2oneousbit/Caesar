@@ -5,21 +5,30 @@
  * residence.
  *
  * Rank       fixed for the mission (scenario.rank; data/ranks.js). It sets
- *            the salary Rome expects him to draw.
- * Salary     any rank's rate, chosen in the Imperial advisor (the rank's own
- *            by default). Paid at each month's end from the treasury into
- *            his savings, after wages, taxes and army pay, and only while the
- *            treasury can cover it: the salary never puts the city in debt
- *            (Colonia's debt stops all building and costs favor every month,
- *            harsher than the original's, which paid down to -5,000 Dn).
- *            Not paid after the mission is won (the original stopped it too).
+ *            the most salary Rome lets him draw.
+ * Salary     his rank's rate or a lower rank's, chosen in the Imperial
+ *            advisor (the rank's own by default). Never a higher rank's:
+ *            Colonia's own rule (the original let a governor draw any rate
+ *            and took favor for it at New Year, a trap more than a choice),
+ *            so the picker greys those out and setSalary refuses them. Paid
+ *            at each month's end from the treasury into his savings, after
+ *            wages, taxes and army pay, and only while the treasury can
+ *            cover it: the salary never puts the city in debt (Colonia's
+ *            debt stops all building and costs favor every month, harsher
+ *            than the original's, which paid down to -5,000 Dn). Not paid
+ *            after the mission is won (the original stopped it too).
  * Favor      at each New Year, Rome judges what was actually paid over the
- *            year: the lowest rank whose year of pay covers it. Above the
- *            governor's own rank, favor falls by the gap (two ranks above:
- *            -2); below it, favor rises by 1; at it, nothing. (The original
- *            looked only at the rate set on New Year's Eve, so a governor
- *            could draw Caesar's pay all year and switch back the night
- *            before; judging the year's pay closes that.)
+ *            year: the lowest rank whose year of pay covers it. Below the
+ *            governor's own rank, by his own choice, favor rises by 1; at
+ *            it, nothing. (The original looked only at the rate set on New
+ *            Year's Eve; judging the year's pay means a modest rate must be
+ *            kept all year to earn the point.)
+ *            A save from before the rule may hold a rate above the rank. It
+ *            is brought down to the rank as it loads, with no favor lost,
+ *            and what was drawn above the rank's rate since New Year goes
+ *            back from his savings to the treasury (salaryWithinRank): so no
+ *            year's pay is ever above the rank, and nothing is left for a
+ *            New Year or a victory to judge.
  * Savings    carried from mission to mission (the app keeps them in the
  *            campaign progress on victory). Spent on gifts to the Emperor
  *            (sim/emperor.js) or donated to the treasury, which the ledger
@@ -59,12 +68,12 @@ export function rankForYearPay(paid) {
 
 /**
  * Favor change for a year in which `paid` Dn of salary went to a governor
- * of `rank`: -gap above it, +1 below it, 0 at it.
+ * of `rank`: +1 below it, 0 at it. (A year above the rank cannot happen: the
+ * rate never goes above it, and an older save's is brought down as it loads,
+ * see salaryWithinRank.)
  */
 export function salaryFavor(rank, paid) {
-  const gap = rankForYearPay(paid) - rank;
-  if (gap > 0) return -gap;
-  return gap < 0 ? 1 : 0;
+  return rankForYearPay(paid) < rank ? 1 : 0;
 }
 
 /**
@@ -76,13 +85,58 @@ export function salaryMonthsSoFar(month) {
   return month === 0 ? 12 : month;
 }
 
-/** Set the salary to a rank's rate. @returns {{ok:boolean, reason?:string}} */
+/** Why a rank's rate cannot be drawn: above the governor's own rank. Null when it can. */
+export function salaryAboveRank(game, salaryRank) {
+  const rank = game.city.governor.rank;
+  if (salaryRank <= rank) return null;
+  return `Rome pays no governor above his rank: ${withArticle(RANKS[rank].name)} draws at most ${RANKS[rank].salary} Dn a month.`;
+}
+
+/** Set the salary to a rank's rate, the governor's own or lower. @returns {{ok:boolean, reason?:string}} */
 export function setSalary(game, salaryRank) {
   const gv = game.city.governor;
   if (game.city.victory) return { ok: false, reason: 'The mission is won: Rome no longer pays a salary here.' };
   if (!Number.isInteger(salaryRank) || salaryRank < 0 || salaryRank > TOP_RANK) return { ok: false, reason: 'Unknown salary.' };
+  const above = salaryAboveRank(game, salaryRank);
+  if (above) return { ok: false, reason: above };
   gv.salaryRank = salaryRank;
   return { ok: true };
+}
+
+/**
+ * On load: a save from before the salary was held to the rank may draw a
+ * higher rank's rate. It drops to the rank's own, and what was drawn above
+ * the rank's rate since New Year goes back from the savings to the treasury
+ * (as far as the savings hold it; the salary ledger line shrinks by as
+ * much). No favor is lost: the old rule's New Year judgement is gone, and
+ * this leaves no year's pay above the rank for it to have judged. Also
+ * mends a rate that is not a rank at all (a hand-edited file).
+ * @returns {number} Dn returned to the treasury
+ */
+export function salaryWithinRank(game) {
+  const c = game.city;
+  const gv = c.governor;
+  if (!gv) return 0;
+  const lowered = !(Number.isInteger(gv.salaryRank) && gv.salaryRank >= 0 && gv.salaryRank <= gv.rank);
+  if (lowered) gv.salaryRank = gv.rank;
+  const due = salaryOf(gv.rank) * salaryMonthsSoFar(game.time.month);
+  const over = Math.max(0, (gv.paidThisYear || 0) - due);
+  if (!lowered && over <= 0) return 0;
+  // The year's pay counts no more than the rank's, whatever the savings
+  // could give back: the year is judged as if the rate had always been it.
+  gv.paidThisYear = Math.min(gv.paidThisYear || 0, due);
+  const back = Math.min(gv.savings, over);
+  if (back > 0) {
+    gv.savings -= back;
+    c.treasury += back;
+    const ledger = c.finance?.thisYear;
+    if (ledger && ledger.salary) ledger.salary = Math.max(0, ledger.salary - back);
+  }
+  const own = RANKS[gv.rank];
+  const returned = `the ${back} Dn you drew above ${withArticle(own.name)}'s pay this year has gone back to the treasury`;
+  if (lowered) game.message(`Rome now pays no governor above his rank: your salary is ${withArticle(own.name)}'s ${own.salary} Dn a month${back > 0 ? `, and ${returned}` : ''}.`, 'info');
+  else if (back > 0) game.message(`Rome now pays no governor above his rank: ${returned}.`, 'info');
+  return back;
 }
 
 /** Monthly (after wages, taxes and army pay): the salary into savings, when the treasury covers it. */
@@ -111,9 +165,7 @@ export function salaryNewYear(game) {
   if (!d) return 0;
   const r = c.ratings;
   r.favor = Math.max(0, Math.min(100, r.favor + d));
-  const own = RANKS[gv.rank].name;
-  if (d < 0) game.message(`Rome has weighed your salary: ${paid} Dn last year is ${withArticle(RANKS[rankForYearPay(paid)].name)}'s pay, above your rank of ${own}. Favor ${d}.`, 'bad');
-  else game.message(`Rome notes your modest salary: ${paid} Dn last year, less than ${withArticle(own)}'s pay. Favor +${d}.`, 'good');
+  game.message(`Rome notes your modest salary: ${paid} Dn last year, less than ${withArticle(RANKS[gv.rank].name)}'s pay. Favor +${d}.`, 'good');
   return d;
 }
 
@@ -126,28 +178,10 @@ export function salaryOutlook(game) {
   const gv = game.city.governor;
   const left = game.city.victory ? 0 : 12 - game.time.month;
   const paid = gv.paidThisYear + salaryOf(gv.salaryRank) * left;
-  return { paid, worth: rankForYearPay(paid), favor: game.city.victory ? 0 : salaryFavor(gv.rank, paid) };
-}
-
-/**
- * On victory (the month step, before any New Year): the year so far is never
- * weighed at a New Year, since the salary stops with the mission won, so
- * what the governor paid himself above his rank's rate this year is taken
- * back from his savings before they go on to the next mission. Without it,
- * drawing Caesar's pay from New Year to the victory cost nothing and
- * carried up to 1,100 Dn into the next mission.
- * @returns {number} Dn taken back
- */
-export function salaryAtVictory(game) {
-  const gv = game.city.governor;
-  if (!gv) return 0;
-  const due = salaryOf(gv.rank) * salaryMonthsSoFar(game.time.month);
-  const over = Math.min(gv.savings, Math.max(0, gv.paidThisYear - due));
-  if (over <= 0) return 0;
-  gv.savings -= over;
-  gv.paidThisYear -= over;
-  game.message(`Rome has taken back ${over} Dn of this year's salary: more than ${withArticle(RANKS[gv.rank].name)}'s pay.`, 'bad');
-  return over;
+  // As salaryNewYear: the point is for a lower rate chosen, not for months
+  // the treasury could not pay at the rank's own.
+  const chosen = gv.salaryRank < gv.rank;
+  return { paid, favor: game.city.victory || !chosen ? 0 : salaryFavor(gv.rank, paid) };
 }
 
 /**

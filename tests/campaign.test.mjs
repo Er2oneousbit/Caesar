@@ -199,7 +199,7 @@ test('capacity model: a villa quarter where the Villa can be reached, its people
   for (const key of ['prefecture', 'engineer_post', 'market', 'forum', 'senate', 'barber', 'baths']) assert.ok(count(plan, key) <= count(working, key) + 1, `${key}: ${count(working, key)} -> ${count(plan, key)}`);
   assert.ok(count(plan, 'farm_vine') > count(working, 'farm_vine'), 'the villas drink wine');
   // Missions 1 to 3 cannot reach the Villa: no quarter, and their ceilings stay.
-  for (const [id, ceiling] of [['c1', 300], ['c2', 450], ['c3', 980], ['c3m', 1160]]) {
+  for (const [id, ceiling] of [['c1', 300], ['c2', 450], ['c3', 1530], ['c3m', 1160]]) {
     const s = findScenario(id);
     assert.equal(planCity(s, 500, SENSIBLE).villas, 0, `${id}: no villas`);
     assert.equal(employmentCeiling(s, SENSIBLE), ceiling, id);

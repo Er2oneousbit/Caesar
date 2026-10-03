@@ -28,7 +28,8 @@
  *   that comes proportionally more often: its
  *   interval is scaled by carry / volume, so on average its traders can carry
  *   its whole year. The line sits at the full carry, not below it, so every
- *   route of the first seven missions keeps its pace (the busiest, Aquileia's
+ *   route of the first two missions, the military provinces of steps 3 to 5,
+ *   Oasis Aurea and Urbs Magna keeps its pace (the busiest, Aquileia's
  *   caravans at 3,200 and Corinthus's ships at 5,200, are at 92% and 90% of
  *   it).
  *

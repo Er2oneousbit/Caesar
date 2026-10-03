@@ -218,6 +218,7 @@ import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
 import { emptyWildlife } from '../sim/wildlife.js';
+import { newTradeState } from '../sim/trade.js';
 import { eventStateOf } from '../sim/events.js';
 import { sandboxEventSwitches } from '../data/events.js';
 import { log } from './debug.js';
@@ -522,6 +523,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 21) upgradeTradeSwitchesV20(game);
   if (data.version < 22) upgradeTurnsV21(game);
   if (data.version < 23) upgradeEventsV22(game);
+  addNewPartners(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A hippodrome's sections lie the way its main section says (they were placed so).
@@ -533,6 +535,20 @@ export function deserializeGame(data, flags = {}) {
   // side: turn it to its water now, with the water layers rebuilt (sim/entities.js faceWater).
   for (const b of game.buildings.values()) if (b.waterSide === undefined) faceWater(game, b);
   return game;
+}
+
+/**
+ * A campaign save stores only its mission's id, so it loads with the
+ * mission's partners as they are now: a partner the mission has gained
+ * since the save was made (Capua at Figlina) gets its route, closed, as a
+ * new game has it. Without it the partner could never be traded with,
+ * though the mission's goals count on it. No save version: the routes
+ * already there are kept as they are.
+ */
+function addNewPartners(game) {
+  const routes = game.city.trade?.routes;
+  if (!routes) return;
+  for (const [id, route] of Object.entries(newTradeState(game.scenario.partners || []).routes)) routes[id] ??= route;
 }
 
 /**

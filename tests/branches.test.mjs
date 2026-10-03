@@ -120,6 +120,22 @@ test('a military province: raids early, forts a step sooner, a distant battle; a
     assert.ok(peace.goals.culture > war.goals.culture, `${peace.id} culture ${peace.goals.culture} over ${war.goals.culture}`);
     assert.ok(peace.goals.prosperity > war.goals.prosperity, `${peace.id} prosperity`);
     assert.ok(peace.goals.favor >= war.goals.favor, `${peace.id} favor`);
+    // ...and on its size: the trading, building side grows bigger cities
+    // (at steps 3 to 5 Figlina, Paestum and Beneventum once asked for as
+    // many people as their military partner, or fewer).
+    assert.ok(peace.goals.population > war.goals.population, `${peace.id} ${peace.goals.population} people over ${war.id}'s ${war.goals.population}`);
+  }
+  // Caesar watches from step 3, on both tracks: every province asks for his
+  // favor (the step 3 and Pons Aelius goals were 0, so nothing a governor
+  // did with Caesar mattered there).
+  for (const s of SCENARIOS) if (s.step >= 3) assert.ok(s.goals.favor > 0, `${s.id}: a favor goal`);
+  // Favor starts at 50 and drifts back toward it, so a goal at or below 50
+  // is one to keep, and one above it must be earned: it grows along the
+  // campaign, the steps of each track never asking for less than the step
+  // before.
+  for (const track of ['peaceful', 'military']) {
+    const favors = SCENARIOS.filter((s) => s.step >= 3 && s.track === track).map((s) => [s.step, s.goals.favor]).sort((a, b) => a[0] - b[0]);
+    for (let i = 1; i < favors.length; i++) assert.ok(favors[i][1] >= favors[i - 1][1], `${track}: favor ${favors[i][1]} at step ${favors[i][0]} under ${favors[i - 1][1]}`);
   }
   // Firmum: legionaries only (archers, cavalry and the fleet wait for step 4),
   // the campaign's earliest raids, and no water to the map's edge, so no raid
@@ -146,16 +162,27 @@ test('the new missions fit their jobs and keep to their pace', () => {
     const s = findScenario(id);
     const ceiling = employmentCeiling(s, SENSIBLE);
     assert.ok(s.goals.population <= ceiling && employsEnough(s, s.goals.population, SENSIBLE), `${id}: ${s.goals.population} people, ceiling ${ceiling}`);
-    // A little under what a city of working homes alone employs (the goals
-    // were set so before the model counted a villa quarter, which lifts the
-    // ceilings of missions 4 on: those goals stay, with room to spare).
-    const working = employmentCeiling(s, { ...SENSIBLE, villas: 0 });
-    assert.ok(s.goals.population <= working && s.goals.population >= working * 0.9, `${id}: a goal a little under the ceiling of working homes (${s.goals.population} of ${working})`);
-    // With the population in reach, peace sets the pace: a point a month from 20.
     const m = goalMonths(s.goals);
-    assert.equal(m.fastest, m.peace, `${id}: peace sets the pace`);
-    assert.equal(m.peace, s.goals.peace - 20);
+    if (s.track === 'military') {
+      // Firmum: a little under what a city of working homes alone employs
+      // (set so before the model counted a villa quarter); peace sets its
+      // pace, a point a month from 20.
+      const working = employmentCeiling(s, { ...SENSIBLE, villas: 0 });
+      assert.ok(s.goals.population <= working && s.goals.population >= working * 0.9, `${id}: a goal a little under the ceiling of working homes (${s.goals.population} of ${working})`);
+      assert.equal(m.fastest, m.peace, `${id}: peace sets the pace`);
+      assert.equal(m.peace, s.goals.peace - 20);
+    } else {
+      // Paestum and Beneventum, as the late peaceful provinces: 85 to 90% of
+      // the sensible ceiling, villas counted, with demand of their own on the
+      // original's tiers for the work.
+      assert.ok(s.goals.population >= ceiling * 0.85 && s.goals.population <= ceiling * 0.9, `${id}: ${s.goals.population} people of a ceiling of ${ceiling}`);
+      for (const goods of Object.values(s.demand)) for (const v of Object.values(goods)) assert.ok([1500, 2500, 4000].includes(v), `${id}: ${v}`);
+    }
   }
+  // Paestum's culture and peace still take longer than its people; Beneventum's 4,700 people set its pace.
+  assert.equal(goalMonths(findScenario('c4p').goals).fastest, 45);
+  const benev = goalMonths(findScenario('c5p').goals);
+  assert.equal(benev.fastest, benev.population);
 });
 
 test('the late siblings ask for a little under the people their jobs allow, and the people set their pace', () => {
@@ -217,9 +244,9 @@ test('after a win: the next step\'s two provinces as cards; one mission alone as
   assert.deepEqual(after2.map((c) => [c.id, c.track]), [['c3', 'Peaceful'], ['c3m', 'Military']]);
   assert.equal(after2[1].name, 'Firmum: The Picene Frontier');
   assert.equal(after2[1].threat, 'First raid after about 2 years; forts and a legion; Caesar may call for troops.');
-  assert.equal(after2[0].threat, 'No raiders and no forts: Rome judges you by culture and prosperity.');
+  assert.equal(after2[0].threat, 'No raiders and no forts: Rome judges you by culture, prosperity and the Emperor\'s favor.');
   assert.equal(after2[1].map, 'Lake District, 112×112');
-  assert.equal(after2[1].goals, 'population 1,100, culture 35, prosperity 20, peace 48');
+  assert.equal(after2[1].goals, 'population 1,100, culture 35, prosperity 20, peace 48, favor 30');
   assert.match(after2[1].intro, /^Rome planted the Latin colony of Firmum .* 264 BC/);
   // Win c3m: Pons Aelius (military) and Paestum (peaceful): tracks switch freely.
   const after3 = nextMissions('c3m').map(postCard);
@@ -327,4 +354,25 @@ test('saves: each new mission saves as its id and loads back as itself', () => {
     assert.equal(back.city.governor.savings, 400);
     assert.equal(back.military.nextRaidMonth, game.military.nextRaidMonth);
   }
+});
+
+test('saves: a mission in progress takes its goals as they are now, and a partner it has gained since', () => {
+  // A Figlina saved when it traded with Tarraco and Aquileia only, asked for
+  // 950 people and no favor: it loads with today's goals (the save holds the
+  // mission's id, not its goals) and with Capua's route, closed, so the
+  // pottery Capua buys can be sold; the routes it had stay as they were.
+  const game = new Game({ scenario: findScenario('c3'), flags: {} });
+  game.runDays(3);
+  const data = JSON.parse(JSON.stringify(serializeGame(game)));
+  delete data.city.trade.routes.capua;
+  data.city.trade.routes.tarraco.open = true;
+  data.city.trade.routes.tarraco.visits = 4;
+  const back = deserializeGame(data);
+  assert.deepEqual(back.scenario.goals, findScenario('c3').goals);
+  assert.deepEqual(Object.keys(back.city.trade.routes).sort(), ['aquileia', 'capua', 'tarraco']);
+  assert.equal(back.city.trade.routes.capua.open, false);
+  assert.equal(back.city.trade.routes.tarraco.open, true);
+  assert.equal(back.city.trade.routes.tarraco.visits, 4);
+  // A mission whose partners are all in its save loads exactly as saved.
+  assert.deepEqual(deserializeGame(JSON.parse(JSON.stringify(serializeGame(game)))).city.trade.routes, game.city.trade.routes);
 });

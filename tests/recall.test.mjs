@@ -306,13 +306,27 @@ test('a rider reaching them in the battle\'s own month turns them in time', () =
   assert.equal(recallOf(game, fort.id).men.length, 8);
 });
 
-test('men still in the province turn back at once, with no rider, and no longer count', () => {
+test('sent troops leave the province at once, with their places kept', () => {
+  const game = newGame();
+  const fort = fortWith(game, 4, 0);
+  requestTroops(game, 'placentia', 6);
+  assert.ok(sendTroops(game).ok);
+  assert.equal(atFort(game, fort).length, 0, 'none walk to the edge first');
+  assert.equal(game.military.battle.sent.men.length, 4);
+  assert.equal(takesNewMen(game, fort), false);
+});
+
+test('men still in the province (a save from before they left at once) turn back at once, with no rider, and no longer count', () => {
   const game = newGame({ type: 'plains' }); // (a long way to the exit: they follow a route there)
   const fort = fortWith(game, 4, 0);
   requestTroops(game, 'placentia', 6);
   sendTroops(game);
-  game.runDays(3);
   const b = game.military.battle;
+  // As an older save had them: back on the map, on their way to the exit.
+  for (const rec of b.sent.men.splice(0)) {
+    spawnUnit(game, rec.type, fort.x + 1.5, fort.y + 3.5, { fort: fort.id, slot: rec.slot, state: 'away', away: true, awayTick: game.time.totalTicks });
+  }
+  game.runDays(3);
   const leaving = [...game.units.values()].filter((u) => u.away);
   assert.equal(leaving.length, 4, 'still on their way out');
   const res = recallFromBattle(game, fort.id);

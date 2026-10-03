@@ -220,6 +220,27 @@ function drawItem(ctx, w, item, sx, sy, k, face, wave = 0, t = 0) {
       ctx.fillStyle = '#777';
       ctx.fillRect(hx - 1.6 * k, hy - 4.5 * k, 3.2 * k, 1.4 * k);
       break;
+    case 'shears': {
+      // a gardener's pruning hook on a long handle, and a sprig of clippings
+      ctx.strokeStyle = '#8a6a44';
+      ctx.lineWidth = 0.7 * k;
+      ctx.beginPath();
+      ctx.moveTo(hx, sy - 1 * k);
+      ctx.lineTo(hx, sy - 15 * k);
+      ctx.stroke();
+      ctx.strokeStyle = '#9aa0a6';
+      ctx.lineWidth = 0.8 * k;
+      ctx.beginPath();
+      // the blade curls up and over, away from the handle, whichever way he faces
+      if (face > 0) ctx.arc(hx + 1.4 * k, sy - 15 * k, 1.4 * k, Math.PI, Math.PI * 1.9, false);
+      else ctx.arc(hx - 1.4 * k, sy - 15 * k, 1.4 * k, 0, -Math.PI * 0.9, true);
+      ctx.stroke();
+      ctx.fillStyle = '#5c8a3a';
+      ctx.beginPath();
+      ctx.arc(sx - face * 2.2 * k, sy - 8 * k, 1.3 * k, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
     case 'staff':
       ctx.strokeStyle = '#8a6a44';
       ctx.lineWidth = 0.8 * k;

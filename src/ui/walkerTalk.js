@@ -80,6 +80,7 @@ function workLines(game, w) {
       if (w.state === 'extinguish') return ['More water! Keep it coming!'];
       return ['Keep your lamps trimmed and your hearths swept.', 'Quiet streets. Just how I like them.', 'One spark on a dry roof and the whole street goes up.'];
     case 'engineer': return ['These walls will not mend themselves.', 'A crack today is a collapse tomorrow.', 'Good stone, poor mortar. I see it everywhere.'];
+    case 'gardener': return ['Box hedges do not clip themselves.', 'Leave a garden a season and the weeds own it.', 'A little oil and the bronze shines like new.'];
     case 'priest': return [`${god} watches over this street.`, `Honor ${god}, and ${god} will honor you.`, 'Bring an offering to the temple, friend.'];
     case 'teacher': return ['The children are learning their letters. Some of them, anyway.', 'An educated city is a strong city.'];
     case 'librarian': return ['I have a scroll here on the voyages of Ulysses. Care to borrow it?', 'Knowledge is the one thing no raider can carry off.'];

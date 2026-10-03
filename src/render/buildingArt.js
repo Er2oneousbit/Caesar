@@ -58,13 +58,16 @@ export const COL = Object.freeze({
   sand: '#dcc58e',
 });
 
+/** The care step (sim/gardens.js) from which a garden or statue looks untended: 60% of its bonus or less. */
+const NEGLECT_STEP = 2;
+
 /** Extra art height (px above the footprint's top corner) per key. */
 const HEIGHT = {
   house: 70, well: 24, fountain: 26, reservoir: 30, barber: 34, clinic: 34, baths: 50, hospital: 50,
   oracle: 56, school: 44, library: 52, academy: 60, theater: 40, amphitheater: 46, colosseum: 70,
   actor_troupe: 44, gladiator_school: 40, menagerie: 40, forum: 46, senate: 84, garden: 30,
   governor_house: 52, governor_villa: 66, governor_palace: 104,
-  statue_small: 40, statue_medium: 64, statue_large: 90, triumphal_arch: 82, engineer_post: 44, prefecture: 40,
+  statue_small: 40, statue_medium: 64, statue_large: 90, triumphal_arch: 82, engineer_post: 44, gardener_yard: 34, prefecture: 40,
   clay_pit: 30, timber_yard: 34, iron_mine: 40, marble_quarry: 40, market: 36, granary: 50, warehouse: 40,
   barracks: 36, fort_legion: 36, fort_archer: 36, fort_cavalry: 36, tower: 66, horse_ranch: 34, dock: 44,
   shipyard: 36, wharf: 30, hippodrome: 46, hippodrome_part: 46, chariot_maker: 34, navalia: 42, naval_station: 58,
@@ -81,7 +84,7 @@ const SHADOW = {
   well: 0.15, fountain: 0.2, reservoir: 0.25, garden: 0.15, plaza: 0, market: 0.3, horse_ranch: 0.25,
   clay_pit: 0.08, iron_mine: 0.45, marble_quarry: 0.35, dock: 0.35, statue_small: 0.35, statue_medium: 0.6,
   statue_large: 0.9, triumphal_arch: 0.9, tower: 1.15, senate: 1.1, colosseum: 1.05, amphitheater: 0.7, theater: 0.55, granary: 0.8,
-  warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45,
+  warehouse: 0.4, barracks: 0.55, fort_legion: 0.5, fort_archer: 0.5, fort_cavalry: 0.5, engineer_post: 0.45, gardener_yard: 0.3,
   prefecture: 0.45, shipyard: 0.3, wharf: 0.25, hippodrome: 0.35, hippodrome_part: 0.35, chariot_maker: 0.45,
   navalia: 0.4, naval_station: 0.55, portus: 0.3, military_academy: 0.5, governor_house: 0.55, governor_villa: 0.75, governor_palace: 1.0,
   native_crops: 0.05, native_hut: 0.5, native_meeting: 0.4,
@@ -137,12 +140,26 @@ export function buildingSpec(key, S, variant = 0, state = 0, live = false, snow 
         // (round and square-symmetric buildings look the same from every side).
         drawTurned(ctx, S, SAME_EVERY_WAY.has(key) ? 0 : turn, (c) => fn(c, S, variant, state, key));
         if (sick) sickSign(ctx, S, extra); // (always at the front corner, whatever the turn)
+        if (BUILDINGS[key]?.tended && state === 1) neglectTint(ctx, S, extra);
       } finally {
         liveFlags = false;
         setRoofSnow(0);
       }
     },
   };
+}
+
+/**
+ * A garden or statue left untended (sim/gardens.js, artState 1): drawn a
+ * little dull and dusty all over, as the sick home is drawn pale. Over the
+ * finished sprite, so it needs nothing of the turned art.
+ */
+function neglectTint(ctx, S, extra) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop'; // only what the art drew
+  ctx.fillStyle = 'rgba(112,98,64,0.36)';
+  ctx.fillRect(-S * HALF_W - 2, -extra - 2, S * CONFIG.TILE_W + 4, extra + S * TH + 6);
+  ctx.restore();
 }
 
 /**
@@ -1586,21 +1603,35 @@ function governorPalaceArt(ctx, S, variant) {
   flagPoles(ctx, 'governor_palace', S);
 }
 
-function gardenArt(ctx, S, variant) {
-  quad(ctx, 0.04, 0.04, S - 0.04, S - 0.04, 0, '#6e9d44');
+/**
+ * A garden. `state` 1: left untended (sim/gardens.js): the grass dry, the
+ * hedge ragged and brown, most flowers gone and weeds come up.
+ */
+function gardenArt(ctx, S, variant, state) {
+  const worn = state === 1;
+  quad(ctx, 0.04, 0.04, S - 0.04, S - 0.04, 0, worn ? '#93954f' : '#6e9d44');
   // hedge border
-  ctx.strokeStyle = '#3e6b2c';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = worn ? '#6a6234' : '#3e6b2c';
+  ctx.lineWidth = worn ? 1.4 : 2;
   const pts = [P(0.1, 0.1, 1), P(0.9, 0.1, 1), P(0.9, 0.9, 1), P(0.1, 0.9, 1)];
   ctx.beginPath(); pts.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.stroke();
-  // flowers
-  for (let k = 0; k < 9; k++) {
+  // flowers (a few faded ones left untended)
+  for (let k = 0; k < (worn ? 3 : 9); k++) {
     const [x, y] = P(0.2 + hash01(variant, k, 51) * 0.6, 0.2 + hash01(variant, k, 52) * 0.6);
-    ctx.fillStyle = ['#e85d5d', '#f4e27a', '#f7f2e4', '#c77dd6'][k % 4];
+    ctx.fillStyle = worn ? ['#b98a6a', '#c9b66a', '#cfc7b4'][k % 3] : ['#e85d5d', '#f4e27a', '#f7f2e4', '#c77dd6'][k % 4];
     ctx.beginPath(); ctx.arc(x, y - 1, 1.3, 0, Math.PI * 2); ctx.fill();
   }
-  if (variant % 2) cypress(ctx, 0.5, 0.5, 0.75);
-  else tree(ctx, 0.5, 0.5, 0.6, '#4f8a3c', '#6b4a2a', variant);
+  // weeds
+  if (worn) {
+    ctx.strokeStyle = '#7a6a3a';
+    ctx.lineWidth = 0.7;
+    for (let k = 0; k < 6; k++) {
+      const [x, y] = P(0.18 + hash01(variant, k, 53) * 0.64, 0.18 + hash01(variant, k, 54) * 0.64);
+      ctx.beginPath(); ctx.moveTo(x - 1, y); ctx.lineTo(x - 0.4, y - 2.4); ctx.moveTo(x + 1, y); ctx.lineTo(x + 0.4, y - 2.2); ctx.stroke();
+    }
+  }
+  if (variant % 2) cypress(ctx, 0.5, 0.5, 0.75, worn ? '#4f5a2c' : undefined);
+  else tree(ctx, 0.5, 0.5, 0.6, worn ? '#7a8a3c' : '#4f8a3c', '#6b4a2a', variant);
 }
 
 /**
@@ -1939,6 +1970,44 @@ function engineerArt(ctx) {
   ctx.beginPath(); ctx.moveTo(x - 12, y - 18); ctx.lineTo(x - 12, y - 9); ctx.stroke();
   ctx.fillStyle = COL.stone;
   ctx.fillRect(x - 14, y - 9, 4, 3);
+}
+
+/**
+ * The gardeners' yard (Topiaria): a gravel yard with a timber tool shed at
+ * the back, a clipped hedge along one side, a rake and a hoe leaning on the
+ * shed, and potted shrubs along the front waiting to be planted out.
+ */
+function gardenerYardArt(ctx, S, variant) {
+  quad(ctx, 0.05, 0.05, 0.95, 0.95, 0, '#bfae84'); // gravel
+  quad(ctx, 0.12, 0.6, 0.66, 0.9, 0.2, '#8a6a44'); // a bed of turned earth for the cuttings
+  box(ctx, 0.1, 0.1, 0.5, 0.42, 0, 11, COL.wood);
+  gableRoof(ctx, 0.1, 0.1, 0.5, 0.42, 11, 5, COL.terra, 'u');
+  door(ctx, 'left', 0.1, 0.1, 0.6, 0.52, 0, 0.55, COL.woodDark, 0.16, 7);
+  // a rake and a hoe against the shed's side
+  const [x, y] = P(0.63, 0.32);
+  ctx.strokeStyle = COL.woodDark;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x + 1.6, y - 12);
+  ctx.moveTo(x + 3.2, y + 0.6); ctx.lineTo(x + 4.2, y - 10.5);
+  ctx.stroke();
+  ctx.strokeStyle = COL.iron;
+  ctx.beginPath();
+  ctx.moveTo(x - 0.4, y - 12); ctx.lineTo(x + 3.6, y - 12); // the rake's head
+  ctx.moveTo(x + 4.2, y - 10.5); ctx.lineTo(x + 6, y - 9.6); // the hoe's blade
+  ctx.stroke();
+  // a clipped hedge along the right edge
+  box(ctx, 0.76, 0.12, 0.14, 0.76, 0, 5, '#4f7a34', { plain: true });
+  // potted shrubs along the front, and a young cypress
+  for (const [u, v] of [[0.22, 0.76], [0.4, 0.8], [0.58, 0.74]]) {
+    box(ctx, u - 0.06, v - 0.06, 0.12, 0.12, 0, 2.6, COL.terra, { plain: true });
+    const [px, py] = P(u, v, 2.6);
+    ctx.fillStyle = (variant + u * 10) % 2 < 1 ? '#5e8f3c' : '#6b9a46';
+    ctx.beginPath(); ctx.arc(px, py - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath(); ctx.arc(px - 0.8, py - 2.8, 1, 0, Math.PI * 2); ctx.fill();
+  }
+  cypress(ctx, 0.66, 0.62, 0.45);
 }
 
 function prefectureArt(ctx) {
@@ -2867,6 +2936,7 @@ const ART = {
   statue_large: statueArt,
   triumphal_arch: triumphalArchArt,
   engineer_post: engineerArt,
+  gardener_yard: gardenerYardArt,
   prefecture: prefectureArt,
   clay_pit: clayPitArt,
   timber_yard: timberYardArt,
@@ -2917,6 +2987,9 @@ export function artState(b, resting = false) {
   if (kind === 'wharf') return (b.waterSide ?? 1) + 4 * ((b.stock?.fish || 0) > 0 ? 1 : 0); // baskets of fish on the deck
   if (kind === 'part') return b.section || 0; // a hippodrome's stretch of track
   if (kind === 'arch') return b.axis || 0; // the way the road runs under it
+  // A garden or statue faded to NEGLECT_STEP or past it (sim/gardens.js)
+  // looks it: 1, drawn dry or dull. One more sprite a type at most.
+  if (b.def.tended) return (b.careStep || 0) >= NEGLECT_STEP ? 1 : 0;
   if (kind === 'farm') return Math.min(4, Math.floor(b.progress / 20)) + (resting ? 5 : 0);
   // Water works and what runs on piped water (the baths) show it: a full
   // pool, or a dry one (the baths were always drawn full, even out of a

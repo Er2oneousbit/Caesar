@@ -22,9 +22,9 @@
  *   when the city lies on a sea route and the province's water reaches the
  *   sea, every Naval Station switched on sends its squadron. Their strength
  *   is fixed there and then: battleStrength (sim/training.js) of each man and
- *   ship. Soldiers march to the map exit and ships sail to the sea entry,
- *   leaving the province there; their records travel with the troops
- *   (`sent.men`, `sent.ships`). Their places at home are kept: the barracks
+ *   ship. They leave the province at once (the march months stand for the
+ *   whole way); their records travel with the troops (`sent.men`,
+ *   `sent.ships`). Their places at home are kept: the barracks
  *   and the navalia do not fill them, and they are paid as before.
  *
  * The march (monthly while the battle is pending)
@@ -52,8 +52,9 @@
  *
  * Recall (Colonia's own; a fort's or station's panel, the Imperial advisor)
  *   While the battle is pending, the men (and ships) of one fort or station
- *   can be called back. Those still in the province on their way out turn
- *   at once. Those already gone are reached by a rider, who rides at twice
+ *   can be called back. Those still in the province on their way out (only
+ *   in a save from before v0.18.3, when troops walked to the map's edge
+ *   first) turn at once. Those already gone are reached by a rider, who rides at twice
  *   the marching pace: he needs riderMonths(covered) = half the months they
  *   have marched, rounded up, at least 1. They march on meanwhile (they do
  *   not know yet); when he reaches them they turn back and come home after
@@ -246,14 +247,13 @@ export function sendTroops(game) {
   b.sent = { month: game.time.totalMonths, march, toGo: march, strength, men: [], ships: [], count: units.length };
   let men = 0;
   let ships = 0;
+  // They leave the province at once: walking to the map's edge first took
+  // longer than some of the marches themselves (playtest), and the march
+  // months already stand for the whole way.
   for (const u of units) {
     endDrill(u);
-    u.away = true;
-    u.awayTick = game.time.totalTicks;
-    u.path = null;
-    u.target = 0;
-    u.state = 'away';
     if (UNIT_TYPES[u.type].naval) ships++; else men++;
+    leaveForBattle(game, u);
   }
   const c = THREATENED_CITIES[b.city];
   game.message(`${men} soldier${men === 1 ? '' : 's'}${ships ? ` and ${ships} liburnian${ships === 1 ? '' : 's'}` : ''} set out for ${c.name} (strength ${strength}). They need about ${march} months to get there.`, 'imperial');

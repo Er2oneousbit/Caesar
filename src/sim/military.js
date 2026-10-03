@@ -1329,10 +1329,12 @@ function updateRoman(game, u, enemies, watch) {
 }
 
 /**
- * A soldier sent to a distant battle (sim/battle.js) marches to the map exit
- * over open land, as to his post, and leaves the province there. One who
- * cannot get there in AWAY_MAX_TICKS (cut off by water, say) is taken to have
- * found another way out.
+ * A soldier of an older save still on his way to a distant battle (sim/battle.js
+ * now sends troops away at once) marches to the map exit over open land, as
+ * to his post, and leaves the province there. One who cannot get there in
+ * AWAY_MAX_TICKS (cut off by water, say) is taken to have found another way
+ * out. The gate step is a safety net: no such man should be in a yard, but
+ * one there must never plan a route from inside the walls.
  */
 function marchOut(game, u) {
   const ex = game.map.exit;

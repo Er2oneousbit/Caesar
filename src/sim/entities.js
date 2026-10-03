@@ -17,6 +17,7 @@ import { FOOD_TYPES, HOUSE_GOODS, GOOD_KEYS, WAREHOUSE_GOODS, emptyStock } from 
 import { WALKER_TYPES } from '../data/walkers.js';
 import { HERD_START } from '../data/units.js';
 import { clearRuin } from './ruins.js';
+import { freeFortNumber } from './fortNumbers.js';
 
 // ---------------------------------------------------------------------------
 // Buildings
@@ -160,6 +161,7 @@ function initKind(b, def) {
     case 'fort':
       b.recruiting = 0; // recruits walking here right now
       b.rally = null; // deploy point {x, y} or null = stand at the fort
+      b.number = 0; // its number among the forts (Castra III, Shift+3), given as it is placed (addBuilding)
       break;
     case 'navalia': // sim/navy.js
       b.stock = emptyStock(def.inputs); // timber, iron, linen for the next liburnian
@@ -387,10 +389,15 @@ export function addBuilding(game, type, x, y, size, { quiet = false, turn = 0 } 
   if (b.def.kind === 'farm') {
     b.fertility = map.countTerrain(x, y, b.size, 1 /* MEADOW */) / (b.size * b.size);
   }
+  // The lowest number no standing fort holds (sim/fortNumbers.js), before
+  // the fort joins the list so it does not count itself.
+  if (b.def.kind === 'fort') b.number = freeFortNumber(game);
   game.buildings.set(id, b);
   computeAccessRoad(game, b);
   faceWater(game, b);
   b.createdDay = game.time.totalDays;
+  // A new garden or statue starts fully tended (sim/gardens.js).
+  if (b.def.tended) { b.tendedDay = game.time.totalDays; b.careStep = 0; }
   game.markDirty('des', 'water');
   map.touch();
   if (!quiet) game.events.emit('buildingAdded', b);

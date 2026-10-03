@@ -25,6 +25,9 @@
  *                  (raiders, rioters and an angered Mercury, who burns the
  *                  fullest storehouse, can still destroy them).
  *   walker         roaming walker type spawned by the building
+ *   tended         a garden or statue: its desirability fades untended and a
+ *                  gardener's visit restores it (sim/gardens.js), where the
+ *                  mission has the Topiaria
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
  *                  | 'shore' (beside navigable water: docks, the navalia, naval stations)
@@ -358,23 +361,32 @@ export const BUILDINGS = Object.freeze({
   }),
   garden: B({
     name: 'Viridarium', en: 'Garden', category: 'government', kind: 'decor', cost: 12, size: 1, needsRoad: false,
-    des: [3, 1, -1, 3], fire: 0, damage: 0,
+    des: [3, 1, -1, 3], fire: 0, damage: 0, tended: true,
     desc: 'A little green. Raises desirability nearby.',
   }),
   statue_small: B({
     name: 'Signum', en: 'Small Statue', category: 'government', kind: 'decor', cost: 15, size: 1, needsRoad: false,
-    des: [3, 1, -1, 3], fire: 0, damage: 0,
+    des: [3, 1, -1, 3], fire: 0, damage: 0, tended: true,
     desc: 'A modest monument. Raises desirability.',
   }),
   statue_medium: B({
     name: 'Statua', en: 'Statue', category: 'government', kind: 'decor', cost: 60, size: 2, needsRoad: false,
-    des: [10, 1, -2, 5], fire: 0, damage: 0,
+    des: [10, 1, -2, 5], fire: 0, damage: 0, tended: true,
     desc: 'An impressive monument. Raises desirability a lot.',
   }),
   statue_large: B({
     name: 'Colossus', en: 'Grand Statue', category: 'government', kind: 'decor', cost: 160, size: 3, needsRoad: false,
-    des: [14, 2, -2, 7], fire: 0, damage: 0,
+    des: [14, 2, -2, 7], fire: 0, damage: 0, tended: true,
     desc: 'A towering tribute. Raises desirability across a wide area.',
+  }),
+  // Colonia's own: the original's gardens and statues needed no upkeep. Its
+  // gardeners roam like prefects and tend every garden and statue within
+  // reach of their road (sim/gardens.js); untended, their desirability fades.
+  // Upkeep, so in the Engineering labor category beside the engineer's post.
+  gardener_yard: B({
+    name: 'Topiaria', en: 'Gardeners\' Yard', category: 'government', cost: 35, size: 1, workers: 4, labor: 'engineering',
+    des: [1, 1, -1, 1], walker: 'gardener', spawnDays: 4, fire: 0.5, damage: 0.5,
+    desc: 'Gardeners who roam the streets and tend every garden and statue within 2 tiles of their road. A month after its last visit a garden or statue starts to lose its desirability, over five months on Normal, down to a quarter of it; a visit restores it in full.',
   }),
   // The original's reward for a distant battle won (sim/battle.js): free, one
   // for each victory, built across a straight road (the road runs on through
@@ -670,7 +682,7 @@ const PLURALS = Object.freeze({
   theater: 'Theatra', amphitheater: 'Amphitheatra', colosseum: 'Arenae', actor_troupe: 'Greges', gladiator_school: 'Ludi Gladiatorii', menagerie: 'Vivaria',
   hippodrome: 'Circi', hippodrome_part: 'Circi', chariot_maker: 'Factiones',
   forum: 'Fora', senate: 'Curiae', governor_house: 'Praetoria', governor_villa: 'Praetoria Maiora', governor_palace: 'Regiae',
-  garden: 'Viridaria', statue_small: 'Signa', statue_medium: 'Statuae', statue_large: 'Colossi', triumphal_arch: 'Fornices',
+  garden: 'Viridaria', statue_small: 'Signa', statue_medium: 'Statuae', statue_large: 'Colossi', gardener_yard: 'Topiariae', triumphal_arch: 'Fornices',
   engineer_post: 'Collegia Fabrum', prefecture: 'Excubitoria',
   farm_wheat: 'Segetes', farm_veg: 'Horti', farm_fruit: 'Pomaria', farm_pig: 'Harae', farm_olive: 'Oliveta', farm_vine: 'Vineae', farm_flax: 'Linaria',
   clay_pit: 'Cretifodinae', timber_yard: 'Silvae Caeduae', iron_mine: 'Ferrariae', marble_quarry: 'Lapicidinae',

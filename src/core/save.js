@@ -186,6 +186,20 @@
  *      sandbox with its events on (or from before them) gets every switch
  *      on, one with them off none, see upgradeEventSwitchesV23(). Campaign
  *      saves store only the mission id and are unchanged.
+ *  25  numbered forts (sim/fortNumbers.js): each fort holds its `number`
+ *      (Castra III; Shift+3 shows it), the lowest free one when it was
+ *      placed. Older saves number their forts 1, 2, 3... in id order, the
+ *      order they were built, see upgradeFortNumbersV24().
+ *  26  gardens and statues fade untended (sim/gardens.js): each garden and
+ *      statue holds `tendedDay` (the day a gardener last passed) and
+ *      `careStep` (how far its desirability has faded). An older save's
+ *      start fully tended, last visited the day it loads, see
+ *      upgradeGardensV25().
+ *  27  festivals cost goods and the gods mind being forgotten
+ *      (sim/religion.js): each god in city.gods has `monthsSinceFestival`
+ *      (its mood target falls once it passes a year) and `festivalsHeld`.
+ *      Older saves load as a new game starts: every god at 0 months, a
+ *      fresh year, with none held yet, see upgradeFestivalsV26().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -218,10 +232,12 @@ import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
 import { emptyWildlife } from '../sim/wildlife.js';
+import { newTradeState } from '../sim/trade.js';
 import { eventStateOf } from '../sim/events.js';
 import { sandboxEventSwitches } from '../data/events.js';
 import { log } from './debug.js';
 import { NATIVE_ID_BASE } from '../data/natives.js';
+import { isFort, numberForts } from '../sim/fortNumbers.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
 export const MIN_SAVE_VERSION = 4;
@@ -522,8 +538,25 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 21) upgradeTradeSwitchesV20(game);
   if (data.version < 22) upgradeTurnsV21(game);
   if (data.version < 23) upgradeEventsV22(game);
+  if (data.version < 25) upgradeFortNumbersV24(game);
+  // A fort with no number, or a number another fort holds (a hand-edited
+  // file), gets the lowest free one: Shift+N must find one fort only.
+  numberForts(game);
+  if (data.version < 26) upgradeGardensV25(game);
+  if (data.version < 27) upgradeFestivalsV26(game);
+  addNewPartners(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
+  // A garden's or statue's care out of range, or a visit in the future (a
+  // hand-edited file, which would never fade), is taken as tended today: a step past the end of CONFIG.CARE_LEVELS has no share
+  // of its desirability to give, and the whole layer would turn to NaN.
+  for (const b of game.buildings.values()) {
+    if (!b.def.tended) continue;
+    if (!(Number.isInteger(b.careStep) && b.careStep >= 0 && b.careStep < CONFIG.CARE_LEVELS.length) || !Number.isFinite(b.tendedDay) || b.tendedDay > game.time.totalDays) {
+      b.careStep = 0;
+      b.tendedDay = game.time.totalDays;
+    }
+  }
   // A hippodrome's sections lie the way its main section says (they were placed so).
   for (const b of game.buildings.values()) if (b.main && game.buildings.has(b.main)) b.turn = game.buildings.get(b.main).turn;
 
@@ -533,6 +566,20 @@ export function deserializeGame(data, flags = {}) {
   // side: turn it to its water now, with the water layers rebuilt (sim/entities.js faceWater).
   for (const b of game.buildings.values()) if (b.waterSide === undefined) faceWater(game, b);
   return game;
+}
+
+/**
+ * A campaign save stores only its mission's id, so it loads with the
+ * mission's partners as they are now: a partner the mission has gained
+ * since the save was made (Capua at Figlina) gets its route, closed, as a
+ * new game has it. Without it the partner could never be traded with,
+ * though the mission's goals count on it. No save version: the routes
+ * already there are kept as they are.
+ */
+function addNewPartners(game) {
+  const routes = game.city.trade?.routes;
+  if (!routes) return;
+  for (const [id, route] of Object.entries(newTradeState(game.scenario.partners || []).routes)) routes[id] ??= route;
 }
 
 /**
@@ -867,6 +914,35 @@ export function upgradeEventsV22(game) {
 }
 
 /**
+ * A save before version 26 (before gardens and statues faded untended,
+ * sim/gardens.js): every garden and statue starts fully tended, last visited
+ * the day the save loads, so none fades before a gardener could reach it.
+ * Wired before the derived layers are rebuilt, so the first desirability
+ * pass already counts them at full.
+ */
+export function upgradeGardensV25(game) {
+  for (const b of game.buildings.values()) {
+    if (!b.def.tended) continue;
+    b.tendedDay = game.time.totalDays;
+    b.careStep = 0;
+  }
+}
+
+/**
+ * A save before version 27 (festivals that cost goods, gods that mind being
+ * forgotten): every god starts as in a new game, 0 months since a festival
+ * and none held, so no god of an older city is neglected for a year. A god
+ * the save lacks starts afresh anyway (the Game constructor).
+ */
+export function upgradeFestivalsV26(game) {
+  for (const s of Object.values(game.city.gods || {})) {
+    if (!s || typeof s !== 'object') continue;
+    s.monthsSinceFestival = 0;
+    s.festivalsHeld = 0;
+  }
+}
+
+/**
  * A save before version 24 (one Events switch for the sandbox): returns a
  * copy of the raw data whose sandbox scenario lists its switches, every one
  * if its events were on (`true`, or no field: a save from before events,
@@ -879,6 +955,16 @@ export function upgradeEventSwitchesV23(data) {
   const s = data.scenario;
   if (!s || typeof s !== 'object' || s.id !== 'sandbox' || Array.isArray(s.events)) return data;
   return { ...data, scenario: { ...s, events: sandboxEventSwitches(s.events !== false) } };
+}
+
+/**
+ * A save before version 25 (before numbered forts): its forts are numbered
+ * 1, 2, 3... in id order, the order they were built, as if each had taken
+ * the lowest free number when placed and none had been torn down since.
+ */
+export function upgradeFortNumbersV24(game) {
+  for (const b of game.buildings.values()) if (isFort(b)) b.number = 0;
+  numberForts(game);
 }
 
 /**

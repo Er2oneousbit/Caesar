@@ -182,7 +182,7 @@ test('liburnians count on a sea route (4, 6 trained), not on a land route', () =
   assert.equal(strengthOf(serviceUnits(game, 'placentia')), 5, 'by land: soldiers only');
 });
 
-test('sending: once, only with soldiers switched on; they march out by the exit and their places are kept', () => {
+test('sending: once, only with soldiers switched on; they leave at once and their places are kept', () => {
   const game = newGame();
   const fort = fortWith(game, 8, 8);
   setService(game, fort, false);

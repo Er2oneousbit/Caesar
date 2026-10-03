@@ -46,7 +46,7 @@
 import { Game } from '../src/core/game.js';
 import { SCENARIOS, sandboxScenario, withDifficulty } from '../src/data/scenarios.js';
 import { DIFFICULTY } from '../src/data/difficulty.js';
-import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, buildDemoQuarters, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
+import { buildDemoCity, buildDemoGarrison, commandGarrison, buildDemoHarbor, buildDemoFishery, buildDemoVenues, buildDemoHippodrome, buildDemoUptown, buildDemoCloth, buildDemoNavy, buildDemoResidence, buildDemoQuarters, holdDemoFestival, UPTOWN_GOODS, DEMO_YARD_TIMBER } from '../src/dev/demoCity.js';
 import { launchLegion, legionCount, soldierCount, isOverrun } from '../src/sim/legion.js';
 import { trainedTotals } from '../src/sim/training.js';
 import { log } from '../src/core/debug.js';
@@ -59,6 +59,7 @@ import { missionCapacity, landOf, planCity, employmentCeiling, topLevels, SENSIB
 import { generateMap, mapOptions } from '../src/world/mapgen.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { CONFIG } from '../src/config.js';
+import { GOD_KEYS } from '../src/data/gods.js';
 import { goalStatus } from '../src/sim/ratings.js';
 import { setTradeMode } from '../src/sim/trade.js';
 import { Terrain } from '../src/world/map.js';
@@ -128,6 +129,10 @@ Options:
                     mission's random and scheduled ones, sim/events.js). Off plays as before events
                     existed. A comma list (wages,land,sea,water,mine,clay, or none) is the sandbox
                     setup's switches left on; a mission keeps its own events
+  --festivals <s>   on | off (default on): from 800 people (where the gods mind being forgotten) the
+                    demo city holds a small festival whenever the cooldown allows and it can spare
+                    the food, for the god longest without one; off holds none. The Gods: line
+                    reports the gods' moods, blessings, wraths and festivals
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
   --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
   --legion <m>      Caesar's legions arrive at the start of month m (the size of a first attack, or
@@ -142,7 +147,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, events: 'on', navy: false, salary: false, academy: false, legion: 0, legionSize: 0, people: null, wolves: null, lowBridge: false, natives: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, events: 'on', navy: false, salary: false, academy: false, legion: 0, legionSize: 0, people: null, wolves: null, lowBridge: false, natives: false, festivals: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -173,6 +178,7 @@ function parse(argv) {
     else if (a === '--people') o.people = next();
     else if (a === '--wolves') o.wolves = /^(on|off)$/.test(argv[i + 1] || '') ? next() : 'on';
     else if (a === '--events') o.events = next();
+    else if (a === '--festivals') o.festivals = next() !== 'off';
     else if (a === '--navy') o.navy = true;
     else if (a === '--salary') o.salary = true;
     else if (a === '--academy') o.academy = true;
@@ -409,6 +415,10 @@ function advanceDays(n) {
   }
 }
 const runMonth = () => {
+  // From 800 people, a small festival for the god longest without one, when
+  // the cooldown, the money and the food allow (holdDemoFestival): all five
+  // gods inside their year, as a sensible player keeps them.
+  if (opts.festivals) holdDemoFestival(game);
   if (harbor.docks) harborMonth();
   if (uptown) uptown.monthly();
   if (quarters) quarters.monthly();
@@ -512,6 +522,22 @@ console.log(`Crime: protesters ${cr.protesters}, thieves ${cr.thieves} (${cr.cau
 const hs = c.health.total;
 const health = { cityHealth: c.health.value, target: c.health.target, outbreaks: hs.outbreaks, spread: hs.spread, deaths: hs.deaths, cured: hs.cured, recovered: hs.recovered, sickHomes: sickHomes(game).length, peakRisk: peakRisk(game) };
 console.log(`Health: city health ${health.cityHealth} (homes average ${health.target}); outbreaks ${health.outbreaks} (${health.spread} caught from a neighbor), deaths ${health.deaths}, cured by physicians ${health.cured}, recovered ${health.recovered}; sick homes now ${health.sickHomes}, highest disease risk ${health.peakRisk}`);
+// The gods (sim/religion.js): their moods now, and what they did, read from
+// the messages ("Ceres is pleased!", "Mars is angry!", "A small festival is
+// held..."), so the line needs no bookkeeping in the game itself.
+const godTally = (re) => {
+  const n = {};
+  for (const m of messages) { const k = re.exec(m.text)?.[1]; if (k) n[k] = (n[k] || 0) + 1; }
+  const total = Object.values(n).reduce((a, b) => a + b, 0);
+  return { total, by: n, text: `${total}${total ? ` (${Object.entries(n).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}` };
+};
+const gods = {
+  moods: Object.fromEntries(GOD_KEYS.map((k) => [k, Math.round(c.gods[k].mood)])),
+  blessings: godTally(/^(\w+) is pleased!/),
+  wraths: godTally(/^(\w+) is angry!/),
+  festivals: godTally(/^An? (\w+) festival is held/),
+};
+console.log(`Gods: moods ${GOD_KEYS.map((k) => `${k} ${gods.moods[k]}`).join(', ')}; blessings ${gods.blessings.text}; wraths ${gods.wraths.text}; festivals ${gods.festivals.text}`);
 const req = c.stats;
 console.log(`Emperor: requests met ${req.requestsMet ?? '?'}, failed ${req.requestsFailed ?? '?'}; mood factors ${JSON.stringify(Object.fromEntries(Object.entries(c.sentimentFactors || {}).map(([k, v]) => [k, Math.round(v)])))}`);
 const last = treasuryByMonth.length;
@@ -580,7 +606,7 @@ if (care.months.length) {
 const capacityCheck = quarters ? checkCapacity() : null;
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
 const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
-if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(events ? { events } : {}), ...(fishing ? { fishing } : {}), ...(capacityCheck ? { capacity: capacityCheck } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
+if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, gods: { moods: gods.moods, blessings: gods.blessings.total, wraths: gods.wraths.total, festivals: gods.festivals.total }, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(events ? { events } : {}), ...(fishing ? { fishing } : {}), ...(capacityCheck ? { capacity: capacityCheck } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
 
 /**
  * --cloth-off: demolish the cloth industry (and the clothing in store), as a

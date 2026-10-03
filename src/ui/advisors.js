@@ -52,7 +52,7 @@ import { tripDays } from '../data/empireRoutes.js';
 import { tradePrice, priceRange, rangeText, distanceNote, marketLine } from '../sim/prices.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
-import { festivalCost, holdFestival } from '../sim/religion.js';
+import { holdFestival, festivalNeeds, festivalMeans, festivalBlocked, festivalNeglect, neglectPenalty, FESTIVAL_SIZES } from '../sim/religion.js';
 import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
 import { setSalary, donate } from '../sim/governor.js';
 import { RANKS } from '../data/ranks.js';
@@ -769,7 +769,7 @@ export class Advisors {
           kv('Short of their next level', shortHomes ? `${fmt(shortHomes)} home${shortHomes === 1 ? '' : 's'}` : 'None', shortHomes ? 'no' : ''),
           shortHomes ? kv('...with no entertainer\'s visit', fmt(rep.short.none)) : null,
           h('div', { class: 'row', style: { marginTop: '6px' } },
-            h('span', { class: 'muted sub', style: { flex: 1 } }, c.festivalCooldown > 0 ? `Festivals lift the mood: the next is possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.` : 'Festivals lift the mood: one can be held now.'),
+            h('span', { class: 'muted sub', style: { flex: 1 } }, c.festivalCooldown > 0 ? `Festivals lift the mood: the next is possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.` : festivalBlocked(g, 0) ? 'Festivals lift the mood: the city cannot pay for one yet (see Festivals).' : 'Festivals lift the mood: one can be held now.'),
             h('button', { class: 'btn small', onclick: () => this.switchTab('religion') }, 'Festivals')))),
       this.adviceBox(entertainmentAdviceText(rep.advice), rep.advice.key === 'fine' || rep.advice.key === 'noDemand'),
       h('h4', {}, 'Venues'),
@@ -786,24 +786,52 @@ export class Advisors {
 
   tab_religion(g) {
     const c = g.city;
+    // Each size's cost and what stops it (the cooldown or a shortfall), worked
+    // out once: the table and every god's buttons read the same answers.
+    const sizes = FESTIVAL_SIZES.map((key, size) => ({ key, size, name: key[0].toUpperCase() + key.slice(1), need: festivalNeeds(g, size), blocked: festivalBlocked(g, size) }));
+    const have = festivalMeans(g);
+    const cell = (need, held, unit) => h('td', { class: `r num${need > held ? ' no' : ''}` }, need > 0 ? `${fmt(need)}${unit}` : '-');
+    const short = (r) => r.blocked && c.festivalCooldown <= 0; // the cooldown is said once, below the table
     return [
-      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens; a large temple counts as two. Once the city passes 800 people, gods without any temple grow angry. Festivals and oracles can lift moods high enough for blessings. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}.`),
+      h('div', { class: 'muted' }, `Each god wants about one staffed temple per ${CONFIG.PEOPLE_PER_TEMPLE} of its share of citizens; a large temple counts as two. Once the city passes 800 people, gods without any temple grow angry, and so does a god with no festival in its honor for more than ${CONFIG.FESTIVAL_FREE_MONTHS} months. Festivals and oracles can lift moods high enough for blessings. A god that has struck stays angered until its mood is back above ${CONFIG.GOD_CALM_MOOD}.`),
+      h('div', { class: 'card festivals', style: { marginTop: '8px' } },
+        h('h4', {}, 'Festivals'),
+        h('table', { class: 'tbl coverage' },
+          h('tr', {}, h('th', {}, 'Size'), h('th', { class: 'r' }, 'Denarii'), h('th', { class: 'r' }, 'Food'), h('th', { class: 'r' }, 'Wine'), h('th', { class: 'r', title: 'Months before another festival can be held' }, 'Pause')),
+          sizes.map((r) => h('tr', { dataset: { size: r.key } },
+            h('td', {}, r.name),
+            cell(r.need.money, g.cheats.freeBuild ? Infinity : have.money, ' Dn'),
+            cell(r.need.food, have.food, ''),
+            cell(r.need.wine, have.wine, ''),
+            h('td', { class: 'r num' }, `${CONFIG.FESTIVAL_COOLDOWN[r.size]} months`))),
+          h('tr', { class: 'muted' }, h('td', {}, 'The city has'), h('td', { class: 'r num' }, `${fmt(have.money)} Dn`), h('td', { class: 'r num', title: 'Food in the granaries' }, fmt(have.food)), h('td', { class: 'r num', title: 'Wine in the warehouses' }, fmt(have.wine)), h('td', {}))),
+        sizes.filter(short).map((r) => h('div', { class: 'status bad', style: { fontSize: '12px', marginTop: '4px' }, dataset: { short: r.key } }, `${r.name}: ${r.blocked}`)),
+        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Food comes from the granaries (the largest stocks first), wine from the warehouses; a festival is held only if all of it is there. Any festival resets its god's year; a large or grand one lifts the god and the people more.`),
+        c.festivalCooldown > 0 ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Next festival possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.`) : null),
       GOD_KEYS.map((k) => {
         const s = c.gods[k];
-        return h('div', { class: 'card', style: { marginTop: '8px' } },
+        const months = s.monthsSinceFestival || 0;
+        const penalty = neglectPenalty(g, k);
+        // Past its year in a town still too small for the gods to mind.
+        const waiting = !penalty && festivalNeglect(months) > 0 && g.isUnlocked(`temple_${k}`);
+        return h('div', { class: 'card', style: { marginTop: '8px' }, dataset: { god: k } },
           h('div', { class: 'row' }, h('h4', { style: { flex: 1, color: GODS[k].color } }, GODS[k].name), h('span', { class: 'muted' }, GODS[k].domain)),
           kv('Mood', `${Math.round(s.mood)} / 100`), bar(s.mood, 100),
           kv('Staffed temples', templeCount(g, k).text),
+          kv('Last festival', s.festivalsHeld ? (months === 0 ? 'this month' : `${months} month${months === 1 ? '' : 's'} ago`) : 'none yet'),
+          penalty > 0 ? h('div', { class: 'status bad', style: { fontSize: '12px' }, dataset: { neglect: penalty } }, `Neglected: mood target -${penalty}. A festival of any size in ${GODS[k].name}'s honor ends it.`) : null,
+          waiting ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `No festival for ${months} months: from 800 people ${GODS[k].name}'s mood target will fall ${festivalNeglect(months)}.`) : null,
           s.angered ? h('div', { class: 'status bad', style: { fontSize: '12px' } }, `Angered: until ${GODS[k].name}'s mood is back above ${CONFIG.GOD_CALM_MOOD}, another wrath strikes ${GODS[k].harderWrath && g.scenario.majorWrath !== false ? 'harder' : 'again'}.`) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, `Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`),
           h('div', { class: 'row', style: { marginTop: '6px' } },
-            ['Small', 'Large', 'Grand'].map((name, size) => h('button', {
+            sizes.map((r) => h('button', {
               class: 'btn small',
-              disabled: c.festivalCooldown > 0,
-              onclick: () => { const r = holdFestival(g, k, size); if (!r.ok) this.app.ui.toastError(r.reason); this.render(); },
-            }, `${name} festival (${fmt(festivalCost(g, size))} Dn)`))));
+              disabled: !!r.blocked,
+              title: r.blocked || `${fmt(r.need.money)} Dn, ${fmt(r.need.food)} food${r.need.wine ? `, ${fmt(r.need.wine)} wine` : ''}`,
+              dataset: { size: r.key },
+              onclick: () => { const res = holdFestival(g, k, r.size); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
+            }, `${r.name} festival`))));
       }),
-      c.festivalCooldown > 0 ? h('div', { class: 'muted', style: { marginTop: '6px' } }, `Next festival possible in ${c.festivalCooldown} months.`) : null,
     ];
   }
 

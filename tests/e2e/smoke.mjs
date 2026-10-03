@@ -1291,6 +1291,54 @@ try {
   await page.evaluate(() => window.colonia.ui.info.close());
   if (shownType.modal) await page.keyboard.press('Escape'); // the click closed the advisors (Escape on the map opens the game menu)
 
+  // 5a4b. Festivals (sim/religion.js): the Religion advisor's table shows
+  //       each size's money, food and wine and what the city has; with no
+  //       wine in the warehouses the large and grand festivals are greyed
+  //       out with the reason; a small one, clicked, takes its food from the
+  //       granaries and the god's last festival reads "this month". The city
+  //       is put back as it was, for the steps that follow.
+  await page.evaluate(() => window.colonia.ui.openAdvisors('religion'));
+  const fest = await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    const c = g.city;
+    const gran = [...g.buildings.values()].find((b) => b.def.kind === 'granary');
+    if (!gran) return { granary: false };
+    const was = { stock: { ...gran.stock }, wine: new Map(), cooldown: c.festivalCooldown, boost: c.festivalBoost, treasury: c.treasury, ceres: { ...c.gods.ceres } };
+    for (const b of g.buildings.values()) if (b.def.kind === 'warehouse') { was.wine.set(b.id, b.stock.wine); b.stock.wine = 0; }
+    gran.stock.wheat += 800;
+    c.festivalCooldown = 0;
+    c.treasury = Math.max(c.treasury, 5000);
+    app.ui.openAdvisors('religion');
+    const body = () => document.querySelector('.modal-body');
+    const rows = [...body().querySelectorAll('.festivals tr[data-size]')].map((tr) => [...tr.children].map((td) => td.textContent));
+    const btn = (size) => body().querySelector(`[data-god="ceres"] button[data-size="${size}"]`);
+    const shown = { grandOff: !!btn('grand')?.disabled, largeOff: !!btn('large')?.disabled, smallOn: btn('small') && !btn('small').disabled, title: btn('grand')?.title || '', short: body().querySelector('.festivals [data-short="grand"]')?.textContent || '' };
+    const food = () => { let n = 0; for (const b of g.buildings.values()) if (b.def.kind === 'granary') for (const k in b.stock) n += b.stock[k]; return n; };
+    const before = food();
+    btn('small').click();
+    const after = food();
+    const last = body().querySelector('[data-god="ceres"]')?.textContent || '';
+    // Festival music for some days after it, not for as long as the mood boost lasts.
+    const music = app.musicMood();
+    app.festivalDay = null;
+    c.festivalBoost = 10;
+    const musicLater = app.musicMood();
+    const out = { granary: true, rows, ...shown, taken: Math.round(before - after), last: /Last festival\s*this month/.test(last), cooldown: c.festivalCooldown, afterOff: !!btn('small')?.disabled, music, musicLater };
+    // Back as it was.
+    Object.assign(gran.stock, was.stock);
+    for (const [id, n] of was.wine) g.buildings.get(id).stock.wine = n;
+    Object.assign(c, { festivalCooldown: was.cooldown, festivalBoost: was.boost, treasury: was.treasury });
+    Object.assign(c.gods.ceres, was.ceres);
+    return out;
+  });
+  await page.keyboard.press('Escape');
+  check('the Religion advisor shows each festival\'s money, food and wine; without wine the large and grand ones are greyed out with the reason; a small one takes its food from the granaries, and festival music follows it for some days',
+    fest.granary && fest.rows.length === 3 && fest.rows.every((r) => /\d/.test(r[1]) && /\d/.test(r[2])) && fest.rows[0][3] === '-' && /\d/.test(fest.rows[2][3])
+      && fest.grandOff && fest.largeOff && fest.smallOn && /Needs \d+ wine in the warehouses, 0 stored/.test(fest.title) && /Grand: Needs \d+ wine/.test(fest.short)
+      && fest.taken >= 100 && fest.last && fest.cooldown === 2 && fest.afterOff && fest.music === 'festival' && fest.musicLater !== 'festival' && errors.length === 0,
+    JSON.stringify({ ...fest, errors }));
+
   // 5a5. Auto-pause (ui/autoPause.js): Settings turns on "a fire breaks out";
   //      a fire in the running game then pauses it, with a note that goes
   //      there on a click, outlasts other toasts and leaves when the game

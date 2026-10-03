@@ -195,6 +195,11 @@
  *      `careStep` (how far its desirability has faded). An older save's
  *      start fully tended, last visited the day it loads, see
  *      upgradeGardensV25().
+ *  27  festivals cost goods and the gods mind being forgotten
+ *      (sim/religion.js): each god in city.gods has `monthsSinceFestival`
+ *      (its mood target falls once it passes a year) and `festivalsHeld`.
+ *      Older saves load as a new game starts: every god at 0 months, a
+ *      fresh year, with none held yet, see upgradeFestivalsV26().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -537,6 +542,7 @@ export function deserializeGame(data, flags = {}) {
   // file), gets the lowest free one: Shift+N must find one fort only.
   numberForts(game);
   if (data.version < 26) upgradeGardensV25(game);
+  if (data.version < 27) upgradeFestivalsV26(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A garden's or statue's care out of range, or a visit in the future (a
@@ -892,7 +898,7 @@ export function upgradeEventsV22(game) {
 }
 
 /**
- * A save before version 25 (before gardens and statues faded untended,
+ * A save before version 26 (before gardens and statues faded untended,
  * sim/gardens.js): every garden and statue starts fully tended, last visited
  * the day the save loads, so none fades before a gardener could reach it.
  * Wired before the derived layers are rebuilt, so the first desirability
@@ -903,6 +909,20 @@ export function upgradeGardensV25(game) {
     if (!b.def.tended) continue;
     b.tendedDay = game.time.totalDays;
     b.careStep = 0;
+  }
+}
+
+/**
+ * A save before version 27 (festivals that cost goods, gods that mind being
+ * forgotten): every god starts as in a new game, 0 months since a festival
+ * and none held, so no god of an older city is neglected for a year. A god
+ * the save lacks starts afresh anyway (the Game constructor).
+ */
+export function upgradeFestivalsV26(game) {
+  for (const s of Object.values(game.city.gods || {})) {
+    if (!s || typeof s !== 'object') continue;
+    s.monthsSinceFestival = 0;
+    s.festivalsHeld = 0;
   }
 }
 

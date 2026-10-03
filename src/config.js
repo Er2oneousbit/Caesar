@@ -18,7 +18,7 @@ export const CONFIG = {
   GAME_TITLE: 'Colonia',
   GAME_TAGLINE: 'Veni, vidi, aedificavi.',
   VERSION: '0.18.3',
-  SAVE_VERSION: 26, // v26: gardens and statues fade untended (their tendedDay and careStep; an older save's start fully tended, last visited the day it loads: upgradeGardensV25); v25: numbered forts (each fort's `number`, Castra III and Shift+3; an older save numbers its forts in id order: upgradeFortNumbersV24); v24: the sandbox's events, a switch each (scenario.events: the list of switches on; an older sandbox gets all of them if its events were on, none if off: upgradeEventSwitchesV23); v23: events (city.romeWage, city.events: cooldowns, trade stopped, an earthquake under way), raiders' peoples (military.people), wolf packs (wildlife, units of side 'wild') and the gladiator revolt, low bridges (map.bridgeLow), native villages (city.natives, village buildings with their anger, villagers of side 'native', the mission post and its walkers); a v22 save loads with none of them (upgradeEventsV22 and the constructor's defaults); v22: buildings turn (each building's `turn`, 0..3, quarter turns of its art; a hippodrome turned 1 or 3 lies north-south, its sections along y); v21: trade by partner (each route's `off`: the goods switched off with that partner, sim/tradeSwitches.js); v20: horses live at the Horse Ranch (its stables' stock and incoming), never in warehouses (warehouse stock, incoming and orders have no horses); v19: recall from a distant battle (military.recalls: riders out, recalled troops coming home); v17: shipyards hold timber (stock, incoming), a boat takes 100; v16: training takes time: a recruit training at the academy (walker state 'training', trainLeft) and a new ship moored at the Portus (unit trainLeft); v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v14 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
+  SAVE_VERSION: 27, // v27: festivals (each god's monthsSinceFestival and festivalsHeld; an older save's gods start a fresh year, none held: upgradeFestivalsV26); v26: gardens and statues fade untended (their tendedDay and careStep; an older save's start fully tended, last visited the day it loads: upgradeGardensV25); v25: numbered forts (each fort's `number`, Castra III and Shift+3; an older save numbers its forts in id order: upgradeFortNumbersV24); v24: the sandbox's events, a switch each (scenario.events: the list of switches on; an older sandbox gets all of them if its events were on, none if off: upgradeEventSwitchesV23); v23: events (city.romeWage, city.events: cooldowns, trade stopped, an earthquake under way), raiders' peoples (military.people), wolf packs (wildlife, units of side 'wild') and the gladiator revolt, low bridges (map.bridgeLow), native villages (city.natives, village buildings with their anger, villagers of side 'native', the mission post and its walkers); a v22 save loads with none of them (upgradeEventsV22 and the constructor's defaults); v22: buildings turn (each building's `turn`, 0..3, quarter turns of its art; a hippodrome turned 1 or 3 lies north-south, its sections along y); v21: trade by partner (each route's `off`: the goods switched off with that partner, sim/tradeSwitches.js); v20: horses live at the Horse Ranch (its stables' stock and incoming), never in warehouses (warehouse stock, incoming and orders have no horses); v19: recall from a distant battle (military.recalls: riders out, recalled troops coming home); v17: shipyards hold timber (stock, incoming), a boat takes 100; v16: training takes time: a recruit training at the academy (walker state 'training', trainLeft) and a new ship moored at the Portus (unit trainLeft); v15: staged raid warnings and the legions' reminders (military.warnStage, caesar.noticeStage); v14: Caesar's legions (no recall at favor 0), distant battles and the forts' and stations' Empire service switch, triumphal arches; v13: the governor (rank, salary, personal savings; gifts to the Emperor from savings, with a count of recent gifts) and his residence v12: training (Military Academy, Portus): soldiers, liburnians and recruits have a trained flag, and those on a drill trip their academy or Portus; large temples; v11: sea raids and the fleet (navalia, naval stations, liburnians, raider ships); v10: the cloth industry (flax, linen, clothing; homes need clothing from the Insula up); v9: fish (a fifth food), shipyards, wharves and fishing boats, the hippodrome; v8: ships wait at the dock while dock workers carry goods both ways; v7: storage orders, rubble that remembers what fell, and the original's five gods; v6: disease; v5: home mood and crime (v4 to v14 saves load, upgraded); saves before v4 cannot be loaded (see core/save.js)
   STORAGE_PREFIX: 'colonia.',
 
   // --- Rendering (isometric) ---------------------------------------------
@@ -296,6 +296,37 @@ export const CONFIG = {
   // falls on the badly served homes and resolves at once (the original's
   // plague could stay armed for years).
   VENUS_WRATH_DISEASE: 80,
+  // Festivals (sim/religion.js). Each god counts the months since its last
+  // festival (any size). The original's mood target held +12 the month of a
+  // festival, 0 a year on and -28 at most; Colonia's festival boost stands in
+  // for the +12, so a god loses nothing for FESTIVAL_FREE_MONTHS, then a
+  // point of its mood target a month, FESTIVAL_NEGLECT_MAX at most (40
+  // months on, as in the original). Not below 800 people, where the gods'
+  // targets are flat and they never strike.
+  FESTIVAL_FREE_MONTHS: 12,
+  FESTIVAL_NEGLECT_MAX: 28,
+  // Months before the next festival (small, large, grand), city-wide. Five
+  // gods at a small festival each every 2 months come round in 10, inside
+  // the free year; a large one in the round still makes it (4 + 4 x 2 = 12).
+  // A grand one is the rare treat it was (a round with one takes 16 months).
+  // The original had no cooldown, only one festival planned at a time, held
+  // 2, 3 or 4 months after it was ordered.
+  FESTIVAL_COOLDOWN: [2, 4, 8],
+  // ...but the people tire of them: a festival held sooner than this many
+  // months after the last one (any god's) lifts the city mood only in
+  // proportion (2 months: two thirds). 3 was the small festival's cooldown
+  // before the gods took turns, so the city mood a festival every 2 months
+  // keeps (about +5 to +7) is what one every 3 months kept before (+4 to
+  // +8); at full value it would hold +7 to +11 for good. The gods' own
+  // festival boost is never cut.
+  FESTIVAL_CITY_FULL_MONTHS: 3,
+  // Goods: food from the granaries, a share of a month of the city's food
+  // (FOOD_PER_PERSON_MONTH), one load at least (Colonia's own); wine from the
+  // warehouses for a large or grand festival: the original's grand festival
+  // took population / FESTIVAL_WINE_PEOPLE + 1 loads, a large one half of
+  // that here, rounded up.
+  FESTIVAL_FOOD_SHARE: [0.05, 0.1, 0.2],
+  FESTIVAL_WINE_PEOPLE: 500,
 
   // --- Trade ---------------------------------------------------------------
   CARAVAN_INTERVAL_DAYS: [32, 56], // random range between caravans per open land route (about the original's pace)

@@ -472,7 +472,7 @@ Starts from 50 and is recalculated monthly (moving halfway toward the new value)
 | Hunger | up to -18 when nobody has food |
 | Housing quality | -4 to +10 by average level (+10 at an average of Apartment Houses) |
 | Gods | -8 to +6 by average mood |
-| Festivals | temporary boost |
+| Festivals | +4, +8 or +14 by size, fading a fifth a month |
 | New city | +20 for the first year |
 | Difficulty | -8 on Insane |
 
@@ -559,6 +559,18 @@ The original's five gods: Ceres, Neptune, Mercury, Mars and Venus. Every temple 
 **Large temples** (Templum Cereris, Templum Neptuni and so on: the grand temples; from mission 3), one per god as in the original: 3x3, 150 Dn, 5 workers, desirability +14 (rings 14, 14, 12, 12, 10). The same priest on the same round as a small temple, so no farther reach on the ground; it counts as **two temples** toward its god (the original counted 1,500 people of coverage to a small temple's 750). Two small temples do the same for 100 Dn and 4 workers; the large one pays back in desirability and in fewer buildings to keep up. Homes still count distinct gods: no level needs a large temple. It burns and collapses like the small ones (the original; Augustus makes them fire-proof). The Religion advisor counts a staffed large temple as two and says so ("2 (0 small, 1 large: a large temple counts as two)").
 
 Each god wants one staffed temple per 500 of its share of citizens (a fifth of the population; a large temple counts as two). Towns under 800 people are left alone. Above that, a god with no temple sinks toward mood 5 and eventually strikes (mood 12 or less; then 8 months before it can strike again, and its mood rises 12). Blessings (mood 92+, then 14 months before the next) need festivals or oracles on top of good coverage.
+
+**Festivals** (Religion advisor: a size for a god) cost money, food from the granaries and, large or grand, wine from the warehouses, all at once; if any of it is missing the festival cannot be held and nothing is taken (the advisor greys the size out and says what is short: *Needs 300 wine in the warehouses, 100 stored.*). Food is taken from the foods the granaries hold most of, levelling them, each from the granary that holds most of it; wine from the warehouse with the most. A granary or warehouse set to Get that good gives last, as for the Emperor. Food a warehouse holds does not count.
+
+| Size | Money | Food (a load at least) | Wine | City mood | The god | Next festival after |
+|---|---|---|---|---|---|---|
+| Small | 60 Dn + 0.15 a citizen | 5% of a month's food | none | +4, fading | mood +5, target +15 fading | 2 months |
+| Large | 150 Dn + 0.4 a citizen | 10% | half a grand festival's, rounded up to a load | +8 | mood +10, target +30 | 4 months |
+| Grand | 400 Dn + 1 a citizen | 20% | 1 load per 500 citizens + 1 (the original's) | +14 | mood +18, target +50 | 8 months |
+
+A month's food is 0.25 a citizen, and a load 100 units. 1,000 people: 100 food for any size, 200 wine for a large festival, 300 for a grand one; 10,000 people: 125, 250 and 500 food, 1,100 and 2,100 wine. The god's part of its mood target fades by 15% a month, the city's mood boost by 20%. The people tire of festivals: one held less than 3 months after the last (any god's) lifts the city mood only in proportion, two thirds after 2 months, so festivals every 2 months keep the city mood about +5 to +7, as one every 3 months did before the gods took turns (+4 to +8); the god always gets its full share. Festival music plays for about 24 days after a festival.
+
+**Neglect** (the original's rule): each god counts the months since its last festival, of any size. For a year nothing happens; after that its mood target falls a point a month, 28 at most (40 months on), until a festival in its honor starts the year again. Not in towns under 800 people, and not for a god whose temple the mission does not have (it stays at 50). Five gods with a small festival each every 2 months come round in 10 months, inside the year; a large festival in the round still fits (4 + 4 x 2 = 12), a grand one pushes the round to 16 months, so the others lose up to 4 for a while. A new game starts every god's count at 0. The Religion advisor shows each god's last festival ("none yet", or how many months ago) and, when it applies, *Neglected: mood target -5*. In the balance sim, a 1,400-person city that held no festival saw every god sink from 80 to 52 within four years (no wrath, its temples covered them; the city mood lost the gods' +5); holding small festivals in turn kept them at 85 to 95, with about two blessings per god in six years.
 
 A god that strikes stays **angered** until its mood is back above 50 (the Religion advisor says so). If Mercury or Venus strikes again before then, the wrath is harder. The first two campaign missions spare a new player that: there a second wrath is like the first.
 

@@ -13,6 +13,15 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.5)
+
+* **Soldiers rest inside their fort**: at rest a fort's men stand in its yard among the tents, in and out by its gate; while raiders, Caesar's legions or a revolt are on the map they stand to at their old places outside and fight as before (in scripted raids, as many raiders slain or more, and the same buildings lost)
+* **Figures beside buildings can be clicked**: a click test of what is actually drawn in front of a walker or soldier, where it treated each building as a box as tall as its flag poles (a recruit training at the Military Academy could not be clicked)
+* **Campaign goals** (from playtest): a favor goal from step 3 (Figlina and Firmum 30, Pons Aelius 35), and the peaceful province asks for about a fifth more people than its military partner at every step from 3 (Figlina 1,350, Paestum 3,350, Beneventum 4,800; Portus Mercatorum 3,900, kept within Oasis Aurea's pace). Figlina gains Capua as a partner and buys more pottery, Beneventum's partners buy furniture, clothing, meat, wine and pottery; a mission in progress takes the new goals and an older Figlina save gains the Capua route
+* Soldiers at rest no longer police the street outside their fort: in the Insane garrison run 23 criminals were caught instead of 29, and peace ended 44 instead of 45
+* Headless sim: Easy, Normal, Hard and Insane identical to v0.18.4
+* 944 unit tests, 196 browser checks
+
 ## Done (v0.18.4)
 
 * **Gardeners** (Colonia's own): the Topiaria (Gardeners' Yard, 35 Dn, 4 workers) sends gardeners who tend every garden and statue within 2 tiles of their road. Untended, a decoration keeps its full desirability for 16 days, then fades a step every 20 days to a floor of 25% (half as fast on Easy, half again on Insane), and a visit restores it. The Gardens and statues overlay shows their care, and a faded garden looks dry, a faded statue dull. Plazas, the arch, the residences and the Oracle never fade; where a mission has no yard, nothing fades

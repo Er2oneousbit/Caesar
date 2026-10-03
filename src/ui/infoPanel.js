@@ -34,6 +34,7 @@ import { dockBerth, dockUsed, shipsWaitingText } from '../sim/trade.js';
 import { wharfBoat, spareBoat, boatStatus, bodyOf, wharvesWithoutBoat, hasBoatTimber } from '../sim/fishing.js';
 import { squadronCounts, recallStation, waterOf, shipStatus, ramOf } from '../sim/navy.js';
 import { trainedText, trainingNote, schoolStatus, inTrainingText, atATime } from './trainingInfo.js';
+import { trainsNow } from '../sim/training.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { removeBuilding, footprintRect, inOwnFort } from '../sim/entities.js';
 import { riskRates } from '../sim/risk.js';
@@ -267,9 +268,10 @@ export function buildingStatus(game, b) {
 /**
  * What a soldier, raider or imperial legionary is doing, in a few words,
  * from his state (sim/military.js, sim/legion.js, sim/battle.js). inYard:
- * a soldier in his fort's yard (inOwnFort).
+ * a soldier in his fort's yard (inOwnFort); paused: one training at a Campus
+ * short of staff.
  */
-export function soldierDoing(u, fort = null, inYard = false) {
+export function soldierDoing(u, fort = null, inYard = false, paused = false) {
   const ours = u.side === 'rome';
   switch (u.state) {
     case 'idle': return ours ? (fort && fort.rally ? 'Holding the deployment point' : inYard ? 'Resting in the fort' : 'Standing to by the fort') : 'Waiting';
@@ -279,7 +281,7 @@ export function soldierDoing(u, fort = null, inYard = false) {
     case 'drill': return 'On his way to train at the Campus';
     case 'training': {
       const days = Math.ceil((u.trainLeft || 0) / CONFIG.TICKS_PER_DAY);
-      return `Training at the Campus, ${days} day${days === 1 ? '' : 's'} left`;
+      return `Training at the Campus, ${days} day${days === 1 ? '' : 's'} left${paused ? ' (paused: the Campus is short of staff)' : ''}`;
     }
     case 'away': return 'Away at a distant battle';
     case 'advance': return u.side === 'native' ? 'Attacking a building on his village\'s land' : 'Advancing on the city';
@@ -942,7 +944,7 @@ export class InfoPanel {
       this.head(def.name, side),
       h('div', { class: 'muted' }, def.desc),
       kv('Health', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
-      kv('Doing', soldierDoing(u, fort, ours && inOwnFort(g, u))),
+      kv('Doing', soldierDoing(u, fort, ours && inOwnFort(g, u), !!u.drill && !trainsNow(g, g.buildings.get(u.drill)))),
       ours ? kv('Fort', fort ? `${fortTitle(fort)} at ${fort.x}, ${fort.y}${fort.rally ? ' (deployed)' : ''}` : 'None') : null,
       ours ? kv('Training', u.trained ? 'Trained at the Campus' : 'Untrained') : null,
       pack ? kv('Pack', packSummary(g, pack)) : null,

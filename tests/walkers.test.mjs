@@ -570,4 +570,6 @@ test('soldiers, raiders and imperial legionaries are picked by a click on their 
   assert.equal(soldierDoing({ side: 'rome', state: 'idle' }, { rally: { x: 1, y: 1 } }), 'Holding the deployment point');
   assert.equal(soldierDoing({ side: 'enemy', state: 'siege' }), 'Attacking buildings');
   assert.equal(soldierDoing({ side: 'enemy', state: 'advance' }), 'Advancing on the city');
+  assert.equal(soldierDoing({ side: 'rome', state: 'training', trainLeft: 9 * 20 }, { rally: null }), 'Training at the Campus, 9 days left');
+  assert.equal(soldierDoing({ side: 'rome', state: 'training', trainLeft: 20 }, { rally: null }, false, true), 'Training at the Campus, 1 day left (paused: the Campus is short of staff)');
 });

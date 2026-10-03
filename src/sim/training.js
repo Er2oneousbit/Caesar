@@ -31,7 +31,8 @@
  *   untrained stayed so, and a playtester's full fort of untrained men never
  *   went to the academy built after them): once a day (startTrips), a fort
  *   at rest sends its untrained man resting in the yard with the lowest slot
- *   to the academy nearest it, when the roads join the two. At rest means not
+ *   to the academy nearest it, when the roads join the two and he can find
+ *   a way there on foot (its length sets the trip's time limit). At rest means not
  *   deployed, none of its men away at a distant battle, nothing that would
  *   have its men stand to (raiders, Caesar's men or a revolt in the province,
  *   raider ships off the shore, a wolf or angry villager near the fort,
@@ -85,7 +86,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { followPath } from './movement.js';
 import { killWalker, inOwnFort } from './entities.js';
 import { waterOf } from './navy.js';
-import { watchOf, standsTo, fortGate } from './military.js';
+import { watchOf, standsTo, fortGate, landRoute } from './military.js';
 import { postsAway } from './battle.js';
 import { revoltActive } from './revolt.js';
 
@@ -306,8 +307,17 @@ export function startTrips(game) {
     if (fort) {
       if (standsTo(game, b, watch, false)) continue; // (a wolf about the fort)
       const academy = academyFor(game, b);
-      if (!academy || b.accessRoad < 0 || !fortGate(game, b) || !game.pf.roadPath(b.accessRoad, academy.accessRoad)) continue;
-      startDrill(game, pupil, academy);
+      const gate = fortGate(game, b);
+      if (!academy || b.accessRoad < 0 || !gate || !game.pf.roadPath(b.accessRoad, academy.accessRoad)) continue;
+      // And a way there on foot (a road may run where men cannot walk:
+      // under a triumphal arch), whose length sets the trip's time limit:
+      // a road that winds far round (a wall's one gate, a far bridge) is
+      // no reason to give up on him halfway (review). None: try again in
+      // TRIP_RETRY_DAYS, not every day.
+      const spot = drillSpot(game, academy, pupil);
+      const route = landRoute(game, pupil.side, gate.out.x, gate.out.y, spot.x, spot.y);
+      if (!route) { b.drillWait = today + CONFIG.TRIP_RETRY_DAYS; continue; }
+      startDrill(game, pupil, academy, route.length);
     } else {
       const portus = portusFor(game, b);
       if (portus) startDrill(game, pupil, portus);
@@ -353,11 +363,13 @@ export function trainAt(game, u, school, days) {
 /**
  * Send a man or ship to the academy or Portus. The trip may take at least
  * DRILL_MAX_DAYS, and for a far school twice the straight-line way there at
- * its speed (with room for detours), so a post far across a big map is not
+ * its speed (with room for detours; `walk`, the tiles of the way there when
+ * a route is known, in place of the straight line when longer), so a post
+ * far across a big map, or round a long detour, is not
  * given up on halfway there.
  */
-export function startDrill(game, u, school) {
-  const tiles = Math.hypot(school.x + school.size / 2 - u.x, school.y + school.size / 2 - u.y);
+export function startDrill(game, u, school, walk = 0) {
+  const tiles = Math.max(walk, Math.hypot(school.x + school.size / 2 - u.x, school.y + school.size / 2 - u.y));
   const perDay = UNIT_TYPES[u.type].speed * CONFIG.TICKS_PER_DAY;
   u.drill = school.id;
   u.drillDay = game.time.totalDays;

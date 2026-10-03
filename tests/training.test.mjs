@@ -23,10 +23,10 @@ import { updateWalkers } from '../src/sim/walkers.js';
 import { updateServiceSpawns } from '../src/sim/services.js';
 import { updateReligion } from '../src/sim/religion.js';
 import {
-  spawnUnit, removeUnit, updateBarracks, updateMilitary, fortPost, deployFort, recallFort, rollDamage, unitDefense, missileDamage, holdingPosition,
+  spawnUnit, removeUnit, updateBarracks, updateMilitary, fortPost, fortGate, landRoute, deployFort, recallFort, rollDamage, unitDefense, missileDamage, holdingPosition,
 } from '../src/sim/military.js';
 import { shoreBerth, waterOf, shipSpeed, ramOf, deployStation } from '../src/sim/navy.js';
-import { academyFor, portusFor, trainsNow, updateDrill, startDrill, battleStrength, trainedOf, reachBetween } from '../src/sim/training.js';
+import { academyFor, portusFor, trainsNow, updateDrill, startDrill, drillSpot, battleStrength, trainedOf, reachBetween } from '../src/sim/training.js';
 import { requestTroops, setService, sendTroops, currentBattle } from '../src/sim/battle.js';
 import { trainedText, trainingNote, schoolStatus, templeCount, inTrainingText } from '../src/ui/trainingInfo.js';
 import { buildDemoCity, buildDemoNavy } from '../src/dev/demoCity.js';
@@ -485,6 +485,51 @@ test('the academy demolished while he trains: he comes home untrained, and nobod
   assert.equal(game.military.stats.soldiersTrained || 0, 0);
   assert.equal(men.filter((m) => m.drill).length, 0, 'no academy, no trips');
   assert.match(trainingNote(game, fort), /^Build a Campus/);
+});
+
+test('review: a trip\'s time is set by the way there on foot; one given up holds the fort\'s next for TRIP_RETRY_DAYS', () => {
+  const { game, academy, fort } = lineCity();
+  const men = garrison(game, fort, 3);
+  updateDrill(game);
+  const u = men.find((m) => m.drill);
+  const gate = fortGate(game, fort);
+  const spot = drillSpot(game, academy, u);
+  const route = landRoute(game, 'rome', gate.out.x, gate.out.y, spot.x, spot.y);
+  const perDay = UNIT_TYPES.legionary.speed * CONFIG.TICKS_PER_DAY;
+  assert.equal(u.drillDays, Math.max(CONFIG.DRILL_MAX_DAYS, Math.ceil((2 * route.length) / perDay) + 10));
+  // Out of time before he got there: given up, and nobody else for TRIP_RETRY_DAYS.
+  u.drillDay = game.time.totalDays - u.drillDays - 1;
+  updateDrill(game);
+  assert.equal(u.drill, 0, 'given up');
+  assert.equal(fort.drillWait, game.time.totalDays + CONFIG.TRIP_RETRY_DAYS);
+  assert.ok(fightUntil(game, () => men.every((m) => inOwnFort(game, m) && m.state === 'idle'), 4000) >= 0, 'he is home');
+  game.time.totalDays += CONFIG.TRIP_RETRY_DAYS - 1;
+  updateDrill(game);
+  assert.equal(men.filter((m) => m.drill).length, 0, 'not yet');
+  game.time.totalDays += 1;
+  updateDrill(game);
+  assert.equal(men.filter((m) => m.drill).length, 1, 'then again');
+});
+
+test('review: a fort with a road to the academy but no way a soldier can find on foot sends nobody, and looks again only after TRIP_RETRY_DAYS', () => {
+  // A wall down the whole map, its one gate far up the road: the road joins
+  // fort and academy, but the walk round is past a soldier's route search.
+  const game = newGame({ type: 'plains', size: 96 });
+  const map = game.map;
+  for (let i = 0; i < map.size; i++) { map.terrain[i] = Terrain.GRASS; map.rubble[i] = 0; map.road[i] = 0; } // (no Imperial road through the wall)
+  const road = (x0, y0, x1, y1) => assert.ok(build(game, 'road', x0, y0, x1, y1).ok);
+  road(14, 60, 20, 60); road(20, 8, 20, 60); road(20, 8, 40, 8); road(40, 8, 40, 60); road(40, 60, 46, 60);
+  assert.ok(build(game, 'wall', 30, 0, 30, map.h - 1).ok);
+  const fort = addBuilding(game, 'fort_legion', 15, 57);
+  const academy = addBuilding(game, 'military_academy', 42, 61);
+  game.processRoadChanges();
+  fort.efficiency = 1;
+  academy.efficiency = 1;
+  assert.ok(game.pf.roadPath(fort.accessRoad, academy.accessRoad), 'joined by road');
+  const men = garrison(game, fort, 3);
+  updateDrill(game);
+  assert.equal(men.filter((m) => m.drill).length, 0, 'nobody sent down a way he cannot walk');
+  assert.equal(fort.drillWait, game.time.totalDays + CONFIG.TRIP_RETRY_DAYS, 'and not asked again every day');
 });
 
 test('a man whose academy is short of staff waits, then comes home untrained after TRAIN_WAIT_MAX_DAYS', () => {

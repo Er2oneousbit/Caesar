@@ -428,7 +428,18 @@ function approach(game, u, target, speed) {
 
 /** Plan an A* route for a unit to a tile (used when steering gets stuck or for long marches). */
 function planPath(game, u, goalX, goalY) {
+  return landRoute(game, u.side, u.x, u.y, goalX, goalY);
+}
+
+/**
+ * An A* route over open land for a unit of `side` from (x, y) to the tile
+ * of (goalX, goalY), or the nearest open tile within 3 of it: tile indices,
+ * or null. (Also asked before a man is sent to train, sim/training.js
+ * startTrips: is there a way there on foot, and how long is it?)
+ */
+export function landRoute(game, side, x, y, goalX, goalY) {
   const map = game.map;
+  const u = { side, x, y };
   let gx = Math.max(0, Math.min(map.w - 1, Math.floor(goalX)));
   let gy = Math.max(0, Math.min(map.h - 1, Math.floor(goalY)));
   // If the goal tile is blocked, aim for the nearest open tile around it.

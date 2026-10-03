@@ -166,3 +166,27 @@ test('save files are named after the slot, the city and the year', () => {
   assert.equal(saveFileName({ slot: 'slot2' }), 'colonia-slot2.json', 'a damaged save: just its slot');
   assert.equal(saveFileName({}), 'colonia-colonia.json');
 });
+
+test('save: a version 22 save (before events, peoples, wolves, low bridges and native villages) loads with none of them', async () => {
+  const { CONFIG } = await import('../src/config.js');
+  assert.equal(CONFIG.SAVE_VERSION, 23);
+  const { newGame: fresh } = await import('./helpers.mjs');
+  const { serializeGame: ser, deserializeGame: des } = await import('../src/core/save.js');
+  const game = fresh({ seed: 'v22' });
+  game.runDays(3);
+  const data = JSON.parse(JSON.stringify(ser(game)));
+  data.version = 22;
+  delete data.map.bridgeLow;
+  delete data.city.natives;
+  delete data.city.events;
+  delete data.city.romeWage;
+  delete data.wildlife;
+  delete data.military.people;
+  const back = des(data);
+  assert.equal(back.map.hasLowBridge(), false);
+  assert.equal(back.city.natives, null);
+  assert.ok(back.city.events, 'events state filled in');
+  assert.ok(back.city.romeWage > 0, 'Rome pays its base wage');
+  assert.deepEqual(back.wildlife.packs, []);
+  back.runDays(3); // (and plays on)
+});

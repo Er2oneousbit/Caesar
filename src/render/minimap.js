@@ -139,10 +139,10 @@ export class Minimap {
     ctx.strokeStyle = '#fff5d6';
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(fx) + 0.5, Math.round(fy) + 0.5, Math.round((v.w / unit) * scale), Math.round((v.h / unit) * scale));
-    // soldiers (white) and raiders (red), drawn live every frame
+    // soldiers (white), raiders (red) and wolves (amber), drawn live every frame
     for (const u of game.units.values()) {
       const [px, py] = at(u.x, u.y);
-      ctx.fillStyle = u.side === 'enemy' ? '#ff3b2f' : u.side === 'native' ? '#f0a030' : '#f4f0e6';
+      ctx.fillStyle = u.side === 'enemy' ? '#ff3b2f' : u.side === 'wild' ? '#e0a030' : u.side === 'native' ? '#f0a030' : '#f4f0e6';
       ctx.fillRect(px - 1, py - 1, 2.5, 2.5);
     }
     // entry/exit markers (tile centers)

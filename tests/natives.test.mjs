@@ -473,3 +473,43 @@ test('natives: Caesar\'s men and villagers never route through a village piece (
   assert.equal(field[game.map.idx(v.m.x, v.m.y)], Infinity, 'the meeting place is no way through');
   for (const h of v.huts) assert.equal(field[game.map.idx(h.x, h.y)], Infinity);
 });
+
+test('natives: an earthquake strikes the city\'s own middle and its cracks pass a village by', async () => {
+  const { quakePoint, startQuake } = await import('../src/sim/events.js');
+  const { RNG } = await import('../src/core/rng.js');
+  const game = villageGame();
+  assert.equal(quakePoint(game, new RNG('q')), null, 'villages alone are no city to strike');
+  const v = firstVillage(game);
+  const pieces = () => [...game.buildings.values()].filter((b) => b.def.kind === 'village').length;
+  const before = pieces();
+  for (let k = 0; k < 4; k++) {
+    // The city's only building, beside the village: the quake strikes there.
+    if (![...game.buildings.values()].some((b) => b.def.kind !== 'village')) {
+      const near = spotNear(game, v.m, 2, 1) || spotNear(game, v.m, 3, 1);
+      addBuilding(game, 'garden', near.x, near.y);
+    }
+    game.city.events.quake = null;
+    assert.ok(startQuake(game, 'large'));
+    game.runDays(12);
+  }
+  assert.equal(pieces(), before, 'not a hut nor the meeting place lost');
+});
+
+test('natives: prefects fight both a wolf and an attacking villager (one hostileToRome for all)', async () => {
+  const { hostileToRome } = await import('../src/sim/military.js');
+  assert.equal(hostileToRome({ side: 'wild' }), true);
+  assert.equal(hostileToRome({ side: 'native', attacking: true }), true);
+  assert.equal(hostileToRome({ side: 'native', attacking: false }), false);
+  const { updatePrefectFights } = await import('../src/sim/prefectFight.js');
+  for (const type of ['wolf', 'villager']) {
+    const game = villageGame();
+    const v = firstVillage(game);
+    v.m.attackDays = 2;
+    const pt = spotNear(game, v.m, 9, 5);
+    const u = spawnUnit(game, type, pt.x + 0.5, pt.y + 0.5, type === 'villager' ? { village: v.m.id, hut: v.huts[0].id, attacking: true, state: 'advance' } : { pack: 0 });
+    const p = spawnWalker(game, 'prefect', game.map.idx(pt.x, pt.y), null, { state: 'roam' });
+    let fought = false;
+    for (let t = 0; t < 50 && !fought; t++) { updatePrefectFights(game); fought = p.fight === u.id || !game.units.has(u.id); }
+    assert.equal(fought, true, type);
+  }
+});

@@ -21,6 +21,10 @@
  *   raids=MODE     off | occasional | frequent  (override invasions for new games)
  *   searaids=off   every raid comes by land (new games; sim/navy.js)
  *   natives=1      the sandbox with skipmenu=1 has native villages (sim/natives.js)
+ *   people=ID      who raids a new game: a people of data/peoples.js (gauls,
+ *                  ligurians, carthaginians...), or site for the province's own
+ *   wolves=on|off  wolf packs on a new game's map, or none (sim/wildlife.js)
+ *   events=off     no events, random or scheduled, in any game (sim/events.js)
  *   nofog=1        reserved for future use
  *   mute=1         start with sound off
  *
@@ -47,6 +51,9 @@ export function parseFlags(source) {
     raids: null,
     searaids: null,
     natives: false,
+    people: null,
+    wolves: null,
+    events: null,
     mute: false,
   };
   let params;
@@ -78,6 +85,10 @@ export function parseFlags(source) {
   if (['off', 'occasional', 'frequent'].includes(get('raids'))) flags.raids = get('raids');
   if (['off', 'on'].includes(get('searaids'))) flags.searaids = get('searaids');
   flags.natives = truthy(get('natives'));
+  // (An unknown people falls back to the province's own: sim/military.js peopleFor.)
+  if (/^[a-z_]+$/.test(String(get('people') ?? ''))) flags.people = String(get('people'));
+  if (['off', 'on'].includes(get('wolves'))) flags.wolves = get('wolves');
+  if (get('events') === 'off') flags.events = 'off';
   flags.mute = truthy(get('mute'));
   return flags;
 }

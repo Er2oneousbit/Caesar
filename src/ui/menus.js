@@ -20,6 +20,7 @@ import { listSlots, deleteSlot, canDownloadFiles, slotSize, storageUsage, STORAG
 import { goalStatus } from '../sim/ratings.js';
 import { RANKS, SANDBOX_RANK, TOP_RANK } from '../data/ranks.js';
 import { SITES, SANDBOX_SITES, HOME_SITE } from '../data/sites.js';
+import { PEOPLES, PEOPLE_BY_SITE, GENERIC_PEOPLE } from '../data/peoples.js';
 import { marketLine } from '../sim/prices.js';
 import { briefingGovernorLine, victoryGovernorLine, victoryTitle, rankLine } from './governorInfo.js';
 import { AUTO_PAUSE, autoPauseSwitches } from './autoPause.js';
@@ -229,6 +230,11 @@ export function briefing(app, s, onBegin = null, onBack = null) {
 /** What the Sea raids switch does (sandbox setup and Settings). */
 const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids come by ship and land near the city; raider ships throw fire pots at boats and buildings by the shore. A Navalia and Stationes (naval stations) build and berth a fleet of liburnians to fight them. Off: every raid comes by land.`;
 
+/** What the Wolves switch does (sandbox setup). */
+const WOLVES_HELP = 'Wolf packs in the woods (none on the desert map). They keep away from the city but fall on anyone who walks near: cart pushers, traders, settlers. Soldiers and towers can kill them; a pack with one wolf left grows back.';
+/** What the sandbox's Events switch does. */
+const EVENTS_HELP = 'Now and then Rome raises or cuts wages, landslides or storms stop caravans or ships for 3 months, bad water lowers city health, or a mine or clay pit caves in (less often on Easy, more on Hard and Insane). Off: none of these.';
+
 export function sandboxMenu(app) {
   const state = {
     size: app.flags.map || 'medium',
@@ -238,10 +244,22 @@ export function sandboxMenu(app) {
     funds: 8000,
     invasions: 'occasional',
     seaRaids: app.settings.seaRaids !== false,
+    events: true,
     rank: SANDBOX_RANK,
     site: HOME_SITE,
     natives: false, // native villages (sim/natives.js): off by default
+    raiders: 'generic', // or 'site': the province's own people (data/peoples.js)
+    wolves: false, // wolf packs in the woods (sim/wildlife.js)
   };
+  // Who the province's own people are, for the site picked now.
+  const siteFolk = () => PEOPLES[PEOPLE_BY_SITE[state.site]] || PEOPLES[GENERIC_PEOPLE];
+  const raidersDesc = h('div', { class: 'muted', style: { fontSize: '12px' } });
+  const showRaiders = () => {
+    raidersDesc.textContent = state.raiders === 'site'
+      ? `${siteFolk().name}: ${siteFolk().desc}`
+      : PEOPLES[GENERIC_PEOPLE].desc;
+  };
+  showRaiders();
   const seedInput = h('input', { type: 'text', value: state.seed, oninput: (e) => { state.seed = e.target.value.trim() || '1'; } });
   const typeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_TYPES[state.type].desc);
   const sizeDesc = h('div', { class: 'muted', style: { fontSize: '12px' } }, MAP_SIZE_NOTES[state.size] || '');
@@ -268,15 +286,25 @@ export function sandboxMenu(app) {
           RANKS.map((r, i) => h('option', { value: i, selected: i === state.rank }, `${r.name} (salary ${r.salary} Dn a month)`))),
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Sets the salary Rome expects you to draw: more costs favor, less earns a little.')),
       h('div', { class: 'field' }, h('label', {}, 'Province'),
-        h('select', { class: 'site-select', onchange: (e) => { state.site = e.target.value; } },
+        h('select', { class: 'site-select', onchange: (e) => { state.site = e.target.value; showRaiders(); } },
           SANDBOX_SITES.map((id) => h('option', { value: id, selected: id === state.site }, `${SITES[id].name} (${SITES[id].region})`))),
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Where your city stands on the empire map: the way each partner\'s traders come, how long a far one takes (it comes less often) and how far your army marches to a distant battle. The landscape above is the map you build on.')),
+      h('div', { class: 'field' }, h('label', {}, 'Raiders'),
+        h('select', { class: 'raiders-select', onchange: (e) => { state.raiders = e.target.value; showRaiders(); } },
+          [['generic', 'A mixed band from beyond the frontier'], ['site', 'The province\'s own people']].map(([k, n]) => h('option', { value: k, selected: k === state.raiders }, n))),
+        raidersDesc),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', checked: state.seaRaids, onchange: (e) => { state.seaRaids = e.target.checked; } }),
         h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP))),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', class: 'natives-check', checked: state.natives, onchange: (e) => { state.natives = e.target.checked; } }),
-        h('span', {}, 'Native villages', h('div', { class: 'muted', style: { fontSize: '12px' } }, 'One to three villages of the land\'s own people, away from the road. They attack what you build on their land until a missionary from a Sacellum Pacis (Mission Post) calms them; calmed, they come to buy your exports.')))),
+        h('span', {}, 'Native villages', h('div', { class: 'muted', style: { fontSize: '12px' } }, 'One to three villages of the land\'s own people, away from the road. They attack what you build on their land until a missionary from a Sacellum Pacis (Mission Post) calms them; calmed, they come to buy your exports.'))),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', class: 'wolves-check', checked: state.wolves, onchange: (e) => { state.wolves = e.target.checked; } }),
+        h('span', {}, 'Wolves', h('div', { class: 'muted', style: { fontSize: '12px' } }, WOLVES_HELP))),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', class: 'events-switch', checked: state.events, onchange: (e) => { state.events = e.target.checked; } }),
+        h('span', {}, 'Events', h('div', { class: 'muted', style: { fontSize: '12px' } }, EVENTS_HELP)))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),

@@ -34,14 +34,16 @@ import { LABOR_CATEGORIES, ENT_BASE_MAX, VENUE_SEATS } from '../data/buildings.j
 import { HOUSE_TIERS } from '../data/housing.js';
 import { GOODS, GOOD_KEYS, RECRUIT_SOURCE, formatAmount } from '../data/goods.js';
 import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
-import { threatSummary, garrisonCounts, recallFort, RUMOUR_MONTHS, SCOUT_MONTHS } from '../sim/military.js';
+import { threatSummary, garrisonCounts, recallFort, RUMOUR_MONTHS, SCOUT_MONTHS, raidPeople } from '../sim/military.js';
+import { packSummary } from '../sim/wildlife.js';
 import { squadronCounts, recallStation, fleetSummary, navalNeed } from '../sim/navy.js';
 import { trainedTotals } from '../sim/training.js';
 import { templeCount } from './trainingInfo.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
-import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
+import { LEDGER_KEYS, ledgerNet, houseMonthlyTax, romeWage } from '../sim/economy.js';
+import { tradeHaltText } from '../sim/events.js';
 import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } from '../sim/trade.js';
 import { partnerBuys, routeInterval } from '../sim/tradeDemand.js';
 import { partnerOn, setPartnerGood, partnerIdle, partnersFor } from '../sim/tradeSwitches.js';
@@ -159,6 +161,7 @@ export function tradeRouteCard(app, g, id, onChange) {
     pace,
     h('div', { class: 'muted route-prices', style: { fontSize: '12px' } }, distanceNote(g.scenario, id)),
     idle ? h('div', { class: 'status warn route-idle', style: { fontSize: '12px' } }, `Every good is switched off: ${sea ? 'no ships' : 'no caravans'} will come until you tick one.`) : null,
+    r.open && tradeHaltText(g, sea ? 'sea' : 'land') ? h('div', { class: 'status warn route-halt', style: { fontSize: '12px' } }, tradeHaltText(g, sea ? 'sea' : 'land')) : null,
     h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought, 'buy')),
     h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold, 'sell')));
 }
@@ -297,7 +300,7 @@ export class Advisors {
         h('div', { class: 'card' },
           h('h4', {}, 'Wages'),
           wageVal, wageInput,
-          h('div', { class: 'muted' }, `Rome pays ${CONFIG.BASE_WAGE}. Higher wages please citizens; lower wages save money but hurt mood.`),
+          h('div', { class: 'muted' }, `Rome pays ${romeWage(g)}. Higher wages please citizens; lower wages save money but hurt mood.`),
           kv('Wages last month', `${fmt(c.lastMonth?.wages || 0)} Dn`))),
       h('h4', {}, 'Labor categories'),
       h('div', { class: 'muted' }, 'When workers are short, priority categories are staffed first; the rest share what is left.'),
@@ -541,11 +544,14 @@ export class Advisors {
     const stations = all.filter((b) => b.def.kind === 'station');
     const yards = all.filter((b) => b.def.kind === 'navalia');
     const seaOk = !!g.map.seaEntry;
+    const folk = raidPeople(g, null);
     const threat = h('div', { class: 'card' },
       h('h4', {}, 'Threat'),
       h('div', { class: `status ${t.level === 'attack' ? 'bad' : t.level === 'warned' ? 'warn' : 'good'}` }, t.level === 'calm' ? 'Scouts see no warband near the province.' : t.text),
       m.settings ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Raiders come from the map edges${seaOk && m.seaRaids ? `, and about ${Math.round(CONFIG.SEA_RAID_SHARE * 100)}% of raids by sea` : ''}. Word of a warband comes about ${RUMOUR_MONTHS} months ahead, the scouts' report of its size and side about ${SCOUT_MONTHS}; warbands grow with your city.`) : null,
       m.settings && seaOk ? h('div', { class: 'muted', style: { fontSize: '12px' } }, `Sea raids: ${m.seaRaids ? 'on' : 'off'} (Settings).`) : null,
+      // Who raids this province (data/peoples.js), when it is a people of its own.
+      m.settings && folk.mix ? h('div', { class: 'muted', style: { marginTop: '4px' } }, h('b', {}, `Your enemies here: the ${folk.name}. `), folk.desc) : null,
       t.level === 'attack' ? h('button', { class: 'btn small primary', style: { marginTop: '6px' }, onclick: () => { this.app.ui.closeModal(); this.app.focusThreat(); } }, t.legion && t.enemies === t.legion ? 'Show me the legions' : 'Show me the raiders') : null,
       t.level === 'warned' ? h('button', { class: 'btn small', style: { marginTop: '6px' }, title: 'Where the warband is and the side it will enter by (E)', onclick: () => this.app.ui.openEmpire(t.legion ? 'legion' : 'warband') }, 'Show on the empire map') : null);
     const army = h('div', { class: 'card' },
@@ -557,7 +563,18 @@ export class Advisors {
       kv('Record', `${st.repelled} of ${st.raids} raids repelled`),
       kv('Raiders slain / soldiers lost', `${fmt(st.enemiesKilled)} / ${fmt(st.soldiersLost)}`),
       kv('Prefects lost fighting', fmt(st.prefectsLost || 0)),
+      st.walkersKilled ? kv('People struck down by missiles', fmt(st.walkersKilled)) : null,
       kv('Buildings lost to raids', fmt(st.buildingsLost)));
+    // Wolf packs (sim/wildlife.js): only on a map that has had any.
+    const wl = g.wildlife;
+    const wolves = wl && wl.nextPackId > 1 ? h('div', { class: 'card' },
+      h('h4', {}, 'Wolves'),
+      wl.packs.length
+        ? h('div', { class: 'muted' }, 'Packs keep to the woods and fall on anyone who walks near. Deploy a fort by a pack to clear it: while one wolf lives, it grows back.')
+        : h('div', { class: 'status good' }, 'Every pack has been cleared.'),
+      ...wl.packs.map((p) => kv(`Pack ${p.id}`, packSummary(g, p))),
+      kv('Wolves killed', fmt(wl.stats.wolvesKilled)),
+      kv('People killed by wolves', fmt(wl.stats.walkersKilled))) : null;
     // The fleet: only where ships can sail, or once there is a ship.
     const showFleet = seaOk || fleet.ships > 0 || stations.length > 0;
     const fleetCard = showFleet ? h('div', { class: 'card' },
@@ -615,7 +632,7 @@ export class Advisors {
           h('button', { class: 'btn small', disabled: !f.rally, onclick: () => { recallFort(g, f.id); this.render(); } }, 'Recall')));
     });
     return [
-      h('div', { class: 'grid2' }, threat, army, fleetCard),
+      h('div', { class: 'grid2' }, threat, army, fleetCard, wolves),
       h('h4', {}, 'Forts'),
       forts.length
         ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Fort'), h('th', { class: 'r' }, 'Soldiers'), h('th', { class: 'r' }, 'Staff'), h('th', {}, 'Orders'), h('th', { title: 'Sent when Caesar calls for troops (Imperial advisor)' }, 'Distant battles'), h('th', {}, '')), fortRows)

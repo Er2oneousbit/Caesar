@@ -16,12 +16,17 @@ import { wharfBoat, boatStatus } from '../sim/fishing.js';
 import { igniteBuilding, collapseBuilding } from '../sim/risk.js';
 import { isStorage, storageCapacity, storageUsed, isStable, stableRoom } from '../sim/storage.js';
 import { launchInvasion, threatSummary, garrisonCounts, enemyCount } from '../sim/military.js';
+import { PEOPLES } from '../data/peoples.js';
+import { addPackAt, packSummary } from '../sim/wildlife.js';
+import { startRevolt } from '../sim/revolt.js';
 import { squadronCounts, shipStatus } from '../sim/navy.js';
 import { startMarch, launchLegion, legionCount, siegeOrder } from '../sim/legion.js';
 import { requestTroops, fightBattle, archesToBuild } from '../sim/battle.js';
 import { THREATENED_CITIES } from '../data/battles.js';
 import { commitCrime, crimeChance, criminalsAbout, unhappiestHomes, crimeEnabled } from '../sim/crime.js';
 import { outbreak, sickHomes, riskiestHomes, diseaseEnabled } from '../sim/disease.js';
+import { applyEvent, eventCondition, startQuake, newEmperor, quakeSummary, tradeHaltText } from '../sim/events.js';
+import { QUAKE_SIZES } from '../data/events.js';
 import { UNIT_TYPES, FORT_CAPACITY, STATION_CAPACITY } from '../data/units.js';
 import { WEATHER, SEASON_NAMES, seasonalKind, SNOW_LEVELS } from '../render/weather.js';
 import { dayTime } from '../render/lighting.js';
@@ -47,6 +52,8 @@ export const CONSOLE_HELP = [
   ['unrest <n>', 'Set the mood of every home (0-100); they drift back toward their targets'],
   ['health', 'Health report: city health, outbreaks this year, sick homes, the homes closest to an outbreak'],
   ['sick [id | x y]', 'The home under the cursor (or #id, or at x,y; else the one at most risk) falls sick now'],
+  ['event', 'Events report: Rome\'s wage, trade stopped, an earthquake shaking, the events so far'],
+  ['event <kind>', 'An event now: wageup | wagedown | land | sea | water | mine | clay | quake [small|medium|large] | emperor'],
   ['garrison', 'Build a barracks, three forts, towers, a ranch and a wall (equipped, and military labor goes first)'],
   ['harbor', 'Build a dock + warehouse and open every sea route (river/coast maps)'],
   ['fishing', 'Build a shipyard (stocked with timber), two fishing wharves and a granary on the nearest water with fish'],
@@ -55,8 +62,10 @@ export const CONSOLE_HELP = [
   ['cloth', 'Build the cloth industry beside the city: a Linarium, a Textrinum, a Taberna Vestiaria and a Horreum'],
   ['navy', 'Build a naval station and a navalia on the shore, stocked for a squadron of liburnians (river/coast maps)'],
   ['academy', 'Build a Campus (military academy) near the city, and a Portus by the first Statio if there is one (they train only at full staff)'],
-  ['invade [n]', 'Launch a raid of n warriors right now (default: normal size)'],
+  ['invade [n] [people]', 'Launch a raid of n warriors right now (default: normal size), of the province\'s people or of one named: gauls, boii, ligurians, carthaginians, lusitanians, cimbri, barbarians...'],
   ['searaid [n]', 'Launch a raid of n warriors by sea right now (river/coast maps; default: normal size)'],
+  ['wolves [here]', 'List the wolf packs; "here" sets a new pack down near the middle of the view'],
+  ['revolt', 'The gladiators revolt now, for 3 months (needs a working gladiator school)'],
   ['legion', 'Caesar\'s legions set out from Rome now (they arrive in 12 months)'],
   ['legion now [n]', 'Caesar\'s legions (n men; default: the next attack\'s size) arrive at the map entrance now'],
   ['battle [city] [n]', `Caesar calls for troops now: city ${Object.keys(THREATENED_CITIES).join(' | ')}, enemy strength n`],
@@ -246,6 +255,23 @@ export class DebugConsole {
       case 'health':
         need();
         return healthReport(g);
+      case 'event': {
+        need();
+        const kind = (args[0] || '').toLowerCase();
+        if (!kind) return eventReport(g);
+        if (kind === 'quake') {
+          const size = args[1] || 'small';
+          if (!QUAKE_SIZES[size]) throw new Error(`usage: event quake [${Object.keys(QUAKE_SIZES).join('|')}]`);
+          const q = startQuake(g, size);
+          return q ? `${quakeSummary(g)}.` : 'No earthquake: one is already shaking, or there is no city to strike.';
+        }
+        if (kind === 'emperor') { newEmperor(g); return 'A new Caesar rules: favor is 50.'; }
+        const key = { wageup: 'wageUp', wagedown: 'wageDown', land: 'land', sea: 'sea', water: 'water', mine: 'mine', clay: 'clay' }[kind];
+        if (!key) throw new Error(`usage: event [${EVENT_KINDS}]`);
+        if (!eventCondition(g, key)) return `It cannot happen now (${EVENT_NEEDS[key]}).`;
+        applyEvent(g, key, g.rng.range(1, 4)); // (a wage event's step, as the month's draw gives)
+        return `${key}: done.`;
+      }
       case 'sick': {
         need();
         const b = pickHome(app, g, args);
@@ -326,13 +352,36 @@ export class DebugConsole {
       case 'searaid': {
         need();
         if (g.military.active) return 'A raid is already under way.';
-        const n = args[0] ? Math.max(1, Math.min(60, Number(args[0]) || 0)) : 0;
+        // A people may come first or second ("invade gauls", "invade 12 gauls").
+        const folk = args.find((a) => Object.hasOwn(PEOPLES, a)) || null;
+        const num = args.find((a) => /^\d+$/.test(a));
+        const n = num ? Math.max(1, Math.min(60, Number(num) || 0)) : 0;
         const sea = cmd.toLowerCase() === 'searaid';
         if (sea && !g.military.seaRaids) return 'Sea raids are off in this city (Settings).';
-        const inv = launchInvasion(g, null, n || undefined, { sea });
+        const inv = launchInvasion(g, null, n || undefined, { sea, people: folk });
         app.renderer.camera.centerOnTile(inv.origin.x, inv.origin.y);
         if (sea && !inv.sea) return `No landing could be found, so a raid of ${inv.size} came by land from ${inv.origin.x},${inv.origin.y}.`;
-        return inv.sea ? `Raid of ${inv.size} by sea in ${inv.ships} ship${inv.ships === 1 ? '' : 's'}, landing at ${inv.origin.x},${inv.origin.y}.` : `Raid of ${inv.size} launched from ${inv.origin.x},${inv.origin.y}.`;
+        const who = PEOPLES[inv.people]?.mix ? ` ${PEOPLES[inv.people].name}` : '';
+        return inv.sea ? `Raid of ${inv.size}${who} by sea in ${inv.ships} ship${inv.ships === 1 ? '' : 's'}, landing at ${inv.origin.x},${inv.origin.y}.` : `Raid of ${inv.size}${who} launched from ${inv.origin.x},${inv.origin.y}.`;
+      }
+      case 'wolves': {
+        // Wolf packs (sim/wildlife.js): list them, or set one down here.
+        need();
+        if (args[0] === 'here') {
+          const cam = app.renderer.camera;
+          const c = cam.screenToTile(cam.viewW / cam.dpr / 2, cam.viewH / cam.dpr / 2);
+          const pack = addPackAt(g, c.x, c.y);
+          return pack ? `A pack of ${pack.size} wolves near ${pack.spot.x},${pack.spot.y}.` : 'No open land near the middle of the view for a pack.';
+        }
+        const wl = g.wildlife;
+        if (!wl || !wl.packs.length) return wl && wl.nextPackId > 1 ? 'Every pack has been cleared.' : 'No wolves in this province. "wolves here" sets a pack down.';
+        return [...wl.packs.map((p) => `Pack ${p.id}: ${packSummary(g, p)} (den ${p.den.x},${p.den.y})`),
+          `Killed ${wl.stats.wolvesKilled} wolves; wolves have killed ${wl.stats.walkersKilled} people.`].join('\n');
+      }
+      case 'revolt': {
+        need();
+        if (!startRevolt(g)) return 'No revolt: one is on already, or no gladiator school is working (staffed, with a road).';
+        return `The gladiators revolt until month ${g.military.revolt.endMonth}: ${g.military.revolt.turned} turned at once.`;
       }
       case 'legion': {
         // Caesar's legions (sim/legion.js): set them marching, or bring them now.
@@ -550,6 +599,28 @@ function pickHome(app, g, args) {
     if (!best || (b.house.diseaseRisk || 0) > (best.house.diseaseRisk || 0)) best = b;
   }
   return best;
+}
+
+/** The `event` command's kinds, and what each needs to happen. */
+const EVENT_KINDS = 'wageup|wagedown|land|sea|water|mine|clay|quake [size]|emperor';
+const EVENT_NEEDS = {
+  wageUp: 'Rome already pays the most it will', wageDown: 'Rome already pays the least it will',
+  land: 'no open land route', sea: 'no open sea route with a staffed Emporium', water: 'fewer than 200 people, or no disease here',
+  mine: 'no iron mine', clay: 'no clay pit',
+};
+
+/** The `event` command's report: Rome's wage, trade stopped, a quake, what came so far. */
+function eventReport(g) {
+  const ev = g.city.events;
+  const counts = Object.entries(ev.counts).map(([k, n]) => `${k} ${n}`).join(', ');
+  return [
+    `Rome pays ${g.city.romeWage} Dn (you pay ${g.city.wage}).`,
+    tradeHaltText(g, 'land') || 'Caravans travel freely.',
+    tradeHaltText(g, 'sea') || 'Ships sail freely.',
+    quakeSummary(g) || 'No earthquake.',
+    `So far: ${counts || 'nothing'}.`,
+    `Usage: event [${EVENT_KINDS}]`,
+  ].join('\n');
 }
 
 /** The `health` command's report. */

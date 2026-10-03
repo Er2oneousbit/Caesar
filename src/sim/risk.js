@@ -81,15 +81,16 @@ export function updateRisk(game, b) {
 }
 
 /** What the rubble remembers for each way a building is set alight (sim/ruins.js). */
-const RUIN_OF_FIRE = { fire: 'fire', spread: 'fire', wrath: 'wrath', raid: 'raidFire', raidQuiet: 'raidFire', riot: 'riot', riotQuiet: 'riot', legion: 'legionFire', legionQuiet: 'legionFire' };
+const RUIN_OF_FIRE = { fire: 'fire', spread: 'fire', wrath: 'wrath', raid: 'raidFire', raidQuiet: 'raidFire', riot: 'riot', riotQuiet: 'riot', legion: 'legionFire', legionQuiet: 'legionFire', revolt: 'revoltFire', revoltQuiet: 'revoltFire' };
 
 /**
  * Burn a building down: it becomes a burning ruin.
- * @param {'fire'|'spread'|'wrath'|'raid'|'raidQuiet'|'riot'|'riotQuiet'|'legion'|'legionQuiet'} cause
+ * @param {'fire'|'spread'|'wrath'|'raid'|'raidQuiet'|'riot'|'riotQuiet'|'legion'|'legionQuiet'|'revolt'|'revoltQuiet'} cause
  *        spread = caught from a fire beside it: burns and reads as 'fire',
  *        but is not a new outbreak for the auto-pause (ui/autoPause.js);
- *        raidQuiet, riotQuiet, legionQuiet = no message (raiders, a mob or
- *        Caesar's legions wrecking a whole street would otherwise flood the
+ *        raidQuiet, riotQuiet, legionQuiet, revoltQuiet = no message (raiders,
+ *        a mob, Caesar's legions or rebel gladiators (sim/revolt.js)
+ *        wrecking a whole street would otherwise flood the
  *        log); wrath = no message either, the angry god's own message says
  *        where (sim/religion.js)
  */
@@ -114,6 +115,8 @@ export function igniteBuilding(game, b, cause = 'fire') {
     riotQuiet: null,
     legion: `Caesar's legions have set ${aLabel} on fire!`,
     legionQuiet: null,
+    revolt: `Rebel gladiators have set ${aLabel} on fire!`,
+    revoltQuiet: null,
   };
   // `in`, not `??`: the quiet causes are null on purpose (`??` turned them
   // back into a "Fire!" message for every building raiders burned).
@@ -127,7 +130,7 @@ export function igniteBuilding(game, b, cause = 'fire') {
 
 /**
  * Collapse a building into rubble.
- * @param {'decay'|'raid'|'raidQuiet'|'legion'|'legionQuiet'} cause
+ * @param {'decay'|'raid'|'raidQuiet'|'legion'|'legionQuiet'|'revolt'|'revoltQuiet'} cause
  */
 export function collapseBuilding(game, b, cause = 'decay') {
   const { own, rest, main } = fallingGround(game, b);
@@ -136,13 +139,14 @@ export function collapseBuilding(game, b, cause = 'decay') {
   const aLabel = withArticle(label);
   removeBuilding(game, b, 'collapse');
   for (const i of tiles) game.map.rubble[i] = 1;
-  const ruin = cause === 'raid' || cause === 'raidQuiet' ? 'raid' : cause === 'legion' || cause === 'legionQuiet' ? 'legion' : cause === 'natives' ? 'natives' : 'collapse';
+  const ruin = cause === 'raid' || cause === 'raidQuiet' ? 'raid' : cause === 'legion' || cause === 'legionQuiet' ? 'legion' : cause === 'revolt' || cause === 'revoltQuiet' ? 'revolt' : cause === 'natives' ? 'natives' : 'collapse';
   recordRuin(game, tiles, label, ruin, siteOf(main));
   game.city.stats.collapses++;
   if (cause === 'raid') game.message(`Raiders have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause === 'legion') game.message(`Caesar's legions have torn down ${aLabel}!`, 'bad', b.x, b.y);
+  else if (cause === 'revolt') game.message(`Rebel gladiators have torn down ${aLabel}!`, 'bad', b.x, b.y);
   else if (cause === 'natives') game.message(`Angry villagers have torn down ${aLabel}!`, 'bad', b.x, b.y);
-  else if (cause !== 'raidQuiet' && cause !== 'legionQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y, { kind: 'collapse' });
+  else if (cause !== 'raidQuiet' && cause !== 'legionQuiet' && cause !== 'revoltQuiet') game.message(`${aLabel[0].toUpperCase()}${aLabel.slice(1)} has collapsed!`, 'bad', b.x, b.y, { kind: 'collapse' });
   game.events.emit('collapse', { x: b.x, y: b.y, size: b.size });
   game.events.emit('sound', { name: 'collapse' });
 }

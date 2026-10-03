@@ -50,6 +50,20 @@ const SKY = [
   [1.00, [255, 255, 255], 0],
 ];
 
+/** The time of day the menu's city is shown at: mid-morning, in full sun. */
+export const MENU_TIME = 0.2;
+
+/**
+ * Ticks to run from `totalTicks` until the time of day is `t` (0..1). The
+ * menu's city ran a fixed 80 days, which since the 16-day month always
+ * ended at nightfall: every visit to the menu opened on a city at night.
+ */
+export function ticksUntil(totalTicks, t) {
+  const now = dayTime(totalTicks);
+  const ahead = (((t - now) % 1) + 1) % 1;
+  return Math.round(ahead * DAY_TICKS);
+}
+
 /** Time of day (0..1) for a tick count. */
 export function dayTime(totalTicks) {
   const t = (totalTicks / DAY_TICKS + DAY_START) % 1;

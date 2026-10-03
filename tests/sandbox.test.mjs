@@ -51,15 +51,16 @@ test('difficulty: every level sets every lever, Normal is neutral, Insane is har
   }
   // Multipliers are 1 on Normal; mood is in points (0), devolveDays in days
   // (3, the original game's rule), protestPeaceEvery a count (0: never),
-  // loanInterest a share (0.2: 20%) and the legions' favor bands in points.
-  const normalValue = { mood: 0, devolveDays: 3, protestPeaceEvery: 0, loanInterest: 0.2, legionHalt: 18, legionHome: 24 };
+  // loanInterest a share (0.2: 20%), the legions' favor bands and a wolf's bite in points and
+  // the events' cooldown in months.
+  const normalValue = { mood: 0, devolveDays: 3, protestPeaceEvery: 0, loanInterest: 0.2, legionHalt: 18, legionHome: 24, eventCooldown: 24, wolfBite: 6 };
   for (const [k, v] of Object.entries(DIFFICULTY.normal)) {
     if (typeof v === 'number') assert.equal(v, normalValue[k] ?? 1, `normal.${k}`);
   }
   assert.deepEqual(DIFFICULTY_ORDER, ['easy', 'normal', 'hard', 'insane']);
   // Levers where less is harder, and where more is harder.
-  const lessIsHarder = ['funds', 'production', 'winterGrowth', 'immigration', 'mood', 'raidInterval', 'requestInterval', 'requestTime', 'devolveDays'];
-  const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize', 'crime', 'crimePeace', 'disease', 'loanInterest', 'winterTrade', 'legionHalt', 'legionHome'];
+  const lessIsHarder = ['funds', 'production', 'winterGrowth', 'immigration', 'mood', 'raidInterval', 'requestInterval', 'requestTime', 'devolveDays', 'eventCooldown'];
+  const moreIsHarder = ['risk', 'raidSize', 'enemy', 'requestSize', 'crime', 'crimePeace', 'disease', 'loanInterest', 'winterTrade', 'legionHalt', 'legionHome', 'events', 'wolfBite'];
   for (let i = 1; i < DIFFICULTY_ORDER.length; i++) {
     const easier = DIFFICULTY[DIFFICULTY_ORDER[i - 1]];
     const harder = DIFFICULTY[DIFFICULTY_ORDER[i]];

@@ -9,8 +9,15 @@
  *     meta:   { city, scenarioId, date, population, treasury, difficulty, savedAt },
  *     scenario (sandbox: in full; campaign: { id }), flags, difficulty,
  *     rng, time, seed, map (base64 layers), buildings[], walkers[], fires[],
- *     ruins[], units[], military, wallHp[], city, messages[], nextIds, camera
+ *     ruins[], units[], military, wildlife, wallHp[], city, messages[], nextIds, camera
  *   }
+ *
+ * Raiders' peoples and wolves (data/peoples.js, sim/wildlife.js) need no
+ * upgrade step: `military.people` missing is the scenario's people from
+ * then on, and a raid such a save had scouted or under way is marked the
+ * generic band it was (core/game.js); a save without `wildlife` has no
+ * packs. Wolves
+ * are units like any other (type 'wolf', side 'wild', with `pack`).
  *
  * Version history:
  *   1  first release
@@ -154,6 +161,25 @@
  *      that partner. Older saves load with every switch on (an empty `off`
  *      on every route), so they trade as before, see
  *      upgradeTradeSwitchesV20().
+ *  23  everything since 22, in one step:
+ *      - events (sim/events.js): city.romeWage (what Rome pays, which random
+ *      events move) and city.events (each event's cooldown, the day land and
+ *      sea trade may start again, the earthquake in progress with its cracks'
+ *      ends, the counts). The cracks themselves are rock in the map. Older
+ *      saves load with Rome at the base wage, nothing cooling down, trade
+ *      open and no quake, see upgradeEventsV22() (the Game constructor
+ *      fills the same defaults, so a save without them loads either way).
+ *      - raiders' peoples, wolf packs and the gladiator revolt
+ *        (data/peoples.js, sim/wildlife.js, sim/revolt.js): see above; no
+ *        step needed.
+ *      - low bridges (sim/bridges.js): map.bridgeLow, 1 on a low bridge's
+ *        tiles. A v22 save has no layer: every bridge is a ship bridge, as
+ *        it was.
+ *      - native villages (sim/natives.js): city.natives (null without
+ *        villages, as in every v22 save: the Game constructor fills it),
+ *        village buildings (kind 'village', ids from NATIVE_ID_BASE, with
+ *        anger and their attack), villagers (units, side 'native'), the
+ *        mission post, missionaries and village traders.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -185,6 +211,8 @@ import { isStable, stableRoom } from '../sim/storage.js';
 import { newGovernorState, salaryOf } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
+import { emptyWildlife } from '../sim/wildlife.js';
+import { eventStateOf } from '../sim/events.js';
 import { log } from './debug.js';
 import { NATIVE_ID_BASE } from '../data/natives.js';
 
@@ -357,6 +385,7 @@ export function serializeGame(game, extra = {}) {
     ruins: serializeRuins(game),
     units,
     military: game.military,
+    wildlife: game.wildlife,
     wallHp: [...game.wallHp],
     city: game.city,
     messages: game.messages.slice(0, 60),
@@ -415,6 +444,8 @@ export function deserializeGame(data, flags = {}) {
   };
   // Military state: Game fills in a fresh one if a save lacks it.
   if (data.military && typeof data.military === 'object') restore.military = data.military;
+  // Wolf packs (sim/wildlife.js): a save from before them has none, never new ones.
+  restore.wildlife = data.wildlife && typeof data.wildlife === 'object' && Array.isArray(data.wildlife.packs) ? data.wildlife : emptyWildlife();
   const game = new Game({ scenario, flags: { ...data.flags, ...flags }, restore });
   if (data.cheats) Object.assign(game.cheats, data.cheats);
 
@@ -482,6 +513,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 20) upgradeHorsesV19(game);
   if (data.version < 21) upgradeTradeSwitchesV20(game);
   if (data.version < 22) upgradeTurnsV21(game);
+  if (data.version < 23) upgradeEventsV22(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A hippodrome's sections lie the way its main section says (they were placed so).
@@ -812,6 +844,18 @@ export function upgradeHorsesV19(game) {
  */
 export function upgradeTurnsV21(game) {
   for (const b of game.buildings.values()) b.turn = 0;
+}
+
+/**
+ * A save before version 23 (before events): Rome pays the base wage, no
+ * event is cooling down, no trade is stopped and nothing shakes. Wired as
+ * `if (data.version < 23)`. It only fills what is missing (sim/events.js
+ * eventStateOf, which the Game constructor runs too): a save made by the
+ * events branch before the bump is tagged 22 and keeps its Rome's wage,
+ * cooldowns and a quake under way.
+ */
+export function upgradeEventsV22(game) {
+  eventStateOf(game.city);
 }
 
 /**

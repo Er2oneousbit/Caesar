@@ -42,7 +42,9 @@ import { smoothLine, routePath, tripDays, legionWay, lineLength, ROME_LL } from 
 import { routeKind, firstVisitDays } from '../sim/trade.js';
 import { routeInterval, partnerBuys } from '../sim/tradeDemand.js';
 import { partnerIdle } from '../sim/tradeSwitches.js';
-import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS } from '../sim/military.js';
+import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS, raidPeople } from '../sim/military.js';
+import { peopleById } from '../data/peoples.js';
+import { tradeHalted } from '../sim/events.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
 import { battleSummary, recallSummary } from '../sim/battle.js';
 import { THREATENED_CITIES, marchLine, enemyLine } from '../data/battles.js';
@@ -239,6 +241,7 @@ export function empireTravelers(game) {
     const sea = routeKind(id) === 'sea';
     if (sea && !seaOk) continue; // no ship ever comes (cannot be opened there anyway)
     if (partnerIdle(game, id, partnerBuys(game, id))) continue; // every good switched off: nobody sets out
+    if (tradeHalted(game, sea ? 'sea' : 'land')) continue; // landslides or storms: nobody sets out either (sim/events.js)
     const left = Math.max(0, r.nextVisit - now);
     // (No trader has reached the city yet: the one on the way set out when the route opened.)
     const trip = shownTripDays(game, id, !r.visits);
@@ -252,12 +255,16 @@ export function empireTravelers(game) {
     const w = m.warned;
     const frac = clamp01(1 - (m.nextRaidMonth - nowMonths(game)) / RUMOUR_MONTHS);
     const months = Math.max(0, m.nextRaidMonth - game.time.totalMonths);
-    if (w) out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, noShore: !!w.noShore, pos: warbandPoint(site, w.dir, frac, !!w.sea) });
-    else out.push({ kind: 'warband', rumour: true, size: null, dir: null, origin: null, months, frac, sea: false, pos: warbandPoint(site, frontierDir(site), frac) });
+    // `people`: who they are (data/peoples.js), or null for the generic band.
+    const folk = peopleById(w?.people || m.people);
+    const people = folk.mix ? folk.name : null;
+    if (w) out.push({ kind: 'warband', size: w.size, dir: w.dir, origin: w.origin, months, frac, sea: !!w.sea, noShore: !!w.noShore, people, pos: warbandPoint(site, w.dir, frac, !!w.sea) });
+    else out.push({ kind: 'warband', rumour: true, size: null, dir: null, origin: null, months, frac, sea: false, people, pos: warbandPoint(site, frontierDir(site), frac) });
   }
   if (m && m.active) {
     const n = enemyCount(game) - legionCount(game); // (Caesar's men are shown apart, below)
-    if (n > 0) out.push({ kind: 'raid', size: n, pos: markerSpots(site).raid });
+    const folk = raidPeople(game);
+    if (n > 0) out.push({ kind: 'raid', size: n, people: folk.mix ? folk.name : null, pos: markerSpots(site).raid });
   }
   out.push(...empireArmies(game));
   return out;
@@ -380,9 +387,9 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** One line about a traveler: "Massilia ship: 6 days", "Warband of 14 from the north, in 3 months". */
 export function travelerLabel(t) {
-  if (t.kind === 'warband' && t.rumour) return `Warband gathering beyond the frontier, ${t.months > 0 ? `in about ${plural(t.months, 'month')}` : 'any day now'}`;
-  if (t.kind === 'warband') return `Warband of ${t.size} ${t.sea ? 'by sea ' : ''}from the ${t.dir}${t.noShore ? ', no landing found' : ''}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
-  if (t.kind === 'raid') return `Raiders in the province: ${t.size} left`;
+  if (t.kind === 'warband' && t.rumour) return `${t.people ? `${t.people}: a warband` : 'Warband'} gathering beyond the frontier, ${t.months > 0 ? `in about ${plural(t.months, 'month')}` : 'any day now'}`;
+  if (t.kind === 'warband') return `Warband of ${t.size}${t.people ? ` ${t.people}` : ''} ${t.sea ? 'by sea ' : ''}from the ${t.dir}${t.noShore ? ', no landing found' : ''}, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
+  if (t.kind === 'raid') return `${t.people || 'Raiders'} in the province: ${t.size} left`;
   if (t.kind === 'legion') {
     if (!t.here) return `Caesar's legions (${t.size} men) marching from Rome, ${t.months > 0 ? `in ${plural(t.months, 'month')}` : 'any day now'}`;
     return `Caesar's legions in the province: ${t.size} left${t.state === 'halted' ? ', halted' : t.state === 'leaving' ? ', marching home' : ''}`;

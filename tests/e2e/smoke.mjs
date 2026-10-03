@@ -168,6 +168,8 @@ try {
   // The province's place on the empire map: six choices, the Etruscan coast first and picked.
   const sites = await page.$$eval('select.site-select option', (os) => os.map((o) => [o.value, o.selected]));
   check('sandbox menu offers six places for the province, the Etruscan coast by default', sites.length === 6 && sites[0][0] === 'etruria' && sites[0][1] && sites.filter((s) => s[1]).length === 1, JSON.stringify(sites));
+  // The Events switch (sim/events.js): on unless unticked.
+  check('sandbox menu has an Events switch, ticked', await page.isChecked('input.events-switch'));
   // Watch the first frames of the new game: its look (a winter month) must
   // replace the menu city's summer look at once, not piece by piece.
   await page.evaluate(() => {
@@ -184,6 +186,7 @@ try {
   await page.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
   check('sandbox starts from the menu', true);
   check('the sandbox from the menu is on the Etruscan coast', await page.evaluate(() => window.colonia.game.scenario.site) === 'etruria');
+  check('the sandbox from the menu has its events on', await page.evaluate(() => window.colonia.game.scenario.events) === true);
   await page.waitForFunction(() => window.__look.length >= 3, null, { timeout: 5000 }).catch(() => {});
   const look = await page.evaluate(() => { window.__unhookRender(); return window.__look; });
   check('a new game shows its own season from the first frame (no old-look patchwork)', look.length > 0 && look.every((f) => f.prev === null && !f.pending), JSON.stringify(look));
@@ -2450,6 +2453,77 @@ try {
       check('the low bridge draws at every view turn without an error', berrors.length === 0, berrors.join(' | '));
     }
     await bp.close();
+  }
+
+  // 6d2. Peoples and wolves (data/peoples.js, sim/wildlife.js): a sandbox at
+  //      Narbo Martius set to the province's own people and with wolves:
+  //      the Cimbri raid it and packs roam its woods; a click on a wolf and
+  //      on a warrior opens their panels, which name the pack and the people.
+  {
+    const sp = await browser.newPage();
+    const serrors = [];
+    sp.on('pageerror', (e) => serrors.push(e.message));
+    await sp.goto(`${url}?mute=1`);
+    await sp.click('text=Sandbox');
+    await sp.selectOption('select.site-select', 'narbo');
+    await sp.selectOption('select.raiders-select', 'site');
+    const raidersSay = await sp.textContent('select.raiders-select + div');
+    await sp.check('input.wolves-check');
+    await sp.click('text=Found the city');
+    await sp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const setup = await sp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      const g = app.game;
+      // A warband of the province's people now, set down well inside the map so it can be clicked.
+      app.ui.console.run('invade 6');
+      const m = g.map;
+      for (const u of g.units.values()) if (u.side === 'enemy') { u.x = u.px = m.w / 2 + 0.5 + (u.id % 3); u.y = u.py = m.h / 2 + 0.5 + (u.id % 2); }
+      return {
+        people: g.military.people, raid: g.military.active?.people, scenario: { raiders: g.scenario.raiders, wolves: g.scenario.wolves },
+        packs: g.wildlife.packs.length, wolves: [...g.units.values()].filter((u) => u.type === 'wolf').length,
+        kinds: [...new Set([...g.units.values()].filter((u) => u.side === 'enemy').map((u) => u.type))],
+        threat: document.querySelector('.hud-btn.threat')?.title || '',
+      };
+    });
+    check('sandbox at Narbo with its own people and wolves: the setup names the Cimbri, they raid, and packs roam the woods',
+      /Cimbri and Teutones/.test(raidersSay) && setup.people === 'cimbri' && setup.raid === 'cimbri' && setup.scenario.raiders === 'site' && setup.scenario.wolves === true
+        && setup.packs >= 1 && setup.wolves >= 6 && setup.kinds.every((t) => ['swordsman', 'axeman', 'raider', 'horseman'].includes(t)) && serrors.length === 0,
+      JSON.stringify({ raidersSay, setup, serrors }));
+    // Click a unit of `type`: the camera on it, its drawn spot, and a click there.
+    const clickUnit = async (type) => {
+      await sp.evaluate((t) => {
+        const app = window.colonia;
+        const u = [...app.game.units.values()].find((v) => v.type === t || (t === 'enemy' && v.side === 'enemy'));
+        if (u) app.renderer.camera.centerOnTile(Math.floor(u.x), Math.floor(u.y));
+      }, type);
+      await sp.waitForTimeout(250);
+      const at = await sp.evaluate((t) => {
+        const app = window.colonia;
+        const r = app.renderer;
+        const cam = r.camera;
+        const rect = app.canvas.getBoundingClientRect();
+        for (const s of r.unitSpots) {
+          const u = app.game.units.get(s.id);
+          if (!u || !(u.type === t || (t === 'enemy' && u.side === 'enemy'))) continue;
+          const q = cam.toScreen(s.wx, s.wy - 8);
+          const x = rect.left + q.x / cam.dpr;
+          const y = rect.top + q.y / cam.dpr;
+          if (r.pickUnit(x - rect.left, y - rect.top) !== s.id) continue;
+          return { id: s.id, x, y };
+        }
+        return null;
+      }, type);
+      if (!at) return { at };
+      await sp.mouse.click(at.x, at.y);
+      await sp.waitForTimeout(150);
+      return { at, ...(await sp.evaluate(() => ({ target: window.colonia.ui.info.target, head: document.querySelector('#info-panel h3')?.textContent || '', chip: document.querySelector('#info-panel .panel-head .chip')?.textContent || '', text: document.querySelector('#info-panel')?.textContent || '' }))) };
+    };
+    const wolf = await clickUnit('wolf');
+    check('clicking a wolf opens its panel: a wild animal, its pack and its bite', !!wolf.at && wolf.target?.kind === 'unit' && wolf.target.id === wolf.at.id && wolf.head === 'Wolf' && wolf.chip === 'Wild animal' && /Pack/.test(wolf.text) && /Bite/.test(wolf.text) && serrors.length === 0, JSON.stringify({ ...wolf, text: (wolf.text || '').slice(0, 200) }));
+    const raider = await clickUnit('enemy');
+    check('clicking a raiding warrior opens his panel, naming his people and what the warband is after', !!raider.at && raider.target?.kind === 'unit' && raider.chip === 'Cimbri and Teutones' && /Warband/.test(raider.text) && serrors.length === 0, JSON.stringify({ ...raider, text: (raider.text || '').slice(0, 200) }));
+    await sp.close();
   }
 
   // 7. Phone layout: no horizontal scroll, sidebar becomes a bottom sheet

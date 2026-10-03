@@ -10,19 +10,22 @@
  *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
  *      (spreads work evenly across the day instead of spiking at midnight;
- *      a home's disease risk comes after its fire risk)
+ *      a home's disease risk comes after its fire risk), then an
+ *      earthquake's cracks (sim/events.js)
  *      then criminals: prefects and soldiers catch them, prefects hunt
  *   4. on a new day:   labor, no-road notices, water, desirability, city
  *                      stats, entertainment base, wine sources, mid-month
  *                      goods use, immigration, fires, sick homes, home moods
  *                      (day 8), trade, raid progress, Caesar's legions (their
- *                      march, the siege), the check for a city overrun and
- *                      the native villages (anger, attacks, traders)
+ *                      march, the siege) and the check for a city overrun,
+ *                      wolf packs (roaming, growing back), the native
+ *                      villages (anger, attacks, traders)
  *   5. on a new month: consumption, finances, army pay, the governor's
  *                      salary, raid warnings, city mood, home moods,
  *                      religion, ratings, city health, Emperor, distant
  *                      battles, farm season notice, the count of recent
- *                      gifts, the victory check
+ *                      the province's events (scheduled, then the
+ *                      month's random draw), gifts, the victory check
  *   6. on a new year:  tribute, ledger rollover, the salary's favor, trade
  *                      quotas, crime and disease counts
  *   7. on a new day, after all that: the crime roll
@@ -61,8 +64,10 @@ import { updateShipyard, updateWharf } from '../sim/fishing.js';
 import { updateRatings, checkOutcome, enemiesInProvince } from '../sim/ratings.js';
 import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '../sim/emperor.js';
 import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
-import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort } from '../sim/military.js';
+import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort, peopleFor } from '../sim/military.js';
 import { updatePrefectFights } from '../sim/prefectFight.js';
+import { newWildlife, wildlifeDaily } from '../sim/wildlife.js';
+import { GENERIC_PEOPLE } from '../data/peoples.js';
 import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
 import { caesarDaily } from '../sim/legion.js';
 import { battleMonthly, archesToBuild } from '../sim/battle.js';
@@ -72,6 +77,7 @@ import { updateHomeMoods } from '../sim/mood.js';
 import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../sim/crime.js';
 import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear, refreshDiseaseGate } from '../sim/disease.js';
 import { foundVillages, nativesDaily } from '../sim/natives.js';
+import { newEventState, eventStateOf, eventsMonthly, updateQuake } from '../sim/events.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -131,6 +137,8 @@ export function newCityState(scenario, funds, savings = 0) {
     stats: { fires: 0, collapses: 0, evolutions: 0, devolutions: 0, immigrated: 0, emigrated: 0, peakPopulation: 0, requestsMet: 0, requestsFailed: 0 },
     crime: newCrimeState(), // this year's protesters, thieves, riots... (sim/crime.js)
     health: newHealthState(), // city health and this year's outbreaks (sim/disease.js)
+    romeWage: CONFIG.BASE_WAGE, // what Rome pays, the citizens' yardstick for the city's wage (sim/economy.js romeWage; sim/events.js moves it)
+    events: newEventState(), // cooldowns, trade stopped, a quake shaking (sim/events.js)
     flags: {},
     victory: false,
     defeat: false,
@@ -189,10 +197,21 @@ export class Game {
     this.wallHp ??= new Map(); // tile index -> remaining hp of a damaged wall/gate
     this.ruins ??= new Map(); // rubble tile index -> what fell there, why and when (sim/ruins.js)
     this.military ??= newMilitaryState(scenario, this.time, flags);
+    if (this.military.people === undefined) {
+      // A save from before peoples (data/peoples.js): the province's people
+      // from now on; a raid it had scouted or under way was the generic band.
+      this.military.people = peopleFor(scenario);
+      if (this.military.active) this.military.active.people ??= GENERIC_PEOPLE;
+      if (this.military.warned) this.military.warned.people ??= GENERIC_PEOPLE;
+    }
+    // Wolf packs (sim/wildlife.js): placed on a new game's map; a save
+    // brings its own (core/save.js gives an older one none).
+    this.wildlife ??= newWildlife(this, scenario, flags);
     this.city.crime ??= newCrimeState(); // saves from before crime (v4)
     this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
     for (const g of GOD_KEYS) this.city.gods[g] ??= newGodMood(); // a god a save lacks starts afresh
     this.city.venusBoost ??= 0;
+    eventStateOf(this.city); // saves from before events: Rome pays the base wage, nothing cooling down or shaking
     this.city.natives ??= null; // a city with native villages: their state (sim/natives.js); none in older saves
     if (!restore) foundVillages(this); // a new game: the native villages of the missions that have them
     this.projectiles = []; // arrows and sling stones in flight (not saved)
@@ -289,6 +308,7 @@ export class Game {
     for (const b of this.buildings.values()) {
       if (b.phase === phase) this.updateBuilding(b);
     }
+    updateQuake(this); // an earthquake's cracks, a few steps a day (sim/events.js)
     if (t.newDay) this.onDay();
     if (t.newMonth) this.onMonth();
     if (t.newYear) this.onYear();
@@ -354,6 +374,7 @@ export class Game {
     updateTrade(this);
     militaryDaily(this);
     caesarDaily(this); // Caesar's legions, and the loss of a city overrun (sim/legion.js)
+    wildlifeDaily(this); // wolf packs roam, grow back or are gone (sim/wildlife.js)
     nativesDaily(this); // native villages: anger, attacks, traders (sim/natives.js)
     if (enemiesInProvince(this)) this.city.raidMonth = true; // no peace gained this month (sim/ratings.js)
     this.events.emit('day', this.time);
@@ -375,6 +396,7 @@ export class Game {
     this.city.raidMonth = false; // (and this)
     updateCityHealth(this);
     updateEmperor(this);
+    eventsMonthly(this); // a mission's scheduled events, then the month's random draw (sim/events.js)
     battleMonthly(this); // Caesar's calls for troops and the distant battles (sim/battle.js)
     tradeMonthly(this); // news of a partner's demand changing this month (sim/tradeDemand.js)
     farmSeasonNotice(this); // Insane: the farms stop in winter

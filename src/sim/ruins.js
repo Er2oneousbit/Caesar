@@ -39,11 +39,12 @@
  *   raid       torn down by raiders
  *   raidWall   a wall raiders broke through
  *   legionFire, legion, legionWall   the same, by Caesar's legions (sim/legion.js)
+ *   quake      brought down by an earthquake (sim/events.js)
  *   natives    torn down by the men of an angry native village (sim/natives.js)
  */
 import { BUILDINGS } from '../data/buildings.js';
 
-export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall', 'legionFire', 'legion', 'legionWall', 'natives']);
+export const RUIN_CAUSES = Object.freeze(['fire', 'wrath', 'raidFire', 'riot', 'collapse', 'raid', 'raidWall', 'legionFire', 'legion', 'legionWall', 'revoltFire', 'revolt', 'revoltWall', 'quake', 'natives']);
 
 /** Remember what fell on these tiles (they hold rubble now); `site`: see the header. */
 export function recordRuin(game, tiles, what, cause, site = null) {

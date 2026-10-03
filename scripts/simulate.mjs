@@ -31,6 +31,8 @@
  *                              (a city of six blocks and a villa quarter: the capacity model against play)
  *   npm run sim -- --type coast --raids frequent --garrison --navy --years 8   (sea raids against a fleet)
  *   npm run sim -- --type coast --raids frequent --garrison --navy --academy --years 8   (and training)
+ *   npm run sim -- --events off   (no events: the city as before they existed)
+ *   npm run sim -- --scenario c10p --years 10   (a mission's events: Puteoli's earthquake in its 8th year)
  *
  * Campaign runs build every building unless --unlocks is given (then only
  * what the mission unlocks), so their numbers stay comparable with earlier
@@ -60,6 +62,8 @@ import { goalStatus } from '../src/sim/ratings.js';
 import { setTradeMode } from '../src/sim/trade.js';
 import { Terrain } from '../src/world/map.js';
 import { spareBoat, hasBoatTimber } from '../src/sim/fishing.js';
+import { PEOPLES } from '../src/data/peoples.js';
+import { quakeSummary } from '../src/sim/events.js';
 
 const HELP = `
 Headless balance simulation
@@ -112,6 +116,13 @@ Options:
                     money and favor reported are the city's own)
   --raids <mode>    off | occasional | frequent (overrides the scenario)
   --sea-raids <s>   on | off: the Sea raids switch (default on: some raids come by sea where ships can sail)
+  --people <p>      who raids: site (the province's own people) or a people of src/data/peoples.js
+                    (gauls, boii, ligurians, carthaginians, lusitanians, cimbri...). Default: a
+                    mission's own people, the sandbox's generic band
+  --wolves [on|off] wolf packs on the map (default: a mission's own, none in the sandbox).
+                    Reports the packs, wolves killed and walkers lost to them
+  --events <s>      on | off: the province's events (default on: the sandbox's random events, a mission's
+                    random and scheduled ones, sim/events.js). Off plays as before events existed
   --navy            also build a naval station and a navalia, stocked for a squadron (where ships can sail)
   --academy         with --garrison also a Military Academy, with --navy also a Portus (training: who is trained)
   --legion <m>      Caesar's legions arrive at the start of month m (the size of a first attack, or
@@ -126,7 +137,7 @@ Options:
 `;
 
 function parse(argv) {
-  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, navy: false, salary: false, academy: false, legion: 0, legionSize: 0, lowBridge: false, natives: false };
+  const o = { harbor: 0, scenario: null, type: 'river', size: 64, seed: 'demo', years: 3, level: 2, difficulty: 'normal', json: false, verbose: false, garrison: false, raids: null, pace: false, caretaker: false, capacity: false, unlocks: false, homes: Infinity, fishing: 0, venues: false, hippodrome: false, uptown: false, cloth: false, clothOff: 0, blocks: 1, villas: 0, wine: false, seaRaids: null, events: 'on', navy: false, salary: false, academy: false, legion: 0, legionSize: 0, people: null, wolves: null, lowBridge: false, natives: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -154,6 +165,9 @@ function parse(argv) {
     else if (a === '--harbor') o.harbor = /^\d+$/.test(argv[i + 1] || '') ? Number(next()) : 1;
     else if (a === '--raids') o.raids = next();
     else if (a === '--sea-raids') o.seaRaids = next();
+    else if (a === '--people') o.people = next();
+    else if (a === '--wolves') o.wolves = /^(on|off)$/.test(argv[i + 1] || '') ? next() : 'on';
+    else if (a === '--events') o.events = next();
     else if (a === '--navy') o.navy = true;
     else if (a === '--salary') o.salary = true;
     else if (a === '--academy') o.academy = true;
@@ -215,7 +229,12 @@ if (!scenario) { console.error(`Unknown scenario ${opts.scenario}`); process.exi
 const SIM_MONEY = 20000 * Math.max(1, opts.blocks + opts.villas);
 if (opts.seaRaids !== null && !['on', 'off'].includes(opts.seaRaids)) { console.error(`--sea-raids takes on or off
 ${HELP}`); process.exit(2); }
-const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids } });
+if (opts.people !== null && opts.people !== 'site' && !PEOPLES[opts.people]) { console.error(`--people takes site or one of ${Object.keys(PEOPLES).join(', ')}\n${HELP}`); process.exit(2); }
+if (!['on', 'off'].includes(opts.events)) { console.error(`--events takes on or off
+${HELP}`); process.exit(2); }
+// --events off: no event of any kind (the sandbox setup's switch, and for a mission the debug flag).
+if (opts.events === 'off' && scenario.id === 'sandbox') scenario.events = false;
+const game = new Game({ scenario, flags: { unlockall: !opts.unlocks, money: SIM_MONEY, raids: opts.raids, searaids: opts.seaRaids, people: opts.people, wolves: opts.wolves, ...(opts.events === 'off' ? { events: 'off' } : {}) } });
 // The governor's salary (sim/governor.js) is his own, not the city's: it goes
 // into savings he can give back (donations) or spend on gifts. Unless asked,
 // the demo governor draws none and Rome judges none (he is a Citizen, whose
@@ -437,6 +456,22 @@ console.log(`\nSimulated ${opts.years} years in ${Date.now() - t0} ms. Fires ${c
 console.log(`Ratings: culture ${Math.floor(c.ratings.culture)} prosperity ${Math.floor(c.ratings.prosperity)} peace ${Math.floor(c.ratings.peace)} favor ${Math.floor(c.ratings.favor)}`);
 const ms = game.military.stats;
 console.log(`Military: ${game.military.settings ? 'raids on' : 'no raids'}; raids ${ms.raids}, repelled ${ms.repelled}, raiders slain ${ms.enemiesKilled}, buildings lost ${ms.buildingsLost}${ms.raids || ms.prefectsLost ? `, prefects lost ${ms.prefectsLost || 0}` : ''}, plundered ${Math.round((c.finance.thisYear.plunder || 0) + (c.finance.lastYear?.plunder || 0))} Dn (last 2 years), soldiers ${[...game.units.values()].filter((u) => u.side === 'rome' && u.type !== 'liburnian').length}`);
+{
+  // A people's raids (data/peoples.js): who, what came, and the city's people they struck down.
+  const people = PEOPLES[game.military.people];
+  if (people && people.mix) {
+    const came = Object.entries(ms.warriors || {}).map(([t, n]) => `${t} ${n}`).join(', ') || 'none yet';
+    console.log(`Raiders: ${people.name} (${people.target}, break at ${Math.round((1 - people.breaks) * 100)}% lost); warriors came: ${came}; walkers struck down ${ms.walkersKilled || 0}`);
+  }
+}
+{
+  // Wolf packs (sim/wildlife.js): only on a map that had any.
+  const wl = game.wildlife;
+  if (wl && wl.nextPackId > 1) {
+    const left = [...game.units.values()].filter((u) => u.type === 'wolf').length;
+    console.log(`Wolves: packs ${wl.nextPackId - 1} (${wl.packs.length} left, ${wl.stats.packsCleared} cleared), wolves now ${left}, killed ${wl.stats.wolvesKilled}, walkers killed by wolves ${wl.stats.walkersKilled}`);
+  }
+}
 if (ms.seaRaids || opts.navy) console.log(`Sea: raids by sea ${ms.seaRaids || 0}, raider ships sunk ${ms.shipsSunk || 0}, liburnians built ${ms.shipsBuilt || 0}, lost ${ms.shipsLost || 0}, afloat ${[...game.units.values()].filter((u) => u.type === 'liburnian').length}, fishing boats sunk ${ms.boatsSunk || 0}`);
 if (opts.legion) {
   const cs = game.military.caesar;
@@ -484,6 +519,11 @@ if (harbor.docks) {
   harbor.summary = s;
   console.log(`Harbor: ${s.docks} dock${s.docks === 1 ? '' : 's'}, ${s.ships} ships in ${years.toFixed(1)} years, average stay ${s.avgStayDays} days (longest ${s.longestStayDays}); exports ${s.exportsPerYear} Dn a year, imports ${s.importsPerYear} Dn a year`);
 }
+// The province's events (sim/events.js): what came, and what it cost. Not
+// printed with --events off, so that run reads exactly as before events.
+const ev = c.events;
+const events = opts.events === 'on' ? { counts: { ...ev.counts }, romeWage: c.romeWage, quake: ev.quake ? quakeSummary(game) : null } : null;
+if (events) console.log(`Events: ${Object.entries(events.counts).filter(([k]) => !k.startsWith('quake') || k === 'quake').map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}; Rome's wage ${c.romeWage}${ev.counts.quake ? `; earthquakes destroyed ${ev.counts.quakeLost || 0} buildings (${ev.counts.quakeHomes || 0} homes)` : ''}${events.quake ? `; still shaking: ${events.quake}` : ''}`);
 const bad = messages.filter((m) => m.level === 'bad').map((m) => m.text);
 if (bad.length) console.log(`Bad events (${bad.length}):`, [...new Set(bad)].slice(0, 8));
 // Fishing: what each wharf landed, against a pig farm's yearly harvest at full
@@ -514,7 +554,7 @@ if (opts.uptown || opts.cloth) {
 const capacityCheck = quarters ? checkCapacity() : null;
 const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
 const water = { fountains: fountains.length, wet: fountains.filter((b) => b.hasWater).length };
-if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(fishing ? { fishing } : {}), ...(capacityCheck ? { capacity: capacityCheck } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
+if (opts.json) console.log(JSON.stringify({ ...(harbor.summary ? { harbor: harbor.summary } : {}), population: c.population, treasury: c.treasury, ratings: c.ratings, stats: c.stats, tiers: c.tierCounts, crime: c.crime.total, health, money, water, avgTier: c.avgTier, sentiment: c.sentiment, ...(events ? { events } : {}), ...(fishing ? { fishing } : {}), ...(capacityCheck ? { capacity: capacityCheck } : {}), ...(opts.uptown || opts.cloth ? { clothing: { peak: clothing.peak, months: clothing.months, produced: { flax: c.produced.flax || 0, linen: c.produced.linen || 0, clothing: c.produced.clothing || 0 } } } : {}) }));
 
 /**
  * --cloth-off: demolish the cloth industry (and the clothing in store), as a

@@ -496,6 +496,20 @@ export function updateCityHealth(game) {
   hc.value = Math.max(0, Math.min(100, hc.value + step));
 }
 
+/**
+ * Bad water (a random event, sim/events.js): city health falls at once, the
+ * original's drop: 50 from over 80, 40 from over 60, else 25, never below 0.
+ * It then climbs back toward the homes' average at the usual pace.
+ * @returns {{ from: number, to: number }}
+ */
+export function foulWater(game) {
+  const hc = game.city.health;
+  const from = hc.value;
+  const drop = from > 80 ? 50 : from > 60 ? 40 : 25;
+  hc.value = Math.max(0, from - drop);
+  return { from, to: hc.value };
+}
+
 // ---------------------------------------------------------------------------
 // Reports
 // ---------------------------------------------------------------------------

@@ -1,7 +1,9 @@
 /**
  * prefectFight.js
  * ----------------------------------------------------------------------------
- * Prefects against raiders and Caesar's legionaries.
+ * Prefects against raiders and Caesar's legionaries, and against any other
+ * unit hostile to Rome (sim/military.js hostileToRome: a wolf, a villager of
+ * a native village at war), which a prefect fights the same way.
  *
  * A prefect on his rounds (walking his patrol or heading home: not running to
  * a fire, putting one out or chasing a criminal) who has an enemy on land
@@ -44,6 +46,7 @@ import { CONFIG } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { killWalker } from './entities.js';
 import { hurt, rollDamage, enemyPower, unitDefense, moveUnitToward, passable, hostileToRome } from './military.js';
+import { revoltActive } from './revolt.js';
 
 /** Ticks an enemy who cannot get at a prefect, and that prefect, leave each other alone. */
 const IGNORE_TICKS = 200;
@@ -77,7 +80,10 @@ function avoids(game, u, p) {
  * picking a fight there would only be cut down, and the next after him).
  */
 function fightable(game, u) {
-  if (u.side === 'native') return !!u.attacking; // a villager, only while his village attacks (sim/natives.js)
+  // A wolf, or a villager of a village at war (sim/military.js hostileToRome):
+  // no raid record to read; hostile is enough.
+  if (u.side !== 'enemy') return hostileToRome(u);
+  if (u.revolt) return revoltActive(game); // a gladiator in revolt, not yet fleeing (sim/revolt.js)
   if (u.legion) {
     const a = game.military.caesar?.army;
     return !!a && a.id === u.legion && !a.retreating && !a.halted && !(u.waitTicks > 0);
@@ -112,9 +118,11 @@ export function prefectFoe(game, w) {
   return game.units.get(w.fight) || null;
 }
 
-/** "a raider" / "one of Caesar's legionaries", for the prefect's panel and talk. */
+/** "a raider" / "one of Caesar's legionaries" / "a wolf", for the prefect's panel and talk. */
 export function foeLabel(u) {
+  if (u && u.side === 'wild') return 'a wolf';
   if (u && u.side === 'native') return 'a villager';
+  if (u && u.revolt) return 'a gladiator in revolt';
   return u && (u.legion || u.type === 'imperial') ? 'one of Caesar\'s legionaries' : 'a raider';
 }
 
@@ -260,6 +268,6 @@ function lossMessage(game, p, u) {
   const near = losses.filter((l) => Math.max(Math.abs(l.x - p.x), Math.abs(l.y - p.y)) <= CONFIG.PREFECT_LOSS_NEAR).length;
   if (near < 2 || day - (m.lastPrefectMessageDay ?? -999) < keep) return;
   m.lastPrefectMessageDay = day;
-  const by = u.legion || u.type === 'imperial' ? 'Caesar\'s legionaries have' : 'Raiders have';
+  const by = u.legion || u.type === 'imperial' ? 'Caesar\'s legionaries have' : u.side === 'wild' ? 'Wolves have' : u.side === 'native' ? 'Villagers have' : u.revolt ? 'Gladiators have' : 'Raiders have';
   game.message(`${by} killed ${near} prefects in the streets! Their prefectures will send others.`, 'bad', p.x, p.y);
 }

@@ -8,9 +8,8 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 ## Next up (suggested order)
 
-1. **v0.18: rotation**: ~~rotate buildings while placing them (R), every building's art turned as a whole (the hippodrome laid north-south too; gates, the arch and waterside buildings keep following their road or water), with a facing in the save~~ (part 1 done: `render/turn.js` draws any building at any of four turns, `b.turn` in saves v22); ~~then rotating the view (parity #7), reusing the turned art (draw each building at `(b.turn + view turn) & 3`), with the renderer, ground pieces, walker directions, picking, overlays and the minimap working from any of four sides~~ (part 2 done: `render/view.js`, Q / Shift+Q and the top bar's buttons, the minimap turning with the view, the turn kept with the camera in saves).
-2. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
-3. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
+1. **Logistics from the mods**: market special orders, partial warehouse storage, supply posts for forts, and roadblock permissions on gates, bridges, granaries and warehouses.
+2. **Playtest the late campaign** (steps 6 to 10, v0.17.0): then decide what "The late missions need more jobs" below leaves open.
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
@@ -503,7 +502,6 @@ What Augustus (4.0) added to the original, checked against its manual and releas
 * **Monuments**: Grand Temples (one per god, and how many a city may build is an option, 2 by default), a Pantheon and a Lighthouse. You pay to place the footprint, then a work camp hauls goods from warehouses and an architect's guild (called the engineer's guild in Augustus 2.0) sends architects who advance each stage. Finished monuments never burn or collapse and cost monthly upkeep. A late-game goal and a place to spend surplus goods.
 * **Caravanserai**: the land counterpart of the Lighthouse; when it is staffed and fed, disruptions to land trade last half as long, and a trade policy (seller, buyer or quantity) can be set.
 * **Global labour pool**: an option that removes the need for labor-seeking walkers to pass homes; every building with road access is fully staffed while enough citizens are unemployed, and category priorities still apply. The original's rule is the default.
-* **Building rotation** for gatehouses, warehouses, forts and hippodromes.
 * **Extended campaign**: after victory, the player can accept the promotion again or extend the regency, indefinitely.
 * **Monthly levies**: some buildings (monuments) cost upkeep in denarii.
 * **Also in Augustus 4.0, candidates for later**: the **Cart Depot** (ox carts move goods between storage buildings on orders: source, destination, good, condition), the **Tavern** (wine, meat and fish give entertainment), the **Watchtower** (a cheaper tower that needs no weapons but needs a barracks), the **Highway** (a fast road that only destination walkers can use, with a cost per tile), and new materials (stone, sand, bricks, concrete, gold) with a **City Mint**.

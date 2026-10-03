@@ -11,7 +11,10 @@
  * Very happy gods bless the city; angry gods punish it.
  *
  * Festivals cost money, food from the granaries and, large or grand, wine
- * from the warehouses, all or nothing. A god whose last festival is more
+ * from the warehouses, all or nothing, and are held at the god's temples: a
+ * small one needs a staffed temple of the god, a large one a staffed large
+ * temple of it too, a grand one an Oracle as well (Colonia's own rule;
+ * festivalTempleBlocked). A god whose last festival is more
  * than a year past is neglected: its mood target falls a point a month, 28
  * at most (the original's rule; not in towns under 800 people). A
  * city-wide cooldown (2, 4 or 8 months) still spaces them, short enough
@@ -438,16 +441,70 @@ export function festivalMeans(game) {
 }
 
 /**
- * Why a festival of this size cannot be held now, or null when it can: the
- * cooldown, else every part of its cost the city is short of ("Needs 200
- * wine in the warehouses, 100 stored.").
+ * The temples a god's festivals can be held at: its small and large temples
+ * at work (staffed, efficiency > 0, as they count for its mood: an empty
+ * temple has no priests to lead the rites), those standing idle, and the
+ * Oracles (any: one speaks for every god; it has no workers, so it counts
+ * once it stands, as it does for the moods).
  */
-export function festivalBlocked(game, size) {
+export function festivalTemples(game, god) {
+  const t = { small: 0, large: 0, idleSmall: 0, idleLarge: 0, oracles: 0 };
+  for (const b of game.buildings.values()) {
+    if (b.type === 'oracle') t.oracles++;
+    if (b.def.god !== god) continue;
+    const large = (b.def.templeWeight || 1) > 1;
+    if (b.efficiency > 0) t[large ? 'large' : 'small']++;
+    else t[large ? 'idleLarge' : 'idleSmall']++;
+  }
+  return t;
+}
+
+/** "a", "a and b", "a, b and c". */
+const listWords = (parts) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`);
+
+/**
+ * Why the temples stop a festival of this size for `god`, or null when they
+ * do not (Colonia's own rule, after the original's festivals held at a
+ * god's temple): a small festival needs a staffed small temple of the god,
+ * a large one a staffed large temple of the god as well, a grand one an
+ * Oracle on top. A kind the province does not unlock is said first, as
+ * building the rest would not help ("Large temples are not available in
+ * this province."); else what is missing ("Needs a large temple of Mars and
+ * an Oracle.", "a staffed temple" where one stands without workers).
+ */
+export function festivalTempleBlocked(game, god, size) {
+  const name = GODS[god].name;
+  if (!game.isUnlocked(`temple_${god}`)) return `Temples of ${name} are not available in this province.`;
+  const closed = [];
+  if (size >= 1 && !game.isUnlocked(`temple_large_${god}`)) closed.push('large temples');
+  if (size >= 2 && !game.isUnlocked('oracle')) closed.push('oracles');
+  if (closed.length) {
+    const words = listWords(closed);
+    return `${words[0].toUpperCase()}${words.slice(1)} are not available in this province.`;
+  }
+  const t = festivalTemples(game, god);
+  const temples = [];
+  if (!t.small) temples.push(t.idleSmall ? 'a staffed temple' : 'a temple');
+  if (size >= 1 && !t.large) temples.push(t.idleLarge ? 'a staffed large temple' : 'a large temple');
+  const parts = temples.length ? [`${listWords(temples)} of ${name}`] : [];
+  if (size >= 2 && !t.oracles) parts.push('an Oracle');
+  return parts.length ? `Needs ${parts.join(parts.length > 1 && temples.length > 1 ? ', and ' : ' and ')}.` : null;
+}
+
+/**
+ * Why a festival of this size cannot be held now, or null when it can: the
+ * cooldown, else what the god's temples lack (with `god`; without it, only
+ * what every god's festival needs) and every part of its cost the city is
+ * short of ("Needs 200 wine in the warehouses, 100 stored.").
+ */
+export function festivalBlocked(game, size, god = null) {
   const c = game.city;
   if (c.festivalCooldown > 0) return `Citizens are still recovering from the last festival (${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}).`;
   const need = festivalNeeds(game, size);
   const have = festivalMeans(game);
   const short = [];
+  const temples = god ? festivalTempleBlocked(game, god, size) : null;
+  if (temples) short.push(temples);
   if (need.money > have.money && !game.cheats.freeBuild) short.push(`Needs ${need.money} Dn, ${Math.floor(have.money)} in the treasury.`);
   if (need.food > have.food) short.push(`Needs ${need.food} food in the granaries, ${Math.floor(have.food)} stored.`);
   if (need.wine > have.wine) short.push(`Needs ${need.wine} wine in the warehouses, ${Math.floor(have.wine)} stored.`);
@@ -530,7 +587,8 @@ export function spendFestivalGoods(game, need) {
 }
 
 /**
- * Hold a festival for a god, paid in full (money, food and, for a large or
+ * Hold a festival for a god, at the temples its size needs
+ * (festivalTempleBlocked) and paid in full (money, food and, for a large or
  * grand one, wine) or not at all. Whatever its size, the god's months since
  * its last festival go back to 0 (the original's rule).
  * @returns {{ok:boolean, reason?:string}}
@@ -539,7 +597,7 @@ export function holdFestival(game, god, size) {
   const c = game.city;
   if (!GODS[god]) return { ok: false, reason: 'Unknown god' };
   if (!FESTIVAL_SIZES[size]) return { ok: false, reason: 'Unknown festival size' };
-  const why = festivalBlocked(game, size);
+  const why = festivalBlocked(game, size, god);
   if (why) return { ok: false, reason: why };
   const need = festivalNeeds(game, size);
   transact(game, 'festivals', -need.money);

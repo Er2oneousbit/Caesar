@@ -54,7 +54,7 @@ import { UNIT_TYPES } from '../data/units.js';
 import { GOOD_KEYS, GOODS } from '../data/goods.js';
 import { Terrain } from '../world/map.js';
 import { planVillages } from '../world/natives.js';
-import { addBuilding, spawnWalker, killWalker } from './entities.js';
+import { addBuilding, spawnWalker, killWalker, inOwnFort } from './entities.js';
 import { followPath } from './movement.js';
 import { spawnUnit, removeUnit, moveToward, fillField, attackUnit, nearestHostile, buildingMaxHp } from './military.js';
 import { fightPrefect } from './prefectFight.js';
@@ -361,7 +361,7 @@ export function updateVillager(game, u, romans) {
   const m = game.buildings.get(u.village);
   if (!u.attacking || !m || !(m.attackDays > 0)) { goHome(game, u, def); return; }
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && Math.hypot(target.x - u.x, target.y - u.y) > def.aggro * 1.6) target = null;
+  if (target && (Math.hypot(target.x - u.x, target.y - u.y) > def.aggro * 1.6 || inOwnFort(game, target))) target = null; // (a man in his fort's yard is out of reach)
   if ((game.time.totalTicks + u.id) % 6 === 0 || !target) target = nearestHostile(romans, u.x, u.y, def.aggro) || target;
   u.target = target ? target.id : 0;
   if (target) {

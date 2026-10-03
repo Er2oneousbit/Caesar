@@ -52,11 +52,11 @@ import { tripDays } from '../data/empireRoutes.js';
 import { tradePrice, priceRange, rangeText, distanceNote, marketLine } from '../sim/prices.js';
 import { empireMapCanvas } from './empireMap.js';
 import { cityStock } from '../sim/storage.js';
-import { holdFestival, festivalNeeds, festivalMeans, festivalBlocked, festivalNeglect, neglectPenalty, FESTIVAL_SIZES } from '../sim/religion.js';
+import { holdFestival, festivalNeeds, festivalMeans, festivalBlocked, festivalTempleBlocked, festivalNeglect, neglectPenalty, FESTIVAL_SIZES } from '../sim/religion.js';
 import { describeRequest, canFulfill, fulfillRequest, sendGift, GIFT_SIZES } from '../sim/emperor.js';
 import { setSalary, donate } from '../sim/governor.js';
 import { RANKS } from '../data/ranks.js';
-import { rankLine, salaryOption, salaryOutlookText, giftLabel, giftBlocked, giftNote, salaryNow } from './governorInfo.js';
+import { rankLine, salaryOption, salaryPickable, salaryOutlookText, giftLabel, giftBlocked, giftNote, salaryNow } from './governorInfo.js';
 import { battleSummary, sendTroops, sendBlocked, strengthOf, awayCounts, awayOf, recallSummary } from '../sim/battle.js';
 import { legionText, battleLines, archLine, serviceButton, recallControls, recallLines, postsInBattle } from './empireInfo.js';
 import { productionReport } from './production.js';
@@ -769,7 +769,7 @@ export class Advisors {
           kv('Short of their next level', shortHomes ? `${fmt(shortHomes)} home${shortHomes === 1 ? '' : 's'}` : 'None', shortHomes ? 'no' : ''),
           shortHomes ? kv('...with no entertainer\'s visit', fmt(rep.short.none)) : null,
           h('div', { class: 'row', style: { marginTop: '6px' } },
-            h('span', { class: 'muted sub', style: { flex: 1 } }, c.festivalCooldown > 0 ? `Festivals lift the mood: the next is possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.` : festivalBlocked(g, 0) ? 'Festivals lift the mood: the city cannot pay for one yet (see Festivals).' : 'Festivals lift the mood: one can be held now.'),
+            h('span', { class: 'muted sub', style: { flex: 1 } }, c.festivalCooldown > 0 ? `Festivals lift the mood: the next is possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.` : festivalBlocked(g, 0) ? 'Festivals lift the mood: the city cannot pay for one yet (see Festivals).' : GOD_KEYS.every((k) => festivalTempleBlocked(g, k, 0)) ? 'Festivals lift the mood: they are held at a god\'s staffed temple, and the city has none yet.' : 'Festivals lift the mood: one can be held now.'),
             h('button', { class: 'btn small', onclick: () => this.switchTab('religion') }, 'Festivals')))),
       this.adviceBox(entertainmentAdviceText(rep.advice), rep.advice.key === 'fine' || rep.advice.key === 'noDemand'),
       h('h4', {}, 'Venues'),
@@ -806,7 +806,7 @@ export class Advisors {
             h('td', { class: 'r num' }, `${CONFIG.FESTIVAL_COOLDOWN[r.size]} months`))),
           h('tr', { class: 'muted' }, h('td', {}, 'The city has'), h('td', { class: 'r num' }, `${fmt(have.money)} Dn`), h('td', { class: 'r num', title: 'Food in the granaries' }, fmt(have.food)), h('td', { class: 'r num', title: 'Wine in the warehouses' }, fmt(have.wine)), h('td', {}))),
         sizes.filter(short).map((r) => h('div', { class: 'status bad', style: { fontSize: '12px', marginTop: '4px' }, dataset: { short: r.key } }, `${r.name}: ${r.blocked}`)),
-        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Food comes from the granaries (the largest stocks first), wine from the warehouses; a festival is held only if all of it is there. Any festival resets its god's year; a large or grand one lifts the god and the people more.`),
+        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Food comes from the granaries (the largest stocks first), wine from the warehouses; a festival is held only if all of it is there. It is held at the god's own temples: a small festival needs a staffed temple of the god, a large one a staffed large temple of the god as well, a grand one an Oracle too. Any festival resets its god's year; a large or grand one lifts the god and the people more.`),
         c.festivalCooldown > 0 ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Next festival possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.`) : null),
       GOD_KEYS.map((k) => {
         const s = c.gods[k];
@@ -824,13 +824,19 @@ export class Advisors {
           s.angered ? h('div', { class: 'status bad', style: { fontSize: '12px' } }, `Angered: until ${GODS[k].name}'s mood is back above ${CONFIG.GOD_CALM_MOOD}, another wrath strikes ${GODS[k].harderWrath && g.scenario.majorWrath !== false ? 'harder' : 'again'}.`) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, `Blessing: ${GODS[k].blessing} Wrath: ${GODS[k].wrath}`),
           h('div', { class: 'row', style: { marginTop: '6px' } },
-            sizes.map((r) => h('button', {
-              class: 'btn small',
-              disabled: !!r.blocked,
-              title: r.blocked || `${fmt(r.need.money)} Dn, ${fmt(r.need.food)} food${r.need.wine ? `, ${fmt(r.need.wine)} wine` : ''}`,
-              dataset: { size: r.key },
-              onclick: () => { const res = holdFestival(g, k, r.size); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
-            }, `${r.name} festival`))));
+            sizes.map((r) => {
+              const why = festivalBlocked(g, r.size, k);
+              return h('button', {
+                class: 'btn small',
+                disabled: !!why,
+                title: why || `${fmt(r.need.money)} Dn, ${fmt(r.need.food)} food${r.need.wine ? `, ${fmt(r.need.wine)} wine` : ''}`,
+                dataset: { size: r.key },
+                onclick: () => { const res = holdFestival(g, k, r.size); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
+              }, `${r.name} festival`);
+            })),
+          // What the temples lack, in words as well as the buttons' tooltips
+          // (a phone has no hover): one line per reason, its sizes together.
+          templeNotes(g, k, sizes).map((n) => h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '2px' }, dataset: { temples: n.keys.join(' ') } }, `${n.names}: ${n.reason}`)));
       }),
     ];
   }
@@ -966,9 +972,10 @@ export class Advisors {
   }
 
   /**
-   * Imperial tab: the governor's rank, his salary (any rank's rate, picked
-   * here) and what Rome will make of it, his savings and donations to the
-   * treasury (sim/governor.js).
+   * Imperial tab: the governor's rank, his salary (his rank's rate or a
+   * lower one, picked here; the higher ranks are listed greyed out) and what
+   * Rome will make of it, his savings and donations to the treasury
+   * (sim/governor.js).
    */
   governorCard(g) {
     const gv = g.city.governor;
@@ -983,10 +990,10 @@ export class Advisors {
         h('select', {
           class: 'salary-select', disabled: won,
           onchange: (e) => { const res = setSalary(g, Number(e.target.value)); if (!res.ok) this.app.ui.toastError(res.reason); this.render(); },
-        }, RANKS.map((r, i) => h('option', { value: i, selected: i === gv.salaryRank }, salaryOption(i, gv.rank))))),
+        }, RANKS.map((r, i) => h('option', { value: i, selected: i === gv.salaryRank, disabled: !salaryPickable(i, gv.rank) }, salaryOption(i, gv.rank))))),
       kv('Paid this year', `${fmt(gv.paidThisYear)} Dn`),
       h('div', { class: 'muted', style: { fontSize: '12.5px' } }, salaryOutlookText(g)),
-      h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, 'Rome judges the year\'s pay at New Year: above your rank\'s costs favor, below it earns a little. The salary is not paid while the treasury cannot cover it.'),
+      h('div', { class: 'muted', style: { fontSize: '12.5px', marginTop: '4px' } }, 'Rome pays no governor above his rank. At New Year it looks at the year\'s pay: a year below your rank\'s, by your own choice, earns a little favor. The salary is not paid while the treasury cannot cover it.'),
       h('div', { class: 'row', style: { marginTop: '6px', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
         h('span', {}, 'Give to the city:'),
         amounts.map((n) => h('button', { class: 'btn small donate-btn', onclick: () => give(n) }, `${fmt(n)} Dn`)),
@@ -1002,6 +1009,28 @@ export class Advisors {
       onclick: () => { if (m.empire) openMessage(this.app, m); else if (openMessage(this.app, m)) this.app.ui.closeModal(); },
     }, h('span', { class: 'date' }, m.date), m.text)));
   }
+}
+
+/**
+ * Religion tab: what a god's temples lack for each festival size
+ * (festivalTempleBlocked in sim/religion.js), sizes with the same reason
+ * together: [{ keys: ['large', 'grand'], names: 'Large and grand festivals',
+ * reason: 'Large temples are not available in this province.' }].
+ */
+function templeNotes(g, god, sizes) {
+  const notes = [];
+  for (const r of sizes) {
+    const reason = festivalTempleBlocked(g, god, r.size);
+    if (!reason) continue;
+    const last = notes.at(-1);
+    if (last && last.reason === reason) last.sizes.push(r);
+    else notes.push({ reason, sizes: [r] });
+  }
+  return notes.map((n) => {
+    const names = n.sizes.map((r, i) => (i ? r.key : r.name));
+    const words = names.length < 2 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    return { keys: n.sizes.map((r) => r.key), names: `${words} festival${names.length > 1 ? 's' : ''}`, reason: n.reason };
+  });
 }
 
 /** The color of a coverage figure: green when everyone who needs it has it, red under half. */

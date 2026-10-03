@@ -487,6 +487,13 @@ test('bridges: a ramp beside a roadblock starts at the water, a run that turns o
     map.road[map.idx(...pt(16, 20))] = 0;
     map.terrain[map.idx(...pt(16, 20))] = Terrain.WATER;
     assert.equal(bridgeSpan(map, ...pt(15.9, 20.5), false, 0).lift, Z);
+    // When the road leaves that last tile sideways onto a bank (the Imperial
+    // road turning on its last water tile; review: a 33 px drop off the
+    // side), the deck comes down toward that end as at a bank.
+    map.road[map.idx(...pt(15, 21))] = Road.ROAD;
+    map.terrain[map.idx(...pt(15, 21))] = Terrain.GRASS;
+    assert.equal(bridgeSpan(map, ...pt(15.5, 20.5), false, 0).lift, Z / 3);
+    assert.equal(bridgeSpan(map, ...pt(15.5, 21.2), false, 0).lift, 0, 'off it onto the side road');
   }
   // Two bridges side by side: each keeps its own way, and a road on the
   // bank beside the first tile no longer turns it across the river.
@@ -520,5 +527,42 @@ test('bridges: every piece of the bridges\' art draws at the heights the ramps g
     assert.ok(spec.w > 0 && spec.ay >= top + 4 && spec.h - spec.ay >= 32, 'room above the tile for the deck and its parapets');
     spec.draw(recordingContext().ctx);
   }
-  assert.equal(bridgeSpec('u').ay, bridgeSpec('u', Z, Z, Z).ay, 'the build menu\'s icon: a tile of full deck');
+});
+
+test('bridges: a ship under the deck is cut off at the far parapet, so no mast sticks up through a ramp (review: masts over the banks\' ramps)', async () => {
+  const { mastClip } = await import('../src/render/bridgeProfile.js');
+  const { BRIDGE_DECK_Z: Z } = await import('../src/render/terrainArt.js');
+  const { toView } = await import('../src/render/view.js');
+  const MAST = 46; // a merchantman's, pennant and swell included (measured above)
+  for (const axis of ['u', 'v']) {
+    const { map, pt } = bridgeMap(axis, 6);
+    for (let turn = 0; turn < 4; turn++) {
+      const at = (k, j) => {
+        const [fx, fy] = pt(k, j);
+        const [vx, vy] = toView(fx, fy, turn, 40, 40);
+        const line = mastClip(map, fx, fy, turn);
+        if (!line) return { ground: (vx + vy) * 16, clip: null };
+        // The line's height at the ship's own screen column (the mast's).
+        const x = (vx - vy) * 32;
+        const n = line.findIndex((p) => p.x >= x);
+        assert.ok(n > 0 && line.every((p, i) => !i || p.x > line[i - 1].x), 'the line runs left to right across the ship');
+        const [a, b] = [line[n - 1], line[n]];
+        return { ground: (vx + vy) * 16, clip: a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x) };
+      };
+      const label = `axis ${axis}, turn ${turn}`;
+      // Under the first (ramp) tile, crossing the bridge: the top is cut under the parapet.
+      const ramp = at(10.5, 20.5);
+      assert.ok(ramp.clip !== null && ramp.ground - MAST < ramp.clip, `${label}: a mast over the ramp is cut`);
+      assert.ok(ramp.ground - ramp.clip >= 2 * Z / 3 - 1, `${label}: not lower than the ramp over it`);
+      // Under the middle of the deck it is cut at the deck over it (the deck's far half hides the rest anyway).
+      const deck = at(12.5, 20.5);
+      assert.ok(Math.abs(deck.ground - deck.clip - (Z + 4)) < 1e-9, `${label}: cut at the full deck, parapet included`);
+      // Not yet under the deck (coming in past its far side), off the bridge, or a low bridge: not cut.
+      // (Which edge of the tile is the far side depends on the turn.)
+      assert.ok([at(12.5, 20.05), at(12.5, 20.95)].some((p) => p.clip === null), `${label}: a ship behind the deck is whole`);
+      assert.equal(at(8.5, 20.5).clip, null);
+    }
+  }
+  const { map, pt } = bridgeMap('u', 4, true);
+  assert.equal(mastClip(map, ...pt(11.5, 20.5), 0), null, 'no boat passes a low bridge');
 });

@@ -538,11 +538,12 @@ export function plazaSpec(variant) {
  */
 export const BRIDGE_DECK_Z = 33;
 const BR_S0 = 0.2; // the deck's two sides across the tile
+export const BRIDGE_FAR_SIDE = BR_S0; // (bridgeProfile.js mastClip: the far parapet a mast must stay under)
 const BR_S1 = 0.8;
 const BR_PIER = 0.14; // a pier's thickness along the bridge
 const BR_SPRING = 7; // where the arches spring, over the water
 const BR_DECK = 5; // the deck's thickness over an arch
-const BR_PARAPET = 4;
+export const BR_PARAPET = 4;
 const BR_STONE = '#b9ad94';
 const BR_PAVING = '#a89a80';
 

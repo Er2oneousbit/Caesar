@@ -250,6 +250,17 @@ export function mainOf(game, b) {
   return game.buildings.get(b.main) || b;
 }
 
+/**
+ * Is a soldier inside his own fort's walls, in its yard (sim/military.js
+ * yardSpot)? A fort's footprint is no ground for anyone else, so nothing
+ * outside reaches him there: raiders, Caesar's men, villagers and wolves do
+ * not pick him, and he catches no thief in the street.
+ */
+export function inOwnFort(game, u) {
+  const f = u.fort ? game.buildings.get(u.fort) : null;
+  return !!f && u.x >= f.x && u.y >= f.y && u.x < f.x + f.size && u.y < f.y + f.size;
+}
+
 /** Tile indices of every building in b's linked group. */
 export function groupTiles(game, b) {
   const out = [];

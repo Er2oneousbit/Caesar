@@ -168,17 +168,35 @@ export const INVASION_PRESETS = Object.freeze({
  * ask for what a sensibly built town employs: measured with the demo city
  * (`npm run sim -- --scenario c1 --unlocks --homes 40`: 312 people, 4% out
  * of work) and held under the capacity model's sensible ceiling by a test
- * (sim/capacity.js, `npm run sim -- --capacity`). Missions 3 to 7 ask for a
- * little under what a city of working homes alone employs; the model now
- * counts a few villas too, which leaves them room to spare. The provinces
- * added from step 6 on ask for 85 to 90% of the model's sensible ceiling,
- * villas counted (never more than 92%: the villa quarter is the model's
- * riskiest assumption), with demand of their own on the original's tiers;
- * the population sets their pace, and the last step is the longest.
+ * (sim/capacity.js, `npm run sim -- --capacity`); mission 2's 450 was set
+ * before the Curia came to it, whose 30 jobs lift its ceiling to 550, so a
+ * town that builds one has room to spare. The military provinces of
+ * steps 3 to 7 ask for a little under what a city of working homes alone
+ * employs, or less; the model now counts a few villas too, which leaves
+ * them room to spare. Portus Mercatorum asks for 3,900, the most that keeps
+ * it within Oasis Aurea's pace, so that Beneventum beside it can ask for
+ * more. The peaceful provinces ask for more people than their military
+ * partner at every step (about a fifth more at steps 3 to 5), and from
+ * step 3 for 83 to 90% of the model's sensible ceiling (85 to 90% at
+ * steps 3 to 5, but Figlina 82% since the Curia's jobs came to the
+ * missions before step 5; the gardeners' yards lifted the late ceilings), villas
+ * counted (never more than 92%: the villa quarter is the model's riskiest
+ * assumption), with demand of their own on the original's tiers where
+ * their buildings alone do not give the work (Figlina, Beneventum and each
+ * province from step 6). The last step is the longest.
+ *
+ * Favor: Caesar watches from step 3. Favor starts at 50 and drifts back
+ * toward it, so a goal below 50 (30 at step 3, 35 at Pons Aelius, 40 at
+ * Paestum) asks the governor to keep it: missed requests, unpaid tribute,
+ * debt and an unanswered call for troops lose it, and requests met, the
+ * tribute and gifts win it back. From step 5 the goals ask for more than
+ * 50, which requests, gifts and, in a military province, battles won and
+ * raids repelled earn.
  *
  * Length: each mission's goals are set so the fastest possible city takes the
- * mission's paceYears (sim/pace.js). In missions 1 and 2 peace sets it (a
- * point a month from 20); from mission 3 on, the population.
+ * mission's paceYears (sim/pace.js). In the missions of steps 1 to 4 and in
+ * Oasis Aurea peace sets it (a point a month from 20); in the others, the
+ * population.
  *
  * The homes follow the housing ladder: what the unlocked buildings let homes
  * reach (Huts in the first mission, Townhouses in the second, Domus in the
@@ -201,9 +219,14 @@ export const NAVY_KEYS = Object.freeze(['navalia', 'naval_station', 'portus']);
  * The gardeners' yard comes with the garden, from the first mission: its
  * gardens and statues fade untended only where a yard can be built
  * (sim/gardens.js careApplies).
+ * The Curia (Senate House) comes with the second mission and stays from
+ * there: a town's seat of government, it collects taxes like a Forum and
+ * lifts culture and prosperity while staffed (sim/ratings.js). It costs 400
+ * Dn and 30 workers, a big share of a small town's people, so it is a
+ * choice there, not a given; the capacity model counts its jobs.
  */
 const BASIC = ['house', 'road', 'roadblock', 'clear', 'well', 'prefecture', 'engineer_post', 'farm_wheat', 'granary', 'market', 'temple_ceres', 'temple_mercury', 'garden', 'gardener_yard', 'forum', 'governor_house'];
-const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza'];
+const TIER2 = [...BASIC, 'reservoir', 'aqueduct', 'fountain', 'barber', 'school', 'theater', 'actor_troupe', 'farm_veg', 'temple_neptune', 'temple_mars', 'temple_venus', 'statue_small', 'plaza', 'senate'];
 /** The large temples (one per god) come with the third mission, the first to ask for Domus and bigger homes. */
 export const LARGE_TEMPLE_KEYS = Object.freeze(GOD_KEYS.map((g) => `temple_large_${g}`));
 const TIER3 = [...TIER2, 'clay_pit', 'pottery_ws', 'warehouse', 'baths', 'clinic', 'library', 'statue_medium', 'farm_fruit', 'amphitheater', 'gladiator_school', 'governor_villa', ...LARGE_TEMPLE_KEYS];
@@ -281,7 +304,8 @@ export const SCENARIOS = Object.freeze([
       'An Aquaeductus (Aqueduct) connects a full reservoir to other reservoirs farther inland.',
       'Cottages need a fountain; above them homes want entertainment, then a school. A Theatrum (Theater) needs actors: build a Grex (Actor Troupe) nearby.',
       'Prosperity grows with better homes, a profit, work for everyone and fair wages.',
-      'Work is still scarce here: about 450 people fill the jobs a sensible town has. Build homes for the people your buildings can employ, not more.',
+      'The Curia (Senate House) collects taxes like a Forum and lifts culture and prosperity while staffed, but it costs 400 Dn and needs 30 workers: build it once the town has people to spare.',
+      'Work is still scarce here: about 450 people fill the jobs a sensible town has (about 550 with a Curia). Build homes for the people your buildings can employ, not more.',
     ],
   },
   {
@@ -290,16 +314,21 @@ export const SCENARIOS = Object.freeze([
     map: { size: 112, type: 'plains', seed: 'figlina' },
     site: 'figline', // where it is on the empire map (data/sites.js)
     funds: 7000, startYear: -255,
-    goals: { population: 950, culture: 45, prosperity: 30, peace: 50, favor: 0 },
+    goals: { population: 1350, culture: 45, prosperity: 30, peace: 50, favor: 30 },
     paceYears: 2.5,
     rank: 2, // Engineer (data/ranks.js)
-    unlocks: TIER3, partners: ['tarraco', 'aquileia'], requests: true,
+    unlocks: TIER3, partners: ['tarraco', 'aquileia', 'capua'], requests: true,
     market: { clay: 0.85, timber: 1.15 }, // the potteries' own clay is cheap; the treeless plain pays for timber (sim/prices.js)
+    // A potters' town: Tarraco and rich Capua each buy pottery on the top
+    // tier. That trade is the work that lets the peaceful province grow
+    // past Firmum (sim/capacity.js).
+    demand: { tarraco: { pottery: 4000 }, capua: { pottery: 4000 } },
     hints: [
       'A Cretifodina (Clay Pit) must be near water. A Figlina (Potter) turns clay into pottery, which Merchant Houses and every home above them need, with Balneae (Baths) nearby.',
       'A Horreum (Warehouse) stores goods. Caravans only trade with warehouses.',
       'Open trade routes in the Trade advisor, then mark goods for import or export.',
-      'Trade is work: what your partners buy keeps farms, clay pits and potters staffed. Let the town grow as its jobs do.',
+      'Trade is work: Tarraco and Capua each buy up to 4,000 pottery a year, and what your partners buy keeps farms, clay pits and potters staffed. Let the town grow as its jobs do.',
+      'Caesar is watching you now: keep his favor at 30 or more. Pay the yearly tribute, stay out of debt and meet his requests when they come.',
       'A Domus wants more shows than a theater gives: add an Amphitheatrum (Amphitheater), with gladiators from a Ludus Gladiatorius (Gladiator School), and actors too for its best shows.',
     ],
   },
@@ -311,7 +340,7 @@ export const SCENARIOS = Object.freeze([
     map: { size: 112, type: 'lakes', seed: 'firmum-picenum' },
     site: 'firmum', // where it is on the empire map (data/sites.js)
     funds: 7000, startYear: -255,
-    goals: { population: 1100, culture: 35, prosperity: 20, peace: 48, favor: 0 },
+    goals: { population: 1100, culture: 35, prosperity: 20, peace: 48, favor: 30 },
     paceYears: 2.3,
     rank: 2, // Engineer, as Figlina (data/ranks.js)
     unlocks: FIRMUM, partners: ['aquileia', 'capua'], requests: true,
@@ -325,6 +354,7 @@ export const SCENARIOS = Object.freeze([
       'Raiders come down from the hills within two years. A Ferraria (Iron Mine) by the rocks and a Fabrica (Weaponsmith) arm the legionaries a Tirocinium (Barracks) trains for a Castra (Legion Fort).',
       'Word of a raid comes about six months before it and scouts report its size and road three months before, and the Empire map shows the warband and the edge it will come in by. Build Turres (Towers) and a Murus (Wall) across that way in.',
       'A Campus (Military Academy) trains your legionaries to fight harder.',
+      `In your second year Caesar will call for troops for Ariminum. Send a legion in time: his favor is one of your goals, and ignoring the call costs ${-CONFIG.BATTLE_FAVOR.none} of it.`,
       'Capua buys iron: what the mine digs beyond the weaponsmith\'s needs is trade, and work.',
       'A Domus wants more shows than a theater gives: add an Amphitheatrum (Amphitheater), with gladiators from a Ludus Gladiatorius (Gladiator School).',
     ],
@@ -335,7 +365,7 @@ export const SCENARIOS = Object.freeze([
     map: { size: 128, type: 'river', seed: 'pons-aelius' },
     site: 'etruria', // where it is on the empire map (data/sites.js)
     funds: 8000, startYear: -240,
-    goals: { population: 2700, culture: 50, prosperity: 40, peace: 55, favor: 0 },
+    goals: { population: 2700, culture: 50, prosperity: 40, peace: 55, favor: 35 },
     paceYears: 2.9,
     rank: 3, // Architect (data/ranks.js)
     unlocks: TIER4, partners: ['tarraco', 'massilia', 'lugdunum'], requests: true,
@@ -348,6 +378,7 @@ export const SCENARIOS = Object.freeze([
       'Apartment Houses need furniture (an Officina Lignaria, the carpenter, from timber); Tenements, the first big homes, also need oil, a barber, and both a school and a library.',
       'Insulae also need clothing: a Linarium (Flax Field) on meadow, a Textrinum (Linen Weaver) and a Taberna Vestiaria (Clothing Maker), or linen bought from Tarraco for the Taberna Vestiaria.',
       'Raiders roam these hills. A Tirocinium (Barracks) trains soldiers for your forts: legionaries need weapons (Fabrica, the weaponsmith), archers need arrows (Officina Sagittaria, the fletcher, from timber and iron).',
+      'Caesar will call for troops for Placentia in your third year, and his favor is one of your goals: answer him in time, and meet his requests.',
     ],
   },
   {
@@ -356,7 +387,7 @@ export const SCENARIOS = Object.freeze([
     map: { size: 128, type: 'coast', seed: 'paestum' },
     site: 'paestum', // where it is on the empire map (data/sites.js)
     funds: 8000, startYear: -240,
-    goals: { population: 2700, culture: 60, prosperity: 50, peace: 65, favor: 40 },
+    goals: { population: 3350, culture: 60, prosperity: 50, peace: 65, favor: 40 },
     paceYears: 3.75,
     rank: 3, // Architect, as Pons Aelius (data/ranks.js)
     unlocks: withoutArmy(TIER4), partners: ['capua', 'massilia', 'corinthus'], requests: true,
@@ -374,8 +405,12 @@ export const SCENARIOS = Object.freeze([
     map: { size: 128, type: 'coast', seed: 'portus-mercatorum' },
     site: 'populonia', // where it is on the empire map (data/sites.js)
     funds: 9000, startYear: -225,
-    goals: { population: 4600, culture: 60, prosperity: 50, peace: 60, favor: 55 },
-    paceYears: 5.1,
+    // 3,900 people (once 4,600): the most whose settlers come within the
+    // 4.2 years of Oasis Aurea, the military province after it. A step's
+    // shorter province must be no longer than the next step's shortest
+    // (tests/campaign.test.mjs), and Beneventum beside it asks for more.
+    goals: { population: 3900, culture: 60, prosperity: 50, peace: 60, favor: 55 },
+    paceYears: 4.2,
     rank: 4, // Quaestor (data/ranks.js)
     unlocks: ALL_BUT_HIPPODROME, partners: ['massilia', 'lugdunum', 'carthago', 'corinthus', 'cirta', 'alexandria'], requests: true,
     market: { iron: 0.85, wine: 0.9, marble: 1.15 }, // Elba's ore and the vines on the slopes; no quarry near (sim/prices.js)
@@ -394,14 +429,19 @@ export const SCENARIOS = Object.freeze([
     map: { size: 128, type: 'river', seed: 'beneventum' },
     site: 'beneventum', // where it is on the empire map (data/sites.js)
     funds: 9000, startYear: -225,
-    goals: { population: 3000, culture: 65, prosperity: 60, peace: 70, favor: 65 },
-    paceYears: 4.2,
+    goals: { population: 4800, culture: 65, prosperity: 60, peace: 70, favor: 65 },
+    paceYears: 5.4,
     rank: 4, // Quaestor, as Portus Mercatorum (data/ranks.js)
     // The river is navigable, but every partner comes by land: the colony lives by caravans.
     unlocks: withoutArmy(ALL_BUT_HIPPODROME), partners: ['capua', 'tarraco', 'aquileia', 'lugdunum'], requests: true,
     market: { meat: 0.85, timber: 0.9, oil: 1.15 }, // Samnite herds on the drove roads and Apennine woods; no olives in the hills (sim/prices.js)
+    // The caravans buy on the original's tiers: furniture of Apennine timber
+    // and clothing for Capua, the herds' meat for Aquileia, wine for
+    // Lugdunum, pottery for Tarraco. That trade is the work that lets the
+    // market town grow past Portus Mercatorum (sim/capacity.js).
+    demand: { capua: { furniture: 2500, clothing: 1500 }, aquileia: { meat: 2500 }, lugdunum: { wine: 2500 }, tarraco: { pottery: 1500 } },
     hints: [
-      'Beneventum trades only by land: four caravan routes meet here. Open them in the Trade advisor and let warehouses near the Imperial road do the business.',
+      'Beneventum trades only by land: four caravan routes meet here. Open them in the Trade advisor and let warehouses near the Imperial road do the business. Capua buys furniture and clothing, Aquileia meat, Lugdunum wine and Tarraco pottery.',
       'There is no army here and no raiders to fear, but Caesar\'s favor must stay high: his requests, the yearly tribute and gifts all count.',
       'Villas need wine, two kinds of food and two gods. Patricians do not work, but pay handsome taxes and lift prosperity.',
     ],

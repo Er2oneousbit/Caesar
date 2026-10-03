@@ -62,7 +62,9 @@ import { UNIT_TYPES } from '../data/units.js';
 import { wallHpOf, TOWER_RANGE } from '../sim/military.js';
 import { waterOf, shoreBerth } from '../sim/navy.js';
 import { farmDormant } from '../sim/production.js';
-import { wallSpec, drawUnit, drawProjectile, drawRallyFlag } from './militaryArt.js';
+import { wallSpec, drawUnit, drawProjectile, drawRallyFlag, drawStandardNumber } from './militaryArt.js';
+import { roman } from '../sim/fortNumbers.js';
+import { rallyTarget } from '../sim/rallyPoints.js';
 import { Camera, tileOfWorld } from './camera.js';
 import { SpriteCache } from './sprites.js';
 import { groundTileSpec, groundBlendSpec, waterTileSpec, shoreSpec, roadSpec, plazaSpec, bridgeSpec, BRIDGE_DECK_Z, lowBridgeSpec, LOW_BRIDGE_DECK_Z, rubbleSpec, treesSpec, rocksSpec, aqueductSpec, BLEND_RANK, roadblockSpec } from './terrainArt.js';
@@ -478,6 +480,8 @@ export class Renderer {
     this.noRoadMarks = []; // buildings in view with no road to use, and their height (the red sign)
     this.noRoadSpots = []; // where those signs were drawn this frame (device px)
     this.deployFort = 0; // fort or naval station id while the player picks a deployment tile
+    this.flagSpots = []; // where each rally flag was drawn this frame, for clicks and drags (pickFlag)
+    this.flagDrag = null; // { id, x, y }: a rally flag the player is dragging, and the map tile under the pointer (input.js)
     this.time = 0;
     this.frame = 0;
     this.stats = { tiles: 0, objects: 0, ms: 0, coverage: null, waterHint: null, noRoad: 0, ghostNoRoad: false, roadEdges: 0 };
@@ -586,6 +590,8 @@ export class Renderer {
     this.walkerSpots = [];
     this.shipSpots = [];
     this.unitSpots = [];
+    this.flagSpots = [];
+    this.flagDrag = null;
     this.selectedUnit = 0;
     this.headings.clear();
     // A new or loaded game opens unturned (a save's camera state turns it back, Camera.restore).
@@ -886,12 +892,16 @@ export class Renderer {
       const wy = (px + py) * HALF_H - p.z;
       if (inView(wx, wy)) items.push({ d: px + py + 0.5, kind: K_PROJ, p, wx, wy, vel: viewDir(p.vx || 0, p.vy || 0, vt) });
     }
+    this.flagSpots = [];
     for (const b of game.buildings.values()) {
       if (!b.rally) continue;
       const [rx, ry] = toView(b.rally.x, b.rally.y, vt, map.w, map.h);
       const wx = (rx - ry) * HALF_W;
       const wy = (rx + ry) * HALF_H;
-      if (inView(wx, wy)) items.push({ d: rx + ry + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b) });
+      if (!inView(wx, wy)) continue;
+      // A fort's standard carries its number (Shift+N finds it); a station's flag none.
+      items.push({ d: rx + ry + 0.002, kind: K_FLAG, wx, wy, color: forceColor(b), id: b.id, num: b.number > 0 ? roman(b.number) : '' });
+      this.flagSpots.push({ id: b.id, wx, wy });
     }
     // Map entrance and exit: a gateway over the Imperial road at the map edge.
     // Two items, so walkers on the tile pass between the pillars.
@@ -940,9 +950,17 @@ export class Renderer {
         case K_PROJ:
           drawProjectile(ctx, it.p, (it.wx - cam.x) * k, (it.wy - cam.y) * k, k, it.vel[0], it.vel[1]);
           break;
-        case K_FLAG:
-          drawRallyFlag(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, it.color, this.time);
+        case K_FLAG: {
+          // The flag being dragged stays where it is, faded, until it is dropped.
+          const dragged = this.flagDrag && this.flagDrag.id === it.id;
+          if (dragged) ctx.globalAlpha = 0.35;
+          const fx = Math.round((it.wx - cam.x) * k);
+          const fy = Math.round((it.wy - cam.y) * k);
+          drawRallyFlag(ctx, fx, fy, k, it.color, this.time);
+          if (it.num) drawStandardNumber(ctx, fx, fy, k, it.num, cam.dpr);
+          if (dragged) ctx.globalAlpha = 1;
           break;
+        }
         case K_GATE:
           drawMapGate(ctx, Math.round((it.wx - cam.x) * k), Math.round((it.wy - cam.y) * k), k, it.ox * k, it.oy * k, it.color, motion ? this.time : 0, it.seed, it.part, pal.snow);
           break;
@@ -1002,14 +1020,15 @@ export class Renderer {
     }
     if (this.deployFort && this.hoverTile) {
       // Picking a deployment point: ghost standard under the cursor.
-      const f = game.buildings.get(this.deployFort);
-      const color = f ? forceColor(f) : '#a8322b';
-      const { x, y } = this.hoverTile;
-      this.outlineFootprint(x, y, 1, 'rgba(255,230,120,0.95)', 2);
-      ctx.globalAlpha = 0.7;
-      const at = this.worldAt(x + 0.5, y + 0.5); // the tile's center
-      drawRallyFlag(ctx, Math.round((at.x - cam.x) * k), Math.round((at.y - cam.y) * k), k, color, this.time);
-      ctx.globalAlpha = 1;
+      this.drawGhostStandard(game.buildings.get(this.deployFort), this.hoverTile.x, this.hoverTile.y);
+    }
+    if (this.flagDrag) {
+      // A rally flag being dragged: its line and the ghost where it would land.
+      const f = game.buildings.get(this.flagDrag.id);
+      if (f) {
+        if (f.rally && f.id !== this.selectedId) this.drawRallyLine(f);
+        this.drawGhostStandard(f, this.flagDrag.x, this.flagDrag.y);
+      }
     }
 
     this.stats.tiles = tiles;
@@ -1436,6 +1455,54 @@ export class Renderer {
       const dy = p.y - s.wy;
       if (Math.abs(dx) > hw || dy < -top || dy > Math.max(6, 4 * css)) continue;
       const d = Math.hypot(dx, dy + 18);
+      if (d < bestD) { bestD = d; best = s.id; }
+    }
+    return best;
+  }
+
+  /**
+   * The ghost standard of fort or station `f` for map tile (x, y): where its
+   * rally point would go (a station's flag moves to the nearest tile of its
+   * water, as the click does: sim/rallyPoints.js), or red on the tile itself
+   * where it cannot go. Nothing off the map.
+   */
+  drawGhostStandard(f, x, y) {
+    const { ctx, camera: cam, game } = this;
+    if (!f || !game.map.inBounds(x, y)) return;
+    const k = cam.scale;
+    const at = rallyTarget(game, f, x, y);
+    const tx = at ? Math.floor(at.x) : x;
+    const ty = at ? Math.floor(at.y) : y;
+    this.outlineFootprint(tx, ty, 1, at ? 'rgba(255,230,120,0.95)' : 'rgba(255,90,70,0.95)', 2);
+    ctx.globalAlpha = 0.7;
+    const w = this.worldAt(tx + 0.5, ty + 0.5); // the tile's center
+    drawRallyFlag(ctx, Math.round((w.x - cam.x) * k), Math.round((w.y - cam.y) * k), k, at ? forceColor(f) : '#e0402a', this.time);
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * The fort or station whose rally flag is drawn under CSS pixel (sx, sy),
+   * or 0. The box is the standard itself (pole, cloth and finial) and a
+   * little more, never under about 12 x 30 CSS px so it can be grabbed
+   * zoomed out; the nearest wins. Flags win over the walkers, soldiers and
+   * buildings under them (input.js asks for them first): a deployed army
+   * stands around its flag and would otherwise hide it from the click.
+   */
+  pickFlag(sx, sy) {
+    const cam = this.camera;
+    const p = cam.screenToWorld(sx, sy);
+    const css = cam.dpr / cam.scale; // world px per CSS px
+    const left = Math.max(4, 4 * css);
+    const right = Math.max(12, 8 * css);
+    const top = Math.max(39, 29 + 10 * css); // (up to the fort's number over the finial, drawStandardNumber)
+    const bottom = Math.max(4, 4 * css);
+    let best = 0;
+    let bestD = Infinity;
+    for (const s of this.flagSpots) {
+      const dx = p.x - s.wx;
+      const dy = p.y - s.wy;
+      if (dx < -left || dx > right || dy < -top || dy > bottom) continue;
+      const d = Math.hypot(dx - 3, dy + 14); // from the middle of the standard
       if (d < bestD) { bestD = d; best = s.id; }
     }
     return best;

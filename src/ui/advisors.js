@@ -65,6 +65,7 @@ import { loanTerms, takeLoan } from '../sim/loans.js';
 import { healthReport, educationReport, entertainmentReport, crimeNow, HEALTH_KINDS, EDUCATION_KINDS, VENUE_KINDS, TRAINER_KINDS } from '../sim/coverage.js';
 import { sickHomes } from '../sim/disease.js';
 import { idleBuildings } from './cycle.js';
+import { fortTitle } from '../sim/fortNumbers.js';
 import {
   coverageText, healthVerdict, healthIsLow, cityHealthLine, crimeLine, healthAdviceText, educationAdviceText,
   entertainmentAdviceText, pluralName, educationLadderText,
@@ -621,7 +622,7 @@ export class Advisors {
       const unit = UNIT_TYPES[f.def.unit];
       const n = counts.get(f.id) || 0;
       return h('tr', {},
-        h('td', {}, h('span', { style: { color: unit.color, fontWeight: 700 } }, '■ '), f.def.name),
+        h('td', { title: f.number >= 1 && f.number <= 9 ? `Shift+${f.number} shows it` : '' }, h('span', { style: { color: unit.color, fontWeight: 700 } }, '■ '), fortTitle(f)),
         h('td', { class: 'r num' }, `${n}/${FORT_CAPACITY}${f.recruiting ? ` (+${f.recruiting})` : ''}${away.get(f.id) ? ` (${away.get(f.id)} away)` : ''}`),
         h('td', { class: 'r num' }, pct(f.efficiency)),
         h('td', {}, f.rally ? `Holding ${Math.floor(f.rally.x)},${Math.floor(f.rally.y)}` : 'At the fort'),

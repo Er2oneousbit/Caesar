@@ -798,3 +798,27 @@ export function drawRallyFlag(ctx, sx, sy, k, color, t) {
   ctx.fillStyle = '#d6ab3c';
   ctx.fillRect(sx - 1.4 * k, sy - 27 * k, 2.8 * k, 3 * k);
 }
+
+/**
+ * A fort's number in Roman numerals ("III") over its standard, so the
+ * player can tell which army holds where and which Shift key finds it.
+ * Gold on a dark edge to read on grass, sand and water alike. Left out
+ * zoomed far out, where it would be larger than the standard itself.
+ */
+export function drawStandardNumber(ctx, sx, sy, k, text, dpr = 1) {
+  if (k < 0.45 * dpr) return;
+  const px = Math.round(Math.max(7 * k, 9 * dpr));
+  ctx.save();
+  ctx.font = `bold ${px}px Georgia, 'Times New Roman', serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(2, 0.3 * px);
+  ctx.strokeStyle = 'rgba(30,20,10,0.85)';
+  const x = sx + 4 * k;
+  const y = sy - 29 * k;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = '#f3d27a';
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}

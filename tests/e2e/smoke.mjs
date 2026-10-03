@@ -1508,6 +1508,137 @@ try {
     } else check('clicking the map deploys the soldiers there', false, 'no free tile on screen near the fort');
     // Never leave deploy mode on for the steps that follow.
     await page.evaluate(() => { if (window.colonia.deploying) window.colonia.cancelDeploy(); });
+
+    // 5b1. Numbered forts: Shift+1 glides to fort I and opens it; the
+    //      deployed fort's standard is a click target and can be dragged
+    //      (sim/fortNumbers.js, input.js), at any view turn.
+    const far = await page.evaluate(() => {
+      const app = window.colonia;
+      app.ui.info.close();
+      const f = [...app.game.buildings.values()].find((b) => b.def.kind === 'fort' && b.number === 1);
+      if (!f) return null;
+      const m = app.game.map;
+      // Look away first: the far side of the map from the fort.
+      app.renderer.camera.centerOnTile(f.x < m.w / 2 ? m.w - 12 : 12, f.y < m.h / 2 ? m.h - 12 : 12);
+      return { id: f.id, x: f.x + 1, y: f.y + 1 };
+    });
+    await page.mouse.move(400, 300); // (the pointer over the map, not a button the press could land on)
+    await page.keyboard.press('Shift+Digit1');
+    await page.waitForTimeout(1500); // the glide
+    const one = await page.evaluate((f) => {
+      const app = window.colonia;
+      const r = app.canvas.getBoundingClientRect();
+      const cam = app.renderer.camera;
+      const at = cam.screenToTile(r.width / 2, r.height / 2);
+      // The fort in the middle of the view (a fort by the map's edge sits off
+      // center: the camera stops at the edge).
+      const w = f ? app.renderer.worldAt(f.x + 0.5, f.y + 0.5) : { x: 0, y: 0 };
+      const sx = ((w.x - cam.x) * cam.scale) / cam.dpr / r.width;
+      const sy = ((w.y - cam.y) * cam.scale) / cam.dpr / r.height;
+      return { at, mid: sx > 0.2 && sx < 0.8 && sy > 0.2 && sy < 0.8, target: app.ui.info.target, head: document.querySelector('#info-panel h3')?.textContent || '', text: document.getElementById('info-panel').textContent };
+    }, far);
+    check('Shift+1 glides to fort I and opens its panel, titled with its number and key', !!far && one.target?.id === far.id && one.mid && / I \(/.test(one.head) && /Shift\+1/.test(one.text), JSON.stringify({ far, at: one.at, mid: one.mid, target: one.target, head: one.head }));
+
+    /** CSS px of the middle of a rally flag's cloth, from where the renderer drew it, or null. */
+    const flagPoint = (id) => page.evaluate((fid) => {
+      const app = window.colonia;
+      const r = app.renderer;
+      const s = r.flagSpots.find((o) => o.id === fid);
+      if (!s) return null;
+      const cam = r.camera;
+      const rect = app.canvas.getBoundingClientRect();
+      return { x: rect.left + ((s.wx + 4 - cam.x) * cam.scale) / cam.dpr, y: rect.top + ((s.wy - 20 - cam.y) * cam.scale) / cam.dpr };
+    }, id);
+    /** A tile `r0` or more tiles from the fort's flag whose spot on screen shows the map, in CSS px. */
+    const openTileNear = (id, r0) => page.evaluate(([fid, rmin]) => {
+      const app = window.colonia;
+      const f = app.game.buildings.get(fid);
+      const m = app.game.map;
+      const cam = app.renderer.camera;
+      const rect = app.canvas.getBoundingClientRect();
+      const fx = Math.floor(f.rally.x);
+      const fy = Math.floor(f.rally.y);
+      for (let r = rmin; r < rmin + 6; r++) for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r], [r, r], [-r, -r]]) {
+        const x = fx + dx;
+        const y = fy + dy;
+        if (!m.inBounds(x, y)) continue;
+        const w = app.renderer.worldAt(x + 0.5, y + 0.5); // (the view turn's own projection)
+        const sx = rect.left + ((w.x - cam.x) * cam.scale) / cam.dpr;
+        const sy = rect.top + ((w.y - cam.y) * cam.scale) / cam.dpr;
+        if (document.elementFromPoint(sx, sy) === app.canvas) return { x, y, sx, sy };
+      }
+      return null;
+    }, [id, r0]);
+    const lookAtFlag = (id) => page.evaluate((fid) => {
+      const app = window.colonia;
+      const f = app.game.buildings.get(fid);
+      app.ui.info.close();
+      app.renderer.camera.centerOnTile(Math.floor(f.rally.x), Math.floor(f.rally.y));
+    }, id);
+    const rallyOf = (id) => page.evaluate((fid) => window.colonia.game.buildings.get(fid).rally, id);
+    const camAt = () => page.evaluate(() => ({ x: window.colonia.renderer.camera.x, y: window.colonia.renderer.camera.y }));
+
+    if (await rallyOf(gar.fortId)) {
+      await lookAtFlag(gar.fortId);
+      await page.waitForTimeout(200);
+      const fp = await flagPoint(gar.fortId);
+      if (fp) await page.mouse.click(fp.x, fp.y);
+      await page.waitForTimeout(100);
+      const clicked = await page.evaluate(() => ({ target: window.colonia.ui.info.target, recall: [...document.querySelectorAll('#info-panel button')].some((b) => /Recall/.test(b.textContent) && !b.disabled) }));
+      check('clicking a deployed fort\'s standard opens the fort, with Recall', !!fp && clicked.target?.kind === 'building' && clicked.target.id === gar.fortId && clicked.recall, JSON.stringify({ fp, clicked }));
+
+      // Drag the standard to a tile a few tiles off: the soldiers' rally moves there, and the map does not pan.
+      await lookAtFlag(gar.fortId);
+      await page.waitForTimeout(200);
+      const from = await flagPoint(gar.fortId);
+      const to = await openTileNear(gar.fortId, 4);
+      const cam0 = await camAt();
+      if (from && to) {
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(to.sx, to.sy, { steps: 8 });
+        const mid = await page.evaluate(() => window.colonia.renderer.flagDrag);
+        await page.mouse.up();
+        const rally = await rallyOf(gar.fortId);
+        const cam1 = await camAt();
+        check('dragging a standard redeploys the fort where it is dropped, without panning the map', !!rally && Math.floor(rally.x) === to.x && Math.floor(rally.y) === to.y && mid && mid.x === to.x && mid.y === to.y && cam0.x === cam1.x && cam0.y === cam1.y, JSON.stringify({ to, rally, mid, cam0, cam1 }));
+      } else check('dragging a standard redeploys the fort where it is dropped, without panning the map', false, JSON.stringify({ from, to }));
+
+      // Dropped on a panel (not on the map): the standard stays where it was.
+      await page.evaluate((id) => window.colonia.ui.info.showBuilding(id), gar.fortId);
+      await page.waitForTimeout(100);
+      const before = await rallyOf(gar.fortId);
+      const from2 = await flagPoint(gar.fortId);
+      // (Its title: plain text, no button a stray click could press.)
+      const panelAt = await page.evaluate(() => { const r = document.querySelector('#info-panel h3').getBoundingClientRect(); return { x: r.left + Math.min(40, r.width / 2), y: r.top + r.height / 2 }; });
+      if (from2) {
+        await page.mouse.move(from2.x, from2.y);
+        await page.mouse.down();
+        await page.mouse.move(panelAt.x, panelAt.y, { steps: 8 });
+      }
+      const held = await page.evaluate(() => window.colonia.renderer.flagDrag); // (the drag really started: no ghost over the panel)
+      if (from2) await page.mouse.up();
+      const after = await rallyOf(gar.fortId);
+      check('a standard dropped on a panel, off the map, stays where it was', !!from2 && !!held && held.x === -1 && JSON.stringify(after) === JSON.stringify(before), JSON.stringify({ from2, held, before, after }));
+
+      // A turned view: the standard is found and dragged by the turned projection.
+      await page.evaluate(() => window.colonia.turnView(1));
+      await lookAtFlag(gar.fortId);
+      await page.waitForTimeout(200);
+      const from3 = await flagPoint(gar.fortId);
+      const to3 = await openTileNear(gar.fortId, 3);
+      if (from3 && to3) {
+        await page.mouse.move(from3.x, from3.y);
+        await page.mouse.down();
+        await page.mouse.move(to3.sx, to3.sy, { steps: 8 });
+        await page.mouse.up();
+      }
+      const rally3 = await rallyOf(gar.fortId);
+      const turn = await page.evaluate(() => window.colonia.renderer.viewTurn);
+      check('at a turned view a standard is still grabbed and dropped on the tile under the pointer', turn === 1 && !!to3 && !!rally3 && Math.floor(rally3.x) === to3.x && Math.floor(rally3.y) === to3.y, JSON.stringify({ turn, from3, to3, rally3 }));
+      await page.evaluate(() => window.colonia.turnView(-window.colonia.renderer.viewTurn));
+    } else check('clicking a deployed fort\'s standard opens the fort, with Recall', false, 'the fort was not deployed');
+    await page.evaluate(() => window.colonia.ui.info.close());
   }
   // 5b2. The Empire map: E opens it and it draws (a scouted warband and a
   //      caravan on the way included), clicking the warband closes it and
@@ -2230,6 +2361,53 @@ try {
       }
       const rally = await np.evaluate((id) => window.colonia.game.buildings.get(id).rally, fleet.st.id);
       check('fleet: Deploy and a click on the water send the squadron there', !!water && !!rally && Math.abs(Math.floor(rally.x) - water.x) <= 2 && Math.abs(Math.floor(rally.y) - water.y) <= 2, JSON.stringify({ water, rally }));
+      // The squadron's flag dragged onto dry land (no water of its own within
+      // 2 tiles): it stays on the water where it was.
+      if (rally) {
+        const drag = await np.evaluate((sid) => {
+          const app = window.colonia;
+          const g = app.game;
+          const m = g.map;
+          const st = g.buildings.get(sid);
+          const body = m.navBody[st.berth];
+          app.ui.info.close();
+          app.renderer.camera.centerOnTile(Math.floor(st.rally.x), Math.floor(st.rally.y));
+          return { body, rx: Math.floor(st.rally.x), ry: Math.floor(st.rally.y) };
+        }, fleet.st.id);
+        await np.waitForTimeout(250);
+        const pts = await np.evaluate(([sid, d]) => {
+          const app = window.colonia;
+          const m = app.game.map;
+          const r = app.renderer;
+          const cam = r.camera;
+          const rect = app.canvas.getBoundingClientRect();
+          const css = (wx, wy) => ({ x: rect.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: rect.top + ((wy - cam.y) * cam.scale) / cam.dpr });
+          const s = r.flagSpots.find((o) => o.id === sid);
+          const dryAround = (x, y) => {
+            for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (m.inBounds(x + dx, y + dy) && m.navBody[m.idx(x + dx, y + dy)] === d.body) return false;
+            return true;
+          };
+          let land = null;
+          for (let rr = 4; rr < 16 && !land; rr++) for (const [dx, dy] of [[rr, 0], [0, rr], [-rr, 0], [0, -rr], [rr, rr], [-rr, -rr], [rr, -rr], [-rr, rr]]) {
+            const x = d.rx + dx;
+            const y = d.ry + dy;
+            if (!m.inBounds(x, y) || !dryAround(x, y)) continue;
+            const w = r.worldAt(x + 0.5, y + 0.5);
+            const p = css(w.x, w.y);
+            if (document.elementFromPoint(p.x, p.y) === app.canvas) { land = { tx: x, ty: y, x: p.x, y: p.y }; break; }
+          }
+          return { flag: s ? css(s.wx + 4, s.wy - 20) : null, land };
+        }, [fleet.st.id, drag]);
+        if (pts.flag && pts.land) {
+          await np.mouse.move(pts.flag.x, pts.flag.y);
+          await np.mouse.down();
+          await np.mouse.move(pts.land.x, pts.land.y, { steps: 8 });
+          const ghost = await np.evaluate(() => window.colonia.renderer.flagDrag);
+          await np.mouse.up();
+          const after = await np.evaluate((id) => window.colonia.game.buildings.get(id).rally, fleet.st.id);
+          check('fleet: the squadron\'s flag dragged onto dry land stays on the water where it was', !!ghost && ghost.x === pts.land.tx && ghost.y === pts.land.ty && JSON.stringify(after) === JSON.stringify(rally), JSON.stringify({ pts, ghost, rally, after }));
+        } else check('fleet: the squadron\'s flag dragged onto dry land stays on the water where it was', false, JSON.stringify(pts));
+      }
       await np.evaluate(() => { window.colonia.paused = false; window.colonia.ui.console.run('days 8'); window.colonia.paused = true; });
       // Click a liburnian: its panel.
       await np.evaluate(() => { const u = [...window.colonia.game.units.values()].find((v) => v.type === 'liburnian'); window.colonia.renderer.camera.centerOnTile(Math.floor(u.x), Math.floor(u.y)); });

@@ -50,6 +50,7 @@ import { MONTH_SHORT, formatYear } from '../sim/time.js';
 import { rankLine } from './governorInfo.js';
 import { awayOf } from '../sim/battle.js';
 import { serviceButton, serviceNote, recallControls, newMenNote } from './empireInfo.js';
+import { fortTitle, fortKey } from '../sim/fortNumbers.js';
 
 /** "in about 12 days", counting the winter rest on Insane. */
 function nextMareText(game, b) {
@@ -596,7 +597,8 @@ export class InfoPanel {
     const def = b.def;
     const st = buildingStatus(g, b);
     const r = footprintRect(b); // (a hippodrome turned north-south: 5x15)
-    const parts = [this.head(def.name, `${r.w}×${r.h}`, def.en), h('div', { class: `status ${st.level}` }, st.text), this.cycleRow(b)];
+    // A fort's title carries its number (Castra III, sim/fortNumbers.js).
+    const parts = [this.head(fortTitle(b), `${r.w}×${r.h}`, def.en), h('div', { class: `status ${st.level}` }, st.text), this.cycleRow(b)];
     if (def.workers) {
       parts.push(h('div', { class: 'panel-sec' },
         h('h5', {}, 'Employment'),
@@ -681,11 +683,12 @@ export class InfoPanel {
           inTrainingText(g, b) ? kv('Recruits at the Campus', inTrainingText(g, b)) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Holding the fort'),
+          kv('Keys', fortKey(b) ? `${fortKey(b)} shows this fort, F deploys it` : 'F deploys it (Shift+1 to 9 show forts I to IX)'),
           awayOf(g, b.id).length ? kv('Away', `${awayOf(g, b.id).length} at a distant battle (their places are kept)`) : null,
           kv('Pay', `${fmt(unit.upkeep * (n + awayOf(g, b.id).length))} Dn / month`),
           h('div', { class: 'muted' }, unit.desc),
           h('div', { class: 'row', style: { marginTop: '6px' } },
-            h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the map where they should stand', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
+            h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the map where they should stand (key: F). Their standard can be dragged afterwards.', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
             h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallFort(g, b.id); this.render(); } }, '↩ Recall'),
             serviceButton(g, b, () => this.render())),
           recallControls(g, b, () => this.render(), (why) => this.app.ui.toastError(why))));
@@ -756,12 +759,13 @@ export class InfoPanel {
           inTrainingText(g, b) ? kv('New ships at the Portus', inTrainingText(g, b)) : null,
           h('div', { class: 'muted', style: { fontSize: '12px' } }, trainingNote(g, b)),
           kv('Orders', b.rally ? `Holding the water at ${Math.floor(b.rally.x)}, ${Math.floor(b.rally.y)}` : 'Guarding its berths'),
+          kv('Keys', 'F deploys it'),
           kv('Guards', `raider ships within ${b.rally ? CONFIG.STATION_GUARD_DEPLOYED : CONFIG.STATION_GUARD} tiles (chases ${CONFIG.STATION_CHASE} more)`),
           awayOf(g, b.id).length ? kv('Away', `${awayOf(g, b.id).length} at a distant battle (their berths are kept)`) : null,
           kv('Pay', `${fmt(unit.upkeep * (n + awayOf(g, b.id).length))} Dn / month`),
           h('div', { class: 'muted' }, unit.desc),
           h('div', { class: 'row', style: { marginTop: '6px' } },
-            h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the water where they should go', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
+            h('button', { class: 'btn small primary', disabled: n === 0, title: 'Then click the water where they should go (key: F). Their flag can be dragged afterwards.', onclick: () => this.app.startDeploy(b.id) }, '⚑ Deploy…'),
             h('button', { class: 'btn small', disabled: !b.rally, onclick: () => { recallStation(g, b.id); this.render(); } }, '↩ Recall'),
             serviceButton(g, b, () => this.render())),
           serviceNote(g, b) ? h('div', { class: 'muted', style: { fontSize: '12px' } }, serviceNote(g, b)) : null,
@@ -924,7 +928,7 @@ export class InfoPanel {
       h('div', { class: 'muted' }, def.desc),
       kv('Health', `${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`), bar(Math.max(0, u.hp), u.maxHp),
       kv('Doing', soldierDoing(u, fort)),
-      ours ? kv('Fort', fort ? `${fort.def.name} at ${fort.x}, ${fort.y}${fort.rally ? ' (deployed)' : ''}` : 'None') : null,
+      ours ? kv('Fort', fort ? `${fortTitle(fort)} at ${fort.x}, ${fort.y}${fort.rally ? ' (deployed)' : ''}` : 'None') : null,
       ours ? kv('Training', u.trained ? 'Trained at the Campus' : 'Untrained') : null,
       pack ? kv('Pack', packSummary(g, pack)) : null,
       people && people.mix ? kv('Warband', `makes for ${TARGET_WORDS[inv.target] || 'the nearest buildings'}; breaks when ${pct(1 - people.breaks)} have fallen`) : null,

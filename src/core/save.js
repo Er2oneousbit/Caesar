@@ -186,6 +186,10 @@
  *      sandbox with its events on (or from before them) gets every switch
  *      on, one with them off none, see upgradeEventSwitchesV23(). Campaign
  *      saves store only the mission id and are unchanged.
+ *  25  numbered forts (sim/fortNumbers.js): each fort holds its `number`
+ *      (Castra III; Shift+3 shows it), the lowest free one when it was
+ *      placed. Older saves number their forts 1, 2, 3... in id order, the
+ *      order they were built, see upgradeFortNumbersV24().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -222,6 +226,7 @@ import { eventStateOf } from '../sim/events.js';
 import { sandboxEventSwitches } from '../data/events.js';
 import { log } from './debug.js';
 import { NATIVE_ID_BASE } from '../data/natives.js';
+import { isFort, numberForts } from '../sim/fortNumbers.js';
 
 /** Oldest save version this game can load (4: the 20-level housing ladder). */
 export const MIN_SAVE_VERSION = 4;
@@ -522,6 +527,10 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 21) upgradeTradeSwitchesV20(game);
   if (data.version < 22) upgradeTurnsV21(game);
   if (data.version < 23) upgradeEventsV22(game);
+  if (data.version < 25) upgradeFortNumbersV24(game);
+  // A fort with no number, or a number another fort holds (a hand-edited
+  // file), gets the lowest free one: Shift+N must find one fort only.
+  numberForts(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A hippodrome's sections lie the way its main section says (they were placed so).
@@ -879,6 +888,16 @@ export function upgradeEventSwitchesV23(data) {
   const s = data.scenario;
   if (!s || typeof s !== 'object' || s.id !== 'sandbox' || Array.isArray(s.events)) return data;
   return { ...data, scenario: { ...s, events: sandboxEventSwitches(s.events !== false) } };
+}
+
+/**
+ * A save before version 25 (before numbered forts): its forts are numbered
+ * 1, 2, 3... in id order, the order they were built, as if each had taken
+ * the lowest free number when placed and none had been torn down since.
+ */
+export function upgradeFortNumbersV24(game) {
+  for (const b of game.buildings.values()) if (isFort(b)) b.number = 0;
+  numberForts(game);
 }
 
 /**

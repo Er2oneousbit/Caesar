@@ -6,13 +6,15 @@
  * Mouse:
  *   left click          inspect a building / walker / tile (or place with a tool)
  *   left drag           pan the map (no tool) / drag roads, housing, clearing
+ *   left drag on a      move a deployed fort's or station's rally flag (a
+ *     rally flag        click on it opens its panel); never pans the map
  *   right click         cancel the current tool (or close the info panel)
  *   middle/right drag   pan the map
  *   wheel               zoom toward the cursor (trackpad scrolls add up
  *                       to one zoom level per WHEEL_STEP pixels)
  * Touch:
  *   tap = click, one-finger drag = pan (or tool drag), pinch = zoom,
- *   two-finger drag = pan
+ *   two-finger drag = pan; a drag that starts on a rally flag moves the flag
  * Letting go of a fast drag flings the map: it keeps sliding and slows down
  * (camera.fling). Grabbing the map again stops it.
  * Keyboard shortcuts are listed in KEY_HELP (shown in the in-game Help).
@@ -29,6 +31,7 @@ export const KEY_HELP = [
   ['Left click (no tool)', 'Inspect a building, a walker or a tile'],
   ['Left drag (no tool)', 'Scroll the map; let go while moving to fling it'],
   ['Right click', 'Cancel tool / close panel'],
+  ['Drag a rally flag', 'Move a deployed fort\'s or naval station\'s standard (a click on it opens its panel)'],
   ['Space or P', 'Pause / resume'],
   ['M', 'Music on / off'],
   ['1 2 3 4', `Game speed ${CONFIG.SPEEDS.slice(1).map((v) => `${v}x`).join(', ')}`],
@@ -41,6 +44,8 @@ export const KEY_HELP = [
   ['E', 'Empire map: trade partners, caravans and ships on the way, warbands'],
   [', / .', 'The building before / after the open one of the same kind'],
   ['I / Shift+I', 'Next / previous idle building (not working, or short of goods)'],
+  ['Shift+1 to Shift+9', 'Show fort I to IX and open its panel (again: glide to its standard, if deployed)'],
+  ['F', 'Deploy the fort or naval station whose panel is open (then click where they go; F or Esc cancels)'],
   ['Home', 'Glide to the map entrance'],
   ['F1', 'Help'],
   ['F2', 'Advisors'],
@@ -65,6 +70,7 @@ export class Input {
     this.pan = null; // { sx, sy, id }
     this.pointers = new Map(); // id -> {x, y}
     this.pinch = null;
+    this.flag = null; // a press on a rally flag { id, sx, sy, lx, ly, moved, pointerId }: a click or a drag of the flag
     this.keys = new Set();
     // `game` is the game the pointer last really moved in (null behind menus).
     // Edge scrolling waits for it: when a menu closes (or the page loads) under
@@ -93,7 +99,7 @@ export class Input {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.cancelFlag(); }); // (its release may never come)
   }
 
   get game() { return this.app.game; }
@@ -172,6 +178,9 @@ export class Input {
     this.canvas.setPointerCapture?.(e.pointerId);
     const p = this.localPos(e);
     this.pointers.set(e.pointerId, p);
+    // A flag press whose release never came (lost focus mid-drag) must not
+    // turn this new press into a drop.
+    if (this.pointers.size === 1) this.cancelFlag();
     this.app.renderer.camera.stopMotion(); // grabbing the map stops a fling or glide
     this.flick = { vx: 0, vy: 0, t: e.timeStamp || performance.now() };
     if (this.pointers.size === 2) {
@@ -180,6 +189,7 @@ export class Input {
       this.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
       this.press = null;
       this.drag = null;
+      this.cancelFlag();
       this.refreshPlan();
       return;
     }
@@ -188,6 +198,19 @@ export class Input {
       return;
     }
     if (e.button !== 0) return;
+    // A rally flag under the pointer wins over everything under it: a click
+    // opens its panel, a drag moves it (never the map). Not with a tool in
+    // hand or while picking a deploy point: those clicks are for the tile.
+    // A ship's hull is the one thing that wins over a flag: a squadron holds
+    // the water around its flag and is drawn over it, and the flag's top
+    // still shows above the hulls to be grabbed by.
+    const r0 = this.app.renderer;
+    const flag = this.tool || this.app.deploying ? 0 : r0.pickFlag(p.x, p.y);
+    if (flag && !r0.pickShip?.(p.x, p.y, true)) {
+      this.flag = { id: flag, sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: false, pointerId: e.pointerId };
+      this.canvas.style.cursor = 'grabbing';
+      return;
+    }
     const t = this.tileAt(p);
     if (this.tool && dragMode(this.tool) !== 'single') {
       this.drag = { x0: t.x, y0: t.y, x1: t.x, y1: t.y, id: e.pointerId };
@@ -238,6 +261,18 @@ export class Input {
       this.canvas.style.cursor = 'grabbing';
       return;
     }
+    if (this.flag && this.flag.pointerId === e.pointerId) {
+      const f = this.flag;
+      if (!f.moved && Math.hypot(p.x - f.sx, p.y - f.sy) > CLICK_SLOP) f.moved = true;
+      f.lx = p.x;
+      f.ly = p.y;
+      f.over = this.overCanvas(e);
+      if (f.moved) this.flagDragAt(p);
+    } else if (!this.press && !this.pan && !this.drag && !this.tool && !this.app.deploying && !this.pinch && e.pointerType === 'mouse') {
+      // An open hand over a rally flag says it can be picked up.
+      const r = this.app.renderer;
+      this.canvas.style.cursor = r.pickFlag(p.x, p.y) && !r.pickShip?.(p.x, p.y, true) ? 'grab' : 'crosshair';
+    }
     if (this.press && this.press.id === e.pointerId) {
       if (!this.press.moved && Math.hypot(p.x - this.press.sx, p.y - this.press.sy) > CLICK_SLOP) this.press.moved = true;
       if (this.press.moved && !this.tool) {
@@ -261,6 +296,18 @@ export class Input {
     this.pointers.delete(e.pointerId);
     if (this.pinch) {
       if (this.pointers.size < 2) this.pinch = null;
+      return;
+    }
+    if (this.flag && this.flag.pointerId === e.pointerId) {
+      const f = this.flag;
+      this.cancelFlag();
+      if (cancelled || this.app.blockingModal()) return;
+      if (!f.moved) { this.app.clickFlag(f.id); return; }
+      // Let go over the sidebar or a panel: not on the map, so the flag
+      // stays (the tile hidden under the panel is not what was aimed at).
+      if (!this.overCanvas(e)) return;
+      const t = this.tileAt(this.localPos(e));
+      this.app.dropFlag(f.id, t.x, t.y);
       return;
     }
     if (this.pan && this.pan.id === e.pointerId) {
@@ -320,6 +367,35 @@ export class Input {
     this.app.renderer.camera.zoomStep(-step, p.x, p.y);
   }
 
+  /**
+   * A rally flag being dragged is over CSS point `p`: the renderer draws
+   * its ghost on the map tile there (red where it cannot go).
+   */
+  flagDragAt(p) {
+    const t = this.flag.over === false ? { x: -1, y: -1 } : this.tileAt(p); // (over a panel: no ghost)
+    const d = this.app.renderer.flagDrag;
+    if (d && d.id === this.flag.id && d.x === t.x && d.y === t.y) return;
+    this.app.renderer.flagDrag = { id: this.flag.id, x: t.x, y: t.y };
+  }
+
+  /**
+   * Is the pointer of event `e` over the game view itself, not over the
+   * sidebar, a panel or a button on top of it? (Pointer capture sends the
+   * events of a drag to the canvas wherever the pointer goes.)
+   */
+  overCanvas(e) {
+    if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') return true;
+    return document.elementFromPoint(e.clientX, e.clientY) === this.canvas;
+  }
+
+  /** Drop a flag press or drag without moving the flag (pinch, Esc, pointer cancelled). */
+  cancelFlag() {
+    if (!this.flag) return;
+    this.flag = null;
+    this.app.renderer.flagDrag = null;
+    this.canvas.style.cursor = this.tool ? 'cell' : 'crosshair';
+  }
+
   /** Pan the camera by a drag delta and remember how fast the drag is going. */
   dragPan(dx, dy, e) {
     this.app.renderer.camera.panScreen(dx, dy);
@@ -375,6 +451,7 @@ export class Input {
     const k = e.key;
     // Keys that work even with menus open.
     if (e.code === 'Backquote') { e.preventDefault(); a.toggleConsole(); return; }
+    if (k === 'Escape' && this.flag) { e.preventDefault(); this.cancelFlag(); return; } // a flag being dragged goes back
     if (k === 'Escape') { e.preventDefault(); a.escape(); return; }
     if (k === 'F1') { e.preventDefault(); a.ui.openHelp(); return; }
     if (!a.game || a.blockingModal()) return;
@@ -385,6 +462,17 @@ export class Input {
     if (k === 'F9') { e.preventDefault(); a.quickLoad(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { e.preventDefault(); a.undo(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Shift+1..9: fort 1..9 (app.showFort). By the key's place (e.code), not
+    // the character it types: Shift+1 is "!" on one keyboard and "1" on
+    // another, and on those "1" must not also set the game speed.
+    if (e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+      e.preventDefault();
+      if (!e.repeat) a.showFort(Number(e.code.slice(5)));
+      return;
+    }
+    // Game speed by the key's place too: on a keyboard whose top row types
+    // "&" unshifted (AZERTY), Shift gave the digits and now shows forts.
+    if (!e.shiftKey && /^Digit[1-4]$/.test(e.code)) { a.setSpeed(Number(e.code.slice(5))); return; }
     switch (k) {
       case ' ': case 'p': case 'P': e.preventDefault(); a.togglePause(); break;
       case '1': a.setSpeed(1); break;
@@ -392,6 +480,7 @@ export class Input {
       case '3': a.setSpeed(3); break;
       case '4': a.setSpeed(4); break;
       case 'h': case 'H': a.ui.selectTool('house'); break;
+      case 'f': case 'F': if (!e.repeat) a.deployKey(); break; // held, it would flick deploy mode on and off
       case 'r': case 'R': this.onTurnKey(); break; // turn the building in hand, else the Road tool
       // The view: the city a quarter turn clockwise, or back. Once a press:
       // held, the key would spin the city at the keyboard's repeat rate.
@@ -426,7 +515,7 @@ export class Input {
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) dy += speed;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) dy -= speed;
     // Edge scrolling only after a real pointer move on this map (see this.mouse).
-    if (this.app.settings.edgeScroll && this.mouse.over && this.mouse.game === this.game && !this.pan && !this.press) {
+    if (this.app.settings.edgeScroll && this.mouse.over && this.mouse.game === this.game && !this.pan && !this.press && !this.flag) {
       const r = this.canvas.getBoundingClientRect();
       const m = CONFIG.EDGE_SCROLL_PX;
       if (this.mouse.x < m) dx += speed;
@@ -435,5 +524,8 @@ export class Input {
       else if (this.mouse.y > r.height - m) dy -= speed;
     }
     if (dx || dy) cam.panScreen(dx, dy);
+    // The map moved (keys, a zoom) under a flag being dragged: its ghost
+    // follows the tile now under the pointer.
+    if (this.flag && this.flag.moved) this.flagDragAt({ x: this.flag.lx, y: this.flag.ly });
   }
 }

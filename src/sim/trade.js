@@ -51,7 +51,7 @@ import { CONFIG } from '../config.js';
 import { GOODS, GOOD_KEYS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { BUILDINGS } from '../data/buildings.js';
-import { spawnWalker, killWalker } from './entities.js';
+import { spawnWalker, killWalker, shoreWaterAt } from './entities.js';
 import { followPath, walkTo, goHome } from './movement.js';
 import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage, receiveGoods, storageByRoad, isStable, stableRoom, stablesOf } from './storage.js';
 import { militaryNeed } from './military.js';
@@ -292,7 +292,7 @@ function ranchesNear(game, wh) {
 export function dockBerth(game, dock) {
   const map = game.map;
   if (dock.berth === undefined || dock.berth < 0 || !map.navigable[dock.berth]) {
-    dock.berth = map.navigableBeside(dock.x, dock.y, dock.size);
+    dock.berth = shoreWaterAt(map, dock.def, dock.x, dock.y, dock.size); // (its side right at the water's edge)
     if (dock.berth >= 0) {
       const bx = map.xOf(dock.berth);
       const by = map.yOf(dock.berth);

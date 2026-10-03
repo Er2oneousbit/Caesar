@@ -30,7 +30,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
-import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward, spanLayout, spanOrigin } from './entities.js';
+import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward, spanLayout, spanOrigin, waterEdge } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
 import { cityStock } from './storage.js';
@@ -38,7 +38,7 @@ import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { waterBeside } from './fishing.js';
 import { clearRuin, restoreRuin, ruinAt } from './ruins.js';
 import { residenceOf } from './governor.js';
-import { archesToBuild } from './battle.js';
+import { archesToBuild, postsAway } from './battle.js';
 import { boatTiles, lowBridgeCuts, refreshWaterways } from './bridges.js';
 import { nativeLandWarning } from './natives.js';
 
@@ -69,6 +69,74 @@ export function placedTurn(type, turn) {
   return turnRule(type) ? 0 : (Number(turn) || 0) & 3;
 }
 
+/**
+ * Buildings with no front to turn toward a road (roadTurn): those drawn the
+ * same from every side (render/buildingArt.js SAME_EVERY_WAY), and the
+ * hippodrome, whose turn lays its row of sections along x or y, a choice
+ * of ground the player makes with R. Every other building's art puts its
+ * door, gate, porch or open side on the +y face at turn 0 (the front-left
+ * face on the screen: draw.js door(ctx, 'left', ...), the temples'
+ * pediments, the forts' gates, the governor's porch), so that is its front.
+ * A building drawn with its front elsewhere gets its side here (0 = -y,
+ * 1 = +x, 2 = +y, 3 = -x, as sim/entities.js sideToward).
+ */
+const FRONT_SIDE = {
+  well: null, fountain: null, reservoir: null, amphitheater: null, colosseum: null, oracle: null, statue_small: null,
+  hippodrome: null,
+};
+
+/** The side a building's front is drawn on at turn 0, or null for one with no front (FRONT_SIDE). */
+export function frontSide(type) {
+  return type in FRONT_SIDE ? FRONT_SIDE[type] : 2;
+}
+
+/** The sides of a footprint (0 = -y, 1 = +x, 2 = +y, 3 = -x) with a road just past them (corners do not count). */
+export function roadSides(map, x, y, S) {
+  const out = [];
+  for (let side = 0; side < 4; side++) {
+    for (let d = 0; d < S; d++) {
+      const tx = side === 1 ? x + S : side === 3 ? x - 1 : x + d;
+      const ty = side === 0 ? y - 1 : side === 2 ? y + S : y + d;
+      if (map.inBounds(tx, ty) && map.road[map.idx(tx, ty)]) { out.push(side); break; }
+    }
+  }
+  return out;
+}
+
+/**
+ * The turn that faces a building held over cursor tile (cx, cy) toward its
+ * road, or null: when exactly one side of its footprint has a road along it
+ * (with roads on two sides or more, or none, it is the player's choice).
+ * Only for a building placed one at a time that the player may turn and
+ * that has a front (FRONT_SIDE): homes and other buildings painted over an
+ * area keep the turn in hand. A turn takes the art's side f to (f + turn) & 3
+ * (render/turn.js: turn 1 takes +x to +y).
+ */
+export function roadTurn(game, type, cx, cy) {
+  const def = BUILDINGS[type];
+  if (!def || !def.size || turnRule(type) || isAreaBuilding(type)) return null;
+  const front = frontSide(type);
+  if (front === null) return null;
+  const a = anchorFor(type, cx, cy, 0);
+  const sides = roadSides(game.map, a.x, a.y, def.size);
+  return sides.length === 1 ? (sides[0] - front) & 3 : null;
+}
+
+/**
+ * Why building `b` may not be demolished now, or null if it may: a fort
+ * whose soldiers, or a Naval Station whose ships, are away at a distant
+ * battle, on their way out of the province or on their way home
+ * (sim/battle.js postsAway). Clearing it used to release them there and
+ * then (sim/military.js disbandFort); raiders or an earthquake bringing it
+ * down still do.
+ */
+export function demolishBlocked(game, b) {
+  const kind = b?.def.kind;
+  if (kind !== 'fort' && kind !== 'station') return null;
+  if (!postsAway(game).has(b.id)) return null;
+  return `Its ${kind === 'station' ? 'ships' : 'soldiers'} are away at a distant battle: recall them or wait for them to come home`;
+}
+
 /** How a tool is dragged: 'single' | 'area' | 'path' | 'line'. */
 export function dragMode(tool) {
   if (TOOLS[tool]) return TOOLS[tool].drag;
@@ -87,6 +155,15 @@ export function dragMode(tool) {
  */
 export const NO_ROAD_WARNING = 'No road touches it: it gets no workers and does nothing until a road runs along one of its edges (a corner does not count)';
 export const HOUSE_NO_ROAD_WARNING = 'Too far from a road: settlers cannot reach it (a home needs a road within 2 tiles)';
+
+/**
+ * Why a waterside building that touches its water only in part may not go
+ * there (sim/entities.js waterEdge): its quay, slip or mooring runs the
+ * whole length of the side that faces the water, so no strip of land may
+ * lie between that side and the water (playtest: docks stood back from the
+ * shore with a beach in front, touching the water at one corner tile).
+ */
+export const WATER_EDGE_REASON = 'Must stand right at the water\'s edge: one whole side on the water, with no land between it and the water';
 
 /** The no-road warning to show by the cursor for a plan, or null when every spot has a road. */
 export function planNoRoadWarning(plan) {
@@ -157,16 +234,18 @@ export function checkBuilding(game, type, x, y, turn = 0) {
       break;
     case 'shore': {
       if (!map.seaEntry) return fail('No river or sea here reaches the map edge: ships cannot come to this province', cost);
-      const i = map.navigableBeside(x, y, S);
-      if (i < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
-      out.water = i;
+      if (map.navigableBeside(x, y, S) < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
+      const edge = waterEdge(map, def, x, y, S);
+      if (!edge) return fail(WATER_EDGE_REASON, cost);
+      out.water = edge.water;
       break;
     }
     case 'fishingShore': {
-      const i = map.fishWaterBeside(x, y, S);
-      if (i < 0) return fail('Must touch the bank of a river, the sea or a big lake (a pond has no fish)', cost);
-      if (def.kind === 'wharf' && !map.groundsOf(map.fishBody[i]).length) return fail('No fish in this water', cost);
-      out.water = i;
+      if (map.fishWaterBeside(x, y, S) < 0) return fail('Must touch the bank of a river, the sea or a big lake (a pond has no fish)', cost);
+      const edge = waterEdge(map, def, x, y, S);
+      if (!edge) return fail(WATER_EDGE_REASON, cost);
+      if (def.kind === 'wharf' && !map.groundsOf(map.fishBody[edge.water]).length) return fail('No fish in this water', cost);
+      out.water = edge.water;
       break;
     }
     default:
@@ -348,8 +427,11 @@ function ghostState(game, def, x, y, water) {
  * Build a preview plan for a tool drag from (x0,y0) to (x1,y1).
  * For single buildings (x1,y1) is the cursor tile. `turn`: quarter turns
  * of the building being placed (R; ignored for what turns itself, turnRule).
+ * `auto`: the player has not turned it by hand, so a building with a road
+ * along just one side turns its front to that road (roadTurn) and the plan
+ * says so (`autoTurned`); elsewhere it keeps `turn`.
  */
-export function planAction(game, tool, x0, y0, x1, y1, turn = 0) {
+export function planAction(game, tool, x0, y0, x1, y1, turn = 0, { auto = false } = {}) {
   const mode = dragMode(tool);
   if (tool === 'road' || tool === 'aqueduct' || tool === 'wall') return planPath(game, tool, x0, y0, x1, y1);
   if (tool === 'plaza') return planPlaza(game, x0, y0, x1, y1);
@@ -359,7 +441,8 @@ export function planAction(game, tool, x0, y0, x1, y1, turn = 0) {
   if (mode === 'area') return planBuildingArea(game, tool, x0, y0, x1, y1, placedTurn(tool, turn));
   // Single building
   const def = BUILDINGS[tool];
-  const t = def ? placedTurn(tool, turn) : 0;
+  const toRoad = auto ? roadTurn(game, tool, x1, y1) : null;
+  const t = def ? placedTurn(tool, toRoad ?? turn) : 0;
   const a = anchorFor(tool, x1, y1, t);
   const chk = checkBuilding(game, tool, a.x, a.y, t);
   const S = def?.size || 1;
@@ -377,6 +460,7 @@ export function planAction(game, tool, x0, y0, x1, y1, turn = 0) {
     tool,
     kind: 'building',
     turn: t,
+    autoTurned: toRoad !== null,
     items,
     cost: chk.ok ? chk.cost : 0,
     count: chk.ok ? 1 : 0,
@@ -682,6 +766,14 @@ function planClear(game, x0, y0, x1, y1) {
         items.push({ x: b.x, y: b.y, size: b.size, ok: false, reason: 'A native village is not yours to clear', cost: 0 });
         continue;
       }
+      const away = seen.has(id) ? null : demolishBlocked(game, buildings.get(id));
+      if (away) {
+        // A fort or station with its men away: it stands until they are home.
+        const b = buildings.get(id);
+        seen.add(id);
+        items.push({ x: b.x, y: b.y, size: b.size, ok: false, reason: away, cost: 0, away: true });
+        continue;
+      }
       if (!seen.has(id)) {
         // A hippodrome comes down whole: show every section it takes with it.
         const b = buildings.get(id);
@@ -723,7 +815,12 @@ function planClear(game, x0, y0, x1, y1) {
     }
   }
   if (evicted > 0) warnings.push(`${evicted} residents will lose their homes`);
-  return { tool: 'clear', kind: 'area', items, cost, count, warnings, reason: count === 0 ? 'Nothing to clear here' : null };
+  // A fort or station left standing says why, even beside things that are
+  // cleared; with nothing to clear, so does whatever here may not be cleared.
+  const away = items.find((it) => it.away);
+  if (away && count > 0) warnings.push(away.reason);
+  const refused = items.find((it) => !it.ok && it.reason);
+  return { tool: 'clear', kind: 'area', items, cost, count, warnings, reason: count === 0 ? refused?.reason || 'Nothing to clear here' : null };
 }
 
 // ---------------------------------------------------------------------------
@@ -750,10 +847,13 @@ export function applyPlan(game, plan) {
 
   let lowChanged = false; // a low bridge built or cleared: the boats' water changes
   if (plan.tool === 'clear') {
+    let refused = null; // why a building in the plan was left standing after all
     for (const it of plan.items) {
       if (!it.ok) continue;
       if (it.building) {
         const b = game.buildings.get(it.building);
+        const away = demolishBlocked(game, b);
+        if (away) { refused = away; continue; } // (men sent off since the preview was made)
         if (b) { done += linkedGroup(game, b).length; removeBuilding(game, b, 'demolish'); } // a hippodrome: all its sections
       } else if (it.road) {
         const i = map.idx(it.x, it.y);
@@ -781,12 +881,15 @@ export function applyPlan(game, plan) {
         done++;
       }
     }
+    // Nothing cleared after all (a fort's men sent off since the preview):
+    // nothing changed, so the last undo and the quiet stay as they were.
+    if (done === 0) return { ok: false, count: 0, cost: 0, reason: refused || plan.reason || 'Not enough money' };
     if (spent > 0) transact(game, 'construction', -spent);
     if (lowChanged) refreshWaterways(game); // boats may pass where a low bridge stood
     game.onMapEdited();
     game.lastUndo = null;
     game.events.emit('sound', { name: 'demolish' });
-    return { ok: done > 0, count: done, cost: spent };
+    return { ok: true, count: done, cost: spent };
   }
 
   if (plan.tool === 'roadblock') {
@@ -908,13 +1011,17 @@ export function canUndo(game) {
     const b = game.buildings.get(op.id);
     if (!b) return false;
     if (b.house && (b.house.pop > 0 || b.house.incoming > 0)) return false;
+    if (demolishBlocked(game, b)) return false; // (an undo takes it down too: not with its men away)
   }
   return true;
 }
 
 /** Undo the last construction with a full refund. */
 export function undoLast(game) {
-  if (!canUndo(game)) return { ok: false, reason: 'Nothing to undo' };
+  if (!canUndo(game)) {
+    const away = (game.lastUndo?.ops || []).map((op) => op.op === 'building' && demolishBlocked(game, game.buildings.get(op.id))).find(Boolean);
+    return { ok: false, reason: away || 'Nothing to undo' };
+  }
   const u = game.lastUndo;
   const { map } = game;
   let lowChanged = false;

@@ -23,6 +23,7 @@
 
 import { CONFIG } from '../config.js';
 import { dragMode, planAction, turnRule } from '../sim/construction.js';
+import { postsAway } from '../sim/battle.js';
 import { BUILDINGS } from '../data/buildings.js';
 
 export const KEY_HELP = [
@@ -82,6 +83,15 @@ export class Input {
     // The turn the player gave each kind of building (R), kept for the next
     // one of that kind for the rest of the session.
     this.turns = {};
+    // The tool the player turned by hand (R) since he took it up, or null.
+    // Until he does, a building with a road along one side only turns its
+    // front to that road by itself (sim/construction.js roadTurn); once he
+    // does, his turn holds until he picks another tool.
+    this.handTurned = null;
+    // The last building plan shown { tool, turn, auto }: kept when the ghost
+    // goes (the pointer left the map for the build panel's Turn button), so
+    // the button turns on from what the player last saw, as R does.
+    this.lastShown = null;
     this.wheelAcc = 0; // wheel delta not yet turned into a zoom step
     this.flick = { vx: 0, vy: 0, t: 0 }; // drag velocity (CSS px/s) for the fling on release
     this.bind();
@@ -108,6 +118,8 @@ export class Input {
   setTool(key) {
     if (key) this.app.cancelDeploy?.();
     this.tool = key || null;
+    this.handTurned = null; // (a new tool: the road decides again until R)
+    this.lastShown = null;
     this.drag = null;
     this.planKey = '';
     this.app.renderer.tool = this.tool;
@@ -143,7 +155,12 @@ export class Input {
       this.app.ui.toastError?.(why);
       return false;
     }
-    this.turns[tool] = (this.turnFor(tool) + 1) & 3;
+    // A quarter turn on from what the ghost shows: the turn the road gave
+    // it, if it took one, else the turn kept for this kind.
+    const seen = this.lastShown;
+    const shown = this.handTurned !== tool && seen && seen.tool === tool && seen.auto ? seen.turn : this.turnFor(tool);
+    this.turns[tool] = (shown + 1) & 3;
+    this.handTurned = tool;
     // The build panel first (it starts a fresh plan box), then the plan it shows.
     this.app.ui.onTurnChanged?.(tool, this.turns[tool]);
     this.planKey = '';
@@ -427,11 +444,17 @@ export class Input {
     else if (this.hover && this.mouse.over) { x0 = x1 = this.hover.x; y0 = y1 = this.hover.y; }
     else { r.plan = null; this.app.ui.onPlanChanged(null); return; }
     const turn = this.turnFor(this.tool);
-    const key = `${this.tool}:${x0},${y0},${x1},${y1}:${this.game.map.revision}:${Math.floor(this.game.city.treasury)}:${turn}`;
+    const auto = this.handTurned !== this.tool; // (the road may turn it: map.revision in the key covers new roads)
+    // The clear tool also hangs on which forts and stations have men away
+    // (sim/construction.js demolishBlocked): one whose men came home while
+    // the cursor stood still is planned again at the next press.
+    const away = this.tool === 'clear' ? [...postsAway(this.game)].join(',') : '';
+    const key = `${this.tool}:${x0},${y0},${x1},${y1}:${this.game.map.revision}:${Math.floor(this.game.city.treasury)}:${turn}:${auto}:${away}`;
     if (key === this.planKey) return;
     this.planKey = key;
     try {
-      r.plan = planAction(this.game, this.tool, x0, y0, x1, y1, turn);
+      r.plan = planAction(this.game, this.tool, x0, y0, x1, y1, turn, { auto });
+      if (r.plan && r.plan.kind === 'building' && r.plan.tool === this.tool) this.lastShown = { tool: this.tool, turn: r.plan.turn, auto: !!r.plan.autoTurned };
     } catch (err) {
       this.app.log.error('Planning failed:', err);
       r.plan = null;

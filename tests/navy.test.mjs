@@ -24,7 +24,7 @@ import { findDeliveryTarget } from '../src/sim/storage.js';
 import { spawnUnit, updateMilitary, militaryMonthly, militaryDaily, launchInvasion, enemyCount, fillField, threatSummary, seaRaidsFor } from '../src/sim/military.js';
 import {
   seaRaidPlan, seaRoll, findLanding, updateNavalia, updateNavalDemand, navalNeed, squadron, squadronCounts,
-  deployStation, recallStation, stationSpots, shoreBerth, waterOf,
+  deployStation, recallStation, stationSpots, shoreBerth, waterOf, nearestBuilding,
 } from '../src/sim/navy.js';
 import { buildDemoCity, buildDemoNavy, buildDemoFishery } from '../src/dev/demoCity.js';
 import { newGame } from './helpers.mjs';
@@ -203,10 +203,15 @@ test('raider ships: fire pots sink a fishing boat and burn into a building by th
   game.military.active = { id: 99, origin: { x: 0, y: 0 }, size: 1, killed: 0, buildingsLost: 0, startDay: 0, fleeing: false, reached: false, sea: true, landed: true, landedDay: 0 };
   // A wharf by the water and a raider ship 3 tiles off it.
   const fish = buildDemoFishery(game, center, { wharves: 1 });
-  const b = fish.wharves[0];
-  assert.ok(b && map.navigableBeside(b.x, b.y, b.size) >= 0, 'a building by the shore');
-  const w = seaTileNear(game, b.x, b.y, 3);
+  const wharf = fish.wharves[0];
+  assert.ok(wharf && map.navigableBeside(wharf.x, wharf.y, wharf.size) >= 0, 'a building by the shore');
+  const w = seaTileNear(game, wharf.x, wharf.y, 3);
   const ship = spawnUnit(game, 'raider_ship', w.x + 0.5, w.y + 0.5, { invasion: 99, state: 'offshore', crew: [], pots: 2 });
+  // The pot after the boat's goes into the building nearest the ship: the
+  // wharf, or the shipyard beside it (which of them depends on where the
+  // fishery stands on this shore).
+  const b = nearestBuilding(game, ship, UNIT_TYPES.raider_ship.range)?.b;
+  assert.ok(b && map.navigableBeside(b.x, b.y, b.size) >= 0, `a building by the shore in reach (${b?.type})`);
   // A fishing boat beside the ship first: it is the first target.
   const boatTile = seaTileNear(game, w.x, w.y, 1);
   const boat = spawnWalker(game, 'fishing_boat', map.idx(boatTile.x, boatTile.y), null, { state: 'moored', body: map.fishBody[map.idx(boatTile.x, boatTile.y)] });

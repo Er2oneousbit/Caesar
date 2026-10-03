@@ -166,6 +166,8 @@ export class Sidebar {
       if (plan.fertility !== undefined) parts.push(h('div', { class: plan.fertility >= 0.75 ? 'ok' : 'warn' }, `Fertility: ${Math.round(plan.fertility * 100)}%`));
     }
     if (plan.reason && plan.count === 0) parts.push(h('div', { class: 'err' }, plan.reason));
+    // Turned by itself to the one road along it (sim/construction.js roadTurn).
+    if (plan.autoTurned) parts.push(h('div', { class: 'muted', dataset: { autoTurn: String(plan.turn) } }, 'Faces the road beside it (R to turn it yourself)'));
     // No road in reach: in the error style, because the building would do nothing.
     const noRoad = planNoRoadWarning(plan);
     for (const w of plan.warnings || []) parts.push(h('div', { class: w === noRoad ? 'err' : 'warn' }, `⚠ ${w}`));

@@ -41,7 +41,7 @@ import { farmDormant, daysToNextMare, stablesFull } from '../sim/production.js';
 import { moodWord, moodReasonText, criminalText, crimeBand } from './crimeInfo.js';
 import { homeHealth, sickText, noDiseaseText } from './healthInfo.js';
 import { ruinAt } from '../sim/ruins.js';
-import { rebuildPlan } from '../sim/construction.js';
+import { rebuildPlan, demolishBlocked } from '../sim/construction.js';
 import { cutOffNote } from '../sim/bridges.js';
 import { villageStatus, villageRows, missionRows } from '../sim/natives.js';
 import { lacksRoad } from '../sim/roadAccess.js';
@@ -493,14 +493,24 @@ export class InfoPanel {
   }
 
   demolishButton(g, b) {
+    // A fort or station with its men away stands until they are home: the
+    // button is greyed out and says why (sim/construction.js demolishBlocked).
+    const away = demolishBlocked(g, b);
     return h('div', { class: 'panel-sec row' },
       h('button', {
         class: 'btn danger small',
+        disabled: !!away,
+        title: away,
+        dataset: { blocked: away ? '1' : '' }, // (for the smoke test)
         onclick: () => {
+          const why = demolishBlocked(g, b);
+          if (why) { this.app.ui.toastError(why); return; }
           const people = b.house ? b.house.pop : 0;
           const msg = people > 0 ? `Demolish this home? ${people} residents will become homeless.` : `Demolish this ${b.house ? 'home' : b.def.name}?`;
           this.app.ui.confirm(msg, () => {
             if (!g.buildings.has(b.id)) return;
+            const late = demolishBlocked(g, b); // (sent off while the question was up)
+            if (late) { this.app.ui.toastError(late); return; }
             removeBuilding(g, b, 'demolish');
             g.onMapEdited();
             this.app.sfx.play('demolish');
@@ -508,7 +518,8 @@ export class InfoPanel {
           }, { title: 'Demolish', yes: 'Demolish', danger: true });
         },
       }, '⛏ Demolish'),
-      h('span', { class: 'muted', style: { fontSize: '12px' } }, `#${b.id} at ${b.x},${b.y}`));
+      // (said in words too: a touch screen shows no tooltip)
+      h('span', { class: 'muted', style: { fontSize: '12px' } }, away ? `${away}.` : `#${b.id} at ${b.x},${b.y}`));
   }
 
   renderHouse(g, b) {

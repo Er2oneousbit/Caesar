@@ -13,6 +13,15 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.8)
+
+* **A high ship bridge**: the Pons stands 33 px over the water on stone arches with cutwaters, so a merchant ship's mast passes under it, and ramps down to the land road at each bank (over a tile and a half, starting mid-tile so a side road meets it level); walkers, carts, soldiers and rally flags follow the ramps. The low bridge gets short ramps over its first and last half tile
+* **Untrained soldiers go to train**: a fort at rest sends one untrained man at a time from its yard to the nearest fully staffed Military Academy a soldier can walk to; he trains 16 days and comes back trained, never leaving the fort's last man behind. A raid, a deployment or a distant battle calls him back at once. Ships at their berths take turns at the Portus the same way. The fort panel says "5 of 8 trained, 1 at the Campus"
+* **Nobody is shut inside a new building**: soldiers, raiders, wolves, villagers and anyone waiting off the roads step aside when a building or wall goes up where they stand
+* Saves: version 29 (a soldier on a trip in a save from before version 16 comes home untrained)
+* Headless sim: every level identical to v0.18.7 (the demo city never fully staffs its academy)
+* 991 unit tests, 204 browser checks
+
 ## Done (v0.18.7)
 
 * **Fires are fought one building at a time**: a prefect stands at one burning building for half a day, throwing water, then takes the next within 4 tiles that nobody fights, or runs to the nearest within 24; the fire keeps spreading from every building still burning meanwhile. One prefect is called per burning building, and a prefecture with 3 of its own on fire duty sends no more (the next in reach does). A burning ruin's panel says when a prefect is putting it out

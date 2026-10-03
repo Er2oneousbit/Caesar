@@ -1472,6 +1472,42 @@ try {
     app.paused = true;
   }, pauseWas);
 
+  // 5a5b. Prefects put fires out one building at a time (sim/risk.js): a
+  //       home set alight in the running game calls a prefect, who stands
+  //       at it throwing water (drawn without errors), and the burning
+  //       ruin's panel says it is being put out.
+  const douseWas = await page.evaluate(() => ({ speed: window.colonia.speedIndex }));
+  const douseErrors = errors.length;
+  const torch3 = await lightAHome(3);
+  const lit3 = torch3 ? await burnt() : false;
+  const fought = lit3 ? await page.waitForFunction(() => {
+    const g = window.colonia.game;
+    const p = [...g.walkers.values()].find((w) => w.type === 'prefect' && w.state === 'extinguish' && g.fires.has(w.fireTile));
+    if (!p) return null;
+    window.colonia.paused = true;
+    return { id: p.id, tile: p.fireTile };
+  }, null, { timeout: 30000, polling: 50 }).then((h) => h.jsonValue(), () => null) : null;
+  let douse = null;
+  if (fought) {
+    await page.waitForTimeout(200); // a few frames drawn with him at work
+    douse = await page.evaluate((f) => {
+      const app = window.colonia;
+      const { map } = app.game;
+      app.ui.info.showTile(map.xOf(f.tile), map.yOf(f.tile));
+      const text = document.querySelector('#info-panel')?.textContent || '';
+      app.ui.info.close();
+      return { text: text.slice(0, 300) };
+    }, fought);
+  }
+  check('a prefect fights a burning building and its panel says "Being put out by a prefect"',
+    !!fought && /Being put out by a prefect/.test(douse?.text || '') && errors.length === douseErrors, JSON.stringify({ torch3, lit3, fought, douse, errors: errors.slice(douseErrors, douseErrors + 3) }));
+  await page.evaluate((was) => {
+    const app = window.colonia;
+    app.game.fires.clear();
+    app.setSpeed(was.speed);
+    app.paused = true;
+  }, douseWas);
+
   // 5a6. Cycling buildings (ui/cycle.js): a panel's arrows (and , and .) go
   //      to the previous / next building of its kind by id; "Next idle" to
   //      the next one of the kind that is not working; I goes through the

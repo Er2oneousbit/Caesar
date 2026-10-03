@@ -543,6 +543,7 @@ function strike(game, q, i) {
   map.rubble[i] = 0;
   clearRuin(game, i);
   game.fires.delete(i);
+  game.fireGroups.delete(i);
   map.terrain[i] = Terrain.ROCK;
   game.lastUndo = null; // (an undo could put back what the crack took)
   // Desirability reads trees and rubble as well as buildings, so it is

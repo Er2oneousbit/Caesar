@@ -186,6 +186,11 @@
  *      sandbox with its events on (or from before them) gets every switch
  *      on, one with them off none, see upgradeEventSwitchesV23(). Campaign
  *      saves store only the mission id and are unchanged.
+ *  25  festivals cost goods and the gods mind being forgotten
+ *      (sim/religion.js): each god in city.gods has `monthsSinceFestival`
+ *      (its mood target falls once it passes a year) and `festivalsHeld`.
+ *      Older saves load as a new game starts: every god at 0 months, a
+ *      fresh year, with none held yet, see upgradeFestivalsV24().
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -522,6 +527,7 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 21) upgradeTradeSwitchesV20(game);
   if (data.version < 22) upgradeTurnsV21(game);
   if (data.version < 23) upgradeEventsV22(game);
+  if (data.version < 25) upgradeFestivalsV24(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A hippodrome's sections lie the way its main section says (they were placed so).
@@ -864,6 +870,20 @@ export function upgradeTurnsV21(game) {
  */
 export function upgradeEventsV22(game) {
   eventStateOf(game.city);
+}
+
+/**
+ * A save before version 25 (festivals that cost goods, gods that mind being
+ * forgotten): every god starts as in a new game, 0 months since a festival
+ * and none held, so no god of an older city is neglected for a year. A god
+ * the save lacks starts afresh anyway (the Game constructor).
+ */
+export function upgradeFestivalsV24(game) {
+  for (const s of Object.values(game.city.gods || {})) {
+    if (!s || typeof s !== 'object') continue;
+    s.monthsSinceFestival = 0;
+    s.festivalsHeld = 0;
+  }
 }
 
 /**

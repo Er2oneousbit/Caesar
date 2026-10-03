@@ -8,7 +8,8 @@
  * is rebuilt, as a player would. For each mission and difficulty it prints what
  * the city would have needed to start with to never owe (building plus the
  * running losses before it pays its way) against what the difficulty gives,
- * and how it was doing at the end. Each difficulty has an intent (see
+ * and how it was doing at the end (gods: blessings and wraths in the run).
+ * Each difficulty has an intent (see
  * INTENT); read the margins against it.
  *
  * A map where the demo city could not pipe water (no shore in reach, or no
@@ -52,12 +53,12 @@ function run(mission, difficulty) {
 const pad = (v, n) => String(v).padStart(n);
 console.log(`Balance sweep: level 3 demo city, ${years} years. Margin = what the difficulty gives - the most the city was ever out of pocket.`);
 for (const d of difficulties) console.log(`  ${d.padEnd(7)} ${INTENT[d] || ''}`);
-console.log('\n mission difficulty   funds    need  margin  debt  last yr/mo    pop  tier  mood  peace  fires  rebuilt  thieves  outbreaks  water');
+console.log('\n mission difficulty   funds    need  margin  debt  last yr/mo    pop  tier  mood  peace  fires  rebuilt  thieves  outbreaks  gods +/-  water');
 for (const m of missions) {
   for (const d of difficulties) {
     const j = run(m, d);
     const mo = j.money;
     const water = j.water && j.water.fountains ? (j.water.wet === j.water.fountains ? 'yes' : j.water.wet ? 'part' : 'no water') : 'no water';
-    console.log(` ${m.padEnd(7)} ${d.padEnd(10)} ${pad(mo.funds, 6)} ${pad(mo.need, 7)} ${pad(mo.margin, 7)} ${pad(mo.debtMonth ?? '-', 5)} ${pad(mo.lastYearMonthly, 10)} ${pad(j.population, 6)} ${pad(j.avgTier.toFixed(1), 5)} ${pad(j.sentiment, 5)} ${pad(Math.floor(j.ratings.peace), 6)} ${pad(j.stats.fires, 6)} ${pad(mo.rebuilt, 8)} ${pad(j.crime.thieves, 8)} ${pad(j.health.outbreaks, 10)}  ${water}`);
+    console.log(` ${m.padEnd(7)} ${d.padEnd(10)} ${pad(mo.funds, 6)} ${pad(mo.need, 7)} ${pad(mo.margin, 7)} ${pad(mo.debtMonth ?? '-', 5)} ${pad(mo.lastYearMonthly, 10)} ${pad(j.population, 6)} ${pad(j.avgTier.toFixed(1), 5)} ${pad(j.sentiment, 5)} ${pad(Math.floor(j.ratings.peace), 6)} ${pad(j.stats.fires, 6)} ${pad(mo.rebuilt, 8)} ${pad(j.crime.thieves, 8)} ${pad(j.health.outbreaks, 10)} ${pad(j.gods ? `+${j.gods.blessings}/-${j.gods.wraths}` : '-', 9)}  ${water}`);
   }
 }

@@ -77,6 +77,14 @@ const MENU_ORBIT_SPEED = 0.04;
 /** The menu backdrop's map: room around its town so the view stays on land. */
 const MENU_MAP_SIZE = 96;
 const MENU_ZOOM = 2; // CONFIG.ZOOM_LEVELS index: 1x
+/**
+ * Days of festival music after a festival (about a minute at 1x). It used to
+ * play while the festival's mood boost lasted, but small festivals for each
+ * god in turn (every 2 months) keep that boost up for good, and the music
+ * with it; this way a festival every 2 months still leaves some days of
+ * ordinary music between them.
+ */
+const FESTIVAL_MUSIC_DAYS = 24;
 
 export class App {
   /**
@@ -289,6 +297,7 @@ export class App {
     this.menuGame = null;
     this.game = game;
     this.musicOverride = null;
+    this.festivalDay = null; // the game day of the last festival held this session (not saved: music only)
     this.acc = 0;
     this.renderer.attach(game);
     if (cameraState) this.renderer.camera.restore(cameraState);
@@ -296,7 +305,10 @@ export class App {
     const ev = game.events;
     this.gameUnsub.push(
       ev.on('message', (m) => this.onGameMessage(m)),
-      ev.on('sound', ({ name }) => this.sfx.play(name)),
+      ev.on('sound', ({ name }) => {
+        this.sfx.play(name);
+        if (name === 'festival') this.festivalDay = game.time.totalDays; // (musicMood)
+      }),
       ev.on('victory', () => this.onVictory()),
       ev.on('defeat', ({ reason }) => this.onDefeat(reason)),
       ev.on('month', () => this.onMonth()),
@@ -454,7 +466,7 @@ export class App {
     if (!g) return 'menu';
     if (this.musicOverride) return this.musicOverride;
     if (g.military && (g.military.active || enemyCount(g) > 0)) return 'danger';
-    if (g.city.festivalBoost >= 2.5) return 'festival';
+    if (this.festivalDay !== null && g.time.totalDays - this.festivalDay < FESTIVAL_MUSIC_DAYS) return 'festival';
     if (this.renderer.sky.lamps >= 0.6) return 'night';
     return 'day';
   }

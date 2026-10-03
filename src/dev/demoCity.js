@@ -28,6 +28,9 @@ import { CONFIG } from '../config.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { deployFort, recallFort } from '../sim/military.js';
+import { holdFestival, festivalBlocked, festivalMeans, festivalNeeds, SMALL_TOWN } from '../sim/religion.js';
+import { GOD_KEYS } from '../data/gods.js';
+import { FOOD_TYPES } from '../data/goods.js';
 
 /** Undo records of the builds made inside the current attempt() (null outside one). */
 let recording = null;
@@ -274,6 +277,37 @@ export function buildDemoCity(game, opts = {}) {
   const q = at(W - 1, D - 1);
   const bounds = { x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y) };
   return { ok: true, center: c, farms, bounds, firstId };
+}
+
+/**
+ * The demo city's festivals, as a sensible player holds them (simulate.mjs
+ * calls it at the start of every month): a small festival whenever the
+ * cooldown allows, for the god longest without one (of those the city can
+ * worship; ties in the gods' order), so that all five come round inside
+ * their year (sim/religion.js). Only where the gods mind (SMALL_TOWN people
+ * or more): a smaller town's gods never strike or count the months against
+ * it, and a festival every 2 months cost the balance sweep's towns of 300
+ * to 700 people 60 to 110 Dn a month, more than most of them earned. Only
+ * once the granaries hold its food and the city keeps a month's food after
+ * it (granaries and markets), so the festivals never leave the homes
+ * hungry; and never a large or grand one, whose wine the city's best homes
+ * need more. Draws no random numbers.
+ * @returns {string|null} the god honored, or null
+ */
+export function holdDemoFestival(game) {
+  const c = game.city;
+  if (c.festivalCooldown > 0 || c.population < SMALL_TOWN) return null;
+  let god = null;
+  for (const g of GOD_KEYS) {
+    if (!game.isUnlocked(`temple_${g}`)) continue;
+    if (!god || c.gods[g].monthsSinceFestival > c.gods[god].monthsSinceFestival) god = g;
+  }
+  if (!god || festivalBlocked(game, 0)) return null;
+  let market = 0;
+  for (const b of game.buildings.values()) if (b.def.kind === 'market') for (const f of FOOD_TYPES) market += b.stock[f] || 0;
+  const after = festivalMeans(game).food - festivalNeeds(game, 0).food + market;
+  if (after < c.population * CONFIG.FOOD_PER_PERSON_MONTH) return null;
+  return holdFestival(game, god, 0).ok ? god : null;
 }
 
 /**

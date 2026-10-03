@@ -10,7 +10,7 @@
 
 import { RANKS, TOP_RANK } from '../data/ranks.js';
 import { nextMissions, stepOf, rankAfterWin, endsCareer } from '../data/scenarios.js';
-import { salaryOf, salaryOutlook } from '../sim/governor.js';
+import { salaryOf, salaryOutlook, rankForYearPay } from '../sim/governor.js';
 import { GIFT_SIZES, GIFT_MEMORY_MONTHS, giftCost, giftFavor } from '../sim/emperor.js';
 import { withArticle } from '../sim/risk.js';
 
@@ -19,9 +19,19 @@ const SHARE_WORDS = { 2: 'half your savings', 4: 'a quarter of your savings', 8:
 
 const dn = (n) => `${Math.round(n).toLocaleString('en-US')} Dn`;
 
-/** "Citizen: 0 Dn a month", the salary picker's line for a rank. */
+/**
+ * "Citizen: 0 Dn a month", the salary picker's line for a rank. The ranks
+ * above the governor's stay in the list, greyed out (salaryPickable): the
+ * player sees the whole ladder, and what each promotion will pay.
+ */
 export function salaryOption(rank, ownRank) {
-  return `${RANKS[rank].name}: ${dn(RANKS[rank].salary)} a month${rank === ownRank ? ' (your rank)' : ''}`;
+  const note = rank === ownRank ? ' (your rank)' : rank > ownRank ? ' (above your rank)' : '';
+  return `${RANKS[rank].name}: ${dn(RANKS[rank].salary)} a month${note}`;
+}
+
+/** Can the salary picker offer this rank's rate? The governor's own and the ranks below it (sim/governor.js setSalary). */
+export function salaryPickable(rank, ownRank) {
+  return rank <= ownRank;
 }
 
 /** "Clerk, the rank of step 2 of the campaign" (both missions of a step share it) or "Procurator, chosen when the city was founded". */
@@ -41,8 +51,18 @@ export function salaryOutlookText(game) {
   const o = salaryOutlook(game);
   const own = RANKS[gv.rank].name;
   const head = `At this rate you will have drawn ${dn(o.paid)} by New Year`;
-  if (o.favor < 0) return `${head}, ${withArticle(RANKS[o.worth].name)}'s pay, above your rank of ${own}: Rome takes ${-o.favor} favor for it then.`;
   if (o.favor > 0) return `${head}, less than ${withArticle(own)}'s pay: Rome will think well of it (+1 favor).`;
+  if (o.paid < salaryOf(gv.rank) * 12) {
+    // Less than the rank's year, yet no point: either the year is still
+    // above the rank below's (a lower rate chosen too late), or the rate is
+    // the rank's own and the shortfall is months unpaid or an earlier lower
+    // rate given up (salaryNewYear thanks only a lower rate kept).
+    if (rankForYearPay(o.paid) >= gv.rank) {
+      const below = RANKS[gv.rank - 1];
+      return `${head}, less than ${withArticle(own)}'s pay but more than ${withArticle(below.name)}'s year of ${dn(below.salary * 12)}: Rome thanks only a year within a lower rank's pay.`;
+    }
+    return `${head}, less than ${withArticle(own)}'s pay, but your rate is now your rank's: Rome thanks only a lower rate chosen, not months the treasury could not pay.`;
+  }
   return `${head}, ${withArticle(own)}'s pay: Rome expects no less and minds no more.`;
 }
 

@@ -99,6 +99,17 @@ test('each mission\'s goals are within reach of its buildings', () => {
   }
 });
 
+test('the Curia (Senate House) comes with mission 2 and stays for every mission after it', () => {
+  for (const s of SCENARIOS) {
+    const game = new Game({ scenario: s, flags: {} });
+    assert.equal(game.isUnlocked('senate'), s.step >= 2, `${s.id} (step ${s.step})`);
+    assert.equal(unlockedBuildings(s).has('senate'), s.step >= 2, `${s.id}: the capacity model counts it`);
+  }
+  // Mission 2's plan for a town of its goal staffs one, 30 workers.
+  const c2 = findScenario('c2');
+  assert.equal(planCity(c2, c2.goals.population, SENSIBLE).items.find((it) => it.key === 'senate')?.count, 1);
+});
+
 // ---------------------------------------------------------------------------
 // Population goals that fit the jobs (sim/capacity.js)
 // ---------------------------------------------------------------------------
@@ -201,9 +212,10 @@ test('capacity model: a villa quarter where the Villa can be reached, its people
   assert.ok(count(plan, 'farm_vine') > count(working, 'farm_vine'), 'the villas drink wine');
   // Missions 1 to 3 cannot reach the Villa: no quarter. (Their ceilings
   // were 300, 450, 980 and 1,160 before the gardeners' yards: mission 1's
-  // Huts need no gardens, so it plans none. Figlina's 1,550 counts the
-  // pottery Tarraco and Capua buy.)
-  for (const [id, ceiling] of [['c1', 300], ['c2', 470], ['c3', 1550], ['c3m', 1190]]) {
+  // Huts need no gardens, so it plans none. Figlina's counts the pottery
+  // Tarraco and Capua buy. The Curia's 30 jobs from mission 2 lifted the
+  // last three from 470, 1,550 and 1,190.)
+  for (const [id, ceiling] of [['c1', 300], ['c2', 550], ['c3', 1640], ['c3m', 1270]]) {
     const s = findScenario(id);
     assert.equal(planCity(s, 500, SENSIBLE).villas, 0, `${id}: no villas`);
     assert.equal(employmentCeiling(s, SENSIBLE), ceiling, id);

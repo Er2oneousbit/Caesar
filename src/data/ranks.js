@@ -10,8 +10,9 @@
  * as a Proconsul), and a win at the last step makes the governor Caesar, the
  * top rank, and ends the career (data/scenarios.js rankAfterWin). So all
  * eleven are used, the last as the reward. The sandbox setup lets the player
- * pick one (SANDBOX_RANK unless chosen). The salary itself can be set to any
- * rank's rate in the Imperial advisor (sim/governor.js).
+ * pick one (SANDBOX_RANK unless chosen). The salary itself can be set to the
+ * rank's own rate or a lower rank's in the Imperial advisor, never a higher
+ * one's (sim/governor.js).
  * ----------------------------------------------------------------------------
  */
 

@@ -228,7 +228,7 @@ import { SITES } from '../data/sites.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { serializeRuins, restoreRuins } from '../sim/ruins.js';
 import { isStable, stableRoom } from '../sim/storage.js';
-import { newGovernorState, salaryOf } from '../sim/governor.js';
+import { newGovernorState, salaryOf, salaryWithinRank } from '../sim/governor.js';
 import { newGiftState, GIFT_MEMORY_MONTHS } from '../sim/emperor.js';
 import { newCaesarState, noticeStageFor } from '../sim/legion.js';
 import { emptyWildlife } from '../sim/wildlife.js';
@@ -545,6 +545,10 @@ export function deserializeGame(data, flags = {}) {
   if (data.version < 26) upgradeGardensV25(game);
   if (data.version < 27) upgradeFestivalsV26(game);
   addNewPartners(game);
+  // A salary above the governor's rank, which saves made before the rate was
+  // held to the rank may draw, comes down to the rank now (sim/governor.js).
+  // No save version: the format is the same, only the rate's range narrowed.
+  salaryWithinRank(game);
   // A turn that is not 0..3 (a hand-edited file) is taken as no turn.
   for (const b of game.buildings.values()) if (!(Number.isInteger(b.turn) && b.turn >= 0 && b.turn < 4)) b.turn = 0;
   // A garden's or statue's care out of range, or a visit in the future (a

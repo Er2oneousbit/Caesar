@@ -14,6 +14,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.2)
+
+* **A switch per event in the sandbox**: the setup's Events box ticks or clears six switches below it: Rome's wage (rise and cut together), land trade stopped, sea trade stopped, bad water, mine collapse, clay pit flood. A month that draws a switched-off event brings nothing, so the others keep their odds. Missions keep their designed events, and the Hall of Fame scores missions only, so the switches never touch a score. URL flag `events=wages,sea` and `npm run sim -- --events wages,clay` take a list
+* Saves: version 24 (an older sandbox gets every switch on if its events were on, none if off)
+* Headless sim: every level, with events on or off, is identical to v0.18.1
+* 873 unit tests, 184 browser checks
+
 ## Done (v0.18.1)
 
 * **Events** (parity #9): each month one draw from the original's table, by each mission's switches (missions 1 and 2 have none; the sandbox has them all, with a switch): Rome raises or cuts its wage (the wage your mood and prosperity are measured against), land or sea trade stops for 48 days, bad water, the oldest iron mine or clay pit is lost. Scheduled in some missions: an earthquake whose cracks turn tiles to rock over days (the Imperial road always holds), a new Caesar (favor back to 50), price changes, and a gladiator revolt in Urbs Magna and Puteoli where a gladiator school works. Neptune's wrath also sinks merchant ships under sail. Half as often on Easy, half again on Insane

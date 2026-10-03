@@ -3,7 +3,10 @@
  * planBridge): the ship bridge lets every boat under it, the low bridge
  * none; their lengths and prices; the warning when a low bridge would cut a
  * dock or a wharf off; merchant ships, fishing boats and raider ships under
- * way when one goes up; clearing and undoing one; saves.
+ * way when one goes up; clearing and undoing one; saves. And how they are
+ * drawn (render/bridgeProfile.js): the ship bridge high over the masts,
+ * its ramps from the banks' road tiles, the people on them lifted to what
+ * is drawn at every view turn, the low bridge's short ramps.
  */
 
 import test from 'node:test';
@@ -11,7 +14,7 @@ import assert from 'node:assert/strict';
 import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { TOOLS } from '../src/data/buildings.js';
-import { Terrain, Road } from '../src/world/map.js';
+import { GameMap, Terrain, Road } from '../src/world/map.js';
 import { planAction, applyPlan, undoLast } from '../src/sim/construction.js';
 import { addBuilding, spawnWalker } from '../src/sim/entities.js';
 import { followPath } from '../src/sim/movement.js';
@@ -329,4 +332,193 @@ test('bridges: reading a waterside building\'s panel changes nothing (no berth f
   cutOffNote(game, nav);
   assert.equal(nav.berth, undefined);
   assert.equal(nav.waterSide, undefined);
+});
+
+/**
+ * A bare map for the bridges' looks: grass, a channel of water `n` tiles
+ * wide (k = 10 to 9 + n along the bridge), and a straight bridge across it
+ * in row j = 20 with a road tile on each bank (k = 9 and 10 + n). The
+ * bridge runs along x for axis 'u', along y for 'v'; `pt(k, j)` is the map
+ * point k along it and j across.
+ */
+function bridgeMap(axis, n, low = false) {
+  const map = new GameMap(40, 40);
+  map.terrain.fill(Terrain.GRASS);
+  const pt = (k, j) => (axis === 'u' ? [k, j] : [j, k]);
+  for (let k = 10; k < 10 + n; k++) for (let j = 0; j < 40; j++) map.terrain[map.idx(...pt(k, j))] = Terrain.WATER;
+  for (let k = 9; k <= 10 + n; k++) {
+    const i = map.idx(...pt(k, 20));
+    const bank = k === 9 || k === 10 + n;
+    map.road[i] = bank ? Road.ROAD : Road.BRIDGE;
+    if (!bank && low) map.bridgeLow[i] = 1;
+  }
+  return { map, pt };
+}
+
+test('bridges: walkers climb the ship bridge\'s ramps from the middle of the bank\'s road tile to its deck, on either axis at every view turn (playtest: no ramps)', async () => {
+  const { bridgeSpan } = await import('../src/render/renderer.js');
+  const { BRIDGE_DECK_Z: Z } = await import('../src/render/terrainArt.js');
+  assert.equal(Z % 3, 0, 'a third of the deck at each bank edge, two thirds a tile in: whole px');
+  for (const axis of ['u', 'v']) {
+    const { map, pt } = bridgeMap(axis, 6); // water k 10..15, banks 9 and 16
+    for (let turn = 0; turn < 4; turn++) {
+      const lift = (k, j = 20.5) => bridgeSpan(map, ...pt(k, j), false, turn).lift;
+      const at = `axis ${axis}, turn ${turn}`;
+      assert.equal(lift(8.5), 0, `${at}: the road before the bank`);
+      assert.equal(lift(9.5), 0, `${at}: the ramp starts at road level in the middle of the bank's road tile`);
+      assert.equal(lift(9.75), Z / 6, `${at}: halfway up the foot`);
+      assert.equal(lift(10), Z / 3, `${at}: at the water's edge`);
+      assert.equal(lift(10.5), (2 * Z) / 3, `${at}: halfway up the first tile`);
+      assert.equal(lift(11), Z, `${at}: up on the deck`);
+      assert.equal(lift(12.5), Z, `${at}: the deck`);
+      assert.equal(lift(15.5), (2 * Z) / 3, `${at}: down the far ramp`);
+      assert.equal(lift(16.5), 0, `${at}: back at road level on the far bank`);
+      assert.equal(lift(9.5, 20.1), 0, `${at}: a road joining the bank tile from the side meets the ramp at road level`);
+    }
+  }
+});
+
+test('bridges: the deck drawn at each view turn is the one walkers stand on, ramps and feet alike', async () => {
+  const { bridgeSpan } = await import('../src/render/renderer.js');
+  const { bridgeLook, footLook, bridgeFeet } = await import('../src/render/bridgeProfile.js');
+  const { deckAt } = await import('../src/render/terrainArt.js');
+  const { toView } = await import('../src/render/view.js');
+  const frac = (v) => v - Math.floor(v);
+  for (const axis of ['u', 'v']) {
+    for (const [n, low] of [[6, false], [3, false], [1, false], [4, true], [1, true]]) {
+      const { map, pt } = bridgeMap(axis, n, low);
+      for (let turn = 0; turn < 4; turn++) {
+        for (let k = 9; k <= 10 + n; k++) {
+          const [x, y] = pt(k, 20);
+          const look = bridgeLook(map, x, y, turn);
+          const feet = bridgeFeet(map, x, y);
+          if (k === 9 || k === 10 + n) assert.equal(feet.length, low ? 0 : 1, 'a ship bridge\'s ramp starts on each bank\'s road tile; a low bridge\'s on the water');
+          for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+            const [fx, fy] = pt(k + t, 20.5);
+            const [vx, vy] = toView(fx, fy, turn, 40, 40);
+            const lift = bridgeSpan(map, fx, fy, false, turn).lift;
+            const label = `axis ${axis}, ${n} tiles${low ? ' low' : ''}, turn ${turn}, at ${k + t}`;
+            if (look) {
+              // Where the walker is along the tile as the view sees it.
+              const tv = frac(look.axis === 'u' ? vx : vy);
+              assert.ok(Math.abs(lift - deckAt(look.h, tv)) < 1e-9, label);
+            } else if (feet.length) {
+              const { axis: va, sign } = footLook(feet[0], turn);
+              const tv = frac(va === 'u' ? vx : vy);
+              const drawn = feet[0].h * Math.max(0, Math.min(1, (tv - 0.5) * sign * 2)); // (bridgeFootSpec's rise)
+              assert.ok(Math.abs(lift - drawn) < 1e-9, label);
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+/** The highest point (px above its feet) a ship's art reaches, bobbing up as far as it goes. */
+function artTop(draw) {
+  let top = 0;
+  const see = (y) => { top = Math.max(top, -y); };
+  const ctx = new Proxy({}, {
+    get: (t, k) => {
+      if (k === 'moveTo' || k === 'lineTo') return (x, y) => see(y);
+      if (k === 'fillRect' || k === 'strokeRect') return (x, y, w, h) => see(Math.min(y, y + h));
+      if (k === 'quadraticCurveTo') return (cx, cy, x, y) => { see(cy); see(y); };
+      if (k === 'arc') return (x, y, r) => see(y - r);
+      if (k === 'ellipse') return (x, y, rx, ry) => see(y - ry);
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
+      return () => {};
+    },
+    set: () => true,
+  });
+  draw(ctx);
+  return top;
+}
+
+test('bridges: the taller ship bridge clears the masts, ships stay under its deck and people over it at every view turn (playtest: too low for ships)', async () => {
+  const { bridgeSpan } = await import('../src/render/renderer.js');
+  const { BRIDGE_DECK_Z: Z } = await import('../src/render/terrainArt.js');
+  const { drawWalker } = await import('../src/render/walkerArt.js');
+  const { drawUnit } = await import('../src/render/militaryArt.js');
+  const { viewTileOf } = await import('../src/render/view.js');
+  // The highest each reaches over a full swell of its bobbing (the clock t).
+  const highest = (draw) => Math.max(...Array.from({ length: 160 }, (_, i) => artTop((ctx) => draw(ctx, i * 0.02))));
+  const merchant = highest((ctx, t) => drawWalker(ctx, { id: 0, type: 'ship', kind: 'ship', partner: 'massilia', state: 'toDock', moving: true, anim: 0 }, 0, 0, 1, t, 1, 0, 0));
+  const liburnian = highest((ctx, t) => drawUnit(ctx, { id: 0, type: 'liburnian', hp: 180, maxHp: 180, facing: 1, moving: true, walked: 0, strikeTick: -99, hitTick: -99, state: 'sail' }, 0, 0, 1, t, 100, false, 0));
+  assert.ok(merchant > 40 && liburnian > 35, `measured: merchant ${merchant}, liburnian ${liburnian}`);
+  // Seen over a ship under the middle of a tile, the deck's far parapet
+  // (0.3 of a tile back, 4 px high) hides 13.6 px more than the deck's height.
+  assert.ok(merchant <= Z + 13.6 && liburnian <= Z + 13.6, `the masts pass under a deck ${Z} px up: merchant ${merchant}, liburnian ${liburnian}`);
+  for (const axis of ['u', 'v']) {
+    const { map, pt } = bridgeMap(axis, 6);
+    for (let turn = 0; turn < 4; turn++) {
+      for (let k = 9; k <= 16; k++) {
+        const [x, y] = pt(k, 20);
+        const [vx, vy] = viewTileOf(x, y, turn, 40, 40);
+        const deck = vx + vy + 1 + 0.006; // the deck's (or the foot's) draw depth (renderer.js)
+        const walker = bridgeSpan(map, ...pt(k + 0.5, 20.5), false, turn);
+        assert.ok(walker.d > deck, `axis ${axis}, turn ${turn}, tile ${k}: people after the deck`);
+        if (k === 9 || k === 16) continue; // (no ship on land)
+        const ship = bridgeSpan(map, ...pt(k + 0.5, 20.5), true, turn);
+        assert.ok(ship.d < deck && ship.lift === 0, `axis ${axis}, turn ${turn}, tile ${k}: a ship before the deck, on the water`);
+      }
+    }
+  }
+});
+
+test('bridges: a ramp beside a roadblock starts at the water, a run that turns on the water stays up, a bridge alongside keeps its way, the low bridge ramps to its banks', async () => {
+  const { bridgeSpan } = await import('../src/render/renderer.js');
+  const { bridgeFeet, bridgeAxis } = await import('../src/render/bridgeProfile.js');
+  const { BRIDGE_DECK_Z: Z, LOW_BRIDGE_DECK_Z: LZ } = await import('../src/render/terrainArt.js');
+  // A roadblock on the bank's road tile keeps its look: the ramp starts at
+  // the water's edge, as steep, and nobody is lifted on the bank.
+  {
+    const { map, pt } = bridgeMap('v', 6);
+    map.roadblock[map.idx(...pt(9, 20))] = 1;
+    const lift = (k) => bridgeSpan(map, ...pt(k, 20.5), false, 1).lift;
+    assert.deepEqual(bridgeFeet(map, ...pt(9, 20)), []);
+    assert.deepEqual([9.75, 10, 10.5, 11, 11.5, 12].map(lift), [0, 0, Z / 3, (2 * Z) / 3, Z, Z]);
+    assert.deepEqual([15.5, 16.5].map(lift), [(2 * Z) / 3, 0], 'the far bank keeps its foot');
+  }
+  // The Imperial road may turn on the water: where the run meets more water
+  // there is no bank, and the deck runs on at full height.
+  {
+    const { map, pt } = bridgeMap('u', 6);
+    map.road[map.idx(...pt(16, 20))] = 0;
+    map.terrain[map.idx(...pt(16, 20))] = Terrain.WATER;
+    assert.equal(bridgeSpan(map, ...pt(15.9, 20.5), false, 0).lift, Z);
+  }
+  // Two bridges side by side: each keeps its own way, and a road on the
+  // bank beside the first tile no longer turns it across the river.
+  {
+    const { map, pt } = bridgeMap('u', 6);
+    for (let k = 9; k <= 16; k++) map.road[map.idx(...pt(k, 21))] = map.road[map.idx(...pt(k, 20))];
+    map.road[map.idx(...pt(9, 19))] = Road.ROAD;
+    for (let k = 10; k <= 15; k++) assert.equal(bridgeAxis(map, ...pt(k, 20)), 'u', `tile ${k}`);
+    assert.equal(bridgeSpan(map, ...pt(10.5, 20.5), false, 0).lift, (2 * Z) / 3);
+    assert.equal(bridgeSpan(map, ...pt(9.5, 21.5), false, 0).lift, 0);
+  }
+  // The low bridge climbs to its deck over half a tile of water, and a one-tile one humps in the middle.
+  for (const [n, expect] of [[4, [[10, 0], [10.25, LZ / 2], [10.5, LZ], [12, LZ], [13.75, LZ / 2], [9.5, 0], [14.5, 0]]], [1, [[10, 0], [10.25, LZ / 2], [10.5, LZ], [10.75, LZ / 2]]]]) {
+    const { map, pt } = bridgeMap('u', n, true);
+    for (const [k, h] of expect) assert.equal(bridgeSpan(map, ...pt(k, 20.5), false, 2).lift, h, `${n} tiles, at ${k}`);
+  }
+});
+
+test('bridges: every piece of the bridges\' art draws at the heights the ramps give it, in sprites tall enough to hold it', async () => {
+  const { bridgeSpec, bridgeFootSpec, lowBridgeSpec, BRIDGE_DECK_Z: Z, LOW_BRIDGE_DECK_Z: LZ } = await import('../src/render/terrainArt.js');
+  const { recordingContext } = await import('../src/render/draw.js');
+  const specs = [];
+  for (const axis of ['u', 'v']) {
+    for (const h of [[Z, Z, Z], [Z / 3, (2 * Z) / 3, Z], [Z, (2 * Z) / 3, Z / 3], [0, Z / 3, (2 * Z) / 3], [Z / 3, (2 * Z) / 3, Z / 3]]) {
+      for (const abut of [false, true]) for (const snow of [0, 1]) specs.push([bridgeSpec(axis, ...h, abut, snow), Math.max(...h)]);
+    }
+    for (const sign of [1, -1]) specs.push([bridgeFootSpec(axis, sign, Z / 3, 0.5), Z / 3]);
+    for (const h of [[LZ, LZ, LZ], [0, LZ, LZ], [0, LZ, 0]]) specs.push([lowBridgeSpec(axis, ...h), LZ]);
+  }
+  for (const [spec, top] of specs) {
+    assert.ok(spec.w > 0 && spec.ay >= top + 4 && spec.h - spec.ay >= 32, 'room above the tile for the deck and its parapets');
+    spec.draw(recordingContext().ctx);
+  }
+  assert.equal(bridgeSpec('u').ay, bridgeSpec('u', Z, Z, Z).ay, 'the build menu\'s icon: a tile of full deck');
 });

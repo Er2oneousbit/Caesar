@@ -169,7 +169,7 @@ Two bridges carry a road over water, as in the original. Drag either in a straig
 
 | | Pons (Ship Bridge) | Pons Sublicius (Low Bridge) |
 |---|---|---|
-| Built of | stone, high on arches | timber, on piles just over the water |
+| Built of | stone, high on arches (a ship's mast passes under), ramps up from the road on each bank | timber, on piles just over the water, short ramps at the banks |
 | Cost | 100 Dn a water tile | 40 Dn a water tile |
 | Spans | 3 to 16 tiles of water | 1 to 16 tiles of water |
 | Boats | every boat sails under it | **no boat passes it** |

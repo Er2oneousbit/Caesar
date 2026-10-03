@@ -23,6 +23,8 @@
   water=1 (fishing and races only: shipyard, wharf, boats, the hippodrome, chariots)
   cloth=1 (the cloth industry only: the flax farm as it grows and rests, the two workshops, the carts)
   navy=1 (the fleet only: the navalia and naval station on each side, liburnians and raider ships)
+  bridges=1 (the bridges only: the Pons over a merchant ship, its ramps up from the banks, the
+           Pons Sublicius with its short ramps, both ways along the screen, and under snow)
   turns=1 (turned art only: every building and home level at turns 0, 1, 2 and 3; turns=farm,temple
            for the kinds whose key contains one of the words; snow=1 under snow)
   Served by: npm run serve, then open /tests/e2e/artsheet.html
@@ -34,6 +36,7 @@
   import { drawWalker, drawChariot } from '../../src/render/walkerArt.js';
   import { drawUnit } from '../../src/render/militaryArt.js';
   import { drawGulls } from '../../src/render/waterArt.js';
+  import { bridgeSpec, bridgeFootSpec, lowBridgeSpec, BRIDGE_DECK_Z, LOW_BRIDGE_DECK_Z } from '../../src/render/terrainArt.js';
   import { LED_GOODS } from '../../src/render/cargoArt.js';
   import { GOOD_KEYS } from '../../src/data/goods.js';
   import { BUILDINGS } from '../../src/data/buildings.js';
@@ -45,9 +48,10 @@
   const water = !!q.get('water');
   const cloth = !!q.get('cloth');
   const navy = !!q.get('navy');
+  const bridges = !!q.get('bridges');
   const governor = !!q.get('governor');
   const turns = q.get('turns');
-  const only = q.get('carts') || water || cloth || navy || governor || turns ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
+  const only = q.get('carts') || water || cloth || navy || bridges || governor || turns ? [] : q.get('tiers') ? q.get('tiers').split(',').map(Number) : null;
   const sheet = document.getElementById('sheet');
 
   /** Draw one sprite spec into a new canvas at `scale`. */
@@ -236,7 +240,56 @@
       shipSpec({ type: 'raider_ship', state: 'leave', moving: true, hp: 40, maxHp: 140 }, 'damaged, leaving'),
     ]);
   }
-  if ((!only || q.get('extras') || q.get('carts') || cloth) && !water && !navy) {
+  if (!only || q.get('extras') || bridges) {
+    // The bridges as the game lays them: a bank road tile, the water tiles,
+    // the far bank, drawn back to front along the screen's u axis (right
+    // and down) or v axis (left and down), with the deck heights the game
+    // gives a run of that length (render/bridgeProfile.js). A merchant ship
+    // sails under the Pons's third tile, drawn just before it as the game
+    // draws it.
+    const Z = BRIDGE_DECK_Z;
+    const LZ = LOW_BRIDGE_DECK_Z;
+    const run = (axis, tiles, ship) => {
+      const step = axis === 'u' ? [32, 16] : [-32, 16];
+      const n = tiles.length;
+      return { w: n * 32 + 72, h: n * 16 + 32 + Z + 24, ax: axis === 'u' ? 36 : n * 32 + 36, ay: Z + 20, draw(ctx) {
+        tiles.forEach(([kind], k) => {
+          ctx.fillStyle = kind === 'bank' ? '#c9b48a' : '#4a90c8';
+          ctx.beginPath();
+          for (const [x, y] of [[0, 0], [32, 16], [0, 32], [-32, 16]]) ctx.lineTo(x + step[0] * k, y + step[1] * k);
+          ctx.fill();
+        });
+        tiles.forEach(([, spec], k) => {
+          ctx.save();
+          ctx.translate(step[0] * k, step[1] * k);
+          if (ship && k === ship) drawWalker(ctx, { id: 2, type: 'ship', kind: 'ship', partner: 'massilia', state: 'toDock', moving: true, anim: 0 }, 0, 16, 1, 0, axis === 'u' ? -1 : 1, 1, 0);
+          if (spec) spec.draw(ctx);
+          ctx.restore();
+        });
+      } };
+    };
+    const pons = (axis, snow = 0) => run(axis, [
+      ['bank', bridgeFootSpec(axis, 1, Z / 3, snow)],
+      ['water', bridgeSpec(axis, Z / 3, (2 * Z) / 3, Z, true, snow)],
+      ['water', bridgeSpec(axis, Z, Z, Z, false, snow)],
+      ['water', bridgeSpec(axis, Z, Z, Z, false, snow)],
+      ['water', bridgeSpec(axis, Z, (2 * Z) / 3, Z / 3, false, snow)],
+      ['bank', bridgeFootSpec(axis, -1, Z / 3, snow)],
+    ], 3);
+    const sublicius = (axis) => run(axis, [
+      ['bank', null],
+      ['water', lowBridgeSpec(axis, 0, LZ, LZ)],
+      ['water', lowBridgeSpec(axis, LZ, LZ, LZ)],
+      ['water', lowBridgeSpec(axis, LZ, LZ, 0)],
+      ['bank', null],
+    ]);
+    section('Bridges: the Pons (Ship Bridge) over a merchant ship, its ramps up from the banks; the Pons Sublicius (Low Bridge); both ways, then under snow', [
+      ['Pons, u', pons('u')], ['Pons, v', pons('v')],
+      ['Sublicius, u', sublicius('u')], ['Sublicius, v', sublicius('v')],
+      ['Pons in snow', pons('u', 1)],
+    ]);
+  }
+  if ((!only || q.get('extras') || q.get('carts') || cloth) && !water && !navy && !bridges) {
     // Carts: every good at a part load (100 of a hand cart's 200) and a full
     // load, facing right then left; farm wagons at 100 and 400; horses led;
     // caravan mules coming in (bales) and going out with what they bought.

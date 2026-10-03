@@ -378,9 +378,10 @@ function stocked(game) {
 
 const blocked = (game, god) => [0, 1, 2].map((size) => festivalTempleBlocked(game, god, size));
 
-test('temples: a small festival needs a staffed temple of the god, a large one its large temple too, a grand one an Oracle as well', () => {
+test('temples: a bigger festival needs more priests (a temple 1, a large temple 2: small 1, large 3, grand 3 and an Oracle)', () => {
   const game = stocked(newGame({ seed: 'temples' }));
-  assert.deepEqual(blocked(game, 'mars'), ['Needs a temple of Mars.', 'Needs a temple and a large temple of Mars.', 'Needs a temple and a large temple of Mars, and an Oracle.']);
+  const three = 'Needs temples of Mars with 3 priests (a temple has 1, a large temple 2)';
+  assert.deepEqual(blocked(game, 'mars'), ['Needs a temple of Mars.', `${three}: 0 at work.`, `${three}: 0 at work; and an Oracle.`]);
   // The reason is the festival's, said first, before anything the city is short of.
   assert.equal(festivalBlocked(game, 0, 'mars'), 'Needs a temple of Mars.');
   assert.equal(festivalBlocked(game, 0), null, 'without a god: only what every festival needs');
@@ -388,22 +389,25 @@ test('temples: a small festival needs a staffed temple of the god, a large one i
   assert.deepEqual(holdFestival(game, 'mars', 0), { ok: false, reason: 'Needs a temple of Mars.' });
   assert.equal(JSON.stringify([game.city.treasury, game.city.gods, game.city.festivalCooldown]), was, 'nothing paid, no god moved');
 
+  // A large temple alone is enough for a small festival (it has two priests).
+  const large = temple(game, 'mars', true);
+  assert.deepEqual(blocked(game, 'mars'), [null, `${three}: 2 at work.`, `${three}: 2 at work; and an Oracle.`]);
   // A temple with no workers holds no rites (as it does not count for the god's mood).
-  const small = temple(game, 'mars');
-  small.efficiency = 0;
+  large.efficiency = 0;
   assert.equal(festivalTempleBlocked(game, 'mars', 0), 'Needs a staffed temple of Mars.');
-  small.efficiency = 0.5;
-  assert.deepEqual(blocked(game, 'mars'), [null, 'Needs a large temple of Mars.', 'Needs a large temple of Mars and an Oracle.']);
+  assert.equal(festivalTempleBlocked(game, 'mars', 1), `${three}: 0 at work, 2 more in temples without workers.`);
+  large.efficiency = 1;
   // Another god's temples are no help.
   temple(game, 'venus', true);
-  assert.equal(festivalTempleBlocked(game, 'mars', 1), 'Needs a large temple of Mars.');
-  const large = temple(game, 'mars', true);
-  large.efficiency = 0;
-  assert.equal(festivalTempleBlocked(game, 'mars', 1), 'Needs a staffed large temple of Mars.');
-  large.efficiency = 1;
+  temple(game, 'venus', true);
+  assert.equal(festivalTempleBlocked(game, 'mars', 1), `${three}: 2 at work.`);
+  // A temple and a large temple: 3 priests.
+  const small = temple(game, 'mars');
   assert.deepEqual(blocked(game, 'mars'), [null, null, 'Needs an Oracle.']);
-  // The large temple alone, without a small one, is not enough.
-  assert.equal(festivalTempleBlocked(game, 'venus', 1), 'Needs a temple of Venus.');
+  // Two large temples are as good, and so are three small ones.
+  assert.equal(festivalTempleBlocked(game, 'venus', 1), null, 'two large temples');
+  for (let k = 0; k < 3; k++) temple(game, 'ceres');
+  assert.equal(festivalTempleBlocked(game, 'ceres', 1), null, 'three temples');
   // Any Oracle: it speaks for every god, and has no workers to wait for.
   oracle(game);
   assert.deepEqual(blocked(game, 'mars'), [null, null, null]);
@@ -412,31 +416,36 @@ test('temples: a small festival needs a staffed temple of the god, a large one i
   assert.equal(festivalBlocked(game, 0, 'ceres'), 'Citizens are still recovering from the last festival (8 months).');
   game.city.festivalCooldown = 0;
   small.efficiency = 0;
+  large.efficiency = 0;
   game.city.treasury = 10;
   assert.equal(festivalBlocked(game, 0, 'mars'), 'Needs a staffed temple of Mars. Needs 210 Dn, 10 in the treasury.', 'the temples first, then the money');
 });
 
-test('temples: where the province has no large temples or oracles, the larger festivals say so', () => {
+test('temples: where the province has no temple of the god or no Oracle, it says so', () => {
   const mission = (id) => {
     const game = new Game({ scenario: findScenario(id), flags: { money: 50000 } });
     return stocked(game);
   };
+  const three = 'Needs temples of Mars with 3 priests (a temple has 1, a large temple 2)';
   // Mission 1: Ceres's and Mercury's temples only.
   const m1 = mission('c1');
   assert.deepEqual(blocked(m1, 'neptune'), Array(3).fill('Temples of Neptune are not available in this province.'));
   assert.equal(festivalTempleBlocked(m1, 'ceres', 0), 'Needs a temple of Ceres.');
   temple(m1, 'ceres');
-  assert.deepEqual(blocked(m1, 'ceres'), [null, 'Large temples are not available in this province.', 'Large temples and oracles are not available in this province.']);
+  assert.deepEqual(blocked(m1, 'ceres'), [null, 'Needs temples of Ceres with 3 priests (a temple has 1, a large temple 2): 1 at work.', 'Oracles are not available in this province.']);
   assert.deepEqual(holdFestival(m1, 'ceres', 0), { ok: true }, 'a small festival is held as before');
-  // Mission 2: every god's small temple, no large ones yet.
+  // Mission 2: small temples only, so a large festival takes three of them.
   const m2 = mission('c2');
   temple(m2, 'mars');
-  assert.deepEqual(blocked(m2, 'mars'), [null, 'Large temples are not available in this province.', 'Large temples and oracles are not available in this province.']);
+  assert.equal(festivalTempleBlocked(m2, 'mars', 1), `${three}: 1 at work.`);
+  temple(m2, 'mars');
+  temple(m2, 'mars');
+  assert.deepEqual(blocked(m2, 'mars'), [null, null, 'Oracles are not available in this province.']);
   // Missions 3 and 4: large temples, no Oracle.
   for (const id of ['c3', 'c3m', 'c4', 'c4p']) {
     const g = mission(id);
     temple(g, 'mars');
-    assert.equal(festivalTempleBlocked(g, 'mars', 1), 'Needs a large temple of Mars.', id);
+    assert.equal(festivalTempleBlocked(g, 'mars', 1), `${three}: 1 at work.`, id);
     temple(g, 'mars', true);
     assert.deepEqual(blocked(g, 'mars'), [null, null, 'Oracles are not available in this province.'], id);
   }

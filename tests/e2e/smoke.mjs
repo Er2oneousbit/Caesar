@@ -1338,10 +1338,10 @@ try {
     gran.stock.wheat += 800;
     c.festivalCooldown = 0;
     c.treasury = Math.max(c.treasury, 5000);
-    // No staffed large temple of Ceres for the moment (the demo city builds
-    // small ones): her large festival waits for one, and says so.
-    const largeCeres = [...g.buildings.values()].filter((b) => b.type === 'temple_large_ceres').map((b) => [b, b.efficiency]);
-    for (const [b] of largeCeres) b.efficiency = 0;
+    // One staffed temple of Ceres for the moment (1 priest; the others idle):
+    // her large festival needs 3 priests, and says so.
+    const ceresTemples = [...g.buildings.values()].filter((b) => b.def.god === 'ceres').sort((a, b) => (a.def.templeWeight || 1) - (b.def.templeWeight || 1) || a.id - b.id).map((b) => [b, b.efficiency]);
+    ceresTemples.forEach(([b], k) => { b.efficiency = k === 0 ? Math.max(b.efficiency, 1) : 0; });
     app.ui.openAdvisors('religion');
     const body = () => document.querySelector('.modal-body');
     const rows = [...body().querySelectorAll('.festivals tr[data-size]')].map((tr) => [...tr.children].map((td) => td.textContent));
@@ -1349,7 +1349,7 @@ try {
     const shown = { grandOff: !!btn('grand')?.disabled, largeOff: !!btn('large')?.disabled, smallOn: btn('small') && !btn('small').disabled, title: btn('grand')?.title || '', short: body().querySelector('.festivals [data-short="grand"]')?.textContent || '' };
     shown.largeTitle = btn('large')?.title || '';
     shown.templeNote = body().querySelector('[data-god="ceres"] [data-temples~="large"]')?.textContent || '';
-    for (const [b, eff] of largeCeres) b.efficiency = eff;
+    for (const [b, eff] of ceresTemples) b.efficiency = eff;
     const food = () => { let n = 0; for (const b of g.buildings.values()) if (b.def.kind === 'granary') for (const k in b.stock) n += b.stock[k]; return n; };
     const before = food();
     btn('small').click();
@@ -1375,7 +1375,7 @@ try {
       && fest.taken >= 100 && fest.last && fest.cooldown === 2 && fest.afterOff && fest.music === 'festival' && fest.musicLater !== 'festival' && errors.length === 0,
     JSON.stringify({ ...fest, errors }));
   check('a festival size the god\'s temples cannot hold is greyed out, with the reason on the button and under it',
-    fest.granary && fest.largeOff && /^Needs a (staffed )?large temple of Ceres\./.test(fest.largeTitle) && /^Large festival: Needs a (staffed )?large temple of Ceres\.$/.test(fest.templeNote) && errors.length === 0,
+    fest.granary && fest.largeOff && /^Needs temples of Ceres with 3 priests .*: 1 at work/.test(fest.largeTitle) && /^Large festival: Needs temples of Ceres with 3 priests .*: 1 at work/.test(fest.templeNote) && errors.length === 0,
     JSON.stringify({ largeTitle: fest.largeTitle, templeNote: fest.templeNote }));
 
   // 5a5. Auto-pause (ui/autoPause.js): Settings turns on "a fire breaks out";

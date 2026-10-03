@@ -13,6 +13,12 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.9)
+
+* **Festivals count priests**: a bigger feast needs more priests among the god's staffed temples, a temple having 1 and a large temple 2: a small festival needs 1 (a large temple alone will do), a large one 3 (a temple and a large temple, two large, or three temples), a grand one 3 and an Oracle. Where a province has no large temples, three temples hold a large festival
+* Headless sim: every level identical to v0.18.8
+* 991 unit tests, 204 browser checks
+
 ## Done (v0.18.8)
 
 * **A high ship bridge**: the Pons stands 33 px over the water on stone arches with cutwaters, so a merchant ship's mast passes under it, and ramps down to the land road at each bank (over a tile and a half, starting mid-tile so a side road meets it level); walkers, carts, soldiers and rally flags follow the ramps. The low bridge gets short ramps over its first and last half tile
@@ -580,6 +586,8 @@ From playtesting (still to decide which to take):
 * **The early missions on Hard and Insane**: the sweep's demo city finds them harsh, partly because it builds what those missions do not unlock (`npm run sim -- --unlocks` builds only what they allow); measure again with it before changing anything.
 * **Unstaffed buildings wear out from the day they are placed**: industry burned or collapsed three times before its first worker came. Either risk grows only once staffed, or the placement and building panels say so.
 * **Buildings placed together collapse together**: everything built on day one reached its collapse point in the same month, so three key buildings fell at once. Some spread in their starting risk would turn a sudden disaster into a warning.
+* **Festival costs** (after v0.18.4): Colonia's small festival costs about 3.5 times the original's money (60 + 0.15 a citizen against the original's population / 20 + 10), and keeping five gods content now takes about five festivals a year; the food's one-load minimum is steep for a town just past 800 people. Whether to lower either.
+* **The water's-edge rule and slanted coasts** (v0.18.6): it cut legal dock spots two to seven times on the campaign maps (every coastal mission keeps 22 or more) and to 5 on one sandbox lakes map. Whether a diagonal shore should count as the water's edge.
 
 Playing smoother:
 
@@ -636,6 +644,9 @@ Ideas that would change the original's economy or rules; each would come as an o
 * Keyboard remapping and a colorblind-friendly overlay palette.
 * Performance: cache static terrain into chunk canvases for the most zoomed-out view. When the screen is full of tiles (the middle of a Large or Uber map) that view costs about 16 ms a frame in headless Chromium against 4 ms one zoom level in; chunks would cut its thousands of ground draw calls to a few dozen (see ARCHITECTURE.md, *Draw calls*).
 * Smaller saves for very big cities: buildings are about 0.8 KB each in a save (mostly the house record), so a 1,500-building capital needs about 1.5 MB per slot. Dropping default-valued fields, or compressing the whole save, would stretch the ~5 MB browser allowance further.
+* **The ship bridge's leftovers** (v0.18.8): a small step where two ship bridges cross at a bridge's first water tile, and where a shore road runs right beside that tile; a ship's mast top vanishes the moment it passes under the deck's far edge; a ship's lantern glow at night shows through the stone above it; following a walker on the deck centers the camera about 23 px too high (`followWalker` does not use the bridge's lift).
+* **Training trips' small gaps** (v0.18.8): a ship's trip to the Portus is timed from the straight line, not its route on the water (the 16-day retry hold limits repeat failures); a unit more than 12 tiles inside one huge placement is not moved off it.
+* **Two smoke checks failed once in five runs** on the main page's random map (v0.18.8, root cause not yet found): "the cloth chain can be placed" (no free meadow within 10 tiles of a road on that map: the search, not the rule) and "a second fire pauses again" (the home did not burn within 30 s). Log the seed on failure and find the cause.
 
 ## Decisions
 

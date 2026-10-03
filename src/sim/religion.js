@@ -11,10 +11,10 @@
  * Very happy gods bless the city; angry gods punish it.
  *
  * Festivals cost money, food from the granaries and, large or grand, wine
- * from the warehouses, all or nothing, and are held at the god's temples: a
- * small one needs a staffed temple of the god, a large one a staffed large
- * temple of it too, a grand one an Oracle as well (Colonia's own rule;
- * festivalTempleBlocked). A god whose last festival is more
+ * from the warehouses, all or nothing, and are held at the god's temples,
+ * whose priests a bigger feast needs more of: a staffed temple has one, a
+ * large temple two; a small festival needs 1, a large one 3, a grand one 3
+ * and an Oracle (Colonia's own rule; festivalTempleBlocked). A god whose last festival is more
  * than a year past is neglected: its mood target falls a point a month, 28
  * at most (the original's rule; not in towns under 800 people). A
  * city-wide cooldown (2, 4 or 8 months) still spaces them, short enough
@@ -441,54 +441,58 @@ export function festivalMeans(game) {
 }
 
 /**
- * The temples a god's festivals can be held at: its small and large temples
- * at work (staffed, efficiency > 0, as they count for its mood: an empty
- * temple has no priests to lead the rites), those standing idle, and the
- * Oracles (any: one speaks for every god; it has no workers, so it counts
- * once it stands, as it does for the moods).
+ * Priests a festival of each size needs among the god's temples at work
+ * (FESTIVAL_SIZES order): a bigger feast needs more priests to lead its
+ * rites. A temple has one, a large temple two (data/buildings.js
+ * templeWeight, as it counts for the god's mood), so a small festival needs
+ * any temple of the god, a large one a temple and a large temple (or two
+ * large, or three small), and a grand one the same and an Oracle.
+ */
+export const FESTIVAL_PRIESTS = Object.freeze([1, 3, 3]);
+
+/**
+ * The priests a god's festivals can draw on: its temples at work (staffed,
+ * efficiency > 0, as they count for its mood: an empty temple has no
+ * priests to lead the rites), the priests its idle temples would bring, and
+ * the Oracles (any: one speaks for every god; it has no workers, so it
+ * counts once it stands, as it does for the moods).
  */
 export function festivalTemples(game, god) {
-  const t = { small: 0, large: 0, idleSmall: 0, idleLarge: 0, oracles: 0 };
+  const t = { priests: 0, idle: 0, oracles: 0 };
   for (const b of game.buildings.values()) {
     if (b.type === 'oracle') t.oracles++;
     if (b.def.god !== god) continue;
-    const large = (b.def.templeWeight || 1) > 1;
-    if (b.efficiency > 0) t[large ? 'large' : 'small']++;
-    else t[large ? 'idleLarge' : 'idleSmall']++;
+    t[b.efficiency > 0 ? 'priests' : 'idle'] += b.def.templeWeight || 1;
   }
   return t;
 }
 
-/** "a", "a and b", "a, b and c". */
-const listWords = (parts) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`);
-
 /**
  * Why the temples stop a festival of this size for `god`, or null when they
  * do not (Colonia's own rule, after the original's festivals held at a
- * god's temple): a small festival needs a staffed small temple of the god,
- * a large one a staffed large temple of the god as well, a grand one an
- * Oracle on top. A kind the province does not unlock is said first, as
- * building the rest would not help ("Large temples are not available in
- * this province."); else what is missing ("Needs a large temple of Mars and
- * an Oracle.", "a staffed temple" where one stands without workers).
+ * god's temple): the god's temples at work must hold FESTIVAL_PRIESTS[size]
+ * priests, and a grand festival needs an Oracle as well. A province without
+ * the god's temples, or without oracles for a grand one, says so first, as
+ * building the rest would not help; else what is missing ("Needs a temple
+ * of Mars.", "Needs temples of Mars with 3 priests (a temple has 1, a large
+ * temple 2): 2 at work.", "Needs an Oracle.").
  */
 export function festivalTempleBlocked(game, god, size) {
   const name = GODS[god].name;
   if (!game.isUnlocked(`temple_${god}`)) return `Temples of ${name} are not available in this province.`;
-  const closed = [];
-  if (size >= 1 && !game.isUnlocked(`temple_large_${god}`)) closed.push('large temples');
-  if (size >= 2 && !game.isUnlocked('oracle')) closed.push('oracles');
-  if (closed.length) {
-    const words = listWords(closed);
-    return `${words[0].toUpperCase()}${words.slice(1)} are not available in this province.`;
-  }
+  if (size >= 2 && !game.isUnlocked('oracle')) return 'Oracles are not available in this province.';
   const t = festivalTemples(game, god);
-  const temples = [];
-  if (!t.small) temples.push(t.idleSmall ? 'a staffed temple' : 'a temple');
-  if (size >= 1 && !t.large) temples.push(t.idleLarge ? 'a staffed large temple' : 'a large temple');
-  const parts = temples.length ? [`${listWords(temples)} of ${name}`] : [];
+  const need = FESTIVAL_PRIESTS[size];
+  const parts = [];
+  if (t.priests < need) {
+    if (need === 1) parts.push(`${t.idle ? 'a staffed temple' : 'a temple'} of ${name}`);
+    else {
+      const idle = t.idle ? `, ${t.idle} more in temples without workers` : '';
+      parts.push(`temples of ${name} with ${need} priests (a temple has 1, a large temple 2): ${t.priests} at work${idle}`);
+    }
+  }
   if (size >= 2 && !t.oracles) parts.push('an Oracle');
-  return parts.length ? `Needs ${parts.join(parts.length > 1 && temples.length > 1 ? ', and ' : ' and ')}.` : null;
+  return parts.length ? `Needs ${parts.join(parts.length > 1 && need > 1 ? '; and ' : ' and ')}.` : null;
 }
 
 /**

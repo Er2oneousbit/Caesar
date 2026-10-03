@@ -806,7 +806,7 @@ export class Advisors {
             h('td', { class: 'r num' }, `${CONFIG.FESTIVAL_COOLDOWN[r.size]} months`))),
           h('tr', { class: 'muted' }, h('td', {}, 'The city has'), h('td', { class: 'r num' }, `${fmt(have.money)} Dn`), h('td', { class: 'r num', title: 'Food in the granaries' }, fmt(have.food)), h('td', { class: 'r num', title: 'Wine in the warehouses' }, fmt(have.wine)), h('td', {}))),
         sizes.filter(short).map((r) => h('div', { class: 'status bad', style: { fontSize: '12px', marginTop: '4px' }, dataset: { short: r.key } }, `${r.name}: ${r.blocked}`)),
-        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Food comes from the granaries (the largest stocks first), wine from the warehouses; a festival is held only if all of it is there. It is held at the god's own temples: a small festival needs a staffed temple of the god, a large one a staffed large temple of the god as well, a grand one an Oracle too. Any festival resets its god's year; a large or grand one lifts the god and the people more.`),
+        h('div', { class: 'muted sub', style: { marginTop: '4px' } }, `Food comes from the granaries (the largest stocks first), wine from the warehouses; a festival is held only if all of it is there. It is held at the god's own temples, and a bigger feast needs more priests: a staffed temple of the god has 1, a large temple 2; a small festival needs 1, a large one 3, a grand one 3 and an Oracle. Any festival resets its god's year; a large or grand one lifts the god and the people more.`),
         c.festivalCooldown > 0 ? h('div', { class: 'muted', style: { marginTop: '4px' } }, `Next festival possible in ${c.festivalCooldown} month${c.festivalCooldown === 1 ? '' : 's'}.`) : null),
       GOD_KEYS.map((k) => {
         const s = c.gods[k];
@@ -1015,7 +1015,7 @@ export class Advisors {
  * Religion tab: what a god's temples lack for each festival size
  * (festivalTempleBlocked in sim/religion.js), sizes with the same reason
  * together: [{ keys: ['large', 'grand'], names: 'Large and grand festivals',
- * reason: 'Large temples are not available in this province.' }].
+ * reason: 'Oracles are not available in this province.' }].
  */
 function templeNotes(g, god, sizes) {
   const notes = [];

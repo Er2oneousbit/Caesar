@@ -1754,15 +1754,12 @@ try {
   const sent = await page.evaluate(() => {
     const g = window.colonia.game;
     const b = g.military.battle;
-    return { sent: !!(b && b.sent), away: [...g.units.values()].filter((u) => u.away).length, strength: b && b.sent ? b.sent.strength : 0, kind: window.colonia.ui.modalKind, card: document.querySelector('.battle-card')?.textContent || '' };
+    return { sent: !!(b && b.sent), gone: b && b.sent ? b.sent.men.length : 0, onMap: [...g.units.values()].filter((u) => u.away).length, strength: b && b.sent ? b.sent.strength : 0, kind: window.colonia.ui.modalKind, card: document.querySelector('.battle-card')?.textContent || '' };
   });
-  check('the Imperial advisor shows Caesar\'s call for troops and sends the forts switched to Empire service', /Placentia/.test(callText) && sent.sent && sent.away > 0 && sent.strength > 0 && sent.kind === 'advisors' && /strength/.test(sent.card) && errors.length === 0, JSON.stringify({ call: callText.slice(0, 90), ...sent, card: sent.card.slice(0, 120) }));
-  // The recall: once they have left the province, a rider goes after one fort's men (they still count until he reaches them).
+  check('the Imperial advisor shows Caesar\'s call for troops and sends the forts switched to Empire service', /Placentia/.test(callText) && sent.sent && sent.gone > 0 && sent.onMap === 0 && sent.strength > 0 && sent.kind === 'advisors' && /strength/.test(sent.card) && errors.length === 0, JSON.stringify({ call: callText.slice(0, 90), ...sent, card: sent.card.slice(0, 120) }));
+  // The recall: they left the province the moment they were sent, so a rider goes after one fort's men (they still count until he reaches them).
   const recall = await page.evaluate(() => {
     const g = window.colonia.game;
-    // (Set down at the map exit, they leave within a day: the clock barely moves for the steps that follow.)
-    for (const u of g.units.values()) if (u.away) { u.x = u.px = g.map.exit.x + 0.5; u.y = u.py = g.map.exit.y + 0.5; u.path = null; }
-    g.runDays(1);
     window.colonia.ui.openAdvisors('imperial');
     const btn = document.querySelector('.battle-card .recall-battle');
     if (!btn) return { btn: false };

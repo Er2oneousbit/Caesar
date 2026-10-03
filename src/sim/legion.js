@@ -52,6 +52,7 @@ import { Terrain, Wall } from '../world/map.js';
 import { spawnUnit, removeUnit, passable, fillField, damageBuilding, damageWallAt, moveUnitToward, attackWith, enemyCount, screenDirection, marchTo } from './military.js';
 import { residenceOf } from './governor.js';
 import { fightPrefect } from './prefectFight.js';
+import { inOwnFort } from './entities.js';
 
 /** Fresh state: no attack coming, none so far. Kept on game.military.caesar (saved with it). */
 export function newCaesarState() {
@@ -412,7 +413,7 @@ export function updateLegionary(game, u, romans) {
   // man the army would stand there for ever, never camped, never done.
   if (u.ignore && game.time.totalTicks > u.ignoreUntil) u.ignore = null;
   let target = u.target ? game.units.get(u.target) : null;
-  if (target && (Math.hypot(target.x - u.x, target.y - u.y) > def.aggro * 1.6 || (u.ignore && u.ignore.includes(target.id)))) target = null;
+  if (target && (Math.hypot(target.x - u.x, target.y - u.y) > def.aggro * 1.6 || (u.ignore && u.ignore.includes(target.id)) || inOwnFort(game, target))) target = null; // (a man gone into his fort's yard is out of reach)
   if ((game.time.totalTicks + u.id) % 6 === 0 || !target) target = nearestRoman(romans, u, def.aggro) || target;
   u.target = target ? target.id : 0;
   if (target) {

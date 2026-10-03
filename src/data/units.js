@@ -173,6 +173,29 @@ export const RAM_COOLDOWN = 60;
 /** Soldiers per fort. */
 export const FORT_CAPACITY = 8;
 
+/**
+ * A fort's yard, where its men stand at rest (sim/military.js yardSpot),
+ * per kind of soldier: one spot per place, as (u, v) in tiles on the
+ * unturned art of a 3 x 3 fort (render/buildingArt.js fortArt: a camp
+ * walled on every side with a tower at each corner, the gateway in the
+ * middle of the +v wall, tents (an archery target among the archers') or a
+ * stable and two horses inside, the standard in the middle). The men are
+ * drawn after the whole fort, so its walls cannot swallow them, but then
+ * nothing in front of a man hides his feet either: each spot is on open
+ * ground where, from whichever side the view is turned, the walls, towers,
+ * gateway, tents and horses in front of him reach at most a few pixels
+ * over his feet (worked out from the art's boxes: the best open spots at
+ * least a third of a tile apart). A fort of another size scales them.
+ */
+export const FORT_YARD = Object.freeze({
+  legionary: [[1.45, 1.35], [1.45, 1.7], [1.75, 1.9], [1.4, 2.05], [1.75, 1.15], [1.1, 1.85], [1.75, 1.55], [1.15, 1.2]],
+  archer: [[1.45, 1.35], [1.9, 1.5], [1.45, 1.7], [2.3, 1.4], [1.55, 2.05], [1.2, 1.95], [1.8, 1.15], [1.85, 1.85]],
+  cavalry: [[1.55, 2.0], [1.55, 0.65], [2.3, 1.35], [1.4, 1.6], [2.45, 1.75], [1.95, 0.9], [1.3, 1.0], [1.95, 2.1]],
+});
+
+/** The middle of a fort's gateway on its unturned art (u, v in tiles of a 3 x 3 fort; buildingArt.js fortArt). */
+export const FORT_GATEWAY = Object.freeze([1.5, 3]);
+
 /** Days a fully staffed barracks needs to train one recruit. */
 export const TRAIN_DAYS = 8;
 

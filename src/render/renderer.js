@@ -413,21 +413,67 @@ export function walkerWorld(w, alpha, t = 0, W = 0, H = 0) {
  * How far ahead of a carter (world px, at zoom 1) his cart reaches: a hand
  * cart's far end, or a farm wagon and its ox (walkerArt.js drawCart).
  */
+/** A sprite pixel this opaque or more hides what was drawn under it (its soft contact shadows do not). */
+const OPAQUE_ALPHA = 128;
+
 /**
- * Is a figure whose feet are at world y `feetY` hidden behind a building at
- * world point `p`? Buildings are prisms: height H over their footprint. The
- * screen column through the point crosses a footprint between world y lo and
- * hi; the building covers the point if the point is at most H above that
- * span, and it is in front of a figure whose feet are above hi.
- * @returns {(feetY:number) => boolean}
+ * The alpha (0..255) of one pixel of a sprite's canvas. Read only on a
+ * click, never per frame: a read from the canvas is slow, a click is rare.
+ * A canvas that cannot be read counts as opaque (the building keeps the
+ * click, as before pixels were read).
  */
-function coveredAt(boxes, p) {
-  const hx = p.x / HALF_W;
-  return (feetY) => (boxes || []).some((o) => {
-    const lo = Math.max(HALF_H * (2 * o.x - hx), HALF_H * (2 * o.y + hx));
-    const hi = Math.min(HALF_H * (2 * (o.x + o.S) - hx), HALF_H * (2 * (o.y + o.S) + hx));
-    return lo <= hi && hi > feetY + 1 && p.y <= hi && p.y + o.H >= lo;
-  });
+function spriteAlpha(spr, x, y) {
+  try {
+    return spr.canvas.getContext('2d').getImageData(x, y, 1, 1).data[3];
+  } catch {
+    return 255;
+  }
+}
+
+/**
+ * Was building strip `it` (a K_STRIP item collectBuilding queued: its
+ * sprite, anchor `wx, wy` in world px and strip `j` of `n`, or `full`)
+ * painted opaque at world point `p` this frame? The sprite pixel under the
+ * point is the one blit() and blitStrip() put there: its anchor sits at
+ * (wx, wy), and a sprite made at scale `s` holds `s` pixels per world px
+ * (drawn stretched while a zoom eases, the same pixel lands there).
+ */
+function stripOpaqueAt(it, p) {
+  const spr = it.spr;
+  if (!spr || !spr.s || !spr.canvas) return false;
+  const x = Math.floor((p.x - it.wx) * spr.s + spr.ax);
+  const y = Math.floor((p.y - it.wy) * spr.s + spr.ay);
+  if (x < 0 || y < 0 || x >= spr.w || y >= spr.h) return false;
+  if (!it.full && (x < Math.round((it.j * spr.w) / it.n) || x >= Math.round(((it.j + 1) * spr.w) / it.n))) return false;
+  return spriteAlpha(spr, x, y) >= OPAQUE_ALPHA;
+}
+
+/**
+ * Where in this frame's draw order the last building strip painted opaque
+ * at world point `p` lies (its depth `d`; -Infinity: no building there). A
+ * figure drawn before it (a smaller depth) is hidden at that point; one
+ * drawn after it shows. What a building hides is what its art covers, strip
+ * by strip as the frame drew it: a box as tall as the sprite over the whole
+ * footprint hid a recruit beside a low academy wall, under the empty air
+ * by its flag pole (playtest).
+ */
+export function coverDepthAt(strips, p) {
+  let best = -Infinity;
+  for (const it of strips || []) {
+    if (it.d > best && stripOpaqueAt(it, p)) best = it.d;
+  }
+  return best;
+}
+
+/**
+ * Is a figure drawn this frame at spot `s` (its draw depth `d`) hidden at
+ * world point `p` by a building strip drawn after it? The pixels are read
+ * for the first figure that asks, and only on a click.
+ * @returns {(s:{d:number}) => boolean}
+ */
+function coveredAt(strips, p) {
+  let cover;
+  return (s) => (cover ??= coverDepthAt(strips, p)) > s.d;
 }
 
 /** How far past its tile's depth a bridge deck is drawn: after a ship under it (+0.003, +0.004), before a walker on it. */
@@ -474,7 +520,7 @@ export class Renderer {
     this.unitSpots = []; // where each soldier, raider and imperial legionary was drawn this frame (pickUnit)
     this.follow = null; // { id } of a walker the view follows (until the map is moved)
     this.walkerSpots = []; // where each walker was drawn this frame, for clicks (pickWalker)
-    this.buildingBoxes = []; // footprint and height of each building drawn this frame (pickWalker)
+    this.coverStrips = []; // the building strips drawn this frame, for clicks (coverDepthAt: what hides a figure)
     this.noRoadMarks = []; // buildings in view with no road to use, and their height (the red sign)
     this.noRoadSpots = []; // where those signs were drawn this frame (device px)
     this.deployFort = 0; // fort or naval station id while the player picks a deployment tile
@@ -586,6 +632,7 @@ export class Renderer {
     this.walkerSpots = [];
     this.shipSpots = [];
     this.unitSpots = [];
+    this.coverStrips = [];
     this.selectedUnit = 0;
     this.headings.clear();
     // A new or loaded game opens unturned (a save's camera state turns it back, Camera.restore).
@@ -663,6 +710,21 @@ export class Renderer {
   }
 
   /**
+   * The draw depth of a soldier in his fort's yard (at map point fx, fy, as
+   * drawn this frame): just after the fort's last strip, before its flag
+   * cloth. Strips are whole screen columns of the sprite, walls, tents and
+   * yard in one, so a man drawn at his own depth was painted over by the
+   * fort; drawn after it he shows, and stays clickable (his yard spot keeps
+   * him clear of the walls in front of him, FORT_YARD). null: he is not in
+   * his fort's yard.
+   */
+  yardDepth(u, fx, fy) {
+    const f = u.fort ? this.game.buildings.get(u.fort) : null;
+    if (!f || fx < f.x || fy < f.y || fx >= f.x + f.size || fy >= f.y + f.size) return null;
+    return Math.max(...this.stripsFor(f)) + 0.0002;
+  }
+
+  /**
    * Render one frame.
    * @param {number} alpha  0..1 progress toward the next sim tick (smooth walkers)
    * @param {number} dt     seconds since the last frame
@@ -714,7 +776,7 @@ export class Renderer {
     const motion = this.motionOn;
     const glints = motion && cam.zoom >= 1 && env.sun > 0.5 && env.overcast < 0.5;
     const visibleBuildings = [];
-    this.buildingBoxes = [];
+    this.coverStrips = [];
     this.noRoadMarks = [];
     const waterFrame = Math.floor(this.time * 2.5) % 4;
 
@@ -851,8 +913,10 @@ export class Renderer {
       const dirX = ddx === 0 ? (last === 1 || last === 0 ? 1 : -1) : Math.sign(ddx);
       // A carter's cart (and a wagon's ox) is drawn ahead of him and is most
       // of what the eye sees: clicks on it pick the carter (cartReach).
-      this.walkerSpots.push({ id: w.id, wx, wy, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
-      items.push({ d: span.d ?? fd + 0.003, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
+      // (Its depth goes with the spot: a click asks what was drawn over it, coverDepthAt.)
+      const d = span.d ?? fd + 0.003;
+      this.walkerSpots.push({ id: w.id, wx, wy, d, ship: w.kind === 'ship', ahead: w.type === 'cart' ? dirX * cartReach(origin) : 0 });
+      items.push({ d, kind: K_WALKER, w, wx, wy, stride, origin, dirX, dirY: Math.sign(ddy) });
     }
 
     // --- soldiers, raiders, missiles, rally flags ---------------------------
@@ -873,9 +937,10 @@ export class Renderer {
       const stride = u.walked - (1 - alpha) * Math.hypot(u.x - u.px, u.y - u.py);
       const face = this.unitFace(u, vt); // (before the view test: it keeps the heading of units out of view too)
       if (!inView(wx, wy) && !(naval && inView(wx, wy - 60))) continue;
-      items.push({ d: span.d ?? ux + uy + 0.004, kind: K_UNIT, u, wx, wy, stride, face });
+      const d = this.yardDepth(u, fx, fy) ?? span.d ?? ux + uy + 0.004;
+      items.push({ d, kind: K_UNIT, u, wx, wy, stride, face });
       if (naval) this.shipSpots.push({ id: u.id, wx, wy });
-      else this.unitSpots.push({ id: u.id, wx, wy });
+      else this.unitSpots.push({ id: u.id, wx, wy, d });
     }
     if (this.headings.size > game.units.size + 64) {
       for (const id of this.headings.keys()) if (!game.units.has(id)) this.headings.delete(id);
@@ -1310,8 +1375,6 @@ export class Renderer {
     // `true`: live flags (the sprite has bare poles; drawExtra adds fluttering cloth).
     const snow = this.pal.snow;
     const spr = this.sprites.get(key + this.snowKey, () => buildingSpec(b.type, b.size, variant, state, true, snow, sick, T), this.snowPrev === null ? null : key + this.snowPrev);
-    // (In view tiles: picking compares them with world px of the view.)
-    if (spr && spr.s) this.buildingBoxes.push({ x: foot.vx, y: foot.vy, S: b.size, H: spr.ay / spr.s });
     if (lacksRoad(b)) this.noRoadMarks.push({ b, H: spr && spr.s ? spr.ay / spr.s : 0 });
     const n = depths.length;
     // Just built: rise out of the ground and fade in (half a second).
@@ -1327,10 +1390,17 @@ export class Renderer {
         rise = (1 - e) * 14;
       }
     }
+    // (Each strip is kept for clicks too: coverDepthAt reads what it painted.)
     if (b.size === 1) {
-      items.push({ d: front, kind: K_STRIP, spr, wx, wy: wy + rise, full: true, alpha });
+      const it = { d: front, kind: K_STRIP, spr, wx, wy: wy + rise, full: true, alpha };
+      items.push(it);
+      this.coverStrips.push(it);
     } else {
-      for (let j = 0; j < n; j++) items.push({ d: depths[j], kind: K_STRIP, spr, wx, wy: wy + rise, j, n, alpha });
+      for (let j = 0; j < n; j++) {
+        const it = { d: depths[j], kind: K_STRIP, spr, wx, wy: wy + rise, j, n, alpha };
+        items.push(it);
+        this.coverStrips.push(it);
+      }
     }
     const kind = b.def.kind;
     if (kind === 'warehouse' || kind === 'granary') {
@@ -1840,18 +1910,15 @@ export class Renderer {
    * `generous`, never under about 22 x 36 CSS px (people were
    * hard to click; zoomed out a figure is a few pixels wide). The generous
    * box only wins on open ground (app.js clickTile): on a building or a
-   * roadblock it would steal clicks meant for them. Where a building stands
-   * in front of a walker and covers the point, the building gets the click.
+   * roadblock it would steal clicks meant for them. Where a building drawn
+   * after a walker is opaque at the point (coverDepthAt), the building gets
+   * the click.
    */
   pickWalker(sx, sy, generous = true) {
     const cam = this.camera;
     const p = cam.screenToWorld(sx, sy);
     const css = cam.dpr / cam.scale; // world px per CSS px
-    // Buildings as prisms: height H over their footprint. The screen column
-    // through the point crosses a footprint between world y lo and hi; the
-    // building covers the point if the point is at most H above that span,
-    // and it is in front of a walker whose feet are above hi.
-    const covers = coveredAt(this.buildingBoxes, p);
+    const covered = coveredAt(this.coverStrips, p);
     let best = 0;
     let bestD = Infinity;
     for (const s of this.walkerSpots) {
@@ -1866,7 +1933,7 @@ export class Renderer {
       if (dx < near - hw || dx > far + hw || dy < -top || dy > bottom) continue;
       const ex = dx < near ? dx - near : dx > far ? dx - far : 0;
       const d = Math.hypot(ex, dy + top / 2);
-      if (d < bestD && !covers(s.wy)) { bestD = d; best = s.id; }
+      if (d < bestD && !covered(s)) { bestD = d; best = s.id; }
     }
     return best;
   }
@@ -1881,7 +1948,7 @@ export class Renderer {
     const cam = this.camera;
     const p = cam.screenToWorld(sx, sy);
     const css = cam.dpr / cam.scale; // world px per CSS px
-    const covers = coveredAt(this.buildingBoxes, p);
+    const covered = coveredAt(this.coverStrips, p);
     const hw = Math.max(8, 9 * css);
     const top = Math.max(28, 22 * css);
     const bottom = Math.max(5, 5 * css);
@@ -1892,7 +1959,7 @@ export class Renderer {
       const dy = p.y - s.wy;
       if (Math.abs(dx) > hw || dy < -top || dy > bottom) continue;
       const d = Math.hypot(dx, dy + top / 2);
-      if (d < bestD && !covers(s.wy)) { bestD = d; best = s.id; }
+      if (d < bestD && !covered(s)) { bestD = d; best = s.id; }
     }
     return best;
   }

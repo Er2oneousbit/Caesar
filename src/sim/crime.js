@@ -61,7 +61,7 @@ import { GOODS } from '../data/goods.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { RIOT_TARGETS, RIOT_SPARED_KINDS, RIOT_SPARED_TIER, MOOD_REASONS } from '../data/crime.js';
 import { Terrain, Road, Wall } from '../world/map.js';
-import { spawnWalker, killWalker } from './entities.js';
+import { spawnWalker, killWalker, inOwnFort } from './entities.js';
 import { followPath, goHome, startRoaming } from './movement.js';
 import { igniteBuilding, buildingLabel, withArticle } from './risk.js';
 import { transact } from './economy.js';
@@ -725,7 +725,8 @@ export function updateCriminals(game) {
     return;
   }
   const soldiers = [];
-  for (const u of game.units.values()) if (u.side === 'rome' && !UNIT_TYPES[u.type].naval) soldiers.push(u); // (a warship catches nobody in the street)
+  // (A warship catches nobody in the street, nor does a man in his fort's yard, behind its walls.)
+  for (const u of game.units.values()) if (u.side === 'rome' && !UNIT_TYPES[u.type].naval && !inOwnFort(game, u)) soldiers.push(u);
   for (const c of criminals) {
     // Checked every tick, not only between moves: a rioter on a long march
     // gives up on time too.

@@ -1414,15 +1414,19 @@ try {
     const homes = [...g.buildings.values()].filter((b) => b.house && b.house.pop > 0 && b.fireRisk > 0).sort((a, b) => a.id - b.id);
     const b = homes[k] || homes[0];
     if (!b) return null;
-    window.__torch = { id: b.id, fires: g.city.stats.fires };
+    window.__torch = { x: b.x, y: b.y, fires: g.city.stats.fires };
     window.colonia.setSpeed(4);
     return { id: b.id, x: b.x, y: b.y };
   }, pick);
+  // Followed by its tile, not its id: a home that grows into a larger one
+  // (homes merge into a 2x2) is a new building, and the check waited on the
+  // gone id until it timed out (CI, v0.18.9).
   const burnt = () => page.waitForFunction(() => {
     const g = window.colonia.game;
-    const b = g.buildings.get(window.__torch.id);
-    if (b) b.fireRisk = 1e6; // (a passing prefect would lower it again)
-    return !b && g.city.stats.fires > window.__torch.fires;
+    const t = window.__torch;
+    const b = g.buildings.get(g.map.buildingAt(t.x, t.y));
+    if (b && b.house) b.fireRisk = 1e6; // (a passing prefect would lower it again)
+    return !(b && b.house) && g.city.stats.fires > t.fires;
   }, null, { timeout: 30000, polling: 50 }).then(() => true, () => false);
   const torch = await lightAHome(0);
   const lit = torch ? await burnt() : false;

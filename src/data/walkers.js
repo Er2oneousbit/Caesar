@@ -35,6 +35,9 @@ export const WALKER_TYPES = Object.freeze({
   entertainer: { name: 'Entertainer', kind: 'roamer', group: 'entertainment', effect: 'venue', tunic: '#d4573b', item: 'mask', roam: 26, desc: 'Announces shows at the local venue.' },
   // Twice as fast and twice as far as the other entertainers, as in the original.
   charioteer: { name: 'Charioteer', kind: 'roamer', group: 'entertainment', effect: 'venue', tunic: '#2f6db5', item: 'chariot', roam: 52, speed: 2, desc: 'Drives a racing chariot through the streets to bring people to the races.' },
+  // The Topiaria's gardener (sim/gardens.js): tends the gardens and statues
+  // within SERVICE_RADIUS of his road, drawn to the ones longest untended.
+  gardener: { name: 'Topiarius (Gardener)', kind: 'roamer', group: 'maintenance', effect: 'tend', tunic: '#5f7d3a', item: 'shears', roam: 30, desc: 'Clips the hedges, weeds the beds and scrubs the statues of every garden and statue he passes, so they keep their full desirability.' },
   taxman: { name: 'Tax Collector', kind: 'roamer', group: 'tax', effect: 'tax', tunic: '#3d3d6b', item: 'purse', roam: 30, desc: 'Registers households for taxation.' },
   // Native villages (sim/natives.js): the mission post's walker calms every
   // hut and meeting place within 4 tiles of him (not SERVICE_RADIUS); a
@@ -69,7 +72,7 @@ export const WALKER_TYPES = Object.freeze({
  * map.roadblock (see world/map.js ROADBLOCK).
  */
 export const ROADBLOCK_GROUPS = Object.freeze([
-  { key: 'maintenance', name: 'Prefects and engineers', bit: 1 },
+  { key: 'maintenance', name: 'Prefects, engineers and gardeners', bit: 1 },
   { key: 'religion', name: 'Priests', bit: 2 },
   { key: 'market', name: 'Market vendors', bit: 4 },
   { key: 'entertainment', name: 'Entertainers', bit: 8 },

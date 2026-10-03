@@ -174,32 +174,35 @@ test('capacity model: shows, patricians, trade and winter fields', () => {
 });
 
 test('capacity model: a villa quarter where the Villa can be reached, its people using services but not working', () => {
-  // Urbs Magna at 8,000 people: 5% in Villas (400 people on 36 tiles), the
-  // rest Insulae. Its 7,600 plebeians put 2,432 to work, so 2,189 jobs keep
-  // unemployment at 10%; the city plans 2,167, just short (the ceiling is
-  // 7,900). With every home a working one the same city has 2,106 jobs for
-  // 2,560 workers (its ceiling 6,450).
+  // Urbs Magna at 8,200 people: 5% in Villas (410 people on 37 tiles), the
+  // rest Insulae. Its 7,790 plebeians put 2,493 to work, so 2,244 jobs keep
+  // unemployment at 10%; the city plans 2,235, just short (the ceiling is
+  // 8,160; 7,900 before the gardeners' yards, whose 7 add 28 jobs). With
+  // every home a working one the same city has 2,201 jobs for 2,624 workers
+  // (its ceiling 6,640).
   const c7 = findScenario('c7');
-  const plan = planCity(c7, 8000, SENSIBLE);
+  const plan = planCity(c7, 8200, SENSIBLE);
   assert.equal(PATRICIAN_SHARE, 0.05);
   assert.equal(plan.villaLevel, VILLA_LEVEL);
   assert.equal(HOUSE_TIERS[VILLA_LEVEL].name, 'Villa');
-  assert.deepEqual([plan.plebs, plan.villas], [7600, 400]);
-  assert.ok(Math.abs(plan.villaTiles - 400 / 11) < 1e-9, 'Villas hold 11 a tile');
-  assert.equal(plan.jobs, 2167);
-  assert.ok(!employsEnough(c7, 8000, SENSIBLE), 'short of 2,189');
-  assert.ok(employsEnough(c7, 7900, SENSIBLE));
-  assert.equal(employmentCeiling(c7, SENSIBLE), 7900);
-  const working = planCity(c7, 8000, { ...SENSIBLE, villas: 0 });
-  assert.deepEqual([working.plebs, working.villas, working.jobs], [8000, 0, 2106]);
-  assert.equal(employmentCeiling(c7, { ...SENSIBLE, villas: 0 }), 6450);
+  assert.deepEqual([plan.plebs, plan.villas], [7790, 410]);
+  assert.ok(Math.abs(plan.villaTiles - 410 / 11) < 1e-9, 'Villas hold 11 a tile');
+  assert.equal(plan.jobs, 2235);
+  assert.ok(!employsEnough(c7, 8200, SENSIBLE), 'short of 2,244');
+  assert.ok(employsEnough(c7, 8160, SENSIBLE));
+  assert.equal(employmentCeiling(c7, SENSIBLE), 8160);
+  const working = planCity(c7, 8200, { ...SENSIBLE, villas: 0 });
+  assert.deepEqual([working.plebs, working.villas, working.jobs], [8200, 0, 2201]);
+  assert.equal(employmentCeiling(c7, { ...SENSIBLE, villas: 0 }), 6640);
   // The villas' walkers are the city's: no service doubled for them, only
   // more of it for their tiles, and their wine.
   const count = (p, key) => p.items.find((it) => it.key === key)?.count || 0;
-  for (const key of ['prefecture', 'engineer_post', 'market', 'forum', 'senate', 'barber', 'baths']) assert.ok(count(plan, key) <= count(working, key) + 1, `${key}: ${count(working, key)} -> ${count(plan, key)}`);
+  for (const key of ['prefecture', 'engineer_post', 'market', 'forum', 'senate', 'barber', 'baths', 'gardener_yard']) assert.ok(count(plan, key) <= count(working, key) + 1, `${key}: ${count(working, key)} -> ${count(plan, key)}`);
   assert.ok(count(plan, 'farm_vine') > count(working, 'farm_vine'), 'the villas drink wine');
-  // Missions 1 to 3 cannot reach the Villa: no quarter, and their ceilings stay.
-  for (const [id, ceiling] of [['c1', 300], ['c2', 450], ['c3', 980], ['c3m', 1160]]) {
+  // Missions 1 to 3 cannot reach the Villa: no quarter. (Their ceilings
+  // were 300, 450, 980 and 1,160 before the gardeners' yards: mission 1's
+  // Huts need no gardens, so it plans none.)
+  for (const [id, ceiling] of [['c1', 300], ['c2', 470], ['c3', 1120], ['c3m', 1190]]) {
     const s = findScenario(id);
     assert.equal(planCity(s, 500, SENSIBLE).villas, 0, `${id}: no villas`);
     assert.equal(employmentCeiling(s, SENSIBLE), ceiling, id);
@@ -207,12 +210,12 @@ test('capacity model: a villa quarter where the Villa can be reached, its people
 });
 
 test('capacity model: only the plebeians look for work', () => {
-  // Urbs Magna at 7,900: its 7,505 plebeians put 2,402 to work, and its 2,163
+  // Urbs Magna at 7,900: its 7,505 plebeians put 2,402 to work, and its 2,191
   // jobs employ 90% of them. Counting all 7,900 it would need 2,275.
   const c7 = findScenario('c7');
   const plan = planCity(c7, 7900, SENSIBLE);
   const enough = (n) => plan.jobs >= n * CONFIG.WORKFORCE_RATIO * (1 - CONFIG.UNEMPLOYMENT_MOOD_FREE);
-  assert.equal(plan.jobs, 2163);
+  assert.equal(plan.jobs, 2191);
   assert.ok(enough(plan.plebs) && !enough(7900));
   assert.ok(employsEnough(c7, 7900, SENSIBLE));
   // A city all of villas has no workforce: it never lacks jobs.

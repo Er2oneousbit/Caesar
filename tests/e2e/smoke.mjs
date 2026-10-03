@@ -2646,6 +2646,107 @@ try {
     await bp.close();
   }
 
+  // 6e2. Gardens fade untended (sim/gardens.js), on a page of its own so
+  //      the main game's map and days stay as they were (the garrison
+  //      check needs its room): on the demo city, a Topiaria (Gardeners'
+  //      Yard) and a garden picked from the build menu and placed with the
+  //      mouse beside a street of homes; the yard sends out its gardener; a
+  //      garden left untended says so in its panel, and the Gardens and
+  //      statues overlay opens with its legend.
+  {
+    const gp = await ctx.newPage();
+    const gerrors = [];
+    gp.on('pageerror', (e) => gerrors.push(`pageerror: ${e.message}`));
+    gp.on('console', (m) => { if (m.type() === 'error' && !ignorable(m.text())) gerrors.push(m.text()); });
+    await gp.goto(`${url}?skipmenu=1&map=small&seed=demo&mute=1&money=90000`);
+    await gp.waitForFunction(() => window.colonia && window.colonia.game, null, { timeout: 15000 });
+    const yardAt = await gp.evaluate(() => {
+      const app = window.colonia;
+      app.paused = true;
+      app.renderer.camera.zoomIndex = 2;
+      app.ui.console.run('demo 2');
+      const g = app.game;
+      g.runDays(60); // people in the homes, for the yard's workers
+      const m = g.map;
+      const free = (x, y) => m.inBounds(x, y) && m.isFree(x, y) && m.terrain[m.idx(x, y)] !== 2;
+      for (const h of g.buildings.values()) {
+        if (!h.house || !(h.house.pop > 0) || h.accessRoad < 0) continue;
+        const rx = m.xOf(h.accessRoad);
+        const ry = m.yOf(h.accessRoad);
+        // A free tile beside the home's street for the yard, and another
+        // within 2 tiles of that street for the garden.
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const yard = { x: rx + dx, y: ry + dy };
+          if (!free(yard.x, yard.y)) continue;
+          for (let gy = ry - 2; gy <= ry + 2; gy++) {
+            for (let gx = rx - 2; gx <= rx + 2; gx++) {
+              if ((gx === yard.x && gy === yard.y) || !free(gx, gy)) continue;
+              app.renderer.camera.centerOnTile(rx, ry);
+              app.renderer.render(0, 0.016);
+              return { yard, garden: { x: gx, y: gy } };
+            }
+          }
+        }
+      }
+      return null;
+    });
+    check('the demo city has a street of homes with room for a gardeners\' yard and a garden', !!yardAt);
+    if (yardAt) {
+      await gp.waitForTimeout(300);
+      const gScreen = (tx, ty) => gp.evaluate(([x, y]) => {
+        const cam = window.colonia.renderer.camera;
+        const wx = (x + 0.5 - (y + 0.5)) * 32;
+        const wy = (x + 0.5 + (y + 0.5)) * 16;
+        const r = window.colonia.canvas.getBoundingClientRect();
+        return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
+      }, [tx, ty]);
+      const placed = {};
+      for (const key of ['gardener_yard', 'garden']) {
+        await gp.click('.cat-btn[title^="Government"]');
+        const listed = await gp.isVisible(`.build-item[data-key="${key}"]`);
+        if (listed) await gp.click(`.build-item[data-key="${key}"]`);
+        const tool = await gp.evaluate(() => window.colonia.input.tool);
+        const at = key === 'garden' ? yardAt.garden : yardAt.yard;
+        if (tool === key) {
+          const p = await gScreen(at.x, at.y);
+          await gp.mouse.move(p.x - 4, p.y);
+          await gp.mouse.move(p.x, p.y);
+          await gp.waitForTimeout(100);
+          await gp.mouse.click(p.x, p.y);
+        }
+        if (await gp.evaluate(() => window.colonia.input.tool)) await gp.keyboard.press('Escape');
+        placed[key] = { listed, tool, placed: await gp.evaluate(({ x, y, k }) => window.colonia.game.buildings.get(window.colonia.game.map.building[window.colonia.game.map.idx(x, y)])?.type === k, { ...at, k: key }) };
+      }
+      const tending = await gp.evaluate(({ yard, garden }) => {
+        const app = window.colonia;
+        const g = app.game;
+        const y = g.buildings.get(g.map.building[g.map.idx(yard.x, yard.y)]);
+        const b = g.buildings.get(g.map.building[g.map.idx(garden.x, garden.y)]);
+        if (!y || !b) return null;
+        let walker = false;
+        for (let d = 0; d < 24 && !walker; d++) {
+          g.runDays(1);
+          walker = [...g.walkers.values()].some((w) => w.type === 'gardener' && w.origin === y.id);
+        }
+        // Left untended for 100 days: down to its floor.
+        b.tendedDay = g.time.totalDays - 100;
+        g.updateBuilding(b);
+        app.ui.info.showBuilding(b.id);
+        const text = document.querySelector('#info-panel')?.textContent || '';
+        app.ui.info.close();
+        return { walker, staff: y.workers, step: b.careStep, untended: /Care\s*Untended: bonus at 25%/.test(text), note: /Last tended 100 days ago/.test(text) };
+      }, yardAt);
+      await gp.selectOption('.hud-select', 'gardens');
+      await gp.waitForTimeout(150);
+      const legend = await gp.isVisible('#overlay-legend:has-text("Tended: its full desirability")');
+      await gp.selectOption('.hud-select', 'none');
+      check('a Topiaria and a garden are placed from the build menu; its gardener walks out; an untended garden says so; the Gardens overlay opens',
+        placed.gardener_yard?.placed && placed.garden?.placed && tending?.walker && tending.step === 4 && tending.untended && tending.note && legend && gerrors.length === 0,
+        JSON.stringify({ yardAt, placed, tending, legend, gerrors }));
+    }
+    await gp.close();
+  }
+
   // 6d2. Peoples and wolves (data/peoples.js, sim/wildlife.js): a sandbox at
   //      Narbo Martius set to the province's own people and with wolves:
   //      the Cimbri raid it and packs roam its woods; a click on a wolf and

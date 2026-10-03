@@ -49,6 +49,7 @@ import { withArticle } from '../sim/risk.js';
 import { MONTH_SHORT, formatYear } from '../sim/time.js';
 import { rankLine } from './governorInfo.js';
 import { awayOf } from '../sim/battle.js';
+import { careText, careNote } from './gardenInfo.js';
 import { serviceButton, serviceNote, recallControls, newMenNote } from './empireInfo.js';
 import { fortTitle, fortKey } from '../sim/fortNumbers.js';
 
@@ -308,6 +309,15 @@ export function taxLine(game, hs) {
   if (!offices.length) return 'Not registered: the city has no Forum to send tax collectors';
   if (!offices.some((b) => b.efficiency > 0 && b.accessRoad >= 0)) return 'Not registered: no Forum has the workers and a road to send tax collectors';
   return `Not registered: no tax collector has passed in the last ${CONFIG.TAX_ACCESS_DAYS} days. A Forum nearer by, or roadblocks that keep its collector on these streets, would reach it`;
+}
+
+/**
+ * A garden's or statue's care (sim/gardens.js): tended or how far its bonus
+ * has faded, and since when; where the mission has no gardeners, that it
+ * never fades.
+ */
+function careRows(g, b) {
+  return [kv('Care', careText(g, b)), h('div', { class: 'muted' }, careNote(g, b))];
 }
 
 export class InfoPanel {
@@ -804,7 +814,7 @@ export class InfoPanel {
         break;
       case 'decor': {
         const [v, , , r] = def.des;
-        parts.push(sec('Beauty', kv('Desirability', `+${v} fading over ${r} tiles`)));
+        parts.push(sec('Beauty', kv('Desirability', `+${v} fading over ${r} tiles`), def.tended ? careRows(g, b) : null));
         break;
       }
       case 'arch': {

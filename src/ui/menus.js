@@ -219,6 +219,8 @@ const SEA_RAIDS_HELP = `Where a river or the sea reaches the map edge, about ${M
 
 /** What the Wolves switch does (sandbox setup). */
 const WOLVES_HELP = 'Wolf packs in the woods (none on the desert map). They keep away from the city but fall on anyone who walks near: cart pushers, traders, settlers. Soldiers and towers can kill them; a pack with one wolf left grows back.';
+/** What the sandbox's Events switch does. */
+const EVENTS_HELP = 'Now and then Rome raises or cuts wages, landslides or storms stop caravans or ships for 3 months, bad water lowers city health, or a mine or clay pit caves in (less often on Easy, more on Hard and Insane). Off: none of these.';
 
 export function sandboxMenu(app) {
   const state = {
@@ -229,6 +231,7 @@ export function sandboxMenu(app) {
     funds: 8000,
     invasions: 'occasional',
     seaRaids: app.settings.seaRaids !== false,
+    events: true,
     rank: SANDBOX_RANK,
     site: HOME_SITE,
     raiders: 'generic', // or 'site': the province's own people (data/peoples.js)
@@ -281,7 +284,10 @@ export function sandboxMenu(app) {
         h('span', {}, 'Sea raids', h('div', { class: 'muted', style: { fontSize: '12px' } }, SEA_RAIDS_HELP))),
       h('label', { class: 'check-row' },
         h('input', { type: 'checkbox', class: 'wolves-check', checked: state.wolves, onchange: (e) => { state.wolves = e.target.checked; } }),
-        h('span', {}, 'Wolves', h('div', { class: 'muted', style: { fontSize: '12px' } }, WOLVES_HELP)))),
+        h('span', {}, 'Wolves', h('div', { class: 'muted', style: { fontSize: '12px' } }, WOLVES_HELP))),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', class: 'events-switch', checked: state.events, onchange: (e) => { state.events = e.target.checked; } }),
+        h('span', {}, 'Events', h('div', { class: 'muted', style: { fontSize: '12px' } }, EVENTS_HELP)))),
   ], [
     h('button', { class: 'btn', onclick: () => app.ui.closeModal() }, 'Back'),
     h('button', { class: 'btn primary', onclick: () => { app.ui.closeModal(); app.setDifficultyPref(state.difficulty); app.newSandbox(state); } }, 'Found the city'),

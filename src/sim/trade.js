@@ -63,6 +63,7 @@ import { homeSiteId } from '../data/sites.js';
 import { tripDays } from '../data/empireRoutes.js';
 import { tradePrice } from './prices.js';
 import { partnerOn, partnerIdle } from './tradeSwitches.js';
+import { tradeHalted } from './events.js';
 
 /** 'land' or 'sea' */
 export function routeKind(partnerId) {
@@ -151,8 +152,11 @@ export function updateTrade(game) {
     // The usual range, or shorter for a route busier than its traders carry (sim/tradeDemand.js).
     const [a, b] = routeInterval(game, id);
     // Every good it deals in switched off: the wait runs as usual (the same
-    // draw), but nobody sets out (sim/tradeSwitches.js).
-    if (partnerIdle(game, id, partnerBuys(game, id))) {
+    // draw), but nobody sets out (sim/tradeSwitches.js). Likewise while a
+    // disruption stops every route of its kind (landslides, storms, Neptune:
+    // sim/events.js): the visit that falls due is lost, not saved up, so the
+    // routes do not all arrive at once when it ends.
+    if (partnerIdle(game, id, partnerBuys(game, id)) || tradeHalted(game, sea ? 'sea' : 'land')) {
       r.nextVisit = game.time.totalDays + game.rng.range(a, b);
       delete r.waiting;
       continue;

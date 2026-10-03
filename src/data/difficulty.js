@@ -43,10 +43,16 @@
  *                    only halted them); these are the sane order, with the
  *                    later community engine's numbers per level. The army's
  *                    size scales with raidSize (CONFIG.LEGION_SIZES).
+ *   events           how often the monthly random events come (sim/events.js): the
+ *                    share of the original's table that draws an event (0.5: half
+ *                    as often, 1.5: half again as often)
+ *   eventCooldown    months before the same random event can come again (the
+ *                    original had none; these are the later community engine's
+ *                    numbers). Rome's wages always wait 12 (data/events.js)
  *
  * Easy, Normal and Hard only use the first four levers plus raid size, crime,
- * crimePeace and disease (and Easy a longer devolveDays); Insane pulls on all
- * of them.
+ * crimePeace, disease and the two event levers (and Easy a longer devolveDays);
+ * Insane pulls on all of them.
  *
  * Crime and peace: none on Easy, a little on Normal, some on
  * Hard, a lot on Insane. Protests only cost on Insane, and only every fifth:
@@ -71,7 +77,7 @@
 export const DIFFICULTY = Object.freeze({
   easy: Object.freeze({
     name: 'Easy',
-    desc: 'More money, faster growth, rare fires and collapses, homes slower to decline, less crime (and it costs no peace) and disease, smaller raids. Good for learning.',
+    desc: 'More money, faster growth, rare fires and collapses, homes slower to decline, less crime (and it costs no peace) and disease, smaller raids, fewer events. Good for learning.',
     // risk 0.5: an unpatrolled building takes about a year to get dangerous
     // (0.7 still set off ~3 fires per young city; see the tuning notes above).
     funds: 1.5, risk: 0.5, production: 1.15, immigration: 1.25, mood: 0, winterGrowth: 1,
@@ -85,6 +91,7 @@ export const DIFFICULTY = Object.freeze({
     legionHalt: 17, legionHome: 22,
     winterTrade: 1,
     wolfBite: 4,
+    events: 0.5, eventCooldown: 36, // mishaps half as often, and never the same one within 3 years
   }),
   normal: Object.freeze({
     name: 'Normal',
@@ -100,10 +107,11 @@ export const DIFFICULTY = Object.freeze({
     legionHalt: 18, legionHome: 24,
     winterTrade: 1,
     wolfBite: 6,
+    events: 1, eventCooldown: 24,
   }),
   hard: Object.freeze({
     name: 'Hard',
-    desc: 'Less money, slower growth, more fires, more crime (and it costs more peace), more disease and bigger raids.',
+    desc: 'Less money, slower growth, more fires, more crime (and it costs more peace), more disease, bigger raids and more events.',
     funds: 0.6, risk: 1.3, production: 0.9, immigration: 0.85, mood: 0, winterGrowth: 1,
     raidSize: 1.3, raidInterval: 1, enemy: 1,
     requestSize: 1, requestInterval: 1, requestTime: 1,
@@ -115,11 +123,12 @@ export const DIFFICULTY = Object.freeze({
     legionHalt: 20, legionHome: 27,
     winterTrade: 1,
     wolfBite: 8,
+    events: 1.25, eventCooldown: 18,
   }),
   insane: Object.freeze({
     name: 'Insane',
     desc: 'For veterans. Scarce money, grumpy citizens, more fires, more crime that costs much more peace (even protests, now and then), more disease, slow farms and workshops, nothing grows on the farms in winter and half as many traders come, '
-      + 'bigger and tougher raids that come more often, and an Emperor who demands 50% more, more often, with less time to deliver.',
+      + 'bigger and tougher raids that come more often, more events, and an Emperor who demands 50% more, more often, with less time to deliver.',
     // winterGrowth 0: Dec-Feb farms keep their progress but add none (see sim/production.js).
     funds: 0.4, risk: 1.5, production: 0.8, immigration: 0.7, mood: -8, winterGrowth: 0,
     raidSize: 1.5, raidInterval: 0.75, enemy: 1.15,
@@ -132,6 +141,7 @@ export const DIFFICULTY = Object.freeze({
     legionHalt: 22, legionHome: 30,
     winterTrade: 2, // winter roads and seas halve trade
     wolfBite: 8,
+    events: 1.5, eventCooldown: 12,
   }),
 });
 

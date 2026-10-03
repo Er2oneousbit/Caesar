@@ -105,6 +105,7 @@ const RUIN_WORDS = {
   revoltFire: 'burned by rebel gladiators',
   revolt: 'torn down by rebel gladiators',
   revoltWall: 'broken down by rebel gladiators',
+  quake: 'brought down by an earthquake',
 };
 
 /**

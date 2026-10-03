@@ -16,7 +16,7 @@
 
 import { CONFIG } from '../config.js';
 import { GOD_KEYS } from '../data/gods.js';
-import { ledgerNet } from './economy.js';
+import { ledgerNet, romeWage } from './economy.js';
 import { entertainmentScore } from './housing.js';
 import { racesRunning } from './entertainment.js';
 import { salaryAtVictory } from './governor.js';
@@ -78,7 +78,7 @@ export function updateRatings(game) {
   prosperity += Math.min(15, (c.patricians / Math.max(1, c.population)) * 100);
   prosperity += net > 0 ? 15 : net > -500 ? 5 : 0;
   prosperity += c.unemploymentRate < 0.05 ? 10 : c.unemploymentRate < 0.12 ? 5 : 0;
-  prosperity += c.wage >= CONFIG.BASE_WAGE ? 8 : 0;
+  prosperity += c.wage >= romeWage(game) ? 8 : 0;
   prosperity += hasSenate ? 10 : 0;
   // The original gave +1 a year while the hippodrome had races; Colonia's
   // prosperity moves toward a target, so the races lift the target instead.

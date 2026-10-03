@@ -44,6 +44,7 @@ import { routeInterval, partnerBuys } from '../sim/tradeDemand.js';
 import { partnerIdle } from '../sim/tradeSwitches.js';
 import { enemyCount, SCOUT_MONTHS, RUMOUR_MONTHS, raidPeople } from '../sim/military.js';
 import { peopleById } from '../data/peoples.js';
+import { tradeHalted } from '../sim/events.js';
 import { legionSummary, legionCount } from '../sim/legion.js';
 import { battleSummary, recallSummary } from '../sim/battle.js';
 import { THREATENED_CITIES, marchLine, enemyLine } from '../data/battles.js';
@@ -240,6 +241,7 @@ export function empireTravelers(game) {
     const sea = routeKind(id) === 'sea';
     if (sea && !seaOk) continue; // no ship ever comes (cannot be opened there anyway)
     if (partnerIdle(game, id, partnerBuys(game, id))) continue; // every good switched off: nobody sets out
+    if (tradeHalted(game, sea ? 'sea' : 'land')) continue; // landslides or storms: nobody sets out either (sim/events.js)
     const left = Math.max(0, r.nextVisit - now);
     // (No trader has reached the city yet: the one on the way set out when the route opened.)
     const trip = shownTripDays(game, id, !r.visits);

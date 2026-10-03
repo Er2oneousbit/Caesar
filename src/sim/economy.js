@@ -37,6 +37,18 @@ export function transact(game, category, amount) {
   ledger[category] += Math.abs(amount);
 }
 
+/**
+ * The wage Rome pays (Dn a worker a year): what citizens hold the city's own
+ * wage up against (the mood's wages factor, prosperity, the Labor advisor).
+ * It starts at CONFIG.BASE_WAGE and moves only when Rome raises or cuts it
+ * (a random event, sim/events.js), so a city without that event reads the
+ * constant as it always did.
+ */
+export function romeWage(game) {
+  const w = game.city.romeWage;
+  return Number.isFinite(w) ? w : CONFIG.BASE_WAGE;
+}
+
 /** Can the city afford a purchase right now? (debug freebuild bypasses) */
 export function canAfford(game, cost) {
   if (game.cheats.freeBuild) return true;

@@ -17,6 +17,7 @@
  */
 
 import { CONFIG } from './config.js';
+import { ticksUntil, MENU_TIME } from './render/lighting.js';
 import { worldOf, fitTour } from './render/camera.js';
 import { log } from './core/debug.js';
 import { Game } from './core/game.js';
@@ -253,6 +254,9 @@ export class App {
     // sandbox plays as before them: the generic band, no wolves.
     if (opts.raiders === 'site') scenario.raiders = 'site';
     if (opts.wolves) scenario.wolves = true;
+    // The setup's Events switch (on unless unticked), kept in the scenario,
+    // which a sandbox save holds in full (data/events.js missionEvents).
+    scenario.events = opts.events !== false;
     this.startGame(new Game({ scenario, flags: this.flags })); // (the setup's Sea raids switch is in the scenario)
     this.game.message('Welcome, governor! Press F1 any time for help.', 'info');
     farmSeasonNotice(this.game, true); // Insane: the city is founded in winter, when nothing grows
@@ -544,6 +548,7 @@ export class App {
       g.log = { ...log, info() {}, debug() {} };
       const res = buildDemoCity(g, { level: 2 });
       g.runDays(16 * 5);
+      g.runTicks(ticksUntil(g.time.totalTicks, MENU_TIME)); // open in daylight (lighting.js)
       this.menuGame = g;
       this.renderer.attach(g);
       this.renderer.camera.zoomIndex = MENU_ZOOM;

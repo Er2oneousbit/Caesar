@@ -21,6 +21,7 @@ import { FOOD_TYPES, HOUSE_GOODS } from '../data/goods.js';
 import { HOUSE_TIERS, houseCapacity } from '../data/housing.js';
 import { spawnWalker, killWalker } from './entities.js';
 import { followPath, walkTo } from './movement.js';
+import { romeWage } from './economy.js';
 import { houseWantsGood, foodKindsWanted } from './market.js';
 import { sendEmigrants } from './housing.js';
 import { newHousehold } from './mood.js';
@@ -280,7 +281,7 @@ export function computeSentiment(game) {
   const f = {};
   f.base = 50;
   f.taxes = -(c.taxRate - CONFIG.DEFAULT_TAX_RATE) * (c.taxRate > CONFIG.DEFAULT_TAX_RATE ? 3 : 1.5);
-  f.wages = (c.wage - CONFIG.BASE_WAGE) * 0.8;
+  f.wages = (c.wage - romeWage(game)) * 0.8; // against what Rome pays now (sim/events.js moves it)
   const free = CONFIG.UNEMPLOYMENT_MOOD_FREE;
   f.unemployment = c.unemploymentRate > free ? -Math.min(15, (c.unemploymentRate - free) * 60) : 0;
   f.food = c.population > 60 ? -(1 - c.fedShare) * 18 : 0;

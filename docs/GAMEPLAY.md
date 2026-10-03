@@ -44,6 +44,8 @@ Chosen in the Sandbox setup and in every campaign briefing (the menus remember y
 | Bad days in a row before a home falls back a level | 6 | 3 | 3 | 3 |
 | Daily chance an unhappy home breeds trouble (crime) | x0.5 | x1 | x1.2 | x1.4 |
 | Disease risk, and its spread to the homes next door | x0.5 | x1 | x1.3 | x1.5 |
+| Random events (see *Events*) | x0.5 | x1 | x1.25 | x1.5 |
+| Months before the same random event can come again | 36 | 24 | 18 | 12 |
 
 Insane is for veterans: staff the Excubitorium (Prefecture) and the Collegium Fabrum (Engineer's Post) first (labor priorities), because an unpatrolled building burns or collapses a third sooner than on Normal, and plan for roughly twice Normal's army. In winter nothing grows on any farm (crops, pigs, and the foals and herd of the Equaria, the horse ranch): fields keep their progress and grow again from Martius, workers stay on, and carts still haul the harvest already in store. Games start in Ianuarius, so the first harvest waits for spring; a message warns in October, and the city lives on its granaries (or imports) from December to Februarius. Size farms for about a third more than the city eats (a full Insane wheat farm grows about 576 units a year instead of 768) and keep roughly 0.75 units per citizen in store when winter comes. Winter also costs the Equaria about a quarter of the year's foals and mares, so start it early. The headless simulator shows how a level plays out: `npm run sim -- --difficulty insane --raids occasional --garrison`.
 
@@ -210,7 +212,7 @@ Click a granary or warehouse: each good (each food, in a granary) has an order b
 
 ## Money
 
-* **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly.
+* **Wages:** default 24 Dn per worker per year (Rome's fair wage). Paid monthly. Citizens compare your wage with what Rome pays, which starts at 24 and can rise or fall now and then (see *Events*); the Labor advisor says what Rome pays now.
 * **Taxes:** at the default 7% rate each resident pays `5 x the level's tax` Dn per year (a Hut resident 10, a Domus resident 15, an Insula resident 25, an Imperial Palatium resident 80; see the housing table). A town of Cottages with most of its people registered and working about pays its wages; Huts do not, and better homes bring a profit. The rate scales this linearly. Only homes a tax collector visited in the last 48 days pay; a home's panel says whether it is registered and for how many more days, or why not (no Forum, a Forum without workers, or no collector lately), and the Finance tab counts the homes that are not. A collector is drawn to the homes whose registration has run out (see Services), but one Forum can only walk so far: homes more than about 13 tiles from it, or down a long dead end, still lapse. A second Forum, or roadblocks at the ends of a block, keep collectors on your streets.
 * **Tribute:** each year Rome takes half a denarius per citizen above 150. Paying raises favor; failing costs 10 favor.
 * **Trade:** open a route once (Trade advisor), then a caravan comes every 32-56 days and a ship every 64-96 (about the original's pace; a far partner less often, a busy one more; on Insane both come half as often in winter). Each good can be set to export (keep a reserve) or import (up to a target). Partners buy and sell limited amounts per year. See *Trade* below.
@@ -396,7 +398,7 @@ Each distant battle won earns one **Fornix** (Triumphal Arch; Government & Decor
 
 ### The gladiators' revolt
 
-A revolt of the gladiators is one of the events a mission may schedule (see the events; the console's `revolt` starts one now). In its month, if no Ludus Gladiatorius (Gladiator School) is working (staffed, with a road), it is called off for good, without a word. Otherwise *the gladiators have revolted*, and for 3 months every gladiator out in the streets turns on the city where he stands: those on their way from a school to a venue, and the entertainers of venues whose gladiator shows are booked; the schools keep training them, so new ones turn as they set out. A rebel gladiator (75 health, attack 12, defense 4) goes for the nearest buildings as a raider does and breaks what he reaches. Soldiers, watchtowers and prefects fight them, and while they are in the province no peace is gained. In the end month the revolt is over and the survivors flee the map. Rebels are no part of a raid: a raid and a revolt are counted apart.
+A revolt of the gladiators is a scheduled event of Urbs Magna (year 5) and Puteoli (year 6), in a month from Aprilis to Iulius (see Events); the console's `revolt` starts one now. In its month, if no Ludus Gladiatorius (Gladiator School) is working (staffed, with a road), it is called off for good, without a word. Otherwise *the gladiators have revolted*, and for 3 months every gladiator out in the streets turns on the city where he stands: those on their way from a school to a venue, and the entertainers of venues whose gladiator shows are booked; the schools keep training them, so new ones turn as they set out. A rebel gladiator (75 health, attack 12, defense 4) goes for the nearest buildings as a raider does and breaks what he reaches. Soldiers, watchtowers and prefects fight them, and while they are in the province no peace is gained. In the end month the revolt is over and the survivors flee the map. Rebels are no part of a raid: a raid and a revolt are counted apart.
 
 ### Wolves
 
@@ -519,7 +521,7 @@ Left with no prefect or engineer passing, an ordinary building reaches 100 in ab
 * **Collapse first:** temples, the clay pit, iron mine and marble quarry, Tenements and up. The Excubitorium (Prefecture), Oraculum (Oracle) and Turris (Watchtower) cannot burn at all.
 * **Never burn or collapse:** warehouses, the Collegium Fabrum (Engineer's Post), wells, fountains, reservoirs, farms and the Equaria (Horse Ranch), gardens, statues and forts. Only raiders, rioters and an angered Mercury (who burns the fullest granary or warehouse) can destroy them (rioters set fire to farms and engineer's posts, never to warehouses, water works or forts). They never catch from a fire next door either; their panel says so, and the Fire risk and Collapse risk overlays raise no column over them.
 
-Rubble remembers what stood there. Click it: *Ruins of an Excubitorium, burned down in Iul 280 BC.* (Rubble that fell before the buildings had their Latin names keeps the English one it recorded.) The causes are burned down, burned by an angry god, burned by raiders, burned by rioters, collapsed, torn down by raiders, and (for a wall) broken down by raiders. Every tile of a fallen building keeps the record until it is cleared or built over. Its panel has a **Rebuild** button that puts the same building back on the same spot (a home's plots come back as empty lots, a broken wall as wall) at the usual price plus clearing the rubble; it is greyed out with the reason while the ruins still burn, or when there is no money or something now stands in the way, and Undo takes it back like any building. Rubble in a save made by an older version of the game says only *Rubble from a disaster*. (Ruins from before v0.12.2 know what fell but not where it stood exactly, so they offer no Rebuild.)
+Rubble remembers what stood there. Click it: *Ruins of an Excubitorium, burned down in Iul 280 BC.* (Rubble that fell before the buildings had their Latin names keeps the English one it recorded.) The causes are burned down, burned by an angry god, burned by raiders, burned by rioters, collapsed, torn down by raiders, (for a wall) broken down by raiders, and brought down by an earthquake. Every tile of a fallen building keeps the record until it is cleared or built over. Its panel has a **Rebuild** button that puts the same building back on the same spot (a home's plots come back as empty lots, a broken wall as wall) at the usual price plus clearing the rubble; it is greyed out with the reason while the ruins still burn, or when there is no money or something now stands in the way, and Undo takes it back like any building. Rubble in a save made by an older version of the game says only *Rubble from a disaster*. (Ruins from before v0.12.2 know what fell but not where it stood exactly, so they offer no Rebuild.)
 
 ## Gods
 
@@ -534,12 +536,41 @@ A god that strikes stays **angered** until its mood is back above 50 (the Religi
 | God | Blessing | Wrath | Angered again |
 |---|---|---|---|
 | Ceres | instant harvest on every farm | farm progress lost | the same |
-| Neptune | trade windfall (200 Dn + 0.2 a citizen) | buildings near water weakened, and every fishing boat sinks | the same |
+| Neptune | trade windfall (200 Dn + 0.2 a citizen) | buildings near water weakened, and every fishing boat sinks; where you trade by sea, merchant ships under sail sink with their cargo (one tied up at an Emporium rides it out) and no ship sails for your city for 5 months | the same |
 | Mercury | the working granary with the least food receives 600 each of wheat, vegetables, fruit and meat (never fish: the four land foods), as far as it has room and accepts them (a granary set to refuse every land food is passed over; any granary if none is staffed) | the granary or warehouse holding the most loses 1600 units (a granary wheat first, then vegetables, fruit, meat, fish; a warehouse its largest stocks first) | that storehouse burns down, with everything in it; the fire can spread |
 | Mars | +10 peace | brawls: -10 peace, treasury looted (100 Dn + 0.1 a citizen) | the same |
 | Venus | every home's mood +25, and the city mood +15, fading a fifth a month | every home's mood capped at 50, then -5; the city mood -5, fading | homes capped at 45, then -10; the city mood -10, fading; and where disease can break out, every home gains disease risk of 80 x (100 - its health score) / 100 (x the difficulty's disease lever): badly served homes go most of the way to an outbreak, and a passing physician clears it |
 
 Venus's part of the city mood shows in the Overview's mood breakdown as "Venus's blessing or wrath" while it lasts (it fades x0.8 a month and is gone once under half a point). Measured in the balance sim's demo city (six seeds): a blessing lifts the city mood about 7 points; a first wrath takes about 3, a second about 9 more for a few months, and its thieves cost about 20 peace on Normal and Hard.
+
+## Events
+
+The province has its own fortunes, as in the original: random events drawn each month, and events a mission schedules. Each comes with a message; a click on one that happens at a place goes there.
+
+**Random events.** At the start of each month one draw is made against the original's table: about one month in five names an event on Normal (half as often on Easy, a quarter more on Hard, half again on Insane). It happens only if the mission allows it (the sandbox: all of them, unless its setup's **Events** switch is off), if it can (below), and if the same event has not come within the last 24 months (36 on Easy, 18 on Hard, 12 on Insane; Rome's wages 12 on every level). So at most one a month.
+
+| Event | Chance a month (Normal) | Needs | What happens |
+|---|---|---|---|
+| Rome raises wages | 2.3% | Rome pays under 36 | Rome's wage rises 1 to 4 Dn. Your own wage stays, but citizens now measure it against Rome's: each Dn under it costs 0.8 city mood, and prosperity's +8 for a fair wage needs as much as Rome pays. Raise yours in the Labor advisor, or live with it |
+| Rome cuts wages | 2.3% | Rome pays over 12 | Rome's wage falls 1 to 4 Dn (never under 12): you may pay less without the mood suffering |
+| Landslides (sandstorms in the desert) | 3.9% | an open land route | no caravan sets out for your city on any land route for 48 days (3 months); caravans already in the province finish their trade. The visit that falls due meanwhile is lost, not saved up |
+| Storms at sea | 3.1% | an open sea route and a staffed Emporium | the same for ships |
+| Bad water | 1.6% | 200 people or more (and disease, from mission 3) | city health falls 50 from over 80, 40 from over 60, else 25 (never under 0), then climbs back 2 a month toward the homes' average |
+| An iron mine collapses | 3.1% | an iron mine | the oldest one becomes rubble |
+| A clay pit floods | 3.9% | a clay pit | the oldest one becomes rubble |
+
+While trade is stopped, each route card (Trade advisor, Empire map) says until when, and the Empire map shows no trader on the road. Neptune's wrath stops ships for 5 months the same way (see *Gods*).
+
+**Scheduled events** (campaign missions only; the year is fixed, the month drawn from the map's seed):
+
+* **The earthquake** (Paestum and Carteia small, Copia and Mutina medium, Puteoli large). It strikes near the middle of your city (never on a wolf pack's den, which the cracks pass under, as under the Imperial road). Four cracks then grow out of that point over days, one mostly north, one east, one south, one west, a few steps a day: a small quake tries 25 to 56 steps (5 to 11 days), a medium 100 to 163 (16 to 27 days), a large 250 to 377 (31 to 47 days). A crack cannot cross water or rock. Every tile it enters loses whatever stood there (a building falls, the rest of its ground left as rubble that remembers the quake; roads, aqueducts and walls go) and becomes rock for good: nothing can be built on it again, so route roads and aqueducts round the cracks. The Imperial road holds (the way by road from the map entry to the exit as the quake finds it): cracks pass under it, so the city is never cut off from the empire. A message says where it struck, and another when the earth is still, with the buildings and homes lost. Undo is off while it shakes.
+* **A new Caesar** (Beneventum, Cosa, Urbs Magna, Narbo Martius): your favor starts afresh at 50, whatever it was (the original's engine meant this but never did it).
+* **The gladiators' revolt** (Urbs Magna in year 5, Puteoli in year 6; Aprilis to Iulius): see [The gladiators' revolt](#the-gladiators-revolt). With no gladiator school at work that month, nothing happens.
+* **Price changes** (Figlina's pottery, Cosa's wine, Copia's wheat, Luna's marble): from that month, the good costs a share more with every partner, both ways, for good. A message says so.
+
+Which missions have which random events: Figlina the clay pit; Firmum wages and landslides; Pons Aelius landslides and storms; Paestum storms; Portus Mercatorum the iron mine and storms; Beneventum landslides on the Appian Way; Oasis Aurea sandstorms and bad water; Urbs Magna wages; Mutina the iron mine; Luna storms; Corduba wages and the iron mine; Carteia storms in the strait; Narbo Martius wages and landslides. The first two missions have none.
+
+The console's `event` command reports Rome's wage, trade stopped and a quake shaking, and `event <kind>` makes one happen now (for testing); the URL flag `events=off` turns every event off. The balance simulator: `npm run sim -- --events off` (no events) or `--scenario c10p --years 9` (Puteoli's earthquake).
 
 ## Ratings and winning
 

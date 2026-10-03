@@ -10,7 +10,8 @@
  *   2. move walkers, then soldiers/raiders/missiles (sim/military.js)
  *   3. daily logic for the buildings whose "phase" matches this tick
  *      (spreads work evenly across the day instead of spiking at midnight;
- *      a home's disease risk comes after its fire risk)
+ *      a home's disease risk comes after its fire risk), then an
+ *      earthquake's cracks (sim/events.js)
  *      then criminals: prefects and soldiers catch them, prefects hunt
  *   4. on a new day:   labor, no-road notices, water, desirability, city
  *                      stats, entertainment base, wine sources, mid-month
@@ -22,7 +23,8 @@
  *                      salary, raid warnings, city mood, home moods,
  *                      religion, ratings, city health, Emperor, distant
  *                      battles, farm season notice, the count of recent
- *                      gifts, the victory check
+ *                      the province's events (scheduled, then the
+ *                      month's random draw), gifts, the victory check
  *   6. on a new year:  tribute, ledger rollover, the salary's favor, trade
  *                      quotas, crime and disease counts
  *   7. on a new day, after all that: the crime roll
@@ -73,6 +75,7 @@ import { closeGoodsMonth } from '../sim/goodsLedger.js';
 import { updateHomeMoods } from '../sim/mood.js';
 import { newCrimeState, updateCrime, updateCriminals, crimeNewYear } from '../sim/crime.js';
 import { newHealthState, updateDiseaseRisk, updateSickHomes, updateCityHealth, healthNewYear, refreshDiseaseGate } from '../sim/disease.js';
+import { newEventState, eventStateOf, eventsMonthly, updateQuake } from '../sim/events.js';
 
 // Difficulty levels live in data/difficulty.js; re-exported here for older imports.
 export { DIFFICULTY } from '../data/difficulty.js';
@@ -132,6 +135,8 @@ export function newCityState(scenario, funds, savings = 0) {
     stats: { fires: 0, collapses: 0, evolutions: 0, devolutions: 0, immigrated: 0, emigrated: 0, peakPopulation: 0, requestsMet: 0, requestsFailed: 0 },
     crime: newCrimeState(), // this year's protesters, thieves, riots... (sim/crime.js)
     health: newHealthState(), // city health and this year's outbreaks (sim/disease.js)
+    romeWage: CONFIG.BASE_WAGE, // what Rome pays, the citizens' yardstick for the city's wage (sim/economy.js romeWage; sim/events.js moves it)
+    events: newEventState(), // cooldowns, trade stopped, a quake shaking (sim/events.js)
     flags: {},
     victory: false,
     defeat: false,
@@ -204,6 +209,7 @@ export class Game {
     this.city.health ??= newHealthState(); // saves from before disease (v4, v5)
     for (const g of GOD_KEYS) this.city.gods[g] ??= newGodMood(); // a god a save lacks starts afresh
     this.city.venusBoost ??= 0;
+    eventStateOf(this.city); // saves from before events: Rome pays the base wage, nothing cooling down or shaking
     this.projectiles = []; // arrows and sling stones in flight (not saved)
     this.enemyField = null; // raider flow field (derived, see military.js)
     this.events.on('buildingRemoved', ({ building }) => {
@@ -293,6 +299,7 @@ export class Game {
     for (const b of this.buildings.values()) {
       if (b.phase === phase) this.updateBuilding(b);
     }
+    updateQuake(this); // an earthquake's cracks, a few steps a day (sim/events.js)
     if (t.newDay) this.onDay();
     if (t.newMonth) this.onMonth();
     if (t.newYear) this.onYear();
@@ -379,6 +386,7 @@ export class Game {
     this.city.raidMonth = false; // (and this)
     updateCityHealth(this);
     updateEmperor(this);
+    eventsMonthly(this); // a mission's scheduled events, then the month's random draw (sim/events.js)
     battleMonthly(this); // Caesar's calls for troops and the distant battles (sim/battle.js)
     tradeMonthly(this); // news of a partner's demand changing this month (sim/tradeDemand.js)
     farmSeasonNotice(this); // Insane: the farms stop in winter

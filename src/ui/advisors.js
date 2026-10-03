@@ -42,7 +42,8 @@ import { templeCount } from './trainingInfo.js';
 import { GODS, GOD_KEYS } from '../data/gods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { goalStatus } from '../sim/ratings.js';
-import { LEDGER_KEYS, ledgerNet, houseMonthlyTax } from '../sim/economy.js';
+import { LEDGER_KEYS, ledgerNet, houseMonthlyTax, romeWage } from '../sim/economy.js';
+import { tradeHaltText } from '../sim/events.js';
 import { openRoute, setTradeMode, routeKind, shipsWaitingText, importWarnings } from '../sim/trade.js';
 import { partnerBuys, routeInterval } from '../sim/tradeDemand.js';
 import { partnerOn, setPartnerGood, partnerIdle, partnersFor } from '../sim/tradeSwitches.js';
@@ -160,6 +161,7 @@ export function tradeRouteCard(app, g, id, onChange) {
     pace,
     h('div', { class: 'muted route-prices', style: { fontSize: '12px' } }, distanceNote(g.scenario, id)),
     idle ? h('div', { class: 'status warn route-idle', style: { fontSize: '12px' } }, `Every good is switched off: ${sea ? 'no ships' : 'no caravans'} will come until you tick one.`) : null,
+    r.open && tradeHaltText(g, sea ? 'sea' : 'land') ? h('div', { class: 'status warn route-halt', style: { fontSize: '12px' } }, tradeHaltText(g, sea ? 'sea' : 'land')) : null,
     h('div', { class: 'muted' }, 'They sell (you can import):'), h('div', {}, list(p.sells, r.bought, 'buy')),
     h('div', { class: 'muted' }, 'They buy (you can export):'), h('div', {}, list(partnerBuys(g, id), r.sold, 'sell')));
 }
@@ -298,7 +300,7 @@ export class Advisors {
         h('div', { class: 'card' },
           h('h4', {}, 'Wages'),
           wageVal, wageInput,
-          h('div', { class: 'muted' }, `Rome pays ${CONFIG.BASE_WAGE}. Higher wages please citizens; lower wages save money but hurt mood.`),
+          h('div', { class: 'muted' }, `Rome pays ${romeWage(g)}. Higher wages please citizens; lower wages save money but hurt mood.`),
           kv('Wages last month', `${fmt(c.lastMonth?.wages || 0)} Dn`))),
       h('h4', {}, 'Labor categories'),
       h('div', { class: 'muted' }, 'When workers are short, priority categories are staffed first; the rest share what is left.'),

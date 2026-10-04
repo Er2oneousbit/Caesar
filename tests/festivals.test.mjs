@@ -110,7 +110,8 @@ function ceresAfterMonth(game, { months, mood, pop = 1000 }) {
 
 test('neglect: the monthly mood target loses it, counted at the turn of the month', () => {
   const game = newGame({ seed: 'neglect' });
-  temple(game, 'ceres');
+  // A temple for every god: a tie, so no favourite or jealous god moves Ceres (religion.js godsJealousy).
+  for (const g of GOD_KEYS) temple(game, g);
   assert.equal(ceresAfterMonth(game, { months: 0, mood: 80 }), 80, 'a new game: no neglect');
   assert.equal(game.city.gods.ceres.monthsSinceFestival, 1, '+1 at the turn of the month');
   assert.equal(ceresAfterMonth(game, { months: 11, mood: 80 }), 80, 'a year exactly: still free');
@@ -124,7 +125,8 @@ test('neglect: the monthly mood target loses it, counted at the turn of the mont
 
 test('neglect: not in a town under 800 people, and not for a god that cannot be worshipped there', () => {
   const game = newGame({ seed: 'neglect-small' });
-  temple(game, 'ceres');
+  // A temple for every god: a tie, so no favourite or jealous god moves Ceres (religion.js godsJealousy).
+  for (const g of GOD_KEYS) temple(game, g);
   assert.equal(ceresAfterMonth(game, { months: 30, mood: 70, pop: 799 }), 70, 'a small town\'s flat target (70 with a temple)');
   assert.equal(neglectPenalty(game, 'ceres'), 0);
   assert.equal(ceresAfterMonth(game, { months: 30, mood: 61, pop: 800 }), 61, 'from 800 people: 80 - 19 (31 months)');

@@ -182,7 +182,7 @@ export function coverLevelOf(cover, prev = 0) {
 
 /** Falling snow: CSS px of screen per flake at full snow, and the flakes' colour. */
 export const FLAKE_AREA = 4000;
-export const FLAKE_COLOR = 'rgba(250,252,255,0.8)';
+export const FLAKE_COLOR = 'rgba(250,252,255,0.5)'; // half see-through: 0.8 still hid the city (playtest)
 
 export class Weather {
   /** @param {() => number} [random] */

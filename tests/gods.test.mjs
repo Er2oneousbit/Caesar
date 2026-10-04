@@ -26,7 +26,7 @@ import { BUILDINGS } from '../src/data/buildings.js';
 import { SCENARIOS, findScenario } from '../src/data/scenarios.js';
 import { MOOD_REASONS } from '../src/data/crime.js';
 import { addBuilding } from '../src/sim/entities.js';
-import { updateReligion, emptiestGranary, fullestStorehouse, loseStock } from '../src/sim/religion.js';
+import { updateReligion, emptiestGranary, fullestStorehouse, loseStock, godsJealousy, JEALOUS_PENALTY } from '../src/sim/religion.js';
 import { computeSentiment } from '../src/sim/population.js';
 import { cityMoodCause } from '../src/sim/mood.js';
 import { refreshDiseaseGate, houseHealth } from '../src/sim/disease.js';
@@ -505,4 +505,49 @@ test("Mercury's blessing leaves the room held for a Get cart on its way home", (
   assert.ok(![...game.walkers.values()].some((w) => w.type === 'cart'), 'the cart came home');
   assert.equal(food(), blessed, 'no food lost when the cart came home');
   assert.ok(A.stock.wheat >= 800, 'the fetched wheat is in the granary');
+});
+
+test('jealousy: the god with strictly the most temples is the favourite, the one with strictly the fewest is jealous (Venus too)', () => {
+  // The original's rule (it left Venus out by a bug); temples at work, a large one as two.
+  const game = newGame({ seed: 'jealous' });
+  game.city.population = 2000;
+  const temple = (god, large = false) => {
+    const size = large ? 3 : 2;
+    const spot = findFree(game, size + 1, size + 1);
+    const b = addBuilding(game, large ? `temple_large_${god}` : `temple_${god}`, spot.x, spot.y, size);
+    b.efficiency = 1;
+    return b;
+  };
+  assert.deepEqual(godsJealousy(game), { favourite: null, neglected: null }, 'all at none: a tie both ways');
+  for (const g of GOD_KEYS) temple(g);
+  assert.deepEqual(godsJealousy(game), { favourite: null, neglected: null }, 'one each: a tie');
+  temple('mars', true); // Mars 3
+  assert.deepEqual(godsJealousy(game), { favourite: 'mars', neglected: null }, 'four tie at the bottom');
+  for (const g of ['ceres', 'neptune', 'mercury']) temple(g); // 2 each, Venus 1
+  assert.deepEqual(godsJealousy(game), { favourite: 'mars', neglected: 'venus' }, 'Venus counts');
+  // An empty temple honors nobody.
+  const idle = temple('venus');
+  idle.efficiency = 0;
+  assert.equal(godsJealousy(game).neglected, 'venus');
+  // Small towns are left alone.
+  game.city.population = 500;
+  assert.deepEqual(godsJealousy(game), { favourite: null, neglected: null });
+  // The targets: the favourite's lifted to 100, the jealous one's lowered
+  // (10,000 people, so no god's temples cover its share: Venus's target is
+  // 20 + 60 x 0.25 - 25 = 10, the favourite's 65 lifted to 100).
+  game.city.population = 10000;
+  for (const g of GOD_KEYS) game.city.gods[g].mood = 50;
+  updateReligion(game);
+  const moodOf = (g) => game.city.gods[g].mood;
+  assert.equal(moodOf('mars'), 56, 'Mars climbs at the fastest pace toward 100');
+  assert.equal(moodOf('venus'), 46, 'Venus falls toward her lowered target');
+  assert.equal(JEALOUS_PENALTY, 25);
+});
+
+test('jealousy: gods not worshipped in the province take no part', () => {
+  const game = new Game({ scenario: findScenario('c1'), flags: { money: 50000 } }); // Ceres and Mercury only
+  game.city.population = 2000;
+  const spot = findFree(game, 3, 3);
+  addBuilding(game, 'temple_ceres', spot.x, spot.y, 2).efficiency = 1;
+  assert.deepEqual(godsJealousy(game), { favourite: 'ceres', neglected: 'mercury' });
 });

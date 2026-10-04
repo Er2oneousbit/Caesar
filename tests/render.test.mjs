@@ -647,7 +647,8 @@ test('falling snow: a flake per 4,000 px of screen at full snow, a little see-th
   const { ctx } = recordingContext();
   for (let f = 0; f < 30; f++) w.draw(ctx, 1000, 800, 1, 0.016, 0); // the flakes grow in over a few frames
   assert.equal(w.flakes.length, 200);
-  assert.ok(Number(FLAKE_COLOR.match(/,\s*([\d.]+)\)$/)[1]) <= 0.8, FLAKE_COLOR);
+  // 0.8 still hid the city behind the snow (playtest): half see-through.
+  assert.ok(Number(FLAKE_COLOR.match(/,\s*([\d.]+)\)$/)[1]) <= 0.5, FLAKE_COLOR);
 });
 
 test('meadow hint: every farm placed on meadow shows the meadow while in hand, clearly enough to read over snow', () => {

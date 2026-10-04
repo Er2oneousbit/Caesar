@@ -1504,7 +1504,7 @@ try {
     const g = app.game;
     app.paused = true;
     const seen = () => [...g.walkers.values()].find((w) => w.type === 'prefect' && w.state === 'extinguish' && g.fires.has(w.fireTile));
-    for (let t = 0; t < 4 * 20 && !seen(); t++) g.runTicks(1); // up to 4 days (20 ticks a day)
+    for (let t = 0; t < 8 * 20 && !seen(); t++) g.runTicks(1); // up to 8 days (20 ticks a day)
     const p = seen();
     return p ? { id: p.id, tile: p.fireTile } : null;
   }) : null;

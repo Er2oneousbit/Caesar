@@ -112,6 +112,36 @@ export function newGodState() {
   return s;
 }
 
+/** Mood target the neglected god loses (the original's). */
+export const JEALOUS_PENALTY = 25;
+
+/**
+ * The gods' jealousy (the original's rule): of the gods worshipped here, the
+ * one with strictly the most temples at work is the favourite, the one with
+ * strictly the fewest the neglected; any tie at the top (or the bottom)
+ * means none. Temples count by priests, a large one as two, staffed only
+ * (an empty temple honors nobody). The original left Venus out of the
+ * comparison by a bug and counted empty temples; Colonia counts her and
+ * staffed temples, as Augustus does. Only in a city of SMALL_TOWN people or
+ * more, as the gods' other demands. `temples`: counts per god when the
+ * caller has them. @returns {{favourite:string|null, neglected:string|null}}
+ */
+export function godsJealousy(game, temples = null) {
+  const none = { favourite: null, neglected: null };
+  if (game.city.population < SMALL_TOWN) return none;
+  if (!temples) {
+    temples = Object.fromEntries(GOD_KEYS.map((g) => [g, 0]));
+    for (const b of game.buildings.values()) if (b.def.god && b.efficiency > 0) temples[b.def.god] += b.def.templeWeight || 1;
+  }
+  const gods = GOD_KEYS.filter((g) => game.isUnlocked(`temple_${g}`));
+  if (gods.length < 2) return none;
+  const counts = gods.map((g) => temples[g]);
+  const hi = Math.max(...counts);
+  const lo = Math.min(...counts);
+  const only = (v) => (counts.filter((c) => c === v).length === 1 ? gods[counts.indexOf(v)] : null);
+  return { favourite: hi > lo ? only(hi) : null, neglected: hi > lo ? only(lo) : null };
+}
+
 export function updateReligion(game) {
   const c = game.city;
   const pop = c.population;
@@ -124,6 +154,7 @@ export function updateReligion(game) {
     if (b.type === 'oracle') oracles++;
   }
   const wanted = Math.max(1, pop / GOD_KEYS.length);
+  const jealous = godsJealousy(game, temples);
   for (const g of GOD_KEYS) {
     const s = c.gods[g];
     s.temples = temples[g];
@@ -135,6 +166,10 @@ export function updateReligion(game) {
     else if (pop < SMALL_TOWN) target = temples[g] > 0 ? 70 : 55; // small towns do not bother the gods much
     else if (temples[g] === 0) target = 5; // big cities that ignore a god anger it
     else target = 20 + 60 * Math.min(1, (temples[g] * CONFIG.PEOPLE_PER_TEMPLE) / wanted);
+    // The favourite is lifted to 100 if already content, else by 50; the
+    // neglected one sulks (godsJealousy).
+    if (g === jealous.favourite) target = target >= 50 ? 100 : target + 50;
+    else if (g === jealous.neglected) target -= JEALOUS_PENALTY;
     target -= neglectPenalty(game, g); // a year without a festival in its honor
     // Blessings (mood 92+) need festivals or oracles on top of good temple coverage.
     target += Math.min(20, oracles * 6) + s.festival;

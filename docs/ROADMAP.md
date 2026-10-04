@@ -13,6 +13,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.11)
+
+* **Jealous gods** (the original's rule, Venus included): in a city of 800 people or more, the god with strictly the most staffed temples (a large one as two) is the favourite, its mood target lifted to 100 (or by 50 if under 50), and the god with strictly the fewest is jealous, its target 25 lower; a tie means neither. The Religion advisor marks both
+* **Falling snow is half see-through** (was 0.8 opaque)
+* Headless sim: every level identical to v0.18.10 (the demo cities build their gods' temples evenly)
+* 994 unit tests, 204 browser checks
+
 ## Done (v0.18.10)
 
 * **Soldiers heal in their fort** (Colonia's own): a wounded soldier resting in his fort's yard heals from nothing to full in 30 days, and a liburnian at its berth mends its hull at the same pace; nobody heals while deployed, standing to or marching
@@ -658,7 +665,7 @@ Ideas that would change the original's economy or rules; each would come as an o
 ## Decisions
 
 * **Modern features**: pure quality of life (roadblocks, market special orders, partial warehouse storage, building rotation) is on by default. Changes to the original's rules (supply posts, the global labour pool, everything under "Beyond the original") come as options that default to the original. Exception: sea raids and the fleet are on by default, with a *Sea raids* switch (Settings, the sandbox setup) that makes every raid come by land as before.
-* **Gods**: the original's five, Ceres, Neptune, Mercury, Mars and Venus. Mercury and Venus replace Jupiter and Vesta, and older saves map the old gods' moods over. (Built: item 14.) Festivals cost food and wine as well as money, and a god a year without one is neglected (the original's rule).
+* **Gods**: the original's five, Ceres, Neptune, Mercury, Mars and Venus. Mercury and Venus replace Jupiter and Vesta, and older saves map the old gods' moods over. (Built: item 14.) Festivals cost food and wine as well as money, and a god a year without one is neglected (the original's rule). The favourite and the jealous god (most and fewest temples) are the original's too, with Venus counted and staffed temples only (v0.18.11).
 * **Housing**: the original's 20 levels, with Colonia's own names and numbers. Done in v0.7, ahead of disease and crime. Where the original has a plain bug, Colonia does not copy it and makes no option of it; behavior that is odd but possibly meant stays as the original had it.
 * **Crime, disease and events**: on at every difficulty, as they always were in the original, and gentler on Easy.
 * **Localization**: not planned.

@@ -1286,6 +1286,17 @@ function pickTarget(enemies, u, zone) {
 }
 
 /**
+ * A wounded soldier resting in his fort's yard heals: full health in
+ * CONFIG.HEAL_DAYS from nothing, a little each tick. Only in the yard, so a
+ * man standing to, deployed, marching or on his way to the Campus heals
+ * nothing until he is back behind the walls.
+ */
+export function healAtRest(game, u) {
+  if (u.hp >= u.maxHp || !inOwnFort(game, u)) return;
+  u.hp = Math.min(u.maxHp, u.hp + u.maxHp / (CONFIG.HEAL_DAYS * CONFIG.TICKS_PER_DAY));
+}
+
+/**
  * One soldier's tick. `enemies`: every land unit hostile to Rome
  * (hostileToRome); `watch`: what calls a fort's men out of its yard
  * (standsTo).
@@ -1661,6 +1672,7 @@ export function updateMilitary(game) {
     if (u.cooldown > 0) u.cooldown--;
     if (u.away) marchOut(game, u);
     else updateRoman(game, u, hostiles, watch);
+    if (game.units.has(u.id) && !u.away) healAtRest(game, u);
   }
   // Men in their fort's yard are out of everyone's reach behind its walls
   // (they come out to fight: standsTo); they still count as the city's

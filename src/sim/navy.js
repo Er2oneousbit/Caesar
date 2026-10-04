@@ -854,6 +854,9 @@ function updateLiburnian(game, u, pirates) {
     u.state = st.rally ? 'holding' : 'berthed';
     u.moving = false;
     u.path = null;
+    // Moored at home, its crew mends the hull, as soldiers heal in their
+    // fort's yard (sim/military.js healAtRest); not while holding the water.
+    if (u.state === 'berthed' && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + u.maxHp / (CONFIG.HEAL_DAYS * CONFIG.TICKS_PER_DAY));
     return;
   }
   u.state = 'sail';

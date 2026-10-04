@@ -425,6 +425,22 @@ function walkLog(game, fort, men, ticks = 3000, until = () => men.every((u) => u
   return { bad, ticks: t };
 }
 
+test('a wounded soldier heals in his fort yard, full in HEAL_DAYS, and not outside it', () => {
+  // Playtest: soldiers never healed.
+  const { game, fort, men } = restingFort('fort_legion', 2, 0);
+  walkLog(game, fort, men);
+  const [a, b] = men;
+  assert.ok(inOwnFort(game, a) && inOwnFort(game, b), 'both at rest in the yard');
+  a.hp = 1;
+  b.hp = 1;
+  b.x = b.px = fort.x - 3; // set down outside the walls
+  for (let d = 0; d < CONFIG.HEAL_DAYS / 2; d++) game.runTicks(CONFIG.TICKS_PER_DAY);
+  assert.ok(a.hp > a.maxHp * 0.4 && a.hp < a.maxHp * 0.6, `half healed in half the days (${a.hp.toFixed(1)} of ${a.maxHp})`);
+  game.runTicks(CONFIG.TICKS_PER_DAY * (CONFIG.HEAL_DAYS / 2 + 1));
+  assert.equal(a.hp, a.maxHp, 'full, and never past it');
+  assert.ok(b.hp < b.maxHp, 'the man outside healed only once back in the yard, if at all');
+});
+
 test('a fort at rest keeps its men in its yard, each on his spot, in by the gate, at every turn of the fort', () => {
   // Playtest: trained troops stood about outside their fort's walls.
   for (const type of ['fort_legion', 'fort_archer', 'fort_cavalry']) {

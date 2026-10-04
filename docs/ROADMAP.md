@@ -13,6 +13,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.10)
+
+* **Soldiers heal in their fort** (Colonia's own): a wounded soldier resting in his fort's yard heals from nothing to full in 30 days, and a liburnian at its berth mends its hull at the same pace; nobody heals while deployed, standing to or marching
+* Smoke test: the fire checks follow a home by its tile (a home that merged into its neighbour's left the check waiting) and step the game tick by tick to see a prefect at work
+* Headless sim: every level identical to v0.18.9
+* 992 unit tests, 204 browser checks
+
 ## Done (v0.18.9)
 
 * **Festivals count priests**: a bigger feast needs more priests among the god's staffed temples, a temple having 1 and a large temple 2: a small festival needs 1 (a large temple alone will do), a large one 3 (a temple and a large temple, two large, or three temples), a grand one 3 and an Oracle. Where a province has no large temples, three temples hold a large festival

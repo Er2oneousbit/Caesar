@@ -358,15 +358,89 @@ export class GameMap {
 
   /**
    * Every water route for boats: the navigable water and the fishing water
-   * from the terrain (placement reads them as they are), then each split
-   * where a low bridge closes it. Runs at a load and whenever a low bridge
-   * is built or cleared (sim/bridges.js refreshWaterways). The terrain never
-   * changes, so the first two give the same answer every time.
+   * from the terrain (placement reads them as they are), closed under the
+   * waterside buildings that stand out over it (closeBuiltWater), then each
+   * split where a low bridge closes it. Runs at a load (again once the
+   * buildings are down, core/save.js) and whenever a low bridge or a
+   * building over the water comes or goes (sim/bridges.js
+   * refreshWaterways). The terrain never changes, so the first two give the
+   * same answer every time, and the bodies' sizes, numbers, the sea entry
+   * and the fishing grounds never depend on the buildings.
    */
   computeWaterways() {
     this.computeNavigation();
     this.computeFishing();
+    this.closeBuiltWater();
     this.splitAtLowBridges();
+  }
+
+  /**
+   * Water under a building (a waterside building's rows out over the water,
+   * sim/entities.js waterRowsFor) is no water for boats: it leaves the
+   * navigable water and both bodies (0, like land), so every route, berth
+   * and spot found by them goes round it. Before the low bridges split the
+   * bodies, so a bridge and a pier that close a channel together split it
+   * too. Placement never lets a building alone cut a body in two
+   * (wouldCutWater), so with no low bridge every number stays as it was.
+   */
+  closeBuiltWater() {
+    for (let i = 0; i < this.size; i++) {
+      if (!this.building[i] || this.terrain[i] !== Terrain.WATER) continue;
+      this.navigable[i] = 0;
+      this.navBody[i] = 0;
+      this.fishBody[i] = 0;
+    }
+  }
+
+  /**
+   * Would closing water tiles `tiles` (a building's rows out over the water)
+   * cut the open water round them in two: water a boat reaches now that it
+   * could no longer reach from the rest? Open water: water with no building
+   * on it and no low bridge over it (ships pass under a ship bridge). Only
+   * the water just round the tiles needs checking: anything cut off would
+   * be cut off from one of them. A look close by first (it settles almost
+   * every spot on a shore), then the whole water when that is not enough.
+   */
+  wouldCutWater(tiles) {
+    const { w, h } = this;
+    const closed = new Set(tiles);
+    const open = (i) => this.terrain[i] === Terrain.WATER && !this.building[i] && !this.bridgeLow[i] && !closed.has(i);
+    const ring = [];
+    let x0 = w;
+    let y0 = h;
+    let x1 = -1;
+    let y1 = -1;
+    for (const i of tiles) {
+      const x = i % w;
+      const y = (i / w) | 0;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      for (const [dx, dy] of DIRS4) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!this.inBounds(nx, ny)) continue;
+        const j = this.idx(nx, ny);
+        if (open(j) && !ring.includes(j)) ring.push(j);
+      }
+    }
+    if (ring.length <= 1) return false;
+    const joined = (box) => {
+      const seen = new Set([ring[0]]);
+      const queue = [ring[0]];
+      for (let q = 0; q < queue.length; q++) {
+        const i = queue[q];
+        const x = i % w;
+        const y = (i / w) | 0;
+        for (const [dx, dy] of DIRS4) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!this.inBounds(nx, ny) || (box && (nx < x0 - box || nx > x1 + box || ny < y0 - box || ny > y1 + box))) continue;
+          const j = this.idx(nx, ny);
+          if (!seen.has(j) && open(j)) { seen.add(j); queue.push(j); }
+        }
+      }
+      return ring.every((j) => seen.has(j));
+    };
+    return !joined(4) && !joined(0);
   }
 
   /**

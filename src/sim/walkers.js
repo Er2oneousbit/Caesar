@@ -121,8 +121,9 @@ function onArriveTile(game, w) {
       reroute(game, w);
       return;
     }
-    // A low bridge built across a boat's route since it set out (sim/bridges.js).
-    if (w.kind === 'ship' && map.bridgeLow[next]) {
+    // A low bridge built across a boat's route since it set out (sim/bridges.js),
+    // or a waterside building out over the water (world/map.js closeBuiltWater).
+    if (w.kind === 'ship' && (map.bridgeLow[next] || map.building[next])) {
       boatBlocked(game, w);
       return;
     }

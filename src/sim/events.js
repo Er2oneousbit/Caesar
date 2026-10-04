@@ -267,7 +267,7 @@ export function applyEvent(game, key, step = 2) {
 function ruinBuilding(game, b, cause, spare = -1) {
   const { map } = game;
   const main = mainOf(game, b);
-  const tiles = groupTiles(game, b).filter((i) => i !== spare && !map.road[i]);
+  const tiles = groupTiles(game, b).filter((i) => i !== spare && !map.road[i] && map.terrain[i] !== Terrain.WATER); // (rows over the water fall into it: open water)
   const site = { type: main.house ? 'house' : main.type, x: main.x, y: main.y, size: main.size, turn: main.turn || 0 };
   const label = buildingLabel(main);
   removeBuilding(game, b, cause);

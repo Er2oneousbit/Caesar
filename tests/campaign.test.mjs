@@ -29,6 +29,8 @@ import { Terrain } from '../src/world/map.js';
 import { updateImmigration, immigrationPerDay } from '../src/sim/population.js';
 import { buildDemoCity } from '../src/dev/demoCity.js';
 import { checkBuilding } from '../src/sim/construction.js';
+import { waterRowsSide } from '../src/sim/entities.js';
+import { BUILDINGS } from '../src/data/buildings.js';
 import { newGame } from './helpers.mjs';
 
 log.setLevel('error');
@@ -329,6 +331,34 @@ test('the first mission is not won in its first year', () => {
   game.runDays(12 * CONFIG.DAYS_PER_MONTH);
   assert.ok(game.city.population > 400, `the town grew (${game.city.population} people)`);
   assert.equal(won, null, 'no victory in the first year');
+});
+
+test('every mission has room for each waterside building it unlocks, out over the water (ships: where they can come)', () => {
+  // Waterside buildings stand out over the water (sim/entities.js
+  // waterRowsFor): a straight bank three tiles long is needed, and the
+  // missions' maps were made before the rule. Docks and the fleet need
+  // water from the sea; a map with none (Oasis Aurea, Mutina) offers them no
+  // spot, as before.
+  const KINDS = ['dock', 'shipyard', 'wharf', 'navalia', 'naval_station', 'portus'];
+  let checked = 0;
+  for (const s of SCENARIOS) {
+    const kinds = KINDS.filter((k) => unlockedBuildings(s).has(k));
+    if (!kinds.length) continue;
+    const game = new Game({ scenario: s, flags: {} });
+    for (const type of kinds) {
+      if (BUILDINGS[type].placement === 'shore' && !game.map.seaEntry) continue;
+      const S = BUILDINGS[type].size;
+      let found = false;
+      for (let y = 0; y <= game.map.h - S && !found; y++) {
+        for (let x = 0; x <= game.map.w - S && !found; x++) {
+          if (waterRowsSide(game.map, x, y, S) >= 0 && checkBuilding(game, type, x, y).ok) found = true;
+        }
+      }
+      assert.ok(found, `${s.id}: a spot for the ${BUILDINGS[type].name}`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 30, `${checked} kinds checked`);
 });
 
 test('every mission with a shipyard can get timber for its boats: woods for a timber yard, and shore for the yard', () => {

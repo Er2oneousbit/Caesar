@@ -2461,34 +2461,45 @@ try {
       const r = window.colonia.canvas.getBoundingClientRect();
       return { x: r.left + ((wx - cam.x) * cam.scale) / cam.dpr, y: r.top + ((wy - cam.y) * cam.scale) / cam.dpr };
     }, [tx, ty]);
-    // Open 3x3 spots on the shore of the sea: two right at the water's edge
-    // (a whole side on the water), apart from each other, and one that
-    // touches the water with land in front of part of its side.
+    // 3x3 spots on the shore of the sea: some out over the water as the
+    // rule asks (its two front rows on navigable water, the back row open
+    // land, water to tie up at in front), apart from each other; and one
+    // wholly on land right at the water's edge (the older rule's spot).
     const shore = await np.evaluate(() => {
       const g = window.colonia.game;
       const m = g.map;
       const water = (x, y) => m.inBounds(x, y) && m.terrain[m.idx(x, y)] === 4;
-      const wholeSide = (x, y) => [0, 1, 2, 3].some((s) => [0, 1, 2].every((d) => water(s === 1 ? x + 3 : s === 3 ? x - 1 : x + d, s === 0 ? y - 1 : s === 2 ? y + 3 : y + d)));
+      const openWater = (x, y) => water(x, y) && m.navigable[m.idx(x, y)] && !m.building[m.idx(x, y)] && !m.road[m.idx(x, y)];
+      const land = (x, y) => m.isFree(x, y) && m.terrain[m.idx(x, y)] !== 2;
+      // Side s (0 = -y, 1 = +x, 2 = +y, 3 = -x): tile (dx, dy) of the footprint, rows counted from that side.
+      const rowFrom = (s, dx, dy) => (s === 0 ? dy : s === 1 ? 2 - dx : s === 2 ? 2 - dy : dx);
+      const past = (s, d, x, y) => [s === 1 ? x + 3 : s === 3 ? x - 1 : x + d, s === 0 ? y - 1 : s === 2 ? y + 3 : y + d];
+      const fits = (x, y) => [0, 1, 2, 3].some((s) => {
+        for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) if (rowFrom(s, dx, dy) < 2 ? !openWater(x + dx, y + dy) : !land(x + dx, y + dy)) return false;
+        return openWater(...past(s, 1, x, y));
+      });
+      const wholeSide = (x, y) => [0, 1, 2, 3].some((s) => [0, 1, 2].every((d) => water(...past(s, d, x, y))));
       const out = [];
-      let gap = null;
+      let edge = null;
       for (let y = 2; y < m.h - 5; y++) {
         for (let x = 2; x < m.w - 5; x++) {
-          if (m.navigableBeside(x, y, 3) < 0) continue;
-          let ok = true;
-          for (let dy = 0; dy < 3 && ok; dy++) for (let dx = 0; dx < 3; dx++) if (!m.isFree(x + dx, y + dy) || m.terrain[m.idx(x + dx, y + dy)] === 2) { ok = false; break; }
-          if (!ok) continue;
-          if (!wholeSide(x, y)) { gap ??= { x, y }; continue; }
-          if (out.length < 2 && out.every((o) => Math.abs(o.x - x) > 4 || Math.abs(o.y - y) > 4)) out.push({ x, y });
+          if (fits(x, y)) {
+            if (out.length < 12 && out.every((o) => Math.abs(o.x - x) > 4 || Math.abs(o.y - y) > 4)) out.push({ x, y });
+            continue;
+          }
+          let open = true;
+          for (let dy = 0; dy < 3 && open; dy++) for (let dx = 0; dx < 3; dx++) if (!land(x + dx, y + dy)) { open = false; break; }
+          if (open && !edge && wholeSide(x, y)) edge = { x, y };
         }
       }
       if (out[0]) window.colonia.renderer.camera.centerOnTile(out[0].x + 1, out[0].y + 1);
-      return { spots: out, gap };
+      return { spots: out, edge };
     });
     const spots = shore.spots;
-    // The shore rule: a Naval Station held over the spot with land in front
-    // of part of its water side is red and says why; nothing is built there.
-    if (shore.gap) {
-      const s = shore.gap;
+    // The shore rule: a Naval Station held wholly on land at the water's
+    // edge is red and says why; nothing is built there.
+    if (shore.edge) {
+      const s = shore.edge;
       await np.evaluate((t) => { window.colonia.renderer.camera.centerOnTile(t.x + 1, t.y + 1); window.colonia.ui.selectTool('naval_station'); }, s);
       await np.waitForTimeout(250);
       const p = await nScreen(s.x + 1, s.y + 1);
@@ -2501,23 +2512,36 @@ try {
         const plan = app.renderer.plan;
         return { ok: plan?.items[0]?.ok, reason: plan?.reason, at: plan && [plan.items[0].x, plan.items[0].y], side: document.querySelector('#tool-info .err')?.textContent || '', built: !!app.game.map.building[app.game.map.idx(t.x, t.y)] };
       }, s);
-      check('shore rule: a waterfront preview with land in front of part of its water side is red, says why, and builds nothing',
-        refused.ok === false && /^Must stand right at the water's edge/.test(refused.reason || '') && /water's edge/.test(refused.side) && !refused.built, JSON.stringify({ gap: s, refused }));
+      check('shore rule: a waterside building held wholly on land is red, says two rows must stand on the water, and builds nothing',
+        refused.ok === false && refused.reason === 'Two rows of the Statio must stand on the water, the rest on the shore' && /must stand on the water/.test(refused.side) && !refused.built, JSON.stringify({ edge: s, refused }));
       await np.mouse.click(10, 300, { button: 'right' });
     } else {
-      check('shore rule: this coast has a spot with land in front of part of its water side', false, 'none found');
+      check('shore rule: this coast has open land right at the water\'s edge', false, 'none found');
     }
-    check('fleet: open shore for a station and a navalia', spots.length === 2, JSON.stringify(spots));
+    check('fleet: open shore for a station and a navalia, out over the water', spots.length >= 2, JSON.stringify(spots));
+    // Each placed by a click, on the first spot its preview shows green
+    // (the page finds spots by the terrain; the game checks the rest).
     const placed = [];
-    for (const [k, type] of [[0, 'naval_station'], [1, 'navalia']]) {
-      if (!spots[k]) break;
-      await np.evaluate(([s, t]) => { window.colonia.renderer.camera.centerOnTile(s.x + 1, s.y + 1); window.colonia.ui.selectTool(t); }, [spots[k], type]);
-      await np.waitForTimeout(250);
-      const p = await nScreen(spots[k].x + 1, spots[k].y + 1); // the cursor is the middle of a 3x3
-      await np.mouse.move(p.x - 5, p.y);
-      await np.mouse.move(p.x, p.y);
-      await np.mouse.click(p.x, p.y);
-      placed.push(await np.evaluate(([s, t]) => window.colonia.game.buildings.get(window.colonia.game.map.building[window.colonia.game.map.idx(s.x, s.y)])?.type === t, [spots[k], type]));
+    let next = 0;
+    for (const type of ['naval_station', 'navalia']) {
+      let done = false;
+      for (; next < spots.length && !done; next++) {
+        const s = spots[next];
+        await np.evaluate(([s, t]) => { window.colonia.renderer.camera.centerOnTile(s.x + 1, s.y + 1); window.colonia.ui.selectTool(t); }, [s, type]);
+        await np.waitForTimeout(250);
+        const p = await nScreen(s.x + 1, s.y + 1); // the cursor is the middle of a 3x3
+        await np.mouse.move(p.x - 5, p.y);
+        await np.mouse.move(p.x, p.y);
+        await np.waitForTimeout(100);
+        if (!(await np.evaluate(() => !!window.colonia.renderer.plan?.items[0]?.ok))) continue;
+        await np.mouse.click(p.x, p.y);
+        done = await np.evaluate(([s, t]) => {
+          const g = window.colonia.game;
+          const b = g.buildings.get(g.map.building[g.map.idx(s.x, s.y)]);
+          return b?.type === t && b.waterRows === 2 && g.map.navigable[g.map.idx(s.x + 1, s.y + 1)] === 0;
+        }, [s, type]);
+      }
+      placed.push(done);
     }
     check('fleet: a click places a Naval Station and a Navalia on the shore', placed.length === 2 && placed.every(Boolean), JSON.stringify(placed));
     await np.mouse.click(10, 300, { button: 'right' });

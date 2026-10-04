@@ -52,16 +52,19 @@ export function boatTiles(game) {
 }
 
 /**
- * A low bridge was built or cleared: work out the boats' water again and
- * tell every boat afloat which part of it it is on. Berths and moorings on
- * a new low bridge are found again beside their building.
+ * A low bridge was built or cleared, or a waterside building out over the
+ * water built or brought down (Game.waterwaysChanged): work out the boats'
+ * water again and tell every boat afloat which part of it it is on. Berths
+ * and moorings on a new low bridge (or under a building, which placement
+ * never allows: sim/construction.js checkWaterRows) are found again beside
+ * their building.
  */
 export function refreshWaterways(game) {
   const map = game.map;
   map.computeWaterways();
   for (const b of game.buildings.values()) {
-    if (b.berth >= 0 && map.bridgeLow[b.berth]) b.berth = -1;
-    if (b.mooring >= 0 && map.bridgeLow[b.mooring]) b.mooring = -1;
+    if (b.berth >= 0 && (map.bridgeLow[b.berth] || map.building[b.berth])) b.berth = -1;
+    if (b.mooring >= 0 && (map.bridgeLow[b.mooring] || map.building[b.mooring])) b.mooring = -1;
   }
   game.stationSpots = null; // (the squadrons' spots around their anchors, sim/navy.js)
   for (const u of game.units.values()) {
@@ -144,8 +147,9 @@ export function lowBridgeCuts(game, span) {
     const cut = [];
     for (const b of game.buildings.values()) {
       if (b.def.placement !== 'shore') continue;
-      const berth = b.berth >= 0 && !planned.has(b.berth) ? b.berth : shoreWaterAt(map, b.def, b.x, b.y, b.size);
-      if (berth >= 0 && now[berth] && !then[berth]) cut.push(named(b));
+      const berth = b.berth >= 0 && !planned.has(b.berth) ? b.berth : shoreWaterAt(map, b.def, b.x, b.y, b.size, planned); // (where it would tie up with the bridge built)
+      const had = b.berth >= 0 ? b.berth : shoreWaterAt(map, b.def, b.x, b.y, b.size);
+      if ((berth >= 0 && now[berth] && !then[berth]) || (berth < 0 && had >= 0 && now[had])) cut.push(named(b)); // (no water left to tie up at: cut off too)
     }
     if (cut.length) out.push(`This low bridge cuts ${listOf(cut)} off from the sea: no ship will get past it.`);
     else if (span.some((i) => now[i])) out.push('No boat passes a low bridge: ships from the sea will not sail beyond it.');
@@ -153,8 +157,9 @@ export function lowBridgeCuts(game, span) {
   const lost = [];
   for (const b of game.buildings.values()) {
     if (b.def.kind !== 'wharf') continue;
-    const m = mooringNow(map, b);
-    if (m < 0) continue;
+    const now = mooringNow(map, b);
+    const m = now >= 0 && planned.has(now) ? shoreWaterAt(map, b.def, b.x, b.y, b.size, planned) : now; // (moored elsewhere with the bridge built)
+    if (m < 0) { if (now >= 0 && map.groundsOf(map.fishBody[now]).length) lost.push(named(b)); continue; } // (nowhere left to moor)
     const body = map.fishBody[m];
     const grounds = map.groundsOf(body);
     if (!grounds.length) continue;

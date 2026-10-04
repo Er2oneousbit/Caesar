@@ -299,6 +299,21 @@ export function perimeterTiles(map, x, y, size, h = size) {
 }
 
 /**
+ * The tiles of a footprint's perimeter ring (perimeterTiles) beside its
+ * land: a building that stands out over the water (a waterside building's
+ * front rows, waterRowsFor) takes its road on the shore, never from a
+ * bridge passing its pier. For a building wholly on land, the whole ring.
+ */
+export function accessTiles(map, x, y, w, h = w) {
+  return perimeterTiles(map, x, y, w, h).filter((i) => {
+    // The footprint tile it touches: the nearest one (a ring tile is beside exactly one).
+    const fx = Math.max(x, Math.min(x + w - 1, map.xOf(i)));
+    const fy = Math.max(y, Math.min(y + h - 1, map.yOf(i)));
+    return map.terrain[map.idx(fx, fy)] !== Terrain.WATER;
+  });
+}
+
+/**
  * Find the road tile a building uses. Houses accept a road within 2 tiles;
  * everything else needs a road touching its footprint. A road on the network
  * that reaches the map entry (the city's own, where settlers, workers and
@@ -328,9 +343,10 @@ export function computeAccessRoad(game, b) {
     b.accessRoad = best;
     return best;
   }
-  // A building in sections (the hippodrome) takes a road beside any of them.
+  // A building in sections (the hippodrome) takes a road beside any of them;
+  // one out over the water, beside its rows on land (accessTiles).
   const r = footprintRect(b);
-  for (const i of perimeterTiles(map, r.x, r.y, r.w, r.h)) {
+  for (const i of accessTiles(map, r.x, r.y, r.w, r.h)) {
     if (!map.road[i]) continue;
     if (!off(i)) { b.accessRoad = i; break; } // on the city's network: done
     if (b.accessRoad < 0) b.accessRoad = i; // else remember the first road, as a fallback
@@ -338,12 +354,111 @@ export function computeAccessRoad(game, b) {
   return b.accessRoad;
 }
 
+// ---------------------------------------------------------------------------
+// Waterside buildings
+// ---------------------------------------------------------------------------
+
+/** Is this a waterside building: the Emporium, the fleet's three, a shipyard or a wharf? */
+export function isWaterside(def) {
+  return def.placement === 'shore' || def.placement === 'fishingShore';
+}
+
 /**
- * Register a new building on the map.
- * The caller (construction.js) is responsible for validation and payment.
- * `quiet`: no 'buildingAdded' event, so the renderer does not raise it out of
- * the ground (homes split off a bigger home were there all along).
+ * How many rows of a waterside building stand out over the water, as the
+ * original's docks did: one for a 2x2 (the wharf, the shipyard), two for a
+ * 3x3 or larger. Its other rows stand on the shore. The rows on the water
+ * are its front, the side it faces (b.waterSide).
  */
+export function waterRowsFor(size) {
+  return size <= 2 ? 1 : 2;
+}
+
+/**
+ * Added to a waterside building's art state (render/buildingArt.js
+ * artState, and the placement preview) when it stands out over the water:
+ * its rows on the water are drawn as a quay or pier on piles, its others on
+ * the shore. One wholly on land from an older save keeps its old look.
+ */
+export const OVER_WATER_ART = 16;
+
+/** Tile (dx, dy) of an S x S footprint, counted in rows from its `side` (0 = -y, 1 = +x, 2 = +y, 3 = -x). */
+function rowFrom(side, dx, dy, S) {
+  return side === 0 ? dy : side === 1 ? S - 1 - dx : side === 2 ? S - 1 - dy : dx;
+}
+
+/**
+ * The side of an S x S footprint whose front rows (waterRowsFor) are all
+ * water while all its other tiles are land, or -1. The terrain alone decides
+ * it, and at most one side can fit, so a waterside building turns itself and
+ * the player never turns it (sim/construction.js turnRule). A building wholly
+ * on land (placed before the rule, in an older save) has none.
+ */
+export function waterRowsSide(map, x, y, S) {
+  if (!map.inBounds(x, y) || !map.inBounds(x + S - 1, y + S - 1)) return -1;
+  const rows = waterRowsFor(S);
+  for (let side = 0; side < 4; side++) {
+    let fits = true;
+    for (let dy = 0; dy < S && fits; dy++) {
+      for (let dx = 0; dx < S; dx++) {
+        const water = map.terrain[map.idx(x + dx, y + dy)] === Terrain.WATER;
+        if (water !== rowFrom(side, dx, dy, S) < rows) { fits = false; break; }
+      }
+    }
+    if (fits) return side;
+  }
+  return -1;
+}
+
+/** How many of a building's rows stand on the water (0: wholly on land, as every building but the waterside ones). */
+export function waterRowsOf(map, b) {
+  return isWaterside(b.def) && waterRowsSide(map, b.x, b.y, b.size) >= 0 ? waterRowsFor(b.size) : 0;
+}
+
+/** Tile `d` (0..S-1) of the line just past a footprint's `side` edge, as [x, y]. */
+function pastSide(side, d, x, y, S) {
+  return [side === 1 ? x + S : side === 3 ? x - 1 : x + d, side === 0 ? y - 1 : side === 2 ? y + S : y + d];
+}
+
+/**
+ * Where ships or boats tie up at a building out over the water: on the water
+ * just past its front row, alongside the quay, the tile nearest the middle
+ * first (a ship comes alongside, not off a corner), or -1. `beside`: failing
+ * that, the water beside its rows on the water, front row first, as for one
+ * whose front a low bridge has closed since (placement asks for the front).
+ */
+function berthInFront(map, def, x, y, S, side, beside, closed) {
+  const mid = (S - 1) / 2;
+  const order = [...Array(S).keys()].sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid) || a - b);
+  for (const d of order) {
+    const [tx, ty] = pastSide(side, d, x, y, S);
+    if (map.inBounds(tx, ty) && berthWater(map, def, map.idx(tx, ty), closed)) return map.idx(tx, ty);
+  }
+  if (!beside) return -1;
+  for (let r = 0; r < waterRowsFor(S); r++) {
+    const d = side === 0 || side === 3 ? r : S - 1 - r; // row r, along its flanks' edges
+    for (const flank of [(side + 3) & 3, (side + 1) & 3]) {
+      const [tx, ty] = pastSide(flank, d, x, y, S);
+      if (map.inBounds(tx, ty) && berthWater(map, def, map.idx(tx, ty), closed)) return map.idx(tx, ty);
+    }
+  }
+  return -1;
+}
+
+/**
+ * A waterside building of `def` with its top-left tile at (x, y) as it
+ * stands out over the water: the side its rows on the water face (`side`),
+ * how many (`rows`), and its berth in front (`water`, -1 when there is no
+ * water there that ships or boats could use; `beside` as berthInFront).
+ * Null when its rows do not lie so. Terrain and the water layers only:
+ * placement checks the rest (sim/construction.js checkWaterRows).
+ * @returns {{side:number, rows:number, water:number}|null}
+ */
+export function overWaterFit(map, def, x, y, S = def.size, beside = false, closed = null) {
+  const side = waterRowsSide(map, x, y, S);
+  if (side < 0) return null;
+  return { side, rows: waterRowsFor(S), water: berthInFront(map, def, x, y, S, side, beside, closed) };
+}
+
 /**
  * Which edge of a footprint at (x, y) touches the water tile `water`
  * (0 = -y, 1 = +x, 2 = +y, 3 = -x), as the waterside art is turned.
@@ -352,6 +467,16 @@ export function sideToward(map, water, x, y, size) {
   const wx = map.xOf(water);
   const wy = map.yOf(water);
   return wy < y ? 0 : wx >= x + size ? 1 : wy >= y + size ? 2 : 3;
+}
+
+/**
+ * The side a waterside building faces, given its berth `i`: for one out
+ * over the water, the side of its rows on the water (even when its berth
+ * lies beside them), else the edge the berth touches.
+ */
+export function waterSideOf(map, b, i) {
+  const side = isWaterside(b.def) ? waterRowsSide(map, b.x, b.y, b.size) : -1;
+  return side >= 0 ? side : sideToward(map, i, b.x, b.y, b.size);
 }
 
 /**
@@ -366,21 +491,27 @@ function berthBeside(map, def, x, y, size) {
   return -1;
 }
 
-/** Can a waterside building of `def` use water tile `i` (ships reach it, or it has fish)? */
-function berthWater(map, def, i) {
+/**
+ * Can a waterside building of `def` use water tile `i` (ships reach it, or
+ * it has fish)? Never water under a building: the map closes it to boats
+ * (world/map.js closeBuiltWater), nor tile in `closed` (a set of tiles a
+ * plan would close: a low bridge being placed, sim/bridges.js lowBridgeCuts).
+ */
+function berthWater(map, def, i, closed = null) {
+  if (closed && closed.has(i)) return false;
   if (def.placement === 'shore') return !!map.navigable[i] && !map.bridgeLow[i];
   return map.fishBody[i] > 0;
 }
 
 /**
- * The side of a footprint at (x, y) that stands right at the water's edge,
- * as a waterside building must: every tile just past that edge is water
- * (no strip of land between the quay and the water), and the building can
- * use at least one of them. @returns {{side:number, water:number}|null}
- * `side` as sideToward, `water` the first usable tile along it (the berth).
- * The side of the first usable tile found round the footprint the old way
- * (berthBeside) wins when it qualifies, so a building that already stood
- * right at the water faces it exactly as before; then the sides in order.
+ * The rule before buildings stood out over the water (v0.18.6 to v0.18.12),
+ * for those placed under it, wholly on land: the side of a footprint at
+ * (x, y) that stands right at the water's edge, every tile just past it
+ * water and at least one the building can use.
+ * @returns {{side:number, water:number}|null} `side` as sideToward, `water`
+ * the first usable tile along it (the berth). The side of the first usable
+ * tile found round the footprint the oldest way (berthBeside) wins when it
+ * qualifies, then the sides in order.
  */
 export function waterEdge(map, def, x, y, size = def.size) {
   const first = berthBeside(map, def, x, y, size);
@@ -390,8 +521,7 @@ export function waterEdge(map, def, x, y, size = def.size) {
     let water = -1;
     let whole = true;
     for (let d = 0; d < size && whole; d++) {
-      const tx = side === 1 ? x + size : side === 3 ? x - 1 : x + d;
-      const ty = side === 0 ? y - 1 : side === 2 ? y + size : y + d;
+      const [tx, ty] = pastSide(side, d, x, y, size);
       if (!map.inBounds(tx, ty)) { whole = false; break; }
       const i = map.idx(tx, ty);
       if (map.terrain[i] !== Terrain.WATER) whole = false;
@@ -403,27 +533,44 @@ export function waterEdge(map, def, x, y, size = def.size) {
 }
 
 /**
- * The water a waterside building at (x, y) faces, or -1: the berth on its
- * side right at the water's edge (waterEdge), or, for one that stands
- * back from the water (placed before that rule, kept by older saves), the
- * first usable water beside it, as it always had.
+ * The water a waterside building at (x, y) uses (its berth, slip or
+ * mooring), or -1: for one out over the water, the water in front of it
+ * (overWaterFit). One placed before that rule stands wholly on land and
+ * keeps the water it always had: its side right at the water's edge
+ * (waterEdge), or, standing back from the water, the first usable water
+ * beside it. `closed`: tiles to count as closed to boats already (berthWater).
  */
-export function shoreWaterAt(map, def, x, y, size = def.size) {
+export function shoreWaterAt(map, def, x, y, size = def.size, closed = null) {
+  const fit = overWaterFit(map, def, x, y, size, true, closed);
+  if (fit) return fit.water;
   const edge = waterEdge(map, def, x, y, size);
   return edge ? edge.water : berthBeside(map, def, x, y, size);
 }
 
 /**
- * Turn a waterside building to face its water. Done as it is placed (and
- * for an older save, as it loads): before, the side was worked out only
- * when a ship or boat first used the building, and a Portus or Naval
- * Station stood turned the wrong way until then (playtest).
+ * Turn a waterside building to face its water, and note how many of its
+ * rows stand on it (`waterRows`, derived from the terrain: 0 for one wholly
+ * on land). Done as it is placed (and for an older save, as it loads):
+ * before, the side was worked out only when a ship or boat first used the
+ * building, and a Portus or Naval Station stood turned the wrong way until
+ * then (playtest).
  */
 export function faceWater(game, b) {
-  const i = shoreWaterAt(game.map, b.def, b.x, b.y, b.size);
-  if (i >= 0) b.waterSide = sideToward(game.map, i, b.x, b.y, b.size);
+  if (!isWaterside(b.def)) return;
+  const map = game.map;
+  b.waterRows = waterRowsOf(map, b);
+  if (b.waterRows) { b.waterSide = waterRowsSide(map, b.x, b.y, b.size); return; }
+  const i = shoreWaterAt(map, b.def, b.x, b.y, b.size);
+  if (i >= 0) b.waterSide = sideToward(map, i, b.x, b.y, b.size);
 }
 
+/**
+ * Register a new building on the map.
+ * The caller (construction.js) is responsible for validation and payment.
+ * `quiet`: no 'buildingAdded' event, so the renderer does not raise it out of
+ * the ground (homes split off a bigger home were there all along). One out
+ * over the water closes the water under it to boats (Game.waterwaysChanged).
+ */
 export function addBuilding(game, type, x, y, size, { quiet = false, turn = 0 } = {}) {
   const id = game.nextBuildingId++;
   const b = new Building(id, type, x, y, size);
@@ -444,6 +591,7 @@ export function addBuilding(game, type, x, y, size, { quiet = false, turn = 0 } 
   game.buildings.set(id, b);
   computeAccessRoad(game, b);
   faceWater(game, b);
+  if (b.waterRows) game.waterwaysChanged?.(); // (no boat sails through it now)
   b.createdDay = game.time.totalDays;
   // A new garden or statue starts fully tended (sim/gardens.js).
   if (b.def.tended) { b.tendedDay = game.time.totalDays; b.careStep = 0; }
@@ -483,6 +631,9 @@ export function removeBuilding(game, b, reason = 'demolish') {
   if (b.house && b.house.pop > 0 && reason !== 'merge') {
     evictResidents(game, b);
   }
+  // Its rows on the water are open water again, whatever brought it down
+  // (no rubble or flames are left on water: sim/risk.js fallingGround).
+  if (b.waterRows) game.waterwaysChanged?.();
   game.markDirty('des', 'water');
   map.touch();
   game.events.emit('buildingRemoved', { building: b, reason });

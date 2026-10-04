@@ -67,6 +67,7 @@ import { updateEmperor, scheduleNextRequest, newGiftState, giftsMonth } from '..
 import { newGovernorState, paySalary, salaryNewYear } from '../sim/governor.js';
 import { newMilitaryState, updateMilitary, updateBarracks, militaryDaily, militaryMonthly, updateDemand, disbandFort, peopleFor } from '../sim/military.js';
 import { updatePrefectFights } from '../sim/prefectFight.js';
+import { refreshWaterways } from '../sim/bridges.js';
 import { newWildlife, wildlifeDaily } from '../sim/wildlife.js';
 import { GENERIC_PEOPLE } from '../data/peoples.js';
 import { updateNavalia, stationLost, shoreBerth } from '../sim/navy.js';
@@ -267,6 +268,16 @@ export class Game {
     this.events.emit('message', m);
     this.log.info(`[msg:${level}] ${text}`);
     return m;
+  }
+
+  /**
+   * A waterside building out over the water was built or came down
+   * (sim/entities.js addBuilding, removeBuilding): the boats' water is
+   * worked out again with its rows closed, or open again (world/map.js
+   * closeBuiltWater), and every boat afloat told which water it is on.
+   */
+  waterwaysChanged() {
+    refreshWaterways(this);
   }
 
   /** Called by construction after any map edit. */

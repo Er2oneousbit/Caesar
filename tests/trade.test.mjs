@@ -58,13 +58,13 @@ test('river and coast maps have navigable water that reaches the map edge', () =
   }
 });
 
-test('docks must touch navigable water', () => {
+test('docks stand out over navigable water', () => {
   const game = newGame({ type: 'coast', seed: 'beach' });
   const inland = findFree(game, 3, 3);
   const bad = planAction(game, 'dock', inland.x + 1, inland.y + 1, inland.x + 1, inland.y + 1);
   if (game.map.navigableBeside(inland.x, inland.y, 3) < 0) {
     assert.equal(bad.count, 0);
-    assert.match(bad.reason, /bank|sea/i);
+    assert.match(bad.reason, /Two rows of the Emporium must stand on the water, the rest on the shore/);
   }
   const spot = dockSpot(game);
   assert.ok(spot, 'a shore spot exists');

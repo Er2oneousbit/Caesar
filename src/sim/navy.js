@@ -191,14 +191,15 @@ function stepToward(u, tx, ty, speed) {
 /**
  * Follow u.path (tile indices). @returns {boolean|string} true when the
  * route is done (or there is none); 'blocked' when a low bridge has gone up
- * across it since it was planned (sim/bridges.js): the route is dropped and
- * the ship stops short of the bridge.
+ * across it since it was planned (sim/bridges.js), or a waterside building
+ * out over the water (world/map.js closeBuiltWater): the route is dropped
+ * and the ship stops short of it.
  */
 function followWaterPath(game, u, speed) {
   if (!u.path || u.pathIndex >= u.path.length) { u.path = null; return true; }
   const map = game.map;
   const i = u.path[u.pathIndex];
-  if (map.bridgeLow[i]) { u.path = null; u.moving = false; return 'blocked'; }
+  if (map.bridgeLow[i] || map.building[i]) { u.path = null; u.moving = false; return 'blocked'; }
   if (stepToward(u, map.xOf(i) + 0.5, map.yOf(i) + 0.5, speed)) u.pathIndex++;
   if (u.pathIndex >= u.path.length) { u.path = null; return true; }
   return false;

@@ -6,7 +6,9 @@
  *   Fishing water: a river, the sea or a big lake (FISH_BODY_MIN tiles or
  *   more), with fishing grounds where gulls circle (world/map.js
  *   computeFishing: derived from the terrain, never saved). Shipyards and
- *   wharves stand on its bank, on land, like a dock.
+ *   wharves stand on its bank with their front row out over the water,
+ *   like a dock (sim/entities.js waterRowsFor), the slip or mooring just
+ *   past it.
  *
  *   Shipyard: builds one fishing boat at a time from SHIPYARD_BOAT_TIMBER
  *   (100) timber: progress grows by staffing x 100 / SHIPYARD_BOAT_DAYS a day
@@ -49,7 +51,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { spawnWalker, killWalker, shoreWaterAt } from './entities.js';
+import { spawnWalker, killWalker, shoreWaterAt, waterSideOf } from './entities.js';
 import { followPath } from './movement.js';
 import { shipOutput } from './production.js';
 import { logGoods } from './goodsLedger.js';
@@ -57,19 +59,17 @@ import { logGoods } from './goodsLedger.js';
 const TPD = CONFIG.TICKS_PER_DAY;
 
 /**
- * The water tile beside a shipyard or wharf (its slip or mooring), cached,
- * or -1. Also records which edge faces the water (b.waterSide: 0 = -y,
- * 1 = +x, 2 = +y, 3 = -x) for the art, as a dock does.
+ * The water tile a shipyard or wharf uses (its slip or mooring), cached, or
+ * -1: just past its row out over the water (sim/entities.js shoreWaterAt;
+ * one wholly on land from an older save, the water beside it). Also
+ * records which edge faces the water (b.waterSide: 0 = -y, 1 = +x, 2 = +y,
+ * 3 = -x) for the art, as a dock does.
  */
 export function waterBeside(game, b) {
   const map = game.map;
   if (b.mooring === undefined || b.mooring < 0 || !map.fishBody[b.mooring]) {
-    b.mooring = shoreWaterAt(map, b.def, b.x, b.y, b.size); // (its side right at the water's edge)
-    if (b.mooring >= 0) {
-      const mx = map.xOf(b.mooring);
-      const my = map.yOf(b.mooring);
-      b.waterSide = my < b.y ? 0 : mx >= b.x + b.size ? 1 : my >= b.y + b.size ? 2 : 3;
-    }
+    b.mooring = shoreWaterAt(map, b.def, b.x, b.y, b.size);
+    if (b.mooring >= 0) b.waterSide = waterSideOf(map, b, b.mooring);
   }
   return b.mooring;
 }

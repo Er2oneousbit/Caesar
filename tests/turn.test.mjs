@@ -25,6 +25,7 @@ import { turnUV, turnDir, drawTurned, turnCheck, sortUnits } from '../src/render
 import { BUILDINGS } from '../src/data/buildings.js';
 import { HOUSE_TIERS } from '../src/data/housing.js';
 import { HALF_W, HALF_H } from '../src/config.js';
+import { OVER_WATER_ART } from '../src/sim/entities.js';
 
 /** Every building drawing worth checking: [key, size, variant, state]. */
 function allArt() {
@@ -42,6 +43,11 @@ function allArt() {
       continue;
     }
     const states = k === 'hippodrome_part' ? [1, 2] : d.kind === 'farm' ? [0, 4, 7] : [0, 1];
+    // Waterside buildings out over the water: facing each side, with the
+    // hull on the slip or the catch on the deck (sim/entities.js OVER_WATER_ART).
+    if (d.placement === 'shore' || d.placement === 'fishingShore') {
+      for (let side = 0; side < 4; side++) for (const extra of [0, 4, 8]) states.push(OVER_WATER_ART + side + extra);
+    }
     for (const st of states) out.push([k, d.size, 0, st]);
   }
   return out;

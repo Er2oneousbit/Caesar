@@ -18,7 +18,7 @@ import { UNIT_TYPES, FORT_CAPACITY } from '../src/data/units.js';
 import { SCENARIOS, LARGE_TEMPLE_KEYS, NAVY_KEYS } from '../src/data/scenarios.js';
 import { GOD_KEYS } from '../src/data/gods.js';
 import { addBuilding, removeBuilding, inOwnFort } from '../src/sim/entities.js';
-import { checkBuilding } from '../src/sim/construction.js';
+import { checkBuilding, waterRowsReason } from '../src/sim/construction.js';
 import { updateWalkers } from '../src/sim/walkers.js';
 import { updateServiceSpawns } from '../src/sim/services.js';
 import { updateReligion } from '../src/sim/religion.js';
@@ -710,7 +710,8 @@ test('the Portus: its water rule, and only a fully staffed one on the station\'s
   const off = checkBuilding(game, 'portus', inland.x, inland.y);
   const nav = checkBuilding(game, 'navalia', inland.x, inland.y);
   assert.equal(off.ok, nav.ok);
-  if (!off.ok) assert.equal(off.reason, nav.reason);
+  if (!off.ok) assert.equal(off.reason.replace(BUILDINGS.portus.name, BUILDINGS.navalia.name), nav.reason);
+  if (!off.ok && !game.map.isNearTerrain(inland.x, inland.y, 3, Terrain.WATER, 1)) assert.equal(off.reason, waterRowsReason(BUILDINGS.portus));
   assert.ok(waterOf(game, portus) > 0);
   assert.equal(portusFor(game, station), portus);
   portus.efficiency = 11 / 12;

@@ -186,7 +186,7 @@ test('fishing grounds: the same after a save and load (never saved, derived agai
 // Placement
 // ---------------------------------------------------------------------------
 
-test('placement: wharves and shipyards on the bank of water with fish, never inland or by a pond', () => {
+test('placement: wharves and shipyards out over water with fish, never inland or by a pond', () => {
   const game = coastGame();
   const spots = shoreSpots(game);
   assert.ok(spots.length > 0);
@@ -197,7 +197,7 @@ test('placement: wharves and shipyards on the bank of water with fish, never inl
   for (let y = 2; y < map.h - 4 && !inland; y++) for (let x = 2; x < map.w - 4; x++) if (map.isFree(x, y) && map.isFree(x + 1, y) && map.isFree(x, y + 1) && map.isFree(x + 1, y + 1) && map.waterDist[map.idx(x, y)] > 5) { inland = { x, y }; break; }
   const r = checkBuilding(game, 'wharf', inland.x, inland.y);
   assert.equal(r.ok, false);
-  assert.match(r.reason, /bank of a river, the sea or a big lake/);
+  assert.equal(r.reason, 'One row of the Piscatoria must stand on the water, the rest on the shore');
   // A wharf on water whose body has no ground is refused ("No fish in this water").
   const body = map.fishBody[map.fishWaterBeside(spots[0].x, spots[0].y, 2)];
   const saved = map.fishingGrounds;

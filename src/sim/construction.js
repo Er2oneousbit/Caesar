@@ -30,7 +30,7 @@ import { CONFIG } from '../config.js';
 import { BUILDINGS, TOOLS } from '../data/buildings.js';
 import { HOUSE_TIERS } from '../data/housing.js';
 import { Road, Terrain, WaterBits, Wall, ROADBLOCK } from '../world/map.js';
-import { addBuilding, perimeterTiles, removeBuilding, linkedGroup, sideToward, spanLayout, spanOrigin, waterEdge } from './entities.js';
+import { addBuilding, perimeterTiles, accessTiles, removeBuilding, linkedGroup, spanLayout, spanOrigin, isWaterside, overWaterFit, waterRowsFor, waterRowsSide, shoreWaterAt, OVER_WATER_ART } from './entities.js';
 import { canAfford, transact } from './economy.js';
 import { dockBerth } from './trade.js';
 import { cityStock } from './storage.js';
@@ -158,13 +158,76 @@ export const NO_ROAD_WARNING = 'No road touches it: it gets no workers and does 
 export const HOUSE_NO_ROAD_WARNING = 'Too far from a road: settlers cannot reach it (a home needs a road within 2 tiles)';
 
 /**
- * Why a waterside building that touches its water only in part may not go
- * there (sim/entities.js waterEdge): its quay, slip or mooring runs the
- * whole length of the side that faces the water, so no strip of land may
- * lie between that side and the water (playtest: docks stood back from the
- * shore with a beach in front, touching the water at one corner tile).
+ * Why a waterside building may not go where its rows do not lie as they
+ * must (sim/entities.js waterRowsFor): it stands out over the water as the
+ * original's docks did, its front row (a 2x2) or two front rows (a 3x3) on
+ * the water and the rest on the shore (playtest: on land with one side at
+ * the water's edge, it did not read as a harbor).
  */
-export const WATER_EDGE_REASON = 'Must stand right at the water\'s edge: one whole side on the water, with no land between it and the water';
+export function waterRowsReason(def) {
+  return `${waterRowsFor(def.size) === 1 ? 'One row' : 'Two rows'} of the ${def.name} must stand on the water, the rest on the shore`;
+}
+
+/** What a waterside building calls the water it uses: a slip to launch from, a mooring, or a berth. */
+function berthWord(def) {
+  return def.kind === 'shipyard' || def.kind === 'navalia' ? 'slip' : def.kind === 'wharf' ? 'mooring' : 'berth';
+}
+
+/**
+ * Can waterside building `def` stand with its top-left tile at (x, y)?
+ * Its footprint's tiles are already checked one by one (checkBuilding):
+ * here, that its rows on the water lie as they must (overWaterFit), on
+ * water its ships or boats can use, with that water just past its front
+ * for the berth; and that closing its rows to boats takes nothing from
+ * anyone (waterRowsBlocked). @returns {{ok:boolean, reason?:string, water?:number, side?:number}}
+ */
+export function checkWaterRows(game, def, x, y) {
+  const { map } = game;
+  const S = def.size;
+  const shore = def.placement === 'shore';
+  const no = (reason) => ({ ok: false, reason });
+  if (shore && !map.seaEntry) return no('No river or sea here reaches the map edge: ships cannot come to this province');
+  const fit = overWaterFit(map, def, x, y, S);
+  if (!fit) return no(waterRowsReason(def));
+  const tiles = [];
+  for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) if (map.terrain[map.idx(x + dx, y + dy)] === Terrain.WATER) tiles.push(map.idx(x + dx, y + dy));
+  if (shore && !map.navigable[tiles[0]]) return no('Must stand out over a river or sea that ships can sail');
+  if (!shore && !map.fishBody[tiles[0]]) return no('Must stand out over a river, the sea or a big lake (a pond has no fish)');
+  // (What it would take from others first: that says why better than the berth.)
+  const blocked = waterRowsBlocked(game, tiles);
+  if (blocked) return no(blocked);
+  if (fit.water < 0) return no(shore ? 'Ships tie up just past its front: open water must lie there' : 'Its boats moor just past its front: open water must lie there');
+  if (def.kind === 'wharf' && !map.groundsOf(map.fishBody[fit.water]).length) return no('No fish in this water');
+  return { ok: true, water: fit.water, side: fit.side };
+}
+
+/**
+ * Why water tiles `tiles` may not be closed to boats by a building out over
+ * them (world/map.js closeBuiltWater), or null: they hold the tile where
+ * ships come in from the sea, a fishing ground, a boat, another waterside
+ * building's berth, slip or mooring, or a squadron's deployed station; or
+ * closing them would cut the water in two, a channel no boat could pass
+ * again (map.wouldCutWater). Refused rather than worked round: a body of
+ * water split by a building would leave ships, boats, grounds and berths on
+ * the far side of it with no way through and no word why.
+ */
+export function waterRowsBlocked(game, tiles) {
+  const { map } = game;
+  const here = new Set(tiles);
+  if (map.seaEntry && here.has(map.idx(map.seaEntry.x, map.seaEntry.y))) return 'Ships come in from the sea here: keep this water open';
+  if (map.fishingGrounds.some((g) => here.has(map.idx(g.x, g.y)))) return 'A fishing ground lies here: keep this water open';
+  const boats = boatTiles(game);
+  if (tiles.some((i) => boats.has(i))) return 'A boat is in the way: wait until it has passed';
+  for (const b of game.buildings.values()) {
+    if (!isWaterside(b.def)) continue;
+    const kept = b.def.placement === 'shore' ? b.berth : b.mooring;
+    const at = kept >= 0 ? kept : shoreWaterAt(map, b.def, b.x, b.y, b.size);
+    if (at >= 0 && here.has(at)) return `The ${b.def.name} at ${b.x}, ${b.y} has its ${berthWord(b.def)} here: keep this water open`;
+    if (b.rally && here.has(map.idx(Math.floor(b.rally.x), Math.floor(b.rally.y)))) return `The ${b.def.name}'s squadron holds this water: recall it first`;
+  }
+  if (map.wouldCutWater(tiles)) return 'It would close the channel: no boat could sail past it';
+  return null;
+}
 
 /** The no-road warning to show by the cursor for a plan, or null when every spot has a road. */
 export function planNoRoadWarning(plan) {
@@ -197,6 +260,8 @@ export function checkBuilding(game, type, x, y, turn = 0) {
   let trees = 0;
   let rubble = 0;
   let meadow = 0;
+  // A waterside building stands partly on the water (checkWaterRows says how).
+  const waterside = isWaterside(def);
   for (let dy = 0; dy < H; dy++) {
     for (let dx = 0; dx < W; dx++) {
       const tx = x + dx;
@@ -204,10 +269,10 @@ export function checkBuilding(game, type, x, y, turn = 0) {
       if (!map.inBounds(tx, ty)) return fail('Outside the map');
       const i = map.idx(tx, ty);
       const t = map.terrain[i];
-      if (t === Terrain.WATER) return fail('Cannot build on water');
+      if (t === Terrain.WATER && !waterside) return fail('Cannot build on water');
       if (t === Terrain.ROCK) return fail('Cannot build on rocks');
       if (map.building[i]) return fail('Something is already built here');
-      if (map.road[i]) return fail('Cannot build on a road');
+      if (map.road[i]) return fail(t === Terrain.WATER ? 'A bridge is in the way' : 'Cannot build on a road');
       if (map.aqueduct[i]) return fail('An aqueduct is in the way');
       if (map.wall[i]) return fail('A wall is in the way');
       if (game.fires.has(i)) return fail('The ground is on fire!');
@@ -233,20 +298,12 @@ export function checkBuilding(game, type, x, y, turn = 0) {
     case 'nearRock':
       if (!map.isNearTerrain(x, y, S, Terrain.ROCK, 1)) return fail('Must be right next to rocks', cost);
       break;
-    case 'shore': {
-      if (!map.seaEntry) return fail('No river or sea here reaches the map edge: ships cannot come to this province', cost);
-      if (map.navigableBeside(x, y, S) < 0) return fail('Must touch the bank of a river or sea that ships can sail', cost);
-      const edge = waterEdge(map, def, x, y, S);
-      if (!edge) return fail(WATER_EDGE_REASON, cost);
-      out.water = edge.water;
-      break;
-    }
+    case 'shore':
     case 'fishingShore': {
-      if (map.fishWaterBeside(x, y, S) < 0) return fail('Must touch the bank of a river, the sea or a big lake (a pond has no fish)', cost);
-      const edge = waterEdge(map, def, x, y, S);
-      if (!edge) return fail(WATER_EDGE_REASON, cost);
-      if (def.kind === 'wharf' && !map.groundsOf(map.fishBody[edge.water]).length) return fail('No fish in this water', cost);
-      out.water = edge.water;
+      const rows = checkWaterRows(game, def, x, y);
+      if (!rows.ok) return fail(rows.reason, cost);
+      out.water = rows.water;
+      out.side = rows.side;
       break;
     }
     default:
@@ -256,7 +313,7 @@ export function checkBuilding(game, type, x, y, turn = 0) {
   // Soft warnings (placement allowed, but it will not work well).
   // (A building with no workers, the Oracle, works without a road.)
   if (def.needsRoad && def.kind !== 'house' && def.workers > 0) {
-    const hasRoad = perimeterTiles(map, x, y, W, H).some((i) => map.road[i]);
+    const hasRoad = accessTiles(map, x, y, W, H).some((i) => map.road[i]); // (beside its land: sim/entities.js computeAccessRoad)
     if (!hasRoad) {
       out.warnings.push(NO_ROAD_WARNING);
       out.noRoad = true;
@@ -418,11 +475,13 @@ export function anchorFor(type, cx, cy, turn = 0) {
 
 /**
  * A preview look for a waterside building being placed: which edge faces
- * the water (the art's state), as once it is built.
+ * the water, out over it (the art's state), as once it is built. From the
+ * terrain alone, so a spot whose rows lie right but which is refused for
+ * something else (a boat, a channel) still shows the pier the right way.
  */
-function ghostState(game, def, x, y, water) {
-  if ((def.placement !== 'fishingShore' && def.placement !== 'shore') || !(water >= 0)) return 0;
-  return sideToward(game.map, water, x, y, def.size);
+function ghostState(game, def, x, y) {
+  const side = isWaterside(def) && game.map.inBounds(x, y) ? waterRowsSide(game.map, x, y, def.size) : -1;
+  return side >= 0 ? side + OVER_WATER_ART : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +516,7 @@ export function planAction(game, tool, x0, y0, x1, y1, turn = 0, { auto = false 
   // in the preview and built with the first.
   const lay = def ? spanLayout(def, a.x, a.y, t) : { sections: [a], w: 1, h: 1 };
   const m = lay.sections[0];
-  const items = [{ x: m.x, y: m.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y, chk.water) : 0, turn: t, origin: { x: a.x, y: a.y, w: lay.w, h: lay.h } }];
+  const items = [{ x: m.x, y: m.y, size: S, ok: chk.ok, reason: chk.reason, cost: chk.cost, noRoad: !!chk.noRoad, state: def ? ghostState(game, def, a.x, a.y) : 0, turn: t, origin: { x: a.x, y: a.y, w: lay.w, h: lay.h } }];
   for (let k = 1; k < lay.sections.length; k++) {
     const p = lay.sections[k];
     items.push({ x: p.x, y: p.y, size: S, ok: chk.ok, reason: chk.reason, cost: 0, noRoad: !!chk.noRoad, part: true, type: `${tool}_part`, state: k, turn: t });

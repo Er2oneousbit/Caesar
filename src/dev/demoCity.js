@@ -20,7 +20,7 @@
  */
 
 import { planAction, applyPlan, undoLast } from '../sim/construction.js';
-import { removeBuilding, waterEdge } from '../sim/entities.js';
+import { removeBuilding, overWaterFit, accessTiles } from '../sim/entities.js';
 import { openRoute, setTradeMode, dockBerth } from '../sim/trade.js';
 import { TRADE_PARTNERS, FIRST_NINE } from '../data/scenarios.js';
 import { Terrain, WaterBits } from '../world/map.js';
@@ -799,12 +799,13 @@ function homesInReach(game, start) {
 
 /**
  * The water a waterside building of `type` with its top-left at (x, y)
- * would berth at, or -1 where it may not stand: it must stand right at the
- * water's edge (sim/entities.js waterEdge), so the showcases look only at
- * spots the player could build on.
+ * would berth at, or -1 where it may not stand: its front rows out over the
+ * water and the rest on the shore, with water to tie up at in front
+ * (sim/entities.js overWaterFit), so the showcases look only at spots the
+ * player could build on (placement checks the rest).
  */
 function edgeWater(map, type, x, y) {
-  return waterEdge(map, BUILDINGS[type], x, y)?.water ?? -1;
+  return overWaterFit(map, BUILDINGS[type], x, y)?.water ?? -1;
 }
 
 /**
@@ -845,9 +846,11 @@ function placeJoined(game, type, size, center, maxD, fits = () => true, tries = 
         const d = Math.hypot(map.xOf(h.accessRoad) - s.x, map.yOf(h.accessRoad) - s.y);
         if (d < bestD) { bestD = d; street = { x: map.xOf(h.accessRoad), y: map.yOf(h.accessRoad) }; }
       }
+      const edge = accessTiles(map, s.x, s.y, S); // (where a road gives it access)
       for (const [x, y] of [[s.x + S, s.y], [s.x - 1, s.y], [s.x, s.y + S], [s.x, s.y - 1], [s.x + S, s.y + S - 1], [s.x - 1, s.y + S - 1]]) {
         if (joined()) break;
         if (!map.inBounds(x, y) || map.building[map.idx(x, y)] || map.terrain[map.idx(x, y)] === Terrain.WATER) continue;
+        if (!edge.includes(map.idx(x, y))) continue; // (beside a row out over the water: never its road)
         if (!(street && build(game, 'road', x, y, street.x, street.y))) connectToRoad(game, x, y, entryNet);
         game.processRoadChanges();
       }
@@ -1182,7 +1185,7 @@ export function buildDemoHarbor(game, center) {
   for (let y = 1; y < map.h - 4; y++) {
     for (let x = 1; x < map.w - 4; x++) {
       const d = Math.hypot(x - center.x, y - center.y);
-      if (d > 34) continue;
+      if (d > 40) continue; // (a dock stands two rows out over the water: its top-left lies farther out than on land)
       spots.push({ x, y, d });
     }
   }
@@ -1205,6 +1208,7 @@ export function buildDemoHarbor(game, center) {
     }
     for (const [x, y] of [[dock.x + 3, dock.y + 1], [dock.x - 1, dock.y + 1], [dock.x + 1, dock.y + 3], [dock.x + 1, dock.y - 1]]) {
       if (!map.inBounds(x, y) || map.navigable[map.idx(x, y)] || map.building[map.idx(x, y)]) continue;
+      if (!accessTiles(map, dock.x, dock.y, 3).includes(map.idx(x, y))) continue; // (beside its quay on the water: never its road)
       if (!(street && build(game, 'road', x, y, street.x, street.y))) connectToRoad(game, x, y);
       game.processRoadChanges();
       if (dock.accessRoad >= 0) break;
@@ -1216,7 +1220,9 @@ export function buildDemoHarbor(game, center) {
   }
   if (!dock) return { ok: false, routes: [] };
   guard(game, dock.x, dock.y);
-  const warehouse = placeNear(game, 'warehouse', 3, { x: dock.x, y: dock.y }, 3, 12);
+  // The warehouse near the dock's road, on its shore: the dock stands out
+  // over the water, and the nearest land to its corner may be the far bank.
+  const warehouse = placeNear(game, 'warehouse', 3, { x: map.xOf(dock.accessRoad), y: map.yOf(dock.accessRoad) }, 3, 12);
   const routes = [];
   for (const [id, r] of Object.entries(game.city.trade.routes)) {
     // The first nine partners' only (FIRST_NINE): the harbor showcase and its

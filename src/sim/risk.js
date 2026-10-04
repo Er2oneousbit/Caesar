@@ -25,6 +25,7 @@ import { HOUSE_TIERS } from '../data/housing.js';
 import { footprintTiles, removeBuilding, spawnWalker, groupTiles, mainOf } from './entities.js';
 import { followPath, goHome } from './movement.js';
 import { recordRuin } from './ruins.js';
+import { Terrain } from '../world/map.js';
 
 /** Display name for messages: house tier name or building name. */
 export function buildingLabel(b) {
@@ -61,9 +62,11 @@ function siteOf(b) {
 function fallingGround(game, b) {
   // A road under a building (a triumphal arch's middle, sim/construction.js
   // checkArch) stays road: no rubble, flames or ruin on it, as a broken gate
-  // leaves its road (sim/military.js damageWall).
+  // leaves its road (sim/military.js damageWall). Nor on water: a waterside
+  // building's rows out over the water fall into it and leave open water
+  // (sim/entities.js removeBuilding), the wreck burning only on the shore.
   const { map } = game;
-  const open = (i) => !map.road[i];
+  const open = (i) => !map.road[i] && map.terrain[i] !== Terrain.WATER;
   const main = mainOf(game, b);
   if (main === b && !(b.parts && b.parts.length)) return { own: footprintTiles(map, b.x, b.y, b.size).filter(open), rest: [], main: b };
   const own = footprintTiles(map, b.x, b.y, b.size);

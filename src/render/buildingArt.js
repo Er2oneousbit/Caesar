@@ -25,8 +25,9 @@ import { UNIT_TYPES } from '../data/units.js';
 import { GODS } from '../data/gods.js';
 import { P, poly, quad, ground, box, gableRoof, hipRoof, colonnade, windows, door, shade, mix, tree, bareTree, cypress, hash01, horse, setRoofSnow, roofSnowAmount, SNOW } from './draw.js';
 import { drawTurned, drawTurnedOver, withOrigin, turnUV, unit, decal, TS } from './turn.js';
-import { shipyardArt, wharfArt } from './waterArt.js';
+import { shipyardArt, wharfArt, turner, turnedRect, paint, overWater, pierDeck } from './waterArt.js';
 import { navaliaArt, stationArt, portusArt } from './navyArt.js';
+import { OVER_WATER_ART } from '../sim/entities.js';
 import { hippodromeArt, chariotMakerArt } from './hippodromeArt.js';
 import { nativeHutArt, nativeMeetingArt, nativeCropsArt, missionPostArt } from './nativeArt.js';
 
@@ -2847,6 +2848,7 @@ function ranchArt(ctx, S, variant, herd) {
  * the +u edge and mirrored/rotated into place.
  */
 function dockArt(ctx, S, variant, side = 1) {
+  if (side >= OVER_WATER_ART) { dockQuayArt(ctx, S, side - OVER_WATER_ART); return; }
   const T = (u, v) => (side === 1 ? [u, v] : side === 3 ? [S - u, v] : side === 2 ? [v, u] : [v, S - u]);
   const rect = (u0, v0, du, dv) => {
     const a = T(u0, v0);
@@ -2904,6 +2906,64 @@ function dockArt(ctx, S, variant, side = 1) {
   }
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
+}
+
+/** Height (px) of a stone quay's top over the water, and of the shore row's platform beside it. */
+const QUAY_Z = 5;
+
+/**
+ * The Emporium out over the water: a stone quay on piers over its two rows
+ * on the water, the water showing between the piers, with cargo on the
+ * paving, bollards and two cranes at its edge reaching out over the
+ * berth; on the shore row, raised to the quay's level, the store shed.
+ */
+function dockQuayArt(ctx, S, side) {
+  const T = turner(S, side);
+  const Q = (u, v, z = 0) => P(...T(u, v), z);
+  const at = (u, v) => { const [a, b] = T(u, v); return a + b; };
+  const { shore } = overWater(S);
+  // the shore row: a stone platform up to the quay's level
+  const land = turnedRect(T, 0.02, 0.02, shore - 0.02, S - 0.04);
+  box(ctx, land[0], land[1], land[2], land[3], 0, QUAY_Z, COL.stone, { plain: true });
+  pierDeck(ctx, T, shore, S - 0.02, 0.02, S - 0.02, { z: QUAY_Z, thick: 2.4, step: 0.62, pile: 0.2, pileColor: COL.stoneDark, deck: '#b9ad93', seams: 'rgba(90,80,62,0.35)', seamStep: 0.5 });
+  const items = [];
+  const shed = turnedRect(T, 0.1, 0.22, 0.8, S - 0.44);
+  items.push({ d: shed[0] + shed[1], draw: () => {
+    box(ctx, shed[0], shed[1], shed[2], shed[3], QUAY_Z, 15, '#d8c9a8');
+    gableRoof(ctx, shed[0], shed[1], shed[2], shed[3], QUAY_Z + 15, 7, COL.terra, shed[2] >= shed[3] ? 'u' : 'v');
+  } });
+  for (const [cu, cv, color] of [[1.25, 0.45, '#8a5a33'], [1.25, 0.8, '#b8683c'], [1.6, 0.5, '#c9b13a'], [1.25, S - 0.7, '#7b1f3a'], [1.6, S - 0.55, '#8a5a33']]) {
+    const r = turnedRect(T, cu, cv, 0.26, 0.26);
+    items.push({ d: r[0] + r[1] + 0.3, draw: () => box(ctx, r[0], r[1], r[2], r[3], QUAY_Z, 6, color) });
+  }
+  // two cranes at the quay's edge, their jibs out over the berth
+  for (const cv of [0.85, S - 0.85]) {
+    items.push({ d: at(S - 0.4, cv), draw: () => {
+      const [x, y] = Q(S - 0.4, cv, QUAY_Z);
+      ctx.strokeStyle = COL.woodDark;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y); ctx.lineTo(x, y - 28); ctx.lineTo(x + 4, y);
+      const tip = Q(S + 0.35, cv, QUAY_Z + 34);
+      ctx.moveTo(x, y - 28); ctx.lineTo(tip[0], tip[1]);
+      ctx.stroke();
+      ctx.strokeStyle = '#3a3026';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(tip[0], tip[1]); ctx.lineTo(tip[0], tip[1] + 14); ctx.stroke();
+      ctx.fillStyle = '#c9a36b';
+      ctx.fillRect(tip[0] - 2.5, tip[1] + 14, 5, 4);
+    } });
+  }
+  for (const bv of [0.3, S / 2, S - 0.3]) {
+    items.push({ d: at(S - 0.12, bv), draw: () => {
+      const [x, y] = Q(S - 0.12, bv, QUAY_Z);
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(x - 1.3, y - 4, 2.6, 4);
+      ctx.fillStyle = '#6b5640';
+      ctx.fillRect(x - 1.8, y - 5, 3.6, 1.4);
+    } });
+  }
+  paint(items);
 }
 
 const ART = {
@@ -2979,12 +3039,16 @@ export function artState(b, resting = false) {
   const kind = b.def.kind;
   if (b.house) return b.house.tier;
   if (b.herd !== undefined) return b.herd; // horse ranch: one sprite per herd size
-  if (kind === 'dock' || kind === 'station' || kind === 'portus') return b.waterSide ?? 1; // which edge faces the water (see dockArt)
+  // Waterside buildings: which edge faces the water (see dockArt), and
+  // OVER_WATER_ART when they stand out over it (one wholly on land, from an
+  // older save, keeps its old look).
+  const pier = b.waterRows ? OVER_WATER_ART : 0;
+  if (kind === 'dock' || kind === 'station' || kind === 'portus') return (b.waterSide ?? 1) + pier;
   // Navalia: the water's edge, and the liburnian on the slip (0 none, 1 keel and frames, 2 planked).
-  if (kind === 'navalia') return (b.waterSide ?? 1) + 4 * (!(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2);
+  if (kind === 'navalia') return (b.waterSide ?? 1) + 4 * (!(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2) + pier;
   // Shipyard: the water's edge, and the boat on the slip (0 none, 1 ribs, 2 planked; none while its spare waits on the water).
-  if (kind === 'shipyard') return (b.waterSide ?? 1) + 4 * (b.spareId || !(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2);
-  if (kind === 'wharf') return (b.waterSide ?? 1) + 4 * ((b.stock?.fish || 0) > 0 ? 1 : 0); // baskets of fish on the deck
+  if (kind === 'shipyard') return (b.waterSide ?? 1) + 4 * (b.spareId || !(b.progress > 0) ? 0 : b.progress < 50 ? 1 : 2) + pier;
+  if (kind === 'wharf') return (b.waterSide ?? 1) + 4 * ((b.stock?.fish || 0) > 0 ? 1 : 0) + pier; // baskets of fish on the deck
   if (kind === 'part') return b.section || 0; // a hippodrome's stretch of track
   if (kind === 'arch') return b.axis || 0; // the way the road runs under it
   // A garden or statue faded to NEGLECT_STEP or past it (sim/gardens.js)

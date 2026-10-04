@@ -51,7 +51,7 @@ import { CONFIG } from '../config.js';
 import { GOODS, GOOD_KEYS } from '../data/goods.js';
 import { TRADE_PARTNERS } from '../data/scenarios.js';
 import { BUILDINGS } from '../data/buildings.js';
-import { spawnWalker, killWalker, shoreWaterAt } from './entities.js';
+import { spawnWalker, killWalker, shoreWaterAt, waterSideOf } from './entities.js';
 import { followPath, walkTo, goHome } from './movement.js';
 import { cityStock, storageSpaceFor, storageAccepts, takeGoods, isStorage, receiveGoods, storageByRoad, isStable, stableRoom, stablesOf } from './storage.js';
 import { militaryNeed } from './military.js';
@@ -285,19 +285,18 @@ function ranchesNear(game, wh) {
 // ---------------------------------------------------------------------------
 
 /**
- * The navigable water tile where ships tie up beside a dock (cached), or -1.
- * Also records which edge of the dock faces the water (dock.waterSide:
- * 0 = -y, 1 = +x, 2 = +y, 3 = -x) for the art.
+ * The navigable water tile where ships tie up at a dock (cached), or -1:
+ * alongside its quay, just past its rows out over the water
+ * (sim/entities.js shoreWaterAt; one wholly on land from an older save, the
+ * water beside it). Also records which edge of the dock faces the water
+ * (dock.waterSide: 0 = -y, 1 = +x, 2 = +y, 3 = -x) for the art. The
+ * Navalia, the Naval Station and the Portus use it too (sim/navy.js).
  */
 export function dockBerth(game, dock) {
   const map = game.map;
   if (dock.berth === undefined || dock.berth < 0 || !map.navigable[dock.berth]) {
-    dock.berth = shoreWaterAt(map, dock.def, dock.x, dock.y, dock.size); // (its side right at the water's edge)
-    if (dock.berth >= 0) {
-      const bx = map.xOf(dock.berth);
-      const by = map.yOf(dock.berth);
-      dock.waterSide = by < dock.y ? 0 : bx >= dock.x + dock.size ? 1 : by >= dock.y + dock.size ? 2 : 3;
-    }
+    dock.berth = shoreWaterAt(map, dock.def, dock.x, dock.y, dock.size);
+    if (dock.berth >= 0) dock.waterSide = waterSideOf(map, dock, dock.berth);
   }
   return dock.berth;
 }

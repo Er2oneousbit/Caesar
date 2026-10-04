@@ -415,7 +415,7 @@ test('unlocks: the fleet comes with the missions that have raids and water from 
     }
   }
   assert.ok(shore, 'a station fits on the shore');
-  assert.match(checkBuilding(game, 'navalia', inland.x, inland.y).reason || '', /bank of a river or sea/);
+  assert.equal(checkBuilding(game, 'navalia', inland.x, inland.y).reason, 'Two rows of the Navalia must stand on the water, the rest on the shore');
 });
 
 test('save: the fleet and a raid by sea survive a save; a version 10 city loads with no fleet and the switch on', () => {

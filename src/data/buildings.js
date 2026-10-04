@@ -30,8 +30,9 @@
  *                  mission has the Topiaria
  *   spawnDays      days between walker spawns at full staff
  *   placement      extra placement rule: 'meadow' | 'nearWater' | 'nearTrees' | 'nearRock'
- *                  | 'shore' (beside navigable water: docks, the navalia, naval stations)
- *                  | 'fishingShore' (beside water with fish: shipyards, wharves)
+ *                  | 'shore' (out over navigable water: docks, the navalia, naval stations, the Portus)
+ *                  | 'fishingShore' (out over water with fish: shipyards, wharves)
+ *                  (both: the front row of a 2x2, two of a 3x3, on the water: sim/entities.js waterRowsFor)
  *   kind           behavior family (drives sim dispatch):
  *                    service | farm | raw | workshop | granary | warehouse |
  *                    market | venue | training | water | reservoir |

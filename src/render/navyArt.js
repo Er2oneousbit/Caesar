@@ -20,12 +20,17 @@
  * All three stand on the bank with one edge facing the water, like the dock and
  * the fishing buildings: designed with the water on the +u edge and turned
  * into place by `side` (0 = -v, 1 = +u, 2 = +v, 3 = -u; sim/trade.js
- * dockBerth). Painter's order: back (small u+v after turning) first.
+ * dockBerth). Each has a second drawing for when it stands out over the
+ * water (art state + OVER_WATER_ART, as every one placed since that rule):
+ * its two rows on the water raised on piles or stone, the water showing
+ * between them (waterArt.js pierDeck). Painter's order: back (small u+v
+ * after turning) first.
  * ----------------------------------------------------------------------------
  */
 
 import { P, poly, quad, box, gableRoof, hipRoof, shade } from './draw.js';
-import { turner, turnedRect, paint, post } from './waterArt.js';
+import { turner, turnedRect, paint, post, overWater, shoreGround, pierDeck } from './waterArt.js';
+import { OVER_WATER_ART as OVER_WATER } from '../sim/entities.js';
 
 const WOOD = '#8a5a33';
 const WOOD_DARK = '#5e3b20';
@@ -42,6 +47,7 @@ const BRONZE = '#b8862e';
 
 /** state = side + 4 * stage (stage 0: empty slip, 1: keel and frames, 2: planked, ram fitted). */
 export function navaliaArt(ctx, S, variant, state = 1) {
+  if (state >= OVER_WATER) { navaliaPierArt(ctx, S, state - OVER_WATER); return; }
   const side = state % 4;
   const stage = Math.floor(state / 4);
   const T = turner(S, side);
@@ -120,6 +126,104 @@ export function navaliaArt(ctx, S, variant, state = 1) {
   paint(items);
 }
 
+/** Height (px) of a stone quay's top over the water (the Naval Station, the Portus's moles). */
+const QUAY_Z = 5;
+
+/** A stone pillar standing in the water at designed (u, v), `h` px tall. */
+function pillar(ctx, T, u, v, h, w = 0.12, color = shade(STONE, -0.08)) {
+  const p = turnedRect(T, u - w / 2, v - w / 2, w, w);
+  box(ctx, p[0], p[1], p[2], p[3], 0, h, color, { plain: true });
+}
+
+/**
+ * The Navalia out over the water: timber, the shipwrights' hut and the sail
+ * linen on the shore; over its two rows on the water, the open slipway on
+ * piles running down to the water's surface (with the liburnian on it while
+ * one is built), and beside it the ship shed, its tiled roof on stone
+ * pillars standing in the water, a slip under it; the sheerlegs crane on a
+ * staging at the end, between the two.
+ */
+function navaliaPierArt(ctx, S, state) {
+  const side = state % 4;
+  const stage = Math.floor(state / 4);
+  const T = turner(S, side);
+  const Q = (u, v, z = 0) => P(...T(u, v), z);
+  const at = (u, v) => { const [a, b] = T(u, v); return a + b; };
+  const { shore } = overWater(S);
+  shoreGround(ctx, T, S, shore, '#b3a17c');
+  const slipZ = (u) => 4 * Math.max(0, 1 - (u - 0.9) / (S - 0.9));
+  // piles under both slips (the open one and the one in the shed)
+  for (const u of [1.3, 1.8, 2.3]) {
+    for (const v of [0.5, 1.15, 1.8, 2.55]) {
+      const p = turnedRect(T, u - 0.04, v, 0.08, 0.08);
+      box(ctx, p[0], p[1], p[2], p[3], 0, Math.max(0.5, slipZ(u) - 0.6), WOOD_DARK, { plain: true });
+    }
+  }
+  // sleepers and rails, sloping down into the water
+  ctx.strokeStyle = shade(WOOD, -0.1);
+  ctx.lineWidth = 1.2;
+  for (let u = 1.0; u < S; u += 0.2) {
+    for (const [v0, v1] of [[0.45, 1.25], [1.75, 2.65]]) {
+      const a = Q(u, v0, slipZ(u));
+      const b = Q(u, v1, slipZ(u));
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.lineWidth = 1.1;
+  for (const v of [0.62, 1.08, 1.98, 2.42]) {
+    const a = Q(0.9, v, 4);
+    const b = Q(S - 0.02, v, slipZ(S - 0.02));
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  // the crane's staging at the end, between the slips
+  pierDeck(ctx, T, S - 0.4, S - 0.02, 1.27, 1.6, { z: 4, step: 0.3, seams: null });
+  const items = [];
+  const planks = turnedRect(T, 0.1, 0.1, 0.6, 0.5);
+  items.push({ d: planks[0] + planks[1], draw: () => {
+    for (let k = 0; k < 4; k++) box(ctx, planks[0], planks[1], planks[2], planks[3], k * 2, 2, k % 2 ? WOOD_PALE : '#a57a4a', { plain: true });
+  } });
+  items.push({ d: at(0.4, 0.95), draw: () => {
+    for (const [u, v, z] of [[0.18, 0.8, 0], [0.18, 1.0, 0], [0.18, 1.2, 0], [0.18, 0.9, 2.6], [0.18, 1.1, 2.6]]) {
+      const a = Q(u, v, z + 1.3);
+      const b = Q(u + 0.55, v, z + 1.3);
+      ctx.strokeStyle = '#7a5230';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      ctx.fillStyle = '#c9a06a';
+      ctx.beginPath(); ctx.arc(b[0], b[1], 1.3, 0, Math.PI * 2); ctx.fill();
+    }
+  } });
+  const hut = turnedRect(T, 0.1, 1.75, 0.68, 1.05);
+  items.push({ d: hut[0] + hut[1], draw: () => {
+    box(ctx, hut[0], hut[1], hut[2], hut[3], 0, 12, '#d6c6a0');
+    gableRoof(ctx, hut[0], hut[1], hut[2], hut[3], 12, 7, TERRA, hut[2] >= hut[3] ? 'u' : 'v');
+  } });
+  const linen = turnedRect(T, 0.78, 1.3, 0.18, 0.36);
+  items.push({ d: linen[0] + linen[1] + 0.3, draw: () => box(ctx, linen[0], linen[1], linen[2], linen[3], 3, 2.5, '#ece6d2', { plain: true }) });
+  // the ship shed: a long tiled roof on stone pillars in the water, open at its end
+  const shed = turnedRect(T, 1.0, 1.66, S - 1.05, 1.18);
+  items.push({ d: shed[0] + shed[1] + 0.4, draw: () => {
+    for (const u of [1.05, 1.6, 2.15, S - 0.1]) for (const v of [1.7, 2.78]) pillar(ctx, T, u, v, 15);
+    gableRoof(ctx, shed[0], shed[1], shed[2], shed[3], 15, 8, TERRA, shed[2] >= shed[3] ? 'u' : 'v', 0.04);
+  } });
+  items.push({ d: at(S - 0.15, 1.45), draw: () => {
+    const [x, y] = Q(S - 0.15, 1.45, 4);
+    ctx.strokeStyle = WOOD_DARK;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(x - 3.5, y); ctx.lineTo(x, y - 26); ctx.lineTo(x + 3.5, y); ctx.stroke();
+    const tip = Q(S - 0.55, 0.95, 30);
+    ctx.beginPath(); ctx.moveTo(x, y - 26); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
+    ctx.strokeStyle = '#3a3026';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(tip[0], tip[1]); ctx.lineTo(tip[0], tip[1] + 10); ctx.stroke();
+    ctx.fillStyle = '#6b4a2a';
+    ctx.fillRect(tip[0] - 1.5, tip[1] + 10, 3, 2.5);
+  } });
+  if (stage > 0) items.push({ d: at(1.9, 0.85) + 0.1, draw: () => hullOnSlip(ctx, Q, at, stage, slipZ) });
+  paint(items);
+}
+
 /**
  * A liburnian on the slip, its bow (and ram) toward the water: the keel and
  * stem, then bare frames (stage 1) or planked sides with the oar box, the
@@ -185,6 +289,7 @@ function hullOnSlip(ctx, Q, at, stage, slipZ) {
 
 /** state = side (the edge facing the water). */
 export function stationArt(ctx, S, variant, state = 1) {
+  if (state >= OVER_WATER) { stationPierArt(ctx, S, state - OVER_WATER); return; }
   const side = state % 4;
   const T = turner(S, side);
   const Q = (u, v, z = 0) => P(...T(u, v), z);
@@ -270,6 +375,82 @@ export function stationArt(ctx, S, variant, state = 1) {
   paint(items);
 }
 
+/**
+ * The Naval Station out over the water: a stone quay on piers over its two
+ * rows on the water, two short moles running on from it with the berths'
+ * open water between them, bollards, racked oars and rope on the paving; on
+ * the shore row, raised to the quay's level, the watch post and the crews'
+ * hall.
+ */
+function stationPierArt(ctx, S, side) {
+  const T = turner(S, side);
+  const Q = (u, v, z = 0) => P(...T(u, v), z);
+  const at = (u, v) => { const [a, b] = T(u, v); return a + b; };
+  const { shore } = overWater(S);
+  const Z = QUAY_Z;
+  const stone = { z: Z, thick: 2.4, step: 0.6, pile: 0.2, pileColor: STONE_DARK, deck: STONE, seams: 'rgba(90,80,62,0.35)', seamStep: 0.5 };
+  const land = turnedRect(T, 0.02, 0.02, shore - 0.02, S - 0.04);
+  box(ctx, land[0], land[1], land[2], land[3], 0, Z, STONE_DARK, { plain: true });
+  pierDeck(ctx, T, shore, S - 0.75, 0.02, S - 0.02, stone);
+  for (const v of [0.28, S - 0.73]) pierDeck(ctx, T, S - 0.75, S - 0.02, v, v + 0.45, { ...stone, step: 0.35, pile: 0.16, seams: null });
+  const items = [];
+  for (const [u, v] of [[S - 0.12, 0.5], [S - 0.12, S - 0.5], [S - 0.85, 1.1], [S - 0.85, S - 1.1]]) {
+    items.push({ d: at(u, v) + 0.7, draw: () => {
+      const [x, y] = Q(u, v, Z);
+      ctx.fillStyle = '#7d7462';
+      ctx.fillRect(x - 1.4, y - 3.5, 2.8, 3.5);
+      ctx.fillStyle = '#a49a84';
+      ctx.fillRect(x - 1.8, y - 4.4, 3.6, 1.2);
+    } });
+  }
+  const tower = turnedRect(T, 0.1, 0.1, 0.72, 0.72);
+  items.push({ d: tower[0] + tower[1], draw: () => {
+    box(ctx, tower[0], tower[1], tower[2], tower[3], Z, 30, '#d2c6aa');
+    hipRoof(ctx, tower[0], tower[1], tower[2], tower[3], Z + 30, 8, TERRA);
+    const [px, py] = P(tower[0] + tower[2] / 2, tower[1] + tower[3] / 2, Z + 38);
+    post(ctx, px, py, 11, 1.1);
+    ctx.fillStyle = ROME_RED;
+    ctx.beginPath();
+    ctx.moveTo(px + 0.5, py - 11);
+    ctx.lineTo(px + 8, py - 10);
+    ctx.lineTo(px + 6.5, py - 8);
+    ctx.lineTo(px + 8, py - 6);
+    ctx.lineTo(px + 0.5, py - 6.5);
+    ctx.closePath();
+    ctx.fill();
+  } });
+  const hall = turnedRect(T, 0.08, 1.0, 0.84, 1.9);
+  items.push({ d: hall[0] + hall[1] + 0.2, draw: () => {
+    box(ctx, hall[0], hall[1], hall[2], hall[3], Z, 13, '#e2d6b8');
+    gableRoof(ctx, hall[0], hall[1], hall[2], hall[3], Z + 13, 7, TERRA, hall[2] >= hall[3] ? 'u' : 'v');
+  } });
+  items.push({ d: at(1.55, 1.0), draw: () => {
+    const [cx, cy] = Q(1.55, 1.0, Z);
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(cx - 8, cy - 12, 16, 1.2);
+    ctx.strokeStyle = '#8a6a44';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let k = 0; k < 7; k++) {
+      const x = cx - 7 + k * 2.3;
+      ctx.moveTo(x, cy);
+      ctx.lineTo(x + 1.2, cy - 17);
+    }
+    ctx.stroke();
+    ctx.fillStyle = WOOD_PALE;
+    for (let k = 0; k < 7; k++) ctx.fillRect(cx - 7 + k * 2.3 + 0.5, cy - 19.5, 1.6, 3.8);
+  } });
+  for (const [u, v] of [[1.6, 2.1], [1.9, 1.7]]) {
+    items.push({ d: at(u, v), draw: () => {
+      const [x, y] = Q(u, v, Z);
+      ctx.strokeStyle = '#a58a5a';
+      ctx.lineWidth = 1.2;
+      for (let r = 3.2; r > 0.8; r -= 1) { ctx.beginPath(); ctx.ellipse(x, y - 1, r, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke(); }
+    } });
+  }
+  paint(items);
+}
+
 // ---------------------------------------------------------------------------
 // Portus
 // ---------------------------------------------------------------------------
@@ -285,6 +466,7 @@ const BASIN = '#4f8fb8';
  * did in 260 BC); the crews' hall and a pennant post. state = side.
  */
 export function portusArt(ctx, S, variant, state = 1) {
+  if (state >= OVER_WATER) { portusPierArt(ctx, S, state - OVER_WATER); return; }
   const side = state % 4;
   const T = turner(S, side);
   const Q = (u, v, z = 0) => P(...T(u, v), z);
@@ -339,6 +521,77 @@ export function portusArt(ctx, S, variant, state = 1) {
   } });
   // the crews' hall at the back corner, and the pennant post
   const hall = turnedRect(T, 0.1, 2.3, 1.05, 0.6);
+  items.push({ d: hall[0] + hall[1] + 0.2, draw: () => {
+    box(ctx, hall[0], hall[1], hall[2], hall[3], 0, 12, '#e2d6b8');
+    gableRoof(ctx, hall[0], hall[1], hall[2], hall[3], 12, 6, TERRA, hall[2] >= hall[3] ? 'u' : 'v');
+  } });
+  items.push({ d: at(0.3, 0.3), draw: () => {
+    const [px, py] = Q(0.3, 0.3);
+    post(ctx, px, py, 24, 1.2);
+    ctx.fillStyle = ROME_RED;
+    ctx.beginPath();
+    ctx.moveTo(px + 0.5, py - 24);
+    ctx.lineTo(px + 9, py - 22.5);
+    ctx.lineTo(px + 0.5, py - 19.5);
+    ctx.closePath();
+    ctx.fill();
+  } });
+  paint(items);
+}
+
+/**
+ * The Portus out over the water: two stone moles run out over its rows on
+ * the water from a quay along the bank, and the practice liburnian lies on
+ * the real water between them; on the shore, the rowing benches, the crews'
+ * hall and the pennant, and the stroke master's drum on the quay.
+ */
+function portusPierArt(ctx, S, side) {
+  const T = turner(S, side);
+  const Q = (u, v, z = 0) => P(...T(u, v), z);
+  const at = (u, v) => { const [a, b] = T(u, v); return a + b; };
+  const { shore } = overWater(S);
+  const Z = QUAY_Z;
+  shoreGround(ctx, T, S, shore, '#bfb194');
+  const items = [];
+  // the quay along the bank and the two moles: solid stone from the water up
+  const quay = turnedRect(T, shore - 0.05, 0.12, 0.4, S - 0.24);
+  items.push({ d: quay[0] + quay[1] + 0.2, draw: () => box(ctx, quay[0], quay[1], quay[2], quay[3], 0, Z, STONE, { plain: true }) });
+  for (const v of [0.12, S - 0.47]) {
+    const mole = turnedRect(T, shore + 0.35, v, S - shore - 0.37, 0.35);
+    items.push({ d: mole[0] + mole[1] + 0.3, draw: () => box(ctx, mole[0], mole[1], mole[2], mole[3], 0, Z, STONE, { plain: true }) });
+    items.push({ d: at(S - 0.15, v + 0.17) + 0.6, draw: () => {
+      const [x, y] = Q(S - 0.15, v + 0.17, Z);
+      ctx.fillStyle = '#7d7462';
+      ctx.fillRect(x - 1.4, y - 3.5, 2.8, 3.5);
+      ctx.fillStyle = '#a49a84';
+      ctx.fillRect(x - 1.8, y - 4.4, 3.6, 1.2);
+    } });
+  }
+  items.push({ d: at(2.1, 1.5) + 0.2, draw: () => practiceShip(ctx, Q, at) });
+  for (let k = 0; k < 4; k++) {
+    const u = 0.12 + k * 0.19;
+    const bench = turnedRect(T, u, 0.7, 0.12, 1.55);
+    items.push({ d: bench[0] + bench[1] + 0.1, draw: () => {
+      box(ctx, bench[0], bench[1], bench[2], bench[3], 0, 3, WOOD, { plain: true });
+      ctx.strokeStyle = WOOD_PALE;
+      ctx.lineWidth = 0.9;
+      for (const v of [0.95, 1.45, 1.95]) {
+        const a = Q(u - 0.06, v, 4.5);
+        const b = Q(u + 0.17, v, 4.5);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+        ctx.fillStyle = WOOD_PALE;
+        ctx.fillRect(b[0] - 0.9, b[1] - 0.6, 1.8, 1.4);
+      }
+    } });
+  }
+  items.push({ d: at(1.15, 1.5) + 0.3, draw: () => {
+    const [x, y] = Q(1.15, 1.5, Z);
+    ctx.fillStyle = '#7a4a2a';
+    ctx.fillRect(x - 2.6, y - 4.5, 5.2, 4.5);
+    ctx.fillStyle = '#e8dcc0';
+    ctx.beginPath(); ctx.ellipse(x, y - 4.5, 2.6, 1.1, 0, 0, Math.PI * 2); ctx.fill();
+  } });
+  const hall = turnedRect(T, 0.08, 2.35, 0.82, 0.57);
   items.push({ d: hall[0] + hall[1] + 0.2, draw: () => {
     box(ctx, hall[0], hall[1], hall[2], hall[3], 0, 12, '#e2d6b8');
     gableRoof(ctx, hall[0], hall[1], hall[2], hall[3], 12, 6, TERRA, hall[2] >= hall[3] ? 'u' : 'v');

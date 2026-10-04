@@ -214,6 +214,16 @@
  *      trip before that day). In an older save a soldier could hold a trip
  *      only from before version 16, when it meant something else: he comes
  *      straight home, untrained, see upgradeSoldierTripsV28().
+ *  30  waterside buildings stand out over the water (sim/entities.js
+ *      waterRowsFor): a building's front rows may stand on water tiles,
+ *      which no boat sails through, and its berth, slip or mooring lies
+ *      just past them. A building's `waterRows` is derived from the
+ *      terrain as the save loads, whatever the file says. Every waterside
+ *      building in an older save stands wholly on land: it keeps its
+ *      berth and its look, and works as it did, so no step is needed. The
+ *      version moves so that a game from before the rule refuses a newer
+ *      save rather than loading buildings on water it would let ships sail
+ *      through.
  *
  * Typed-array map layers are base64 encoded, run-length compressed first
  * when that is smaller (encodeLayer). Derived data (building tile layer,
@@ -232,7 +242,7 @@ import { Game } from './game.js';
 import { RNG } from './rng.js';
 import { GameMap } from '../world/map.js';
 import { GameTime } from '../sim/time.js';
-import { Building, Walker, footprintTiles, faceWater } from '../sim/entities.js';
+import { Building, Walker, footprintTiles, faceWater, isWaterside, waterRowsOf } from '../sim/entities.js';
 import { Unit, RUMOUR_MONTHS, DOOR_MONTHS, RAID_MIN_POP } from '../sim/military.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { BUILDINGS } from '../data/buildings.js';
@@ -506,6 +516,18 @@ export function deserializeGame(data, flags = {}) {
     if (b.id < NATIVE_ID_BASE) maxB = Math.max(maxB, b.id); // (a native village's ids are apart: sim/natives.js)
   }
   game.nextBuildingId = Math.max(game.nextBuildingId, maxB + 1);
+  // Waterside buildings out over the water close it to boats: the map's
+  // water was worked out before the buildings were down (world/map.js
+  // deserialize), so again now. waterRows comes from the terrain, never
+  // from the file; an older save's buildings stand wholly on land (0) and
+  // its water is as it was (version 30, no step needed).
+  let overWater = false;
+  for (const b of game.buildings.values()) {
+    if (!isWaterside(b.def)) continue;
+    b.waterRows = waterRowsOf(map, b);
+    if (b.waterRows) overWater = true;
+  }
+  if (overWater) map.computeWaterways();
 
   // Walkers
   let maxW = 0;

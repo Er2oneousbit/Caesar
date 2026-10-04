@@ -1482,15 +1482,32 @@ try {
   //       ruin's panel says it is being put out.
   const douseWas = await page.evaluate(() => ({ speed: window.colonia.speedIndex }));
   const douseErrors = errors.length;
-  const torch3 = await lightAHome(3);
-  const lit3 = torch3 ? await burnt() : false;
-  const fought = lit3 ? await page.waitForFunction(() => {
+  // The home nearest a staffed prefecture, so a prefect is in reach on any
+  // map, and the game stepped tick by tick until one fights it: a douse
+  // lasts half a day, which at top speed could start and end between two
+  // polls on a slower machine (CI, v0.18.7).
+  const torch3 = await page.evaluate(() => {
     const g = window.colonia.game;
-    const p = [...g.walkers.values()].find((w) => w.type === 'prefect' && w.state === 'extinguish' && g.fires.has(w.fireTile));
-    if (!p) return null;
-    window.colonia.paused = true;
-    return { id: p.id, tile: p.fireTile };
-  }, null, { timeout: 30000, polling: 50 }).then((h) => h.jsonValue(), () => null) : null;
+    g.fires.clear();
+    const posts = [...g.buildings.values()].filter((b) => b.type === 'prefecture' && b.efficiency > 0);
+    const dist = (h) => Math.min(...posts.map((p) => Math.abs(p.x - h.x) + Math.abs(p.y - h.y)));
+    const homes = [...g.buildings.values()].filter((b) => b.house && b.house.pop > 0).sort((a, b) => dist(a) - dist(b) || a.id - b.id);
+    const b = homes[0];
+    if (!b || !posts.length) return null;
+    window.__torch = { x: b.x, y: b.y, fires: g.city.stats.fires };
+    window.colonia.setSpeed(4);
+    return { id: b.id, x: b.x, y: b.y, posts: posts.length };
+  });
+  const lit3 = torch3 ? await burnt() : false;
+  const fought = lit3 ? await page.evaluate(() => {
+    const app = window.colonia;
+    const g = app.game;
+    app.paused = true;
+    const seen = () => [...g.walkers.values()].find((w) => w.type === 'prefect' && w.state === 'extinguish' && g.fires.has(w.fireTile));
+    for (let t = 0; t < 4 * 20 && !seen(); t++) g.runTicks(1); // up to 4 days (20 ticks a day)
+    const p = seen();
+    return p ? { id: p.id, tile: p.fireTile } : null;
+  }) : null;
   let douse = null;
   if (fought) {
     await page.waitForTimeout(200); // a few frames drawn with him at work

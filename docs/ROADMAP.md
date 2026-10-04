@@ -13,6 +13,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.13)
+
+* **Waterside buildings stand out over the water**: a 2x2 (the Fishing Wharf, the Shipyard) has its front row on the water, a 3x3 (the Emporium, the Navalia, the Naval Station, the Portus) its two front rows, each drawn as a pier, quay or slipway on piles; ships moor just past the front. The water under them is closed to boats (they sail round), a building that would cut a channel in two is refused, and demolished, burned or undone the water opens again. Older saves keep their buildings on land. Every coastal mission keeps spots for each waterside building (25 to 70 for the Emporium)
+* Saves: version 30 (an older game refuses a newer save rather than sail through its piers)
+* Headless sim: every level identical to v0.18.12; the harbor, fishing and navy showcases moved with their new spots
+* 1005 unit tests, 204 browser checks
+
 ## Done (v0.18.12)
 
 * **More room along the Imperial road**: no rock or meadow within 8 tiles of it (with a ragged edge out to 10; was 6 to 8), so a city's first blocks have open ground. Every map is new; the default sim's demo town now fits its industry (171 jobs, was 127) and ends with peace 56 (was 33) at about the same 630 people

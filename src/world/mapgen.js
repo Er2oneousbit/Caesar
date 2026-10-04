@@ -42,9 +42,10 @@ export const MAP_SIZES = Object.freeze({ small: 64, medium: 96, large: 128, uber
 /**
  * No rock or meadow closer than this to the Imperial road, in tiles. The
  * band's outer edge wanders up to 2 tiles further out with noise, so the
- * outcrops and fields beyond it keep a natural, ragged edge.
+ * outcrops and fields beyond it keep a natural, ragged edge. (Was 6: the
+ * first blocks of a city met rock and fields too soon, playtest.)
  */
-export const ROAD_CLEARANCE = 6;
+export const ROAD_CLEARANCE = 8;
 
 /**
  * The Imperial road runs straight in from the map edge for this many tiles
@@ -547,7 +548,7 @@ function clearNearRoad(map, path, groundAt, noise, base) {
         if (!map.inBounds(x, y)) continue;
         const j = y * w + x;
         if (near[j]) continue;
-        const r = ROAD_CLEARANCE + noise.noise(x / 3 + 40, y / 3 + 40) * 2; // 6..8 tiles
+        const r = ROAD_CLEARANCE + noise.noise(x / 3 + 40, y / 3 + 40) * 2; // 8..10 tiles
         if (dx * dx + dy * dy < r * r) near[j] = 1;
       }
     }

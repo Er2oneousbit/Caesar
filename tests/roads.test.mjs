@@ -18,7 +18,7 @@ import { log } from '../src/core/debug.js';
 import { CONFIG } from '../src/config.js';
 import { Terrain } from '../src/world/map.js';
 import { serializeGame, deserializeGame } from '../src/core/save.js';
-import { planAction, planNoRoadWarning, NO_ROAD_WARNING, HOUSE_NO_ROAD_WARNING } from '../src/sim/construction.js';
+import { planAction, planNoRoadWarning, checkBuilding, NO_ROAD_WARNING, HOUSE_NO_ROAD_WARNING } from '../src/sim/construction.js';
 import { lacksRoad, accessEdgeTiles, noRoadText } from '../src/sim/roadAccess.js';
 import { newGame, build, findFree } from './helpers.mjs';
 
@@ -202,4 +202,25 @@ test('a road crosses an aqueduct only straight through, at right angles; never a
   assert.ok(build(game, 'aqueduct', s.x + 7, s.y + 8, s.x + 7, s.y + 10).ok, 'an aqueduct ending on the road, straight in');
   const aqTurn = ok('aqueduct', s.x + 8, s.y + 10, s.x + 8, s.y + 10);
   assert.ok(aqTurn.items.some((it) => !it.ok), 'turning along the road from the crossing');
+});
+
+test('no road under the aqueduct tile that steps down into a reservoir, nor a reservoir beside such a road', () => {
+  // Playtest: a road could be laid on the tile where an aqueduct meets its reservoir.
+  const game = newGame({ size: 64, type: 'plains', seed: 'aq-res' });
+  const s = findFree(game, 12, 12);
+  // (build() takes a 3x3's middle tile: the footprint is s.x..s.x+2, s.y+4..s.y+6.)
+  assert.ok(build(game, 'reservoir', s.x + 1, s.y + 5).ok, 'a reservoir');
+  // An aqueduct running east from its side, along y = s.y + 5.
+  assert.ok(build(game, 'aqueduct', s.x + 3, s.y + 5, s.x + 9, s.y + 5).ok);
+  const plan = (x0, y0, x1, y1) => planAction(game, 'road', x0, y0, x1, y1);
+  // Across the aqueduct's first tile, right beside the reservoir: refused.
+  const atRim = plan(s.x + 3, s.y + 2, s.x + 3, s.y + 8);
+  assert.ok(atRim.items.some((it) => !it.ok && /steps down into the reservoir/.test(it.reason || '')), JSON.stringify(atRim.items.filter((it) => !it.ok)));
+  // A tile further along: a plain crossing, fine (a road ending under the arch, straight in).
+  const further = plan(s.x + 6, s.y + 8, s.x + 6, s.y + 5);
+  assert.ok(further.items.every((it) => it.ok), JSON.stringify(further.items.filter((it) => !it.ok)));
+  assert.ok(build(game, 'road', s.x + 6, s.y + 8, s.x + 6, s.y + 5).ok);
+  // A reservoir placed right above that crossing (top-left s.x+5, s.y+2): refused.
+  const res2 = checkBuilding(game, 'reservoir', s.x + 5, s.y + 2);
+  assert.ok(!res2.ok && /step down into the reservoir/.test(res2.reason || ''), JSON.stringify(res2));
 });

@@ -13,6 +13,13 @@ Colonia is a remake and modernization of Caesar III. The original's rules, build
 
 Alongside: the sim fuzzer and the save corpus, so all of this lands without breaking anyone's city.
 
+## Done (v0.18.12)
+
+* **More room along the Imperial road**: no rock or meadow within 8 tiles of it (with a ragged edge out to 10; was 6 to 8), so a city's first blocks have open ground. Every map is new; the default sim's demo town now fits its industry (171 jobs, was 127) and ends with peace 56 (was 33) at about the same 630 people
+* **No road under the aqueduct tile beside a reservoir**, where the channel steps down into it, and no reservoir beside a road under an aqueduct
+* The demo city adds its second reservoir where it reaches the fountains the first one misses
+* 995 unit tests, 204 browser checks
+
 ## Done (v0.18.11)
 
 * **Jealous gods** (the original's rule, Venus included): in a city of 800 people or more, the god with strictly the most staffed temples (a large one as two) is the favourite, its mood target lifted to 100 (or by 50 if under 50), and the god with strictly the fewest is jealous, its target 25 lower; a tie means neither. The Religion advisor marks both

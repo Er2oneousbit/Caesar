@@ -487,8 +487,19 @@ function pipeWater(game, center) {
   }
   if (!shore) return false;
   keepUp(shore);
-  if (Math.max(Math.abs(shore.x + 1 - center.x), Math.abs(shore.y + 1 - center.y)) <= R - 4) return true;
-  for (const near of findSpot(game, 3, center, 6, R)) {
+  // Done if the shore reservoir's piped area (R past its footprint, sim/water.js)
+  // takes in every fountain the town has; testing only the town's middle once
+  // left most fountains dry when a wider road band moved the town (v0.18.12).
+  const piped = (r, b) => b.x >= r.x - R && b.x <= r.x + 2 + R && b.y >= r.y - R && b.y <= r.y + 2 + R;
+  const fountains = [...game.buildings.values()].filter((b) => b.type === 'fountain');
+  const reach = fountains.length ? fountains : [{ x: center.x, y: center.y }];
+  if (reach.every((f) => piped(shore, f))) return true;
+  // The spots that pipe water to the most fountains the shore misses first
+  // (the town itself fills the spots that would reach them all).
+  const dry = (near) => reach.filter((f) => !piped(shore, f) && !piped(near, f)).length;
+  const spots = [...findSpot(game, 3, center, 6, R)].map((near, k) => ({ near, k, dry: dry(near) }));
+  spots.sort((a, b) => a.dry - b.dry || a.k - b.k);
+  for (const { near } of spots) {
     const ok = attempt(game, () => {
       if (!place(game, 'reservoir', near.x, near.y, 3)) return null;
       // Try the sides of each reservoir that face the other, nearest first.
@@ -523,7 +534,7 @@ function besideToward(s, t) {
   const out = [];
   for (let k = 0; k < 3; k++) out.push({ x: s.x + 3, y: s.y + k }, { x: s.x - 1, y: s.y + k }, { x: s.x + k, y: s.y + 3 }, { x: s.x + k, y: s.y - 1 });
   const d = (p) => Math.abs(p.x - (t.x + 1)) + Math.abs(p.y - (t.y + 1));
-  return out.sort((p, q) => d(p) - d(q)).slice(0, 4);
+  return out.sort((p, q) => d(p) - d(q)); // every side, nearest first: the facing ones may hold its road
 }
 
 /**

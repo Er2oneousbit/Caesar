@@ -147,6 +147,9 @@ test('the Production advisor finds the bottleneck', () => {
   const spot = findFree(game, 5, 4);
   assert.ok(build(game, 'road', spot.x, spot.y, spot.x + 4, spot.y).ok);
   assert.ok(build(game, 'pottery_ws', spot.x + 1, spot.y + 1).ok); // beside the road
+  // A second, so the hint says "Figlinae" whether or not the demo city's own potter has clay on this map.
+  assert.ok(build(game, 'pottery_ws', spot.x + 3, spot.y + 1).ok);
+  for (const b of game.buildings.values()) if (b.type === 'pottery_ws' && b.y === spot.y + 1) { b.efficiency = 1; b.laborAccess = 10; }
   const potter = [...game.buildings.values()].find((b) => b.type === 'pottery_ws' && b.x === spot.x + 1 && b.y === spot.y + 1);
   potter.efficiency = 1;
   potter.laborAccess = 10;
@@ -156,7 +159,7 @@ test('the Production advisor finds the bottleneck', () => {
   const hint = rep.hints.find((t) => /Figlina/.test(t));
   assert.ok(hint, `a hint about the potter: ${rep.hints.join(' | ')}`);
   assert.match(hint, /waiting for clay/);
-  assert.match(hint, /^2 Figlinae are waiting for clay: build more Cretifodinae/, 'the Latin plurals');
+  assert.match(hint, /^\d+ Figlinae are waiting for clay: build more Cretifodinae/, 'the Latin plurals');
   const grp = rep.troubles.find((t) => t.ids.includes(potter.id));
   assert.ok(grp && grp.name === 'Figlina' && /Waiting for clay/.test(grp.text), `the potter is listed with what is wrong: ${JSON.stringify(grp)}`);
 });

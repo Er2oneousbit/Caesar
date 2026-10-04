@@ -275,6 +275,11 @@ export function checkBuilding(game, type, x, y, turn = 0) {
   if (def.needsPiped && !(map.water[map.idx(x, y)] & WaterBits.PIPED)) {
     out.warnings.push('Outside every full reservoir\'s piped area: it will have no water');
   }
+  // A road under an aqueduct right beside it would run under the channel's
+  // step down into the reservoir (besideReservoir).
+  if (def.kind === 'reservoir' && perimeterTiles(map, x, y, S).some((i) => map.aqueduct[i] && map.road[i])) {
+    return fail('A road runs under an aqueduct beside it: the aqueduct would step down into the reservoir over the road');
+  }
   if (def.kind === 'reservoir' && !map.isNearTerrain(x, y, S, Terrain.WATER, 1)) {
     const touchesAqueduct = perimeterTiles(map, x, y, S).some((i) => map.aqueduct[i]);
     if (!touchesAqueduct) out.warnings.push('Not next to water: connect it by aqueduct to a full reservoir');
@@ -558,6 +563,20 @@ export function crossingOk(map, i, road, aq) {
  * a proper crossing (crossingOk): the path's own tiles, or a crossing
  * beside them that the new road or aqueduct would join along its length.
  */
+/**
+ * Is tile i right beside a reservoir (sharing a side)? An aqueduct there
+ * steps down over the rim into it, so no road may pass under it (playtest).
+ */
+export function besideReservoir(game, i) {
+  const { map } = game;
+  const x = map.xOf(i);
+  const y = map.yOf(i);
+  return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+    const b = game.buildings.get(map.buildingAt(x + dx, y + dy));
+    return !!b && b.def.kind === 'reservoir';
+  });
+}
+
 function checkCrossings(game, tool, tiles, items) {
   const { map } = game;
   if (tool !== 'road' && tool !== 'aqueduct') return;
@@ -571,6 +590,11 @@ function checkCrossings(game, tool, tiles, items) {
     for (const j of [i, i - 1, i + 1, i - W, i + W]) {
       if (j < 0 || j >= map.size || Math.abs(map.xOf(j) - map.xOf(i)) > 1) continue;
       if (!(road(j) && aq(j))) continue;
+      if (besideReservoir(game, j)) {
+        it.ok = false;
+        it.reason = 'An aqueduct steps down into the reservoir here: no road may pass under it';
+        return;
+      }
       if (!crossingOk(map, j, road, aq)) {
         it.ok = false;
         it.reason = 'A road crosses an aqueduct only straight through, at right angles: never along it, nor turning under it';
